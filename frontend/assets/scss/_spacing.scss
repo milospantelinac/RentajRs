@@ -1,0 +1,80 @@
+@use 'breakpoints' as *;
+@use 'tokens' as *;
+
+// Spacing utilities generated from the $spacing-scale token map in _tokens.scss
+// (0..8, 4px base unit). Sides: t/b/l/r/x/y. Responsive step at md+ covers the
+// common "tighter on mobile, roomier on desktop" case without a utility
+// explosion for every breakpoint.
+@each $key, $value in $spacing-scale {
+  .m-#{$key} {
+    margin: $value;
+  }
+  .mt-#{$key} {
+    margin-top: $value;
+  }
+  .mb-#{$key} {
+    margin-bottom: $value;
+  }
+  .ml-#{$key} {
+    margin-left: $value;
+  }
+  .mr-#{$key} {
+    margin-right: $value;
+  }
+  .mx-#{$key} {
+    margin-left: $value;
+    margin-right: $value;
+  }
+  .my-#{$key} {
+    margin-top: $value;
+    margin-bottom: $value;
+  }
+
+  .p-#{$key} {
+    padding: $value;
+  }
+  .pt-#{$key} {
+    padding-top: $value;
+  }
+  .pb-#{$key} {
+    padding-bottom: $value;
+  }
+  .pl-#{$key} {
+    padding-left: $value;
+  }
+  .pr-#{$key} {
+    padding-right: $value;
+  }
+  .px-#{$key} {
+    padding-left: $value;
+    padding-right: $value;
+  }
+  .py-#{$key} {
+    padding-top: $value;
+    padding-bottom: $value;
+  }
+}
+
+.mx-auto {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+@include respond-above(md) {
+  @each $key, $value in $spacing-scale {
+    .mb-md-#{$key} {
+      margin-bottom: $value;
+    }
+    .mt-md-#{$key} {
+      margin-top: $value;
+    }
+    .py-md-#{$key} {
+      padding-top: $value;
+      padding-bottom: $value;
+    }
+    .px-md-#{$key} {
+      padding-left: $value;
+      padding-right: $value;
+    }
+  }
+}

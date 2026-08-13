@@ -1,0 +1,21 @@
+{
+  "EMAIL_ALREADY_REGISTERED": "An account with this email address already exists",
+  "INVALID_CREDENTIALS": "Incorrect email or password",
+  "ACCOUNT_LOCKED": "Your account is temporarily locked after too many failed login attempts. Try again in {minutes} minutes",
+  "ACCOUNT_BLOCKED": "Your account has been blocked. {reason}",
+  "EMAIL_NOT_VERIFIED": "Please confirm your email address before continuing",
+  "INVALID_OR_EXPIRED_TOKEN": "This link is invalid or has expired",
+  "TWO_FACTOR_REQUIRED": "A two-factor authentication code is required",
+  "TWO_FACTOR_INVALID": "The code you entered is not valid",
+  "GOOGLE_ACCOUNT_EXISTS": "This account was registered via Google sign-in. Please use the Google button to log in",
+  "CANNOT_BOOK_OWN_LISTING": "You cannot book your own listing",
+  "LISTING_NOT_FOUND": "Listing not found",
+  "LISTING_NOT_BOOKABLE": "This listing does not accept bookings",
+  "TERM_NOT_AVAILABLE": "The selected time is no longer available",
+  "CATEGORY_MAX_DEPTH": "A category cannot be nested more than three levels deep",
+  "CATEGORY_HAS_LISTINGS": "A category with listings cannot be deleted — merge or archive it instead",
+  "SUBSCRIPTION_LISTING_LIMIT": "You've reached the listing limit for your current package",
+  "PHOTO_LIMIT_EXCEEDED": "A listing can have at most {max} photos",
+  "PERMISSION_DENIED": "You do not have permission to perform this action",
+  "RATE_LIMITED": "Too many requests. Please try again later"
+}

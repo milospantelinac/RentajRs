@@ -1,0 +1,110 @@
+@use 'tokens' as *;
+
+// Card: 14px radius, thin border, subtle shadow (Ch.18.4). Used for listing
+// cards, dashboard tiles, admin panels — one shape for every "boxed content"
+// surface on the platform.
+
+.card {
+  background: $color-surface;
+  border: 1px solid $color-border;
+  border-radius: $radius-card;
+  box-shadow: $shadow-card;
+}
+
+.card-body {
+  padding: 20px;
+}
+
+.card-body-sm {
+  padding: 14px;
+}
+
+.card-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid $color-border;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.card-footer {
+  padding: 16px 20px;
+  border-top: 1px solid $color-border;
+}
+
+.card-interactive {
+  transition:
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
+}
+
+.card-interactive:hover {
+  box-shadow:
+    0 2px 4px rgba(15, 27, 51, 0.06),
+    0 8px 20px rgba(15, 27, 51, 0.1);
+  transform: translateY(-2px);
+}
+
+// Status badge: 6px radius, subtle background, darker text (Ch.18.4). Color
+// variants map to the same urgency palette used on the dashboard.
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: $radius-badge;
+  font-size: $font-size-label;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.badge-neutral {
+  background: $color-background;
+  color: $color-text-muted;
+}
+
+.badge-info {
+  background: rgba(27, 79, 216, 0.1);
+  color: $color-primary;
+}
+
+.badge-warning {
+  background: rgba(245, 158, 11, 0.12);
+  color: #92650a;
+}
+
+.badge-critical {
+  background: rgba(229, 72, 77, 0.1);
+  color: $color-error;
+}
+
+.badge-success {
+  background: rgba(18, 183, 106, 0.1);
+  color: #0a8a51;
+}
+
+// "Needs your attention" card variants (Ch.10.3/10.4) — left-border accent by
+// urgency, used on the dashboard attention list.
+.attention-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: $radius-input;
+  background: $color-surface;
+  border: 1px solid $color-border;
+  border-left: 3px solid $color-text-muted;
+}
+
+.attention-card-critical {
+  border-left-color: $color-urgency-critical;
+}
+
+.attention-card-decision {
+  border-left-color: $color-urgency-decision;
+}
+
+.attention-card-info {
+  border-left-color: $color-urgency-info;
+}

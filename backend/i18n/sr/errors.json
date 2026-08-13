@@ -1,0 +1,21 @@
+{
+  "EMAIL_ALREADY_REGISTERED": "Nalog sa ovom e-mail adresom već postoji",
+  "INVALID_CREDENTIALS": "Pogrešan e-mail ili lozinka",
+  "ACCOUNT_LOCKED": "Nalog je privremeno zaključan zbog previše neuspelih pokušaja prijave. Pokušajte ponovo za {minutes} minuta",
+  "ACCOUNT_BLOCKED": "Vaš nalog je blokiran. {reason}",
+  "EMAIL_NOT_VERIFIED": "Potvrdite e-mail adresu pre nego što nastavite",
+  "INVALID_OR_EXPIRED_TOKEN": "Link nije ispravan ili je istekao",
+  "TWO_FACTOR_REQUIRED": "Potreban je kod za dvofaktorsku autentikaciju",
+  "TWO_FACTOR_INVALID": "Uneti kod nije ispravan",
+  "GOOGLE_ACCOUNT_EXISTS": "Ovaj nalog je registrovan preko Google prijave. Prijavite se preko Google dugmeta",
+  "CANNOT_BOOK_OWN_LISTING": "Ne možete rezervisati sopstveni oglas",
+  "LISTING_NOT_FOUND": "Oglas nije pronađen",
+  "LISTING_NOT_BOOKABLE": "Ovaj oglas ne prima rezervacije",
+  "TERM_NOT_AVAILABLE": "Izabrani termin više nije dostupan",
+  "CATEGORY_MAX_DEPTH": "Kategorija ne može imati više od tri nivoa",
+  "CATEGORY_HAS_LISTINGS": "Kategorija sa oglasima se ne može obrisati — spojite je ili arhivirajte",
+  "SUBSCRIPTION_LISTING_LIMIT": "Dostigli ste broj oglasa dozvoljen na trenutnom paketu",
+  "PHOTO_LIMIT_EXCEEDED": "Oglas može imati najviše {max} fotografija",
+  "PERMISSION_DENIED": "Nemate dozvolu za ovu radnju",
+  "RATE_LIMITED": "Previše zahteva. Pokušajte ponovo kasnije"
+}

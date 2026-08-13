@@ -1,0 +1,275 @@
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { Logger } from '@nestjs/common';
+import { I18nService } from 'nestjs-i18n';
+import { OccupancySource } from '@prisma/client';
+import { PrismaService } from '../../prisma/prisma.service';
+import { parseIcs, buildIcsCalendar } from '../../common/utils/ics';
+import { paraToRsd } from '../../common/utils/money';
+import { SetWorkingHoursDto, CreateDefinedSlotDto, CreateManualBlockDto, AddIcalSourceDto } from './dto/availability.dto';
+
+@Injectable()
+export class AvailabilityService {
+  private readonly logger = new Logger(AvailabilityService.name);
+
+  constructor(
+    private prisma: PrismaService,
+    private events: EventEmitter2,
+    private i18n: I18nService,
+  ) {}
+
+  // -- Core term-locking (used by BookingsService) ------------------------
+
+  /**
+   * The single choke point every term reservation goes through. Relies on
+   * the database's GiST exclusion constraint (blocked_term_no_overlap,
+   * migrations/*_constraints_and_extensions) as the actual source of truth
+   * for "is this free" — a concurrent request racing this one will fail
+   * atomically at the database level rather than both succeeding (R53: the
+   * first request locks the term, the second is told it's taken).
+   */
+  async lockTerm(
+    listingId: string,
+    startsAt: Date,
+    endsAt: Date,
+    source: OccupancySource,
+    opts: { bookingId?: string; icalSourceId?: string; note?: string } = {},
+  ) {
+    try {
+      return await this.prisma.blockedTerm.create({
+        data: {
+          listingId,
+          startsAt,
+          endsAt,
+          source,
+          bookingId: opts.bookingId,
+          icalSourceId: opts.icalSourceId,
+          note: opts.note,
+        },
+      });
+    } catch (err) {
+      if (isExclusionViolation(err)) {
+        throw new ConflictException(this.i18n.t('errors.TERM_NOT_AVAILABLE'));
+      }
+      throw err;
+    }
+  }
+
+  async releaseTerm(blockedTermId: string) {
+    await this.prisma.blockedTerm.delete({ where: { id: blockedTermId } }).catch(() => undefined);
+  }
+
+  async releaseTermsForBooking(bookingId: string) {
+    await this.prisma.blockedTerm.deleteMany({ where: { bookingId } });
+  }
+
+  /** Applies R70 — an obligatory gap immediately after a booking's own term. */
+  async applyGapAfter(listingId: string, bookingEnd: Date, gapMinutes: number) {
+    if (gapMinutes <= 0) return;
+    const gapEnd = new Date(bookingEnd.getTime() + gapMinutes * 60000);
+    try {
+      await this.prisma.blockedTerm.create({
+        data: { listingId, startsAt: bookingEnd, endsAt: gapEnd, source: 'GAP' },
+      });
+    } catch (err) {
+      // A gap colliding with something else is a soft problem, not fatal to the booking itself.
+      if (!isExclusionViolation(err)) throw err;
+    }
+  }
+
+  // -- Public / owner reads ---------------------------------------------
+
+  async getAvailability(listingId: string, from: Date, to: Date) {
+    const [blocked, workingHours, definedSlots] = await Promise.all([
+      this.prisma.blockedTerm.findMany({
+        where: { listingId, startsAt: { lt: to }, endsAt: { gt: from } },
+        select: { startsAt: true, endsAt: true, source: true },
+      }),
+      this.prisma.workingHours.findMany({ where: { listingId } }),
+      this.prisma.definedSlot.findMany({
+        where: { listingId, startsAt: { gte: from, lt: to } },
+        orderBy: { startsAt: 'asc' },
+      }),
+    ]);
+    return {
+      blocked,
+      workingHours,
+      definedSlots: definedSlots.map((s) => ({ ...s, price: paraToRsd(s.price) })),
+    };
+  }
+
+  // -- Owner management ----------------------------------------------------
+
+  async setWorkingHours(userId: string, listingId: string, dto: SetWorkingHoursDto) {
+    await this.assertOwnership(userId, listingId);
+    await this.prisma.$transaction([
+      this.prisma.workingHours.deleteMany({ where: { listingId } }),
+      this.prisma.workingHours.createMany({
+        data: dto.hours.map((h) => ({ listingId, dayOfWeek: h.dayOfWeek, startsAt: h.startsAt, endsAt: h.endsAt })),
+      }),
+    ]);
+    return { message: 'ok' };
+  }
+
+  async createDefinedSlot(userId: string, listingId: string, dto: CreateDefinedSlotDto) {
+    await this.assertOwnership(userId, listingId);
+    const slot = await this.prisma.definedSlot.create({
+      data: {
+        listingId,
+        startsAt: new Date(dto.startsAt),
+        endsAt: new Date(dto.endsAt),
+        price: dto.price ? BigInt(Math.round(dto.price * 100)) : undefined,
+        maxBookings: dto.maxBookings ?? 1,
+      },
+    });
+    return { ...slot, price: paraToRsd(slot.price) };
+  }
+
+  async deleteDefinedSlot(userId: string, listingId: string, slotId: string) {
+    await this.assertOwnership(userId, listingId);
+    await this.prisma.definedSlot.deleteMany({ where: { id: slotId, listingId } });
+    return { message: 'ok' };
+  }
+
+  async createManualBlock(userId: string, listingId: string, dto: CreateManualBlockDto) {
+    await this.assertOwnership(userId, listingId);
+    return this.lockTerm(listingId, new Date(dto.startsAt), new Date(dto.endsAt), 'MANUAL', { note: dto.note });
+  }
+
+  async deleteManualBlock(userId: string, listingId: string, blockedTermId: string) {
+    await this.assertOwnership(userId, listingId);
+    const term = await this.prisma.blockedTerm.findFirst({ where: { id: blockedTermId, listingId } });
+    if (!term || term.source !== 'MANUAL') throw new NotFoundException();
+    await this.releaseTerm(blockedTermId);
+    return { message: 'ok' };
+  }
+
+  async addIcalSource(userId: string, listingId: string, dto: AddIcalSourceDto) {
+    const listing = await this.assertOwnership(userId, listingId);
+    if (listing.bookingModel !== 'PER_STAY') {
+      // R67 — iCal only applies to per-stay listings
+      throw new BadRequestException(this.i18n.t('errors.LISTING_NOT_BOOKABLE'));
+    }
+    return this.prisma.icalSource.create({ data: { listingId, name: dto.name, url: dto.url } });
+  }
+
+  async removeIcalSource(userId: string, listingId: string, sourceId: string) {
+    await this.assertOwnership(userId, listingId);
+    await this.prisma.icalOccupancy.deleteMany({ where: { sourceId } });
+    await this.prisma.blockedTerm.deleteMany({ where: { icalSourceId: sourceId } });
+    await this.prisma.icalSource.deleteMany({ where: { id: sourceId, listingId } });
+    return { message: 'ok' };
+  }
+
+  async listIcalSources(userId: string, listingId: string) {
+    await this.assertOwnership(userId, listingId);
+    return this.prisma.icalSource.findMany({ where: { listingId } });
+  }
+
+  /** R64 — every bookable listing has a stable export feed for the owner to paste into Airbnb/Booking.com. */
+  async exportIcs(token: string): Promise<string> {
+    const listing = await this.prisma.listing.findUnique({ where: { icalExportToken: token } });
+    if (!listing) throw new NotFoundException();
+    const bookings = await this.prisma.booking.findMany({
+      where: { listingId: listing.id, status: { in: ['CONFIRMED', 'COMPLETED'] } },
+      select: { id: true, startsAt: true, endsAt: true },
+    });
+    return buildIcsCalendar(
+      bookings.map((b) => ({ uid: `rentaj-booking-${b.id}`, startsAt: b.startsAt, endsAt: b.endsAt, summary: 'Rezervisano' })),
+    );
+  }
+
+  // -- Sync job ------------------------------------------------------------
+
+  /** R65/R68/R69 — pulls every active iCal source every hour; conflicts raise a dispute instead of auto-cancelling anything. */
+  @Cron(CronExpression.EVERY_HOUR)
+  async syncAllIcalSources() {
+    const sources = await this.prisma.icalSource.findMany({ where: { active: true } });
+    for (const source of sources) {
+      await this.syncIcalSource(source.id).catch((err) => this.logger.warn(`iCal sync failed for ${source.id}: ${err.message}`));
+    }
+  }
+
+  async syncIcalSource(sourceId: string) {
+    const source = await this.prisma.icalSource.findUniqueOrThrow({ where: { id: sourceId } });
+    let text: string;
+    try {
+      const response = await fetch(source.url);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      text = await response.text();
+    } catch (err) {
+      const failureCount = source.failureCount + 1;
+      await this.prisma.icalSource.update({
+        where: { id: sourceId },
+        data: { failureCount, lastError: (err as Error).message },
+      });
+      if (failureCount >= 3) {
+        this.events.emit('availability.ical_sync_failed', { listingId: source.listingId, sourceId });
+      }
+      return;
+    }
+
+    const events = parseIcs(text);
+    const existing = await this.prisma.icalOccupancy.findMany({ where: { sourceId, withdrawnAt: null } });
+    const existingByUid = new Map(existing.map((e) => [e.externalUid, e]));
+    const seenUids = new Set<string>();
+
+    for (const event of events) {
+      seenUids.add(event.uid);
+      if (existingByUid.has(event.uid)) continue; // already imported
+
+      const occupancy = await this.prisma.icalOccupancy.create({
+        data: { sourceId, externalUid: event.uid, startsAt: event.startsAt, endsAt: event.endsAt },
+      });
+      try {
+        await this.lockTerm(source.listingId, event.startsAt, event.endsAt, 'ICAL', { icalSourceId: sourceId });
+      } catch {
+        // R68: conflict with an existing request/booking — flag for the owner, don't touch the existing booking.
+        await this.prisma.dispute.create({
+          data: {
+            type: 'TERM_CONFLICT',
+            listingId: source.listingId,
+            submittedByUserId: (await this.prisma.listing.findUniqueOrThrow({ where: { id: source.listingId } })).userId,
+            description: `Imported calendar event ${event.uid} overlaps an existing booking`,
+          },
+        });
+        this.events.emit('availability.ical_conflict', { listingId: source.listingId, sourceId });
+        await this.prisma.icalOccupancy.update({ where: { id: occupancy.id }, data: { withdrawnAt: new Date() } });
+      }
+    }
+
+    // R "uvezeno zauzece nestane sa spoljne platforme" — release anything no longer in the feed.
+    for (const occ of existing) {
+      if (!seenUids.has(occ.externalUid)) {
+        await this.prisma.blockedTerm.deleteMany({ where: { icalSourceId: sourceId, source: 'ICAL', startsAt: occ.startsAt, endsAt: occ.endsAt } });
+        await this.prisma.icalOccupancy.update({ where: { id: occ.id }, data: { withdrawnAt: new Date() } });
+      }
+    }
+
+    await this.prisma.icalSource.update({
+      where: { id: sourceId },
+      data: { lastSyncedAt: new Date(), failureCount: 0, lastError: null },
+    });
+  }
+
+  // -- Internal --------------------------------------------------------
+
+  private async assertOwnership(userId: string, listingId: string) {
+    const listing = await this.prisma.listing.findUnique({ where: { id: listingId } });
+    if (!listing) throw new NotFoundException();
+    if (listing.userId !== userId) throw new ForbiddenException();
+    return listing;
+  }
+}
+
+function isExclusionViolation(err: unknown): boolean {
+  const message = (err as { message?: string })?.message ?? '';
+  const meta = (err as { meta?: { message?: string } })?.meta?.message ?? '';
+  return (
+    message.includes('blocked_term_no_overlap') ||
+    meta.includes('blocked_term_no_overlap') ||
+    message.includes('exclusion') ||
+    meta.includes('exclusion')
+  );
+}

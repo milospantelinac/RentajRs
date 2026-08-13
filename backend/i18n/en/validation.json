@@ -1,0 +1,17 @@
+{
+  "REQUIRED": "{property} is required",
+  "STRING": "{property} must be text",
+  "EMAIL": "The email address entered is not valid",
+  "MIN_LENGTH": "{property} is too short",
+  "MAX_LENGTH": "{property} is too long",
+  "MIN": "{property} value is too small",
+  "MAX": "{property} value is too large",
+  "NUMBER": "{property} must be a number",
+  "BOOLEAN": "{property} must be true or false",
+  "ENUM": "{property} has an invalid value",
+  "UUID": "{property} is not a valid identifier",
+  "DATE": "{property} must be a valid date",
+  "ARRAY": "{property} must be a list of values",
+  "PASSWORD_WEAK": "Password must be at least 8 characters and must not be a commonly used password",
+  "PHONE_INVALID": "Phone number is not valid"
+}

@@ -1,0 +1,1313 @@
+// Rentaj database schema.
+// Source of truth: "Rentaj Product Bible", Chapter 17 (Arhitektura baze podataka).
+// Serbian table/field names from the Bible were translated to English identifiers for
+// codebase conventionality — see DOCUMENTATION.md for the full field glossary mapping
+// back to the original spec (R-rule / ADR references appear inline below).
+//
+// Naming: Prisma default (PascalCase models / camelCase fields) is used rather than
+// @@map/@map snake_case aliases, to keep this file scannable given its size. Prisma
+// quotes identifiers verbatim in generated SQL, so any hand-written raw SQL (see
+// migrations/*_constraints/migration.sql) double-quotes mixed-case identifiers.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums (Chapter 17 §3 — "Nabrajanja")
+// ---------------------------------------------------------------------------
+
+enum Language {
+  SR
+  EN
+}
+
+enum BuyerType {
+  PERSON
+  COMPANY
+}
+
+enum ConsentDocument {
+  TERMS
+  PRIVACY
+  MARKETING
+  COOKIES
+}
+
+enum CategoryStatus {
+  ACTIVE
+  PROPOSED
+  MERGED
+  ARCHIVED
+}
+
+enum BookingModel {
+  PER_STAY
+  PER_SLOT
+  NO_BOOKING
+}
+
+enum SlotSubmode {
+  DEFINED_SLOTS
+  WORKING_HOURS
+}
+
+enum PriceUnit {
+  NIGHT
+  DAY
+  HOUR
+  SLOT
+  MONTH
+  YEAR
+}
+
+enum AttributeType {
+  NUMBER
+  TEXT
+  LIST
+  MULTISELECT
+  BOOLEAN
+}
+
+enum FilterType {
+  RANGE
+  SELECT
+  TOGGLE
+}
+
+enum TranslatableEntity {
+  CATEGORY
+  ATTRIBUTE
+  OPTION
+  PAGE
+}
+
+enum ListingStatus {
+  DRAFT
+  PENDING_APPROVAL
+  REJECTED
+  ACTIVE
+  EXPIRED
+  DELETED
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  BOTH
+}
+
+enum ChargeType {
+  ONE_TIME
+  PER_DAY
+  PER_GUEST
+}
+
+enum VersionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ModerationDecision {
+  APPROVED
+  REJECTED
+}
+
+enum OccupancySource {
+  BOOKING
+  ICAL
+  MANUAL
+  GAP
+}
+
+enum SubscriptionStatus {
+  PENDING_ACTIVATION
+  ACTIVE
+  GRACE
+  EXPIRED
+  CANCELLED
+}
+
+enum BillingCycle {
+  MONTHLY
+  YEARLY
+}
+
+enum TransactionStatus {
+  INITIATED
+  SUCCESSFUL
+  FAILED
+  REFUNDED
+}
+
+enum TransactionType {
+  SUBSCRIPTION
+  RENEWAL
+  FEATURED
+}
+
+enum DocumentType {
+  FISCAL_RECEIPT
+  E_INVOICE
+  PRO_FORMA
+}
+
+enum BookingStatus {
+  REQUESTED
+  AWAITING_PAYMENT
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+  EXPIRED
+  NO_SHOW
+}
+
+enum ReviewDirection {
+  GUEST_TO_OWNER
+  OWNER_TO_GUEST
+}
+
+enum ReviewTag {
+  ARRIVED_ON_TIME
+  RETURNED_NEATLY
+  COMMUNICATIVE
+  LATE
+  DAMAGE
+  NO_SHOW
+}
+
+enum ReportReason {
+  FRAUD
+  INACCURATE_INFO
+  INAPPROPRIATE_CONTENT
+  DUPLICATE
+  OTHER
+}
+
+enum DisputeType {
+  UNCONFIRMED_PAYMENT
+  DISPUTED_NO_SHOW
+  REPORTED_REVIEW
+  TERM_CONFLICT
+}
+
+enum ProcessingStatus {
+  NEW
+  IN_PROGRESS
+  RESOLVED
+  DISMISSED
+}
+
+enum DisputeOutcome {
+  WARNING
+  RESTRICTION
+  BLOCK
+  NO_ACTION
+}
+
+enum EmailStatus {
+  SENT
+  FAILED
+}
+
+// ---------------------------------------------------------------------------
+// Identity (§4)
+// ---------------------------------------------------------------------------
+
+/// No `role` field exists by design — role is derived from state (R13): a user
+/// is an "owner" iff they have >=1 ACTIVE listing. See UsersService.isOwner().
+model User {
+  id                     String     @id @default(uuid()) @db.Uuid
+  firstName              String
+  lastName               String
+  email                  String     @unique
+  emailVerified          Boolean    @default(false)
+  /// Not in the Bible's §4.1 field list, but required by the profile URL
+  /// pattern in Ch.14.2 (rentaj.rs/vlasnik/marko-petrovic) — generated the
+  /// moment a user publishes their first listing (their Gost->Vlasnik
+  /// transition, R14), see UsersService.ensureProfileSlug().
+  profileSlug            String?    @unique
+  passwordHash           String?
+  phone                  String?
+  avatarUrl              String?
+  language               Language   @default(SR)
+  buyerType              BuyerType?
+  companyName            String?
+  taxId                  String? // PIB
+  registrationNumber     String? // maticni broj
+  billingAddress         String?
+  bankAccount            String? // for IPS QR generation on their own listings (R51/R57)
+  verified               Boolean    @default(false) // reserved for future "verified owner" badge
+  blocked                Boolean    @default(false)
+  blockedReason          String?
+  twoFactorEnabled       Boolean    @default(false)
+  twoFactorSecret        String?
+  avgResponseTimeMinutes Int?
+  completedBookingsCount Int        @default(0)
+  failedLoginAttempts    Int        @default(0)
+  lockedUntil            DateTime?  @db.Timestamptz
+  createdAt              DateTime   @default(now()) @db.Timestamptz
+  lastLoginAt            DateTime?  @db.Timestamptz
+  anonymizedAt           DateTime?  @db.Timestamptz
+  /// R175's "confirmed from the registered address" gate for account deletion (Ch.22.4) — a one-shot,
+  /// short-lived hashed token, same shape as the password-reset flow.
+  pendingDeletionTokenHash String?
+  pendingDeletionExpiresAt DateTime? @db.Timestamptz
+
+  logins                  UserLogin[]
+  permissions             UserPermission[]
+  permissionsGranted      UserPermission[]      @relation("PermissionGrantedBy")
+  consents                Consent[]
+  sessions                Session[]
+  passwordResets          PasswordReset[]
+  listings                Listing[]
+  proposedCategories      Category[]            @relation("CategoryProposedBy")
+  listingVersionsReviewed ListingVersion[]      @relation("VersionReviewedBy")
+  moderationsDecided      ListingModeration[]   @relation("ModerationDecidedBy")
+  subscriptions           Subscription[]
+  transactions            Transaction[]
+  invoices                Invoice[]
+  featuredAssigned        FeaturedListing[]     @relation("FeaturedAssignedBy")
+  bookingsAsGuest         Booking[]             @relation("BookingGuest")
+  bookingsAsOwner         Booking[]             @relation("BookingOwner")
+  bookingHistoryChanges   BookingHistory[]      @relation("BookingHistoryChangedBy")
+  conversationsAsGuest    Conversation[]        @relation("ConversationGuest")
+  conversationsAsOwner    Conversation[]        @relation("ConversationOwner")
+  messagesSent            Message[]
+  reviewsAuthored         Review[]              @relation("ReviewAuthor")
+  reviewsReceived         Review[]              @relation("ReviewRecipient")
+  reviewReplies           ReviewReply[]
+  favorites               Favorite[]
+  reportsFiled            Report[]              @relation("ReportFiledBy")
+  reportsHandled          Report[]              @relation("ReportHandledBy")
+  disputesFiled           Dispute[]             @relation("DisputeFiledBy")
+  disputesHandled         Dispute[]             @relation("DisputeHandledBy")
+  notifications           Notification[]
+  notificationSettings    NotificationSetting[]
+  emailLogs               EmailLog[]
+  adminLogs               AdminLog[]
+  emptySearches           EmptySearch[]
+
+  @@index([email])
+  @@index([blocked])
+  @@index([createdAt])
+}
+
+/// Resolves R125: same email must never create a second account.
+model UserLogin {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @db.Uuid
+  provider   String // "GOOGLE" in v1
+  externalId String
+  linkedAt   DateTime @default(now()) @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, externalId])
+}
+
+/// Flat permission list, never a role name (P6/R12). Introducing a moderator or
+/// support role later means inserting a new permission set, not touching app code.
+model Permission {
+  id          String @id @default(uuid()) @db.Uuid
+  key         String @unique // e.g. approve_listing, manage_prices
+  description String
+
+  users UserPermission[]
+}
+
+model UserPermission {
+  userId          String   @db.Uuid
+  permissionId    String   @db.Uuid
+  grantedAt       DateTime @default(now()) @db.Timestamptz
+  grantedByUserId String?  @db.Uuid
+
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission    Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  grantedByUser User?      @relation("PermissionGrantedBy", fields: [grantedByUserId], references: [id])
+
+  @@id([userId, permissionId])
+}
+
+/// Versioned consent (R143). Cookie choices ride the same table since they're
+/// equally a provable, revocable consent.
+model Consent {
+  id         String          @id @default(uuid()) @db.Uuid
+  userId     String?         @db.Uuid
+  document   ConsentDocument
+  version    String
+  choice     Json?           @db.JsonB
+  acceptedAt DateTime        @default(now()) @db.Timestamptz
+  ipAddress  String?
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, document])
+}
+
+model Session {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @db.Uuid
+  tokenHash    String
+  device       String?
+  ipAddress    String?
+  expiresAt    DateTime  @db.Timestamptz
+  lastActiveAt DateTime  @default(now()) @db.Timestamptz
+  revokedAt    DateTime? @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+}
+
+model PasswordReset {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  tokenHash String
+  expiresAt DateTime  @db.Timestamptz
+  usedAt    DateTime? @db.Timestamptz
+  createdAt DateTime  @default(now()) @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tokenHash])
+}
+
+// ---------------------------------------------------------------------------
+// Taxonomy (§5)
+// ---------------------------------------------------------------------------
+
+/// Self-referencing tree, max depth 3 (R24, enforced in service layer + trigger).
+/// Attribute inheritance is NEVER copied — it's resolved by walking up the tree
+/// at read time (see TaxonomyService.resolveAttributes()), so editing a parent's
+/// attribute reaches every descendant instantly.
+model Category {
+  id                  String         @id @default(uuid()) @db.Uuid
+  parentId            String?        @db.Uuid
+  level               Int // 1-3, derived on write
+  slug                String         @unique
+  icon                String?
+  status              CategoryStatus @default(ACTIVE)
+  defaultBookingModel BookingModel
+  allowedPriceUnits   PriceUnit[]
+  defaultPriceUnit    PriceUnit
+  displayOrder        Int            @default(0)
+  proposedByUserId    String?        @db.Uuid
+  proposalComment     String?
+  proposalCount       Int            @default(0)
+  mergedIntoId        String?        @db.Uuid
+  listingCount        Int            @default(0) // cached, refreshed by scheduled job
+  createdAt           DateTime       @default(now()) @db.Timestamptz
+
+  parent           Category?           @relation("CategoryTree", fields: [parentId], references: [id])
+  children         Category[]          @relation("CategoryTree")
+  mergedInto       Category?           @relation("CategoryMerge", fields: [mergedIntoId], references: [id])
+  mergedFrom       Category[]          @relation("CategoryMerge")
+  proposedByUser   User?               @relation("CategoryProposedBy", fields: [proposedByUserId], references: [id])
+  attributes       CategoryAttribute[]
+  listings         Listing[]
+  featuredWaitlist FeaturedWaitlist[]
+  emptySearches    EmptySearch[]
+
+  @@index([parentId])
+  @@index([status])
+}
+
+model CategoryAttribute {
+  id           String        @id @default(uuid()) @db.Uuid
+  categoryId   String        @db.Uuid
+  key          String
+  type         AttributeType
+  required     Boolean       @default(false)
+  unit         String?
+  isFilter     Boolean       @default(false)
+  filterType   FilterType?
+  minValue     Decimal?      @db.Decimal(12, 2)
+  maxValue     Decimal?      @db.Decimal(12, 2)
+  displayOrder Int           @default(0)
+
+  category      Category           @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  options       AttributeOption[]
+  listingValues ListingAttribute[]
+
+  @@unique([categoryId, key])
+}
+
+model AttributeOption {
+  id           String @id @default(uuid()) @db.Uuid
+  attributeId  String @db.Uuid
+  key          String
+  displayOrder Int    @default(0)
+
+  attribute CategoryAttribute @relation(fields: [attributeId], references: [id], onDelete: Cascade)
+
+  @@unique([attributeId, key])
+}
+
+/// Generic translation store (R137). Listing title/description are the deliberate
+/// exception — see Listing model comment.
+model Translation {
+  id         String             @id @default(uuid()) @db.Uuid
+  entityType TranslatableEntity
+  entityId   String             @db.Uuid
+  field      String // name, description, metaDescription, ...
+  language   Language
+  value      String
+
+  @@unique([entityType, entityId, field, language])
+  @@index([entityType, entityId, language])
+}
+
+model Region {
+  id   String @id @default(uuid()) @db.Uuid
+  name String
+  slug String @unique
+
+  cities   City[]
+  listings Listing[]
+}
+
+model City {
+  id        String   @id @default(uuid()) @db.Uuid
+  regionId  String   @db.Uuid
+  name      String
+  slug      String   @unique
+  latitude  Decimal? @db.Decimal(10, 7)
+  longitude Decimal? @db.Decimal(10, 7)
+
+  region        Region        @relation(fields: [regionId], references: [id])
+  areas         CityArea[]
+  listings      Listing[]
+  emptySearches EmptySearch[]
+
+  @@index([regionId])
+}
+
+model CityArea {
+  id     String @id @default(uuid()) @db.Uuid
+  cityId String @db.Uuid
+  name   String
+  slug   String
+
+  city     City      @relation(fields: [cityId], references: [id], onDelete: Cascade)
+  listings Listing[]
+
+  @@unique([cityId, slug])
+}
+
+// ---------------------------------------------------------------------------
+// Listings (§6)
+// ---------------------------------------------------------------------------
+
+/// Central object of the platform. `title`/`description` stay as plain columns
+/// (not in Translation) — search/sort speed matters more here than for the
+/// handful of admin-managed taxonomy strings; owners optionally fill the
+/// `*TranslatedEn` sibling (R140) instead of joining a translation table.
+model Listing {
+  id                      String         @id @default(uuid()) @db.Uuid
+  userId                  String         @db.Uuid
+  categoryId              String         @db.Uuid
+  subscriptionId          String?        @db.Uuid
+  status                  ListingStatus  @default(DRAFT)
+  available               Boolean        @default(true) // "trenutno nedostupno" toggle (R34)
+  title                   String
+  titleTranslatedEn       String?
+  description             String
+  descriptionTranslatedEn String?
+  slug                    String         @unique
+  keywords                String[]
+  bookingModel            BookingModel
+  slotSubmode             SlotSubmode?
+  priceUnit               PriceUnit
+  price                   BigInt // in para (RSD x 100), P4
+  weekendPrice            BigInt?
+  pricePerGuest           BigInt?
+  mandatoryFees           Json?          @db.JsonB
+  minDuration             Int?
+  maxDuration             Int?
+  minGuests               Int?
+  maxGuests               Int?
+  gapAfterMinutes         Int?
+  pickupTime              String? // stored HH:MM, fixed pickup/return times (R71)
+  returnTime              String?
+  earliestBookingHours    Int?
+  paymentMethod           PaymentMethod?
+  advancePercent          Int? // null = full amount due (R60)
+  paymentDeadlineHours    Int?           @default(48) // 12-168 range, R59
+  /// Not in the Bible's §6.1 field list, but explicitly required by R52
+  /// ("owner chooses per listing: send the QR immediately, or require
+  /// approval of the request first") — missing from Ch.17's table, added
+  /// here to actually implement the rule. Defaults to requiring approval,
+  /// the more conservative choice for a new listing.
+  requiresApproval        Boolean        @default(true)
+  cancellationTerms       String?
+  regionId                String?        @db.Uuid
+  cityId                  String?        @db.Uuid
+  cityAreaId              String?        @db.Uuid
+  address                 String? // never shown publicly pre-confirmation
+  latitude                Decimal?       @db.Decimal(10, 7)
+  longitude               Decimal?       @db.Decimal(10, 7)
+  videoUrl                String?
+  viewCount               Int            @default(0)
+  avgRating               Decimal?       @db.Decimal(2, 1) // shown only after 3 reviews (R102)
+  reviewCount             Int            @default(0)
+  icalExportToken         String?        @unique
+  publishedAt             DateTime?      @db.Timestamptz // subscription clock starts here (R28)
+  deletedAt               DateTime?      @db.Timestamptz
+  createdAt               DateTime       @default(now()) @db.Timestamptz
+
+  user         User          @relation(fields: [userId], references: [id])
+  category     Category      @relation(fields: [categoryId], references: [id])
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id])
+  region       Region?       @relation(fields: [regionId], references: [id])
+  city         City?         @relation(fields: [cityId], references: [id])
+  cityArea     CityArea?     @relation(fields: [cityAreaId], references: [id])
+
+  attributes       ListingAttribute[]
+  photos           ListingPhoto[]
+  faqs             ListingFaq[]
+  versions         ListingVersion[]
+  moderations      ListingModeration[]
+  extraServices    ListingExtraService[]
+  blockedTerms     BlockedTerm[]
+  workingHours     WorkingHours[]
+  definedSlots     DefinedSlot[]
+  icalSources      IcalSource[]
+  bankedDays       BankedDay[]
+  featuredPeriods  FeaturedListing[]
+  featuredWaitlist FeaturedWaitlist[]
+  bookings         Booking[]
+  conversations    Conversation[]
+  reviews          Review[]
+  favorites        Favorite[]
+  reports          Report[]
+  disputes         Dispute[]
+  viewStats        ListingViewStat[]
+
+  @@index([status, available])
+  @@index([categoryId, cityId])
+  @@index([userId])
+  @@index([subscriptionId])
+  @@index([latitude, longitude])
+}
+
+/// Values live apart from Listing (P2) — a new category never needs a schema
+/// migration.
+model ListingAttribute {
+  listingId      String   @db.Uuid
+  attributeId    String   @db.Uuid
+  valueNumber    Decimal? @db.Decimal(14, 3)
+  valueText      String?
+  valueBoolean   Boolean?
+  valueOptionIds String[] @db.Uuid
+
+  listing   Listing           @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  attribute CategoryAttribute @relation(fields: [attributeId], references: [id])
+
+  @@id([listingId, attributeId])
+  @@index([attributeId, valueNumber])
+  @@index([attributeId, valueBoolean])
+}
+
+/// `versionId` + `pendingRemoval` let a photo edit go through moderation without
+/// ever taking the live listing off the site (R32) — see 6.5 note in the Bible.
+model ListingPhoto {
+  id             String  @id @default(uuid()) @db.Uuid
+  listingId      String  @db.Uuid
+  url            String
+  altText        String?
+  displayOrder   Int     @default(0)
+  isCover        Boolean @default(false)
+  versionId      String? @db.Uuid // set while pending approval, cleared on approval
+  pendingRemoval Boolean @default(false)
+
+  listing Listing         @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  version ListingVersion? @relation(fields: [versionId], references: [id])
+
+  @@index([listingId])
+}
+
+model ListingFaq {
+  id           String @id @default(uuid()) @db.Uuid
+  listingId    String @db.Uuid
+  question     String
+  answer       String
+  displayOrder Int    @default(0)
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+}
+
+/// Only fields on the "requires approval" list (title, photos, category,
+/// location, working hours/slots) pass through here — everything else writes
+/// straight to Listing (R31).
+model ListingVersion {
+  id               String        @id @default(uuid()) @db.Uuid
+  listingId        String        @db.Uuid
+  changedFields    Json          @db.JsonB
+  status           VersionStatus @default(PENDING)
+  rejectionReason  String?
+  submittedAt      DateTime      @default(now()) @db.Timestamptz
+  reviewedByUserId String?       @db.Uuid
+  reviewedAt       DateTime?     @db.Timestamptz
+
+  listing        Listing            @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  reviewedByUser User?              @relation("VersionReviewedBy", fields: [reviewedByUserId], references: [id])
+  photos         ListingPhoto[]
+  moderation     ListingModeration?
+
+  @@index([listingId, status])
+}
+
+/// Decision recorded as the RESULT of automated checks (R29) — a prerequisite
+/// for later flipping on auto-approval (R119) without changing this shape.
+model ListingModeration {
+  id              String              @id @default(uuid()) @db.Uuid
+  listingId       String              @db.Uuid
+  versionId       String?             @unique @db.Uuid
+  checkResults    Json                @db.JsonB
+  hasWarnings     Boolean
+  decision        ModerationDecision?
+  rejectionReason String?
+  note            String?
+  automatic       Boolean             @default(false)
+  decidedByUserId String?             @db.Uuid
+  decidedAt       DateTime?           @db.Timestamptz
+  createdAt       DateTime            @default(now()) @db.Timestamptz
+
+  listing       Listing         @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  version       ListingVersion? @relation(fields: [versionId], references: [id])
+  decidedByUser User?           @relation("ModerationDecidedBy", fields: [decidedByUserId], references: [id])
+
+  @@index([listingId])
+  @@index([decision])
+}
+
+/// R176 (Listeo-analysis addition) — optional paid add-ons the guest picks at
+/// booking time, distinct from mandatoryFees which the owner always charges.
+model ListingExtraService {
+  id          String     @id @default(uuid()) @db.Uuid
+  listingId   String     @db.Uuid
+  name        String
+  description String?
+  price       BigInt
+  chargeType  ChargeType
+  maxQuantity Int?
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+}
+
+// ---------------------------------------------------------------------------
+// Availability (§7)
+// ---------------------------------------------------------------------------
+
+/// Single table for every occupancy source. `startsAt`/`endsAt` are always full
+/// timestamps (R23) — never "time of day" — so a 2-hour slot and a "Fri 16:00 to
+/// Sun 12:00" weekend package use the exact same mechanism. A GiST exclusion
+/// constraint (added in the follow-up raw-SQL migration) makes two overlapping
+/// rows for the same listing impossible at the database level.
+model BlockedTerm {
+  id           String          @id @default(uuid()) @db.Uuid
+  listingId    String          @db.Uuid
+  startsAt     DateTime        @db.Timestamptz
+  endsAt       DateTime        @db.Timestamptz
+  source       OccupancySource
+  bookingId    String?         @db.Uuid
+  icalSourceId String?         @db.Uuid
+  note         String?
+
+  listing    Listing     @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  booking    Booking?    @relation(fields: [bookingId], references: [id])
+  icalSource IcalSource? @relation(fields: [icalSourceId], references: [id])
+
+  @@index([listingId, startsAt, endsAt])
+}
+
+/// For SlotSubmode.WORKING_HOURS. Multiple rows per day allow a lunch break
+/// (e.g. 09-13 and 16-20).
+model WorkingHours {
+  id        String @id @default(uuid()) @db.Uuid
+  listingId String @db.Uuid
+  dayOfWeek Int // 1-7 (ISO, Monday=1)
+  startsAt  String // HH:MM
+  endsAt    String // HH:MM
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+}
+
+/// For SlotSubmode.DEFINED_SLOTS — the owner hand-creates bookable slots.
+model DefinedSlot {
+  id          String   @id @default(uuid()) @db.Uuid
+  listingId   String   @db.Uuid
+  startsAt    DateTime @db.Timestamptz
+  endsAt      DateTime @db.Timestamptz
+  price       BigInt?
+  maxBookings Int      @default(1)
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId, startsAt])
+}
+
+model IcalSource {
+  id           String    @id @default(uuid()) @db.Uuid
+  listingId    String    @db.Uuid
+  name         String
+  url          String
+  lastSyncedAt DateTime? @db.Timestamptz
+  lastError    String?
+  failureCount Int       @default(0)
+  active       Boolean   @default(true)
+
+  listing      Listing         @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  occupancies  IcalOccupancy[]
+  blockedTerms BlockedTerm[]
+
+  @@index([listingId])
+}
+
+/// Imported busy periods are NOT bookings (R66) — no guest, no amount, no status.
+model IcalOccupancy {
+  id          String    @id @default(uuid()) @db.Uuid
+  sourceId    String    @db.Uuid
+  externalUid String
+  startsAt    DateTime  @db.Timestamptz
+  endsAt      DateTime  @db.Timestamptz
+  withdrawnAt DateTime? @db.Timestamptz
+
+  source IcalSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@index([sourceId])
+}
+
+// ---------------------------------------------------------------------------
+// Subscriptions & billing (§8)
+// ---------------------------------------------------------------------------
+
+/// Configurable, never hard-coded (P7/R116). Seeded with the exact v1 values
+/// from Product Bible §11.2 — see prisma/seed.ts.
+model Package {
+  id            String  @id @default(uuid()) @db.Uuid
+  key           String  @unique // BASIC, STANDARD, PRO
+  priceMonthly  BigInt
+  priceYearly   BigInt
+  listingLimit  Int
+  maxPhotos     Int     @default(20)
+  hasBookings   Boolean
+  hasMessaging  Boolean
+  hasIcal       Boolean
+  hasReviews    Boolean
+  hasStatistics Boolean
+  active        Boolean @default(true)
+  displayOrder  Int     @default(0)
+
+  subscriptions Subscription[]
+  bankedDays    BankedDay[]
+}
+
+/// Tied to the USER, not the listing directly (ADR-004) — a Pro subscription
+/// covers up to package.listingLimit listings via Listing.subscriptionId.
+/// `priceAtPurchase` is locked at purchase time; a later price change never
+/// touches an existing subscription (R174).
+model Subscription {
+  id                  String             @id @default(uuid()) @db.Uuid
+  userId              String             @db.Uuid
+  packageId           String             @db.Uuid
+  billingCycle        BillingCycle
+  status              SubscriptionStatus @default(PENDING_ACTIVATION)
+  priceAtPurchase     BigInt
+  startsAt            DateTime?          @db.Timestamptz
+  expiresAt           DateTime?          @db.Timestamptz
+  autoRenew           Boolean            @default(true)
+  cancelledAt         DateTime?          @db.Timestamptz
+  graceUntil          DateTime?          @db.Timestamptz
+  paymentAttemptCount Int                @default(0)
+  cardToken           String? // opaque token from the payment provider, never card data (R118)
+  createdAt           DateTime           @default(now()) @db.Timestamptz
+
+  user     User      @relation(fields: [userId], references: [id])
+  package  Package   @relation(fields: [packageId], references: [id])
+  listings Listing[]
+
+  transactions Transaction[]
+
+  @@index([userId])
+  @@index([status])
+}
+
+/// ADR-005: paid days transfer, never refund or expire. See
+/// SubscriptionsService.transferBankedDaysOnUpgrade() for the trickiest logic
+/// in the whole schema (documented at length there).
+model BankedDay {
+  id              String    @id @default(uuid()) @db.Uuid
+  listingId       String    @db.Uuid
+  days            Int
+  originPackageId String    @db.Uuid
+  validFrom       DateTime? @db.Timestamptz
+  validUntil      DateTime? @db.Timestamptz
+  createdAt       DateTime  @default(now()) @db.Timestamptz
+  usedAt          DateTime? @db.Timestamptz
+
+  listing       Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  originPackage Package @relation(fields: [originPackageId], references: [id])
+
+  @@index([listingId])
+}
+
+/// `featuredId` was dropped in favor of the single-direction FK on FeaturedListing
+/// (isticanja.transakcija_id in the Bible) — the Bible's mutual FK pair was
+/// redundant; this keeps one unambiguous edge instead of a circular reference.
+model Transaction {
+  id             String            @id @default(uuid()) @db.Uuid
+  userId         String            @db.Uuid
+  subscriptionId String?           @db.Uuid
+  amount         BigInt
+  status         TransactionStatus
+  bankExternalId String?
+  type           TransactionType
+  occurredAt     DateTime          @default(now()) @db.Timestamptz
+  errorMessage   String?
+
+  user             User              @relation(fields: [userId], references: [id])
+  subscription     Subscription?     @relation(fields: [subscriptionId], references: [id])
+  invoices         Invoice[]
+  featuredListings FeaturedListing[]
+
+  @@index([userId])
+  @@index([subscriptionId])
+}
+
+/// Two flows (R109): FISCAL_RECEIPT auto-issued for individuals, E_INVOICE via
+/// SEF for companies, PRO_FORMA sent before a bank transfer.
+model Invoice {
+  id             String       @id @default(uuid()) @db.Uuid
+  transactionId  String       @db.Uuid
+  userId         String       @db.Uuid
+  documentType   DocumentType
+  documentNumber String
+  amount         BigInt
+  externalId     String? // Sparkom VP reference
+  pdfUrl         String?
+  sentAt         DateTime?    @db.Timestamptz
+  createdAt      DateTime     @default(now()) @db.Timestamptz
+
+  transaction Transaction @relation(fields: [transactionId], references: [id])
+  user        User        @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
+/// Rotates on every page refresh so all featured listings in a category get
+/// equal visibility (R114) — see FeaturedListingsService.getRotatedFeatured().
+model FeaturedListing {
+  id               String   @id @default(uuid()) @db.Uuid
+  listingId        String   @db.Uuid
+  transactionId    String?  @db.Uuid
+  durationDays     Int
+  price            BigInt
+  startsAt         DateTime @db.Timestamptz
+  expiresAt        DateTime @db.Timestamptz
+  free             Boolean  @default(false) // admin-assigned, no charge (R145)
+  assignedByUserId String?  @db.Uuid
+
+  listing        Listing      @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  transaction    Transaction? @relation(fields: [transactionId], references: [id])
+  assignedByUser User?        @relation("FeaturedAssignedBy", fields: [assignedByUserId], references: [id])
+
+  @@index([listingId])
+  @@index([expiresAt])
+}
+
+model FeaturedWaitlist {
+  id          String    @id @default(uuid()) @db.Uuid
+  listingId   String    @db.Uuid
+  categoryId  String    @db.Uuid
+  requestedAt DateTime  @default(now()) @db.Timestamptz
+  notifiedAt  DateTime? @db.Timestamptz
+
+  listing  Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id])
+
+  @@index([categoryId])
+}
+
+// ---------------------------------------------------------------------------
+// Bookings (§9)
+// ---------------------------------------------------------------------------
+
+/// `priceAtRequest`/`cancellationTermsSnapshot` freeze the deal at request time
+/// (R63 note in Ch.17 §9.1) — an owner editing the listing's price mid-request
+/// must never change what the guest already agreed to pay.
+model Booking {
+  id                        String        @id @default(uuid()) @db.Uuid
+  listingId                 String        @db.Uuid
+  guestId                   String        @db.Uuid
+  ownerId                   String        @db.Uuid // denormalized for query speed
+  status                    BookingStatus @default(REQUESTED)
+  startsAt                  DateTime      @db.Timestamptz
+  endsAt                    DateTime      @db.Timestamptz
+  guestCount                Int?
+  guestMessage              String?
+  priceUnit                 PriceUnit
+  pricePerUnit              BigInt
+  unitCount                 Int
+  fees                      Json?         @db.JsonB // extra services chosen, mandatory fees snapshot
+  totalAmount               BigInt
+  amountDue                 BigInt // full amount or advance, per R60
+  paymentMethod             PaymentMethod
+  paymentDeadline           DateTime?     @db.Timestamptz
+  ipsQrData                 String? // raw NBS IPS-QR payload string
+  paymentConfirmedAt        DateTime?     @db.Timestamptz
+  phoneUnlocked             Boolean       @default(false) // guest phone visible to owner after acceptance
+  cancellationTermsSnapshot String?
+  cancellationReason        String?
+  noShowDisputed            Boolean       @default(false)
+  /// Which time-based email reminders already went out for this booking —
+  /// "unopened_6h" | "payment_half" | "payment_final" | "day_before" — so the
+  /// reminder crons (Ch.22.4) never send the same nudge twice.
+  remindersSent             String[]      @default([])
+  createdAt                 DateTime      @default(now()) @db.Timestamptz
+
+  listing Listing @relation(fields: [listingId], references: [id])
+  guest   User    @relation("BookingGuest", fields: [guestId], references: [id])
+  owner   User    @relation("BookingOwner", fields: [ownerId], references: [id])
+
+  history       BookingHistory[]
+  blockedTerms  BlockedTerm[]
+  conversations Conversation[]
+  reviews       Review[]
+  disputes      Dispute[]
+
+  @@index([listingId, status])
+  @@index([guestId, status])
+  @@index([ownerId, status])
+  @@index([status, paymentDeadline])
+}
+
+/// Needed for dispute evidence and the automatic CONFIRMED -> COMPLETED
+/// transition 24h after the stay ends (R91).
+model BookingHistory {
+  id              String         @id @default(uuid()) @db.Uuid
+  bookingId       String         @db.Uuid
+  oldStatus       BookingStatus?
+  newStatus       BookingStatus
+  changedByUserId String?        @db.Uuid
+  automatic       Boolean        @default(false)
+  changedAt       DateTime       @default(now()) @db.Timestamptz
+
+  booking       Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  changedByUser User?   @relation("BookingHistoryChangedBy", fields: [changedByUserId], references: [id])
+
+  @@index([bookingId])
+}
+
+// ---------------------------------------------------------------------------
+// Communication (§10)
+// ---------------------------------------------------------------------------
+
+model Conversation {
+  id               String    @id @default(uuid()) @db.Uuid
+  listingId        String    @db.Uuid
+  bookingId        String?   @db.Uuid // null = pre-booking question (R76)
+  guestId          String    @db.Uuid
+  ownerId          String    @db.Uuid
+  lastMessageAt    DateTime? @db.Timestamptz
+  unreadGuestCount Int       @default(0)
+  unreadOwnerCount Int       @default(0)
+
+  listing  Listing   @relation(fields: [listingId], references: [id])
+  booking  Booking?  @relation(fields: [bookingId], references: [id])
+  guest    User      @relation("ConversationGuest", fields: [guestId], references: [id])
+  owner    User      @relation("ConversationOwner", fields: [ownerId], references: [id])
+  messages Message[]
+
+  @@index([guestId, lastMessageAt])
+  @@index([ownerId, lastMessageAt])
+}
+
+model Message {
+  id              String    @id @default(uuid()) @db.Uuid
+  conversationId  String    @db.Uuid
+  senderId        String    @db.Uuid
+  content         String
+  containsContact Boolean   @default(false) // flag only, never the extracted value (R78/R79)
+  readAt          DateTime? @db.Timestamptz
+  sentAt          DateTime  @default(now()) @db.Timestamptz
+
+  conversation Conversation        @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User                @relation(fields: [senderId], references: [id])
+  attachments  MessageAttachment[]
+
+  @@index([conversationId, sentAt])
+}
+
+model MessageAttachment {
+  id        String @id @default(uuid()) @db.Uuid
+  messageId String @db.Uuid
+  url       String
+  type      String
+  size      Int
+  filename  String
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+}
+
+// ---------------------------------------------------------------------------
+// Reviews (§11)
+// ---------------------------------------------------------------------------
+
+/// Both directions are written independently and held back (published=false)
+/// until the counterpart also writes theirs, or 14 days pass — whichever is
+/// first (R96). See ReviewsService.tryPublishPair().
+model Review {
+  id            String          @id @default(uuid()) @db.Uuid
+  bookingId     String          @db.Uuid
+  authorId      String          @db.Uuid
+  recipientId   String          @db.Uuid
+  listingId     String          @db.Uuid // kept even if listing is later deleted (R148)
+  direction     ReviewDirection
+  rating        Int
+  comment       String?
+  published     Boolean         @default(false)
+  publishedAt   DateTime?       @db.Timestamptz
+  writtenAt     DateTime        @default(now()) @db.Timestamptz
+  hiddenByAdmin Boolean         @default(false)
+
+  booking   Booking @relation(fields: [bookingId], references: [id])
+  author    User    @relation("ReviewAuthor", fields: [authorId], references: [id])
+  recipient User    @relation("ReviewRecipient", fields: [recipientId], references: [id])
+  listing   Listing @relation(fields: [listingId], references: [id])
+
+  tags  ReviewTagRow[]
+  reply ReviewReply?
+
+  @@unique([bookingId, direction])
+  @@index([recipientId, published])
+}
+
+/// Guest-only tags (R100 — "brze oznake za gosta").
+model ReviewTagRow {
+  reviewId String    @db.Uuid
+  tag      ReviewTag
+
+  review Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  @@id([reviewId, tag])
+}
+
+/// At most one per review, never edited after posting (R101).
+model ReviewReply {
+  id        String   @id @default(uuid()) @db.Uuid
+  reviewId  String   @unique @db.Uuid
+  authorId  String   @db.Uuid
+  content   String
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  review Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  author User   @relation(fields: [authorId], references: [id])
+}
+
+// ---------------------------------------------------------------------------
+// System (§12)
+// ---------------------------------------------------------------------------
+
+/// `priceAtAdd` powers the price-drop notification job.
+model Favorite {
+  userId              String    @db.Uuid
+  listingId           String    @db.Uuid
+  addedAt             DateTime  @default(now()) @db.Timestamptz
+  priceAtAdd          BigInt
+  priceDropNotifiedAt DateTime? @db.Timestamptz
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@id([userId, listingId])
+}
+
+model Report {
+  id               String           @id @default(uuid()) @db.Uuid
+  listingId        String           @db.Uuid
+  reportedByUserId String           @db.Uuid
+  reason           ReportReason
+  description      String?
+  status           ProcessingStatus @default(NEW)
+  handledByUserId  String?          @db.Uuid
+  createdAt        DateTime         @default(now()) @db.Timestamptz
+
+  listing        Listing @relation(fields: [listingId], references: [id])
+  reportedByUser User    @relation("ReportFiledBy", fields: [reportedByUserId], references: [id])
+  handledByUser  User?   @relation("ReportHandledBy", fields: [handledByUserId], references: [id])
+
+  @@index([listingId])
+  @@index([status])
+}
+
+/// Admin decides about the ACCOUNT, never about money (R61/ADR-019).
+model Dispute {
+  id                String           @id @default(uuid()) @db.Uuid
+  type              DisputeType
+  bookingId         String?          @db.Uuid
+  listingId         String?          @db.Uuid
+  submittedByUserId String           @db.Uuid
+  description       String
+  evidenceUrl       String?
+  status            ProcessingStatus @default(NEW)
+  outcome           DisputeOutcome?
+  adminNote         String?
+  handledByUserId   String?          @db.Uuid
+  createdAt         DateTime         @default(now()) @db.Timestamptz
+
+  listing         Listing? @relation(fields: [listingId], references: [id])
+  booking         Booking? @relation(fields: [bookingId], references: [id])
+  submittedByUser User     @relation("DisputeFiledBy", fields: [submittedByUserId], references: [id])
+  handledByUser   User?    @relation("DisputeHandledBy", fields: [handledByUserId], references: [id])
+
+  @@index([status])
+}
+
+/// Channel-independent by design (R87) — adding SMS later is a new boolean
+/// column, not new logic. `event`-critical rows (money/security/confirmed
+/// booking) ignore NotificationSetting opt-outs, enforced in NotificationsService.
+model Notification {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  event     String
+  title     String
+  content   String
+  linkUrl   String?
+  readAt    DateTime? @db.Timestamptz
+  createdAt DateTime  @default(now()) @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+}
+
+model NotificationSetting {
+  userId       String  @db.Uuid
+  event        String
+  emailEnabled Boolean @default(true)
+  appEnabled   Boolean @default(true)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, event])
+}
+
+/// Proof of delivery, needed to demonstrate the "3 days before charge"
+/// notice was actually sent (R110).
+model EmailLog {
+  id        String      @id @default(uuid()) @db.Uuid
+  userId    String?     @db.Uuid
+  event     String
+  recipient String
+  template  String
+  status    EmailStatus
+  error     String?
+  sentAt    DateTime    @default(now()) @db.Timestamptz
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([event])
+}
+
+/// R166: email copy is editable from the admin panel without a code change.
+/// Structured, non-editable data (IPS QR image, payment breakdown, etc.) is
+/// still assembled in code and injected as `extraHtml` — this table only
+/// owns the parts that are genuinely free text (R171 "tekstovi").
+model EmailTemplate {
+  key          String
+  language     Language
+  subject      String
+  heading      String
+  bodyText     String
+  buttonLabel  String?
+  updatedAt    DateTime @updatedAt @db.Timestamptz
+
+  @@id([key, language])
+}
+
+model AdminLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @db.Uuid
+  action     String
+  entityType String
+  entityId   String?
+  oldValue   Json?    @db.JsonB
+  newValue   Json?    @db.JsonB
+  ipAddress  String?
+  createdAt  DateTime @default(now()) @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([entityType, entityId])
+}
+
+/// Source of demand data (R45/R46) — surfaced weekly to the admin as "what's
+/// searched but doesn't exist yet".
+model EmptySearch {
+  id          String   @id @default(uuid()) @db.Uuid
+  query       String?
+  categoryId  String?  @db.Uuid
+  cityId      String?  @db.Uuid
+  filters     Json?    @db.JsonB
+  userId      String?  @db.Uuid
+  notifyEmail String?
+  createdAt   DateTime @default(now()) @db.Timestamptz
+
+  category Category? @relation(fields: [categoryId], references: [id])
+  city     City?     @relation(fields: [cityId], references: [id])
+  user     User?     @relation(fields: [userId], references: [id])
+
+  @@index([categoryId, cityId])
+}
+
+/// Daily rollups, never per-visitor rows (privacy by design, per the doc's
+/// answer to "no visitor names").
+model ListingViewStat {
+  listingId      String   @db.Uuid
+  date           DateTime @db.Date
+  viewCount      Int      @default(0)
+  uniqueVisitors Int      @default(0)
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@id([listingId, date])
+}
+
+/// Config-not-code (P7/R116/R171). Seeded defaults in prisma/seed.ts mirror
+/// Ch.17 §12.9 exactly.
+model Setting {
+  key         String   @id
+  value       Json     @db.JsonB
+  description String?
+  updatedAt   DateTime @updatedAt
+}
+
+model StaticPage {
+  id          String  @id @default(uuid()) @db.Uuid
+  slug        String  @unique
+  published   Boolean @default(true)
+  footerOrder Int?
+}
+
+/// Needed whenever a slug changes (R133), a category merges (R134), or a
+/// subcategory is promoted to a top-level category — without this table months
+/// of accumulated search ranking on the old URL are lost.
+model Redirect {
+  id        String   @id @default(uuid()) @db.Uuid
+  oldPath   String   @unique
+  newPath   String
+  type      Int      @default(301)
+  createdAt DateTime @default(now()) @db.Timestamptz
+}

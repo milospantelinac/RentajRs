@@ -1,0 +1,61 @@
+// Centralized breakpoint system (Bootstrap-shaped, mobile-first). Every
+// responsive rule in the app should go through the respond-above()/
+// respond-below() mixins below rather than writing an ad-hoc @media query —
+// that's what keeps behavior consistent across hundreds of components.
+//
+// Note on "no nested SCSS": this file (and every other partial) never nests
+// selectors inside selectors. `@include respond-above(md) { ... }` nests a
+// media query inside the CURRENT flat rule, which is the standard, intended
+// use of a Sass mixin — it is not selector nesting.
+
+@use 'sass:map';
+
+$breakpoint-xs: 0;
+$breakpoint-sm: 576px;
+$breakpoint-md: 768px;
+$breakpoint-lg: 992px;
+$breakpoint-xl: 1200px;
+$breakpoint-xxl: 1400px;
+
+$breakpoints: (
+  xs: $breakpoint-xs,
+  sm: $breakpoint-sm,
+  md: $breakpoint-md,
+  lg: $breakpoint-lg,
+  xl: $breakpoint-xl,
+  xxl: $breakpoint-xxl,
+);
+
+@mixin respond-above($name) {
+  $value: map.get($breakpoints, $name);
+  @if $value == 0 {
+    @content;
+  } @else {
+    @media (min-width: $value) {
+      @content;
+    }
+  }
+}
+
+@mixin respond-below($name) {
+  $value: map.get($breakpoints, $name);
+  @media (max-width: ($value - 0.02px)) {
+    @content;
+  }
+}
+
+@mixin respond-between($lower, $upper) {
+  $lower-value: map.get($breakpoints, $lower);
+  $upper-value: map.get($breakpoints, $upper);
+  @media (min-width: $lower-value) and (max-width: ($upper-value - 0.02px)) {
+    @content;
+  }
+}
+
+// Mobile viewport gate, distinct from "small desktop window" — used sparingly
+// for genuinely touch-specific behavior (bottom nav, card-not-table tables).
+@mixin mobile-only {
+  @include respond-below(md) {
+    @content;
+  }
+}

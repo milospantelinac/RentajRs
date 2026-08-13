@@ -1,0 +1,80 @@
+@use 'breakpoints' as *;
+@use 'tokens' as *;
+
+// Table row height 52px, 14px internal spacing (Ch.18.4). R157: on mobile,
+// tables render as stacked cards, never horizontal scroll — every <td> that
+// should show a label on mobile carries a `data-label` attribute (set by the
+// component using this table, see components/ui/AppTable.vue), and the CSS
+// below does the rest with no JS reflow.
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  background: $color-surface;
+}
+
+.table th {
+  text-align: left;
+  font-size: $font-size-label;
+  color: $color-text-muted;
+  font-weight: 600;
+  padding: 10px $table-row-spacing;
+  border-bottom: 1px solid $color-border;
+}
+
+.table td {
+  height: $table-row-height;
+  padding: 0 $table-row-spacing;
+  font-size: $font-size-body;
+  color: $color-text;
+  border-bottom: 1px solid $color-border;
+  vertical-align: middle;
+}
+
+.table tbody tr:hover {
+  background: $color-background;
+}
+
+@include mobile-only {
+  .table-responsive-cards thead {
+    display: none;
+  }
+
+  .table-responsive-cards,
+  .table-responsive-cards tbody,
+  .table-responsive-cards tr,
+  .table-responsive-cards td {
+    display: block;
+    width: 100%;
+  }
+
+  .table-responsive-cards tr {
+    margin-bottom: 12px;
+    border: 1px solid $color-border;
+    border-radius: $radius-card;
+    box-shadow: $shadow-card;
+    overflow: hidden;
+  }
+
+  .table-responsive-cards td {
+    height: auto;
+    min-height: $table-row-height;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border-bottom: 1px solid $color-border;
+  }
+
+  .table-responsive-cards td:last-child {
+    border-bottom: none;
+  }
+
+  .table-responsive-cards td[data-label]::before {
+    content: attr(data-label);
+    font-size: $font-size-label;
+    font-weight: 600;
+    color: $color-text-muted;
+    flex-shrink: 0;
+  }
+}

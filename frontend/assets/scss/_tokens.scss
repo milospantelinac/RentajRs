@@ -1,0 +1,82 @@
+// Design tokens transcribed directly from Product Bible Chapter 18 (Design
+// system). Every color/radius/font-size used anywhere in the app should
+// reference one of these — never a hard-coded hex or px value — so the whole
+// platform reads as one product, including pages with no Figma reference.
+
+// Colors (Ch.18.2) ------------------------------------------------------
+$color-gradient-start: #2bb8f0;
+$color-gradient-end: #1b3fd8;
+$color-primary: #1b4fd8;
+$color-dark: #0f1b33; // buttons, tags
+$color-background: #f5f7fb;
+$color-surface: #ffffff;
+$color-text: #1a1a1a;
+$color-text-muted: #6b7280;
+$color-border: #e5e7eb;
+$color-success: #12b76a;
+$color-warning: #f59e0b;
+$color-error: #e5484d;
+
+// R149: the blue gradient is reserved for marketing surfaces (Home Page
+// hero/CTAs) — never the dashboard or admin panel, which use flat
+// $color-background instead (Ch.18.1).
+$gradient-marketing: linear-gradient(135deg, $color-gradient-start, $color-gradient-end);
+
+// Urgency colors reused for dashboard "needs your attention" cards and nav
+// badge counters (Ch.10.4/10.5) — not new colors, just named roles for the
+// same palette.
+$color-urgency-critical: $color-error; // losing money or a booking
+$color-urgency-decision: $color-warning; // needs a decision
+$color-urgency-info: $color-primary; // review when you get a chance
+
+// Typography (Ch.18.3) — R150: Funnel Sans is the only font on the platform.
+$font-family-base:
+  'Funnel Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+$font-size-page-title: 26px;
+$font-weight-page-title: 600;
+$font-size-section-title: 19px;
+$font-weight-section-title: 600;
+$font-size-body: 15px; // deliberately not the usual 14px — see Ch.18.3
+$font-weight-body: 400;
+$font-size-muted: 13px;
+$font-size-label: 12px;
+
+// Radii & elevation (Ch.18.4) --------------------------------------------
+$radius-card: 14px;
+$radius-button: 8px;
+$radius-badge: 6px;
+$radius-input: 8px;
+$radius-pill: 999px;
+
+$shadow-card: 0 1px 2px rgba(15, 27, 51, 0.04), 0 4px 12px rgba(15, 27, 51, 0.06);
+
+// Spacing scale — 4px base unit, used by the spacing utilities in
+// _spacing.scss and directly by components.
+$spacer: 4px;
+$spacing-scale: (
+  0: 0,
+  1: $spacer,
+  2: $spacer * 2,
+  3: $spacer * 3,
+  4: $spacer * 4,
+  5: $spacer * 6,
+  6: $spacer * 8,
+  7: $spacer * 12,
+  8: $spacer * 16,
+);
+
+// Table row (Ch.18.4)
+$table-row-height: 52px;
+$table-row-spacing: 14px;
+
+// Touch targets (R159 — mobile)
+$touch-target-min: 44px;
+
+// z-index scale, named instead of magic numbers scattered per component
+$z-dropdown: 1000;
+$z-sticky-header: 1010;
+$z-mobile-bottom-nav: 1020;
+$z-modal-backdrop: 1030;
+$z-modal: 1040;
+$z-toast: 1050;

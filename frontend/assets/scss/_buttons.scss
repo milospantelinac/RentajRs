@@ -1,0 +1,107 @@
+@use 'tokens' as *;
+
+// Button component rules straight from Ch.18.4:
+// primary = full pill + gradient + white text
+// secondary = 8px radius, dark background
+// tertiary = 8px radius, border only
+// danger = red border + text, NEVER a full red background
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: $font-family-base;
+  font-size: $font-size-body;
+  font-weight: 600;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    opacity 0.15s ease;
+  min-height: $touch-target-min;
+  padding: 0 20px;
+  white-space: nowrap;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-sm {
+  min-height: 36px;
+  padding: 0 14px;
+  font-size: $font-size-muted;
+}
+
+.btn-primary {
+  border-radius: $radius-pill;
+  background: $gradient-marketing;
+  color: $color-surface;
+}
+
+.btn-primary:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+// Marketing surfaces get the gradient; everywhere else (dashboard, admin)
+// the primary action is a flat, calmer fill — R149.
+.btn-primary-flat {
+  border-radius: $radius-pill;
+  background: $color-primary;
+  color: $color-surface;
+}
+
+.btn-primary-flat:hover:not(:disabled) {
+  background: $color-dark;
+}
+
+.btn-secondary {
+  border-radius: $radius-button;
+  background: $color-dark;
+  color: $color-surface;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.btn-tertiary {
+  border-radius: $radius-button;
+  background: transparent;
+  border-color: $color-border;
+  color: $color-text;
+}
+
+.btn-tertiary:hover:not(:disabled) {
+  border-color: $color-primary;
+  color: $color-primary;
+}
+
+.btn-danger {
+  border-radius: $radius-button;
+  background: transparent;
+  border-color: $color-error;
+  color: $color-error;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: rgba(229, 72, 77, 0.06);
+}
+
+.btn-icon {
+  padding: 0;
+  width: $touch-target-min;
+  min-height: $touch-target-min;
+  border-radius: $radius-pill;
+  background: transparent;
+  border-color: $color-border;
+  color: $color-text;
+}
+
+.btn-block {
+  width: 100%;
+}

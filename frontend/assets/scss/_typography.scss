@@ -1,0 +1,102 @@
+@use 'breakpoints' as *;
+@use 'tokens' as *;
+
+// Responsive type scale. Mobile sizes step down slightly from the Ch.18.3
+// desktop values so long headings still fit a phone width; body/muted/label
+// sizes stay constant across breakpoints per the Bible ("15px is deliberate,
+// not the usual 14").
+
+.text-page-title {
+  font-size: 22px;
+  font-weight: $font-weight-page-title;
+  line-height: 1.25;
+  color: $color-text;
+}
+
+.text-section-title {
+  font-size: 17px;
+  font-weight: $font-weight-section-title;
+  line-height: 1.3;
+  color: $color-text;
+}
+
+.text-body {
+  font-size: $font-size-body;
+  font-weight: $font-weight-body;
+  line-height: 1.55;
+  color: $color-text;
+}
+
+.text-muted {
+  font-size: $font-size-muted;
+  color: $color-text-muted;
+}
+
+.text-label {
+  font-size: $font-size-label;
+  color: $color-text-muted;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+@include respond-above(md) {
+  .text-page-title {
+    font-size: $font-size-page-title;
+  }
+  .text-section-title {
+    font-size: $font-size-section-title;
+  }
+}
+
+// Two-tone marketing heading (Home Page hero — "prvi deo u polucrnoj, drugi u
+// laganoj sivoj", Ch.18.3). Usage:
+// <h1 class="text-hero"><span class="text-hero-strong">Oglasi.</span>
+// <span class="text-hero-light">Rezervacije. Jedno mesto.</span></h1>
+.text-hero {
+  font-size: 32px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: $color-text;
+}
+
+.text-hero-strong {
+  font-weight: 700;
+  color: $color-dark;
+}
+
+.text-hero-light {
+  font-weight: 300;
+  color: $color-text-muted;
+}
+
+@include respond-above(md) {
+  .text-hero {
+    font-size: 44px;
+  }
+}
+
+// Base element defaults so unstyled markup already matches the system.
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: $font-family-base;
+  font-weight: $font-weight-section-title;
+  color: $color-text;
+  margin: 0;
+}
+
+p {
+  margin: 0;
+}
+
+a {
+  color: $color-primary;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}

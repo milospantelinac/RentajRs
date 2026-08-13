@@ -1,0 +1,97 @@
+// Single entry point — imports every partial in dependency order. Nothing in
+// this file or any partial nests selectors (project convention: flat SCSS
+// only, see README). Component-scoped styles in .vue files may use Vue's
+// own <style scoped> but should still prefer these tokens/utilities over new
+// hard-coded values.
+@use 'tokens' as *;
+@use 'breakpoints';
+@use 'container';
+@use 'grid';
+@use 'spacing';
+@use 'typography';
+@use 'buttons';
+@use 'forms';
+@use 'cards';
+@use 'tables';
+
+// Funnel Sans itself is loaded via the Google Fonts <link> in nuxt.config.ts
+// app.head — self-hosting is a reasonable future optimization but adds a
+// build step this MVP doesn't need yet (see DOCUMENTATION.md "future work").
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+}
+
+body {
+  font-family: $font-family-base;
+  font-size: $font-size-body;
+  color: $color-text;
+  background: $color-background;
+  -webkit-font-smoothing: antialiased;
+}
+
+img {
+  max-width: 100%;
+  display: block;
+}
+
+button {
+  font-family: inherit;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.surface {
+  background: $color-surface;
+}
+
+.text-primary {
+  color: $color-primary;
+}
+.text-error {
+  color: $color-error;
+}
+.text-success {
+  color: $color-success;
+}
+
+.d-none {
+  display: none;
+}
+.d-flex {
+  display: flex;
+}
+.d-block {
+  display: block;
+}
+
+@include breakpoints.respond-above(md) {
+  .d-none-md {
+    display: none;
+  }
+  .d-block-md {
+    display: block;
+  }
+}
+
+@include breakpoints.mobile-only {
+  .d-none-mobile {
+    display: none;
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "REQUIRED": "Polje {property} je obavezno",
+  "STRING": "Polje {property} mora biti tekst",
+  "EMAIL": "Uneta e-mail adresa nije ispravna",
+  "MIN_LENGTH": "Polje {property} je prekratko",
+  "MAX_LENGTH": "Polje {property} je predugačko",
+  "MIN": "Vrednost polja {property} je premala",
+  "MAX": "Vrednost polja {property} je prevelika",
+  "NUMBER": "Polje {property} mora biti broj",
+  "BOOLEAN": "Polje {property} mora biti da/ne",
+  "ENUM": "Vrednost polja {property} nije dozvoljena",
+  "UUID": "Polje {property} nije ispravan identifikator",
+  "DATE": "Polje {property} mora biti ispravan datum",
+  "ARRAY": "Polje {property} mora biti niz vrednosti",
+  "PASSWORD_WEAK": "Lozinka mora imati najmanje 8 znakova i ne sme biti na listi najčešće korišćenih lozinki",
+  "PHONE_INVALID": "Broj telefona nije ispravan"
+}

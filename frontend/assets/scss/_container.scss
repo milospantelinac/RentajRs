@@ -1,0 +1,50 @@
+@use 'breakpoints' as *;
+
+// Bootstrap-shaped container: fluid with responsive side padding below the
+// smallest breakpoint's max-width, then steps to fixed max-widths.
+$container-max-widths: (
+  sm: 540px,
+  md: 720px,
+  lg: 960px,
+  xl: 1140px,
+  xxl: 1320px,
+);
+
+$container-padding-x: 16px;
+$container-padding-x-md: 24px;
+
+.container {
+  width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: $container-padding-x;
+  padding-right: $container-padding-x;
+}
+
+@include respond-above(md) {
+  .container {
+    padding-left: $container-padding-x-md;
+    padding-right: $container-padding-x-md;
+  }
+}
+
+@each $name, $max-width in $container-max-widths {
+  @include respond-above($name) {
+    .container {
+      max-width: $max-width;
+    }
+  }
+}
+
+// Full-bleed variant for sections that need edge-to-edge background (hero,
+// carousel) but still want the padding rhythm for their inner content.
+.container-fluid {
+  width: 100%;
+  padding-left: $container-padding-x;
+  padding-right: $container-padding-x;
+
+  @include respond-above(md) {
+    padding-left: $container-padding-x-md;
+    padding-right: $container-padding-x-md;
+  }
+}
