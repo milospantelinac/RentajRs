@@ -1,274 +1,332 @@
 <template>
-  <div class="container wizard-page">
-    <h1 class="text-page-title mb-2">{{ t('listing.wizardTitle') }}</h1>
-    <p class="text-muted mb-4">{{ listing?.category?.name }}</p>
+  <div class="wizard-wrap">
+    <div class="hero-band">
+      <div class="hero-rings" aria-hidden="true">
+        <span class="hero-ring hero-ring-1" />
+        <span class="hero-ring hero-ring-2" />
+        <span class="hero-ring hero-ring-3" />
+      </div>
 
-    <div class="wizard-steps mb-4">
-      <button
-        v-for="(step, index) in steps"
-        :key="step.key"
-        class="wizard-step-tab"
-        :class="{ 'wizard-step-tab-active': currentStep === index, 'wizard-step-tab-disabled': index > maxStepReached }"
-        :disabled="index > maxStepReached"
-        @click="currentStep = index"
-      >
-        {{ index + 1 }}. {{ t(step.labelKey) }}
-      </button>
+      <div class="hero-top">
+        <div>
+          <div class="eyebrow"><span class="pulse-dot" />{{ t('listing.autoSaveNotice') }}</div>
+          <h1>{{ t('listing.wizardTitle') }}</h1>
+          <p>{{ t('listing.wizardStepCounter', { current: currentStep + 1, total: steps.length, label: t(steps[currentStep].labelKey) }) }}</p>
+        </div>
+      </div>
+
+      <div class="stepper">
+        <button
+          v-for="(step, index) in steps"
+          :key="step.key"
+          type="button"
+          class="step"
+          :class="{ done: isStepDone(index), active: currentStep === index }"
+          :disabled="index > maxStepReached"
+          @click="currentStep = index"
+        >
+          <span class="step-line" />
+          <span class="step-circle">{{ isStepDone(index) ? '✓' : index + 1 }}</span>
+          <span class="step-label">{{ t(step.labelKey) }}</span>
+        </button>
+      </div>
     </div>
 
     <div class="card">
-      <div class="card-body">
-        <!-- Step 0: booking model -->
-        <div v-if="currentStep === 0">
-          <div class="form-group mb-3">
-            <label class="form-label">{{ t('listing.stepBookingModel') }}</label>
-            <select v-model="form.bookingModel" class="form-control form-select">
-              <option value="PER_STAY">{{ t('listing.bookingModelPerStay') }}</option>
-              <option value="PER_SLOT">{{ t('listing.bookingModelPerSlot') }}</option>
-              <option value="NO_BOOKING">{{ t('listing.bookingModelNone') }}</option>
-            </select>
+      <div class="card-head">
+        <h2>{{ t(steps[currentStep].labelKey) }}</h2>
+        <p>{{ t(steps[currentStep].descKey) }}</p>
+      </div>
+
+      <!-- Step 0: booking model -->
+      <div v-if="currentStep === 0">
+        <div class="form-group mb-3">
+          <label class="form-label">{{ t('listing.stepBookingModel') }}</label>
+          <select v-model="form.bookingModel" class="form-control form-select">
+            <option value="PER_STAY">{{ t('listing.bookingModelPerStay') }}</option>
+            <option value="PER_SLOT">{{ t('listing.bookingModelPerSlot') }}</option>
+            <option value="NO_BOOKING">{{ t('listing.bookingModelNone') }}</option>
+          </select>
+        </div>
+        <div v-if="form.bookingModel === 'PER_SLOT'" class="form-group mb-3">
+          <select v-model="form.slotSubmode" class="form-control form-select">
+            <option value="DEFINED_SLOTS">{{ t('listing.slotSubmodeDefined') }}</option>
+            <option value="WORKING_HOURS">{{ t('listing.slotSubmodeWorkingHours') }}</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Step 1: basics -->
+      <div v-else-if="currentStep === 1">
+        <div class="form-group mb-3">
+          <label class="form-label">{{ t('listing.title') }}</label>
+          <input v-model="form.title" type="text" class="form-control" maxlength="200" />
+        </div>
+        <div class="form-group mb-3">
+          <label class="form-label">{{ t('listing.description') }}</label>
+          <textarea v-model="form.description" class="form-control" rows="6" maxlength="5000" />
+        </div>
+        <div class="form-group mb-3">
+          <label class="form-label">{{ t('listing.videoUrl') }}</label>
+          <input v-model="form.videoUrl" type="text" class="form-control" placeholder="https://youtube.com/..." />
+        </div>
+      </div>
+
+      <!-- Step 2: category attributes -->
+      <div v-else-if="currentStep === 2">
+        <div v-for="attr in listing?.category?.attributes || []" :key="attr.id" class="form-group mb-3">
+          <label class="form-label">{{ attr.name }}<span v-if="attr.required"> *</span></label>
+
+          <input
+            v-if="attr.type === 'NUMBER'"
+            v-model.number="attributeValues[attr.id].valueNumber"
+            type="number"
+            class="form-control"
+          />
+          <input
+            v-else-if="attr.type === 'TEXT'"
+            v-model="attributeValues[attr.id].valueText"
+            type="text"
+            class="form-control"
+          />
+          <div v-else-if="attr.type === 'BOOLEAN'" class="form-row-inline">
+            <input v-model="attributeValues[attr.id].valueBoolean" type="checkbox" class="form-checkbox" />
           </div>
-          <div v-if="form.bookingModel === 'PER_SLOT'" class="form-group mb-3">
-            <select v-model="form.slotSubmode" class="form-control form-select">
-              <option value="DEFINED_SLOTS">{{ t('listing.slotSubmodeDefined') }}</option>
-              <option value="WORKING_HOURS">{{ t('listing.slotSubmodeWorkingHours') }}</option>
-            </select>
+          <select v-else-if="attr.type === 'LIST'" v-model="attributeValues[attr.id].singleOption" class="form-control form-select">
+            <option value="">—</option>
+            <option v-for="opt in attr.options" :key="opt.id" :value="opt.id">{{ opt.name }}</option>
+          </select>
+          <div v-else-if="attr.type === 'MULTISELECT'" class="wizard-multiselect">
+            <label v-for="opt in attr.options" :key="opt.id" class="form-row-inline">
+              <input type="checkbox" class="form-checkbox" :value="opt.id" v-model="attributeValues[attr.id].valueOptionIds" />
+              {{ opt.name }}
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 3: location -->
+      <div v-else-if="currentStep === 3">
+        <div class="form-group mb-3">
+          <label class="form-label">{{ t('listing.region') }}</label>
+          <select v-model="location.regionId" class="form-control form-select" @change="onRegionChange">
+            <option value="">—</option>
+            <option v-for="r in regions" :key="r.id" :value="r.id">{{ r.name }}</option>
+          </select>
+        </div>
+        <div class="form-group mb-3">
+          <label class="form-label">{{ t('listing.city') }}</label>
+          <select v-model="location.cityId" class="form-control form-select" @change="onCityChange">
+            <option value="">—</option>
+            <option v-for="c in citiesInRegion" :key="c.id" :value="c.id">{{ c.name }}</option>
+          </select>
+        </div>
+        <div v-if="cityAreas.length" class="form-group mb-3">
+          <label class="form-label">{{ t('listing.cityArea') }}</label>
+          <select v-model="location.cityAreaId" class="form-control form-select">
+            <option value="">—</option>
+            <option v-for="a in cityAreas" :key="a.id" :value="a.id">{{ a.name }}</option>
+          </select>
+        </div>
+        <div class="form-group mb-3">
+          <label class="form-label">{{ t('listing.address') }}</label>
+          <input v-model="location.address" type="text" class="form-control" />
+        </div>
+      </div>
+
+      <!-- Step 4: photos -->
+      <div v-else-if="currentStep === 4">
+        <div
+          class="dropzone"
+          :class="{ 'dropzone-active': dropzoneActive }"
+          @click="fileInput.click()"
+          @dragover.prevent="dropzoneActive = true"
+          @dragleave.prevent="dropzoneActive = false"
+          @drop.prevent="onDropFiles"
+        >
+          <div class="dropzone-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 16V4M12 4l-4 4M12 4l4 4" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /><path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="white" stroke-width="2" stroke-linecap="round" /></svg>
+          </div>
+          <strong>{{ t('listing.dropzoneTitle') }}</strong>
+          <span>{{ t('listing.dropzoneHint') }}</span>
+          <input ref="fileInput" type="file" accept="image/*" multiple class="d-none" @change="onFileInputChange" />
+        </div>
+
+        <div class="photo-grid">
+          <div
+            v-for="(photo, index) in photos"
+            :key="photo.id"
+            class="photo"
+            draggable="true"
+            @dragstart="onPhotoDragStart(index)"
+            @dragover.prevent
+            @drop.prevent="onPhotoDrop(index)"
+          >
+            <img :src="photo.url" :alt="photo.altText || ''" />
+            <button
+              class="photo-badge"
+              :class="{ 'photo-badge-inactive': index !== 0 }"
+              :title="index === 0 ? t('listing.coverPhotoBadge') : t('listing.setCoverPhotoHint')"
+              @click.stop="setCoverPhoto(index)"
+            >
+              ★ {{ index === 0 ? t('listing.coverPhotoBadge') : '' }}
+            </button>
+            <button class="photo-remove" :aria-label="t('listing.removePhoto')" @click.stop="removePhoto(photo.id)">✕</button>
+            <span class="photo-drag" aria-hidden="true">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><circle cx="8" cy="6" r="1.6" fill="#334155" /><circle cx="16" cy="6" r="1.6" fill="#334155" /><circle cx="8" cy="12" r="1.6" fill="#334155" /><circle cx="16" cy="12" r="1.6" fill="#334155" /><circle cx="8" cy="18" r="1.6" fill="#334155" /><circle cx="16" cy="18" r="1.6" fill="#334155" /></svg>
+            </span>
+          </div>
+          <div class="photo photo-add" @click="fileInput.click()">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="#0957df" stroke-width="2.2" stroke-linecap="round" /></svg>
+            {{ t('listing.addMorePhotos') }}
           </div>
         </div>
 
-        <!-- Step 1: basics -->
-        <div v-else-if="currentStep === 1">
-          <div class="form-group mb-3">
-            <label class="form-label">{{ t('listing.title') }}</label>
-            <input v-model="form.title" type="text" class="form-control" maxlength="200" />
-          </div>
-          <div class="form-group mb-3">
-            <label class="form-label">{{ t('listing.description') }}</label>
-            <textarea v-model="form.description" class="form-control" rows="6" maxlength="5000" />
-          </div>
-          <div class="form-group mb-3">
-            <label class="form-label">{{ t('listing.videoUrl') }}</label>
-            <input v-model="form.videoUrl" type="text" class="form-control" placeholder="https://youtube.com/..." />
-          </div>
+        <div v-if="photos.length > 1" class="grid-hint">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2" /><path d="M12 8v5M12 16h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg>
+          {{ t('listing.setCoverPhotoHint') }}
         </div>
+      </div>
 
-        <!-- Step 2: category attributes -->
-        <div v-else-if="currentStep === 2">
-          <div v-for="attr in listing?.category?.attributes || []" :key="attr.id" class="form-group mb-3">
-            <label class="form-label">{{ attr.name }}<span v-if="attr.required"> *</span></label>
-
-            <input
-              v-if="attr.type === 'NUMBER'"
-              v-model.number="attributeValues[attr.id].valueNumber"
-              type="number"
-              class="form-control"
-            />
-            <input
-              v-else-if="attr.type === 'TEXT'"
-              v-model="attributeValues[attr.id].valueText"
-              type="text"
-              class="form-control"
-            />
-            <div v-else-if="attr.type === 'BOOLEAN'" class="form-row-inline">
-              <input v-model="attributeValues[attr.id].valueBoolean" type="checkbox" class="form-checkbox" />
-            </div>
-            <select v-else-if="attr.type === 'LIST'" v-model="attributeValues[attr.id].singleOption" class="form-control form-select">
-              <option value="">—</option>
-              <option v-for="opt in attr.options" :key="opt.id" :value="opt.id">{{ opt.name }}</option>
-            </select>
-            <div v-else-if="attr.type === 'MULTISELECT'" class="wizard-multiselect">
-              <label v-for="opt in attr.options" :key="opt.id" class="form-row-inline">
-                <input type="checkbox" class="form-checkbox" :value="opt.id" v-model="attributeValues[attr.id].valueOptionIds" />
-                {{ opt.name }}
-              </label>
+      <!-- Step 5: pricing -->
+      <div v-else-if="currentStep === 5">
+        <div class="row">
+          <div class="col-6">
+            <div class="form-group mb-3">
+              <label class="form-label">{{ t('listing.price') }} (RSD)</label>
+              <input v-model.number="form.price" type="number" min="0" class="form-control" />
             </div>
           </div>
-        </div>
-
-        <!-- Step 3: location -->
-        <div v-else-if="currentStep === 3">
-          <div class="form-group mb-3">
-            <label class="form-label">{{ t('listing.region') }}</label>
-            <select v-model="location.regionId" class="form-control form-select" @change="onRegionChange">
-              <option value="">—</option>
-              <option v-for="r in regions" :key="r.id" :value="r.id">{{ r.name }}</option>
-            </select>
-          </div>
-          <div class="form-group mb-3">
-            <label class="form-label">{{ t('listing.city') }}</label>
-            <select v-model="location.cityId" class="form-control form-select" @change="onCityChange">
-              <option value="">—</option>
-              <option v-for="c in citiesInRegion" :key="c.id" :value="c.id">{{ c.name }}</option>
-            </select>
-          </div>
-          <div v-if="cityAreas.length" class="form-group mb-3">
-            <label class="form-label">{{ t('listing.cityArea') }}</label>
-            <select v-model="location.cityAreaId" class="form-control form-select">
-              <option value="">—</option>
-              <option v-for="a in cityAreas" :key="a.id" :value="a.id">{{ a.name }}</option>
-            </select>
-          </div>
-          <div class="form-group mb-3">
-            <label class="form-label">{{ t('listing.address') }}</label>
-            <input v-model="location.address" type="text" class="form-control" />
-          </div>
-        </div>
-
-        <!-- Step 4: photos -->
-        <div v-else-if="currentStep === 4">
-          <div class="row mb-3">
-            <div v-for="photo in photos" :key="photo.id" class="col-6 col-md-3 mb-3">
-              <div class="wizard-photo">
-                <img :src="photo.url" :alt="photo.altText || ''" />
-                <button class="btn btn-danger btn-sm wizard-photo-remove" @click="removePhoto(photo.id)">
-                  {{ t('listing.removePhoto') }}
-                </button>
-              </div>
-            </div>
-          </div>
-          <label class="btn btn-tertiary">
-            {{ t('listing.addPhoto') }}
-            <input type="file" accept="image/*" class="d-none" @change="uploadPhoto" />
-          </label>
-        </div>
-
-        <!-- Step 5: pricing -->
-        <div v-else-if="currentStep === 5">
-          <div class="row">
-            <div class="col-6">
-              <div class="form-group mb-3">
-                <label class="form-label">{{ t('listing.price') }} (RSD)</label>
-                <input v-model.number="form.price" type="number" min="0" class="form-control" />
-              </div>
-            </div>
-            <div class="col-6">
-              <div class="form-group mb-3">
-                <label class="form-label">{{ t('listing.priceUnit') }}</label>
-                <select v-model="form.priceUnit" class="form-control form-select">
-                  <option v-for="unit in listing?.category?.allowedPriceUnits || []" :key="unit" :value="unit">
-                    {{ t(`listing.unit${unitLabel(unit)}`) }}
-                  </option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          <div class="form-group mb-3">
-            <label class="form-label">{{ t('listing.paymentMethod') }}</label>
-            <select v-model="form.paymentMethod" class="form-control form-select">
-              <option value="CASH">{{ t('listing.paymentCash') }}</option>
-              <option value="BANK_TRANSFER">{{ t('listing.paymentBankTransfer') }}</option>
-              <option value="BOTH">{{ t('listing.paymentBoth') }}</option>
-            </select>
-          </div>
-
-          <div v-if="form.paymentMethod !== 'CASH'" class="row">
-            <div class="col-6">
-              <div class="form-group mb-3">
-                <label class="form-label">{{ t('listing.advancePercent') }}</label>
-                <input v-model.number="form.advancePercent" type="number" min="1" max="100" class="form-control" />
-              </div>
-            </div>
-            <div class="col-6">
-              <div class="form-group mb-3">
-                <label class="form-label">{{ t('listing.paymentDeadlineHours') }}</label>
-                <input v-model.number="form.paymentDeadlineHours" type="number" min="12" max="168" class="form-control" />
-              </div>
-            </div>
-          </div>
-          <p v-if="form.paymentMethod !== 'CASH' && !hasBankAccount" class="form-error">
-            {{ t('listing.stepPricing') }}: <NuxtLink to="/kontrolna-tabla/podesavanja">{{ t('common.edit') }} →</NuxtLink>
-          </p>
-
-          <div v-if="listing?.bookingModel !== 'NO_BOOKING'" class="form-group mt-3">
-            <label class="form-label">{{ t('listing.requestHandling') }}</label>
-            <select v-model="form.requiresApproval" class="form-control form-select">
-              <option :value="true">{{ t('listing.requestHandlingApproval') }}</option>
-              <option :value="false">{{ t('listing.requestHandlingInstant') }}</option>
-            </select>
-          </div>
-        </div>
-
-        <!-- Step 6: availability rules -->
-        <div v-else-if="currentStep === 6">
-          <div class="row">
-            <div class="col-6">
-              <div class="form-group mb-3">
-                <label class="form-label">{{ t('listing.minDuration') }}</label>
-                <input v-model.number="form.minDuration" type="number" min="1" class="form-control" />
-              </div>
-            </div>
-            <div class="col-6">
-              <div class="form-group mb-3">
-                <label class="form-label">{{ t('listing.maxDuration') }}</label>
-                <input v-model.number="form.maxDuration" type="number" min="1" class="form-control" />
-              </div>
-            </div>
-          </div>
-          <div class="row">
-            <div class="col-6">
-              <div class="form-group mb-3">
-                <label class="form-label">{{ t('listing.minGuests') }}</label>
-                <input v-model.number="form.minGuests" type="number" min="1" class="form-control" />
-              </div>
-            </div>
-            <div class="col-6">
-              <div class="form-group mb-3">
-                <label class="form-label">{{ t('listing.maxGuests') }}</label>
-                <input v-model.number="form.maxGuests" type="number" min="1" class="form-control" />
-              </div>
-            </div>
-          </div>
-          <div class="form-group mb-3">
-            <label class="form-label">{{ t('listing.gapAfterMinutes') }}</label>
-            <input v-model.number="form.gapAfterMinutes" type="number" min="0" class="form-control" />
-          </div>
-          <div class="row">
-            <div class="col-6">
-              <div class="form-group mb-3">
-                <label class="form-label">{{ t('listing.pickupTime') }}</label>
-                <input v-model="form.pickupTime" type="time" class="form-control" />
-              </div>
-            </div>
-            <div class="col-6">
-              <div class="form-group mb-3">
-                <label class="form-label">{{ t('listing.returnTime') }}</label>
-                <input v-model="form.returnTime" type="time" class="form-control" />
-              </div>
+          <div class="col-6">
+            <div class="form-group mb-3">
+              <label class="form-label">{{ t('listing.priceUnit') }}</label>
+              <select v-model="form.priceUnit" class="form-control form-select">
+                <option v-for="unit in listing?.category?.allowedPriceUnits || []" :key="unit" :value="unit">
+                  {{ t(`listing.unit${unitLabel(unit)}`) }}
+                </option>
+              </select>
             </div>
           </div>
         </div>
 
-        <!-- Step 7: cancellation -->
-        <div v-else-if="currentStep === 7">
-          <div class="form-group mb-3">
-            <label class="form-label">{{ t('listing.cancellationTerms') }}</label>
-            <textarea v-model="form.cancellationTerms" class="form-control" rows="5" maxlength="3000" />
+        <div class="form-group mb-3">
+          <label class="form-label">{{ t('listing.paymentMethod') }}</label>
+          <select v-model="form.paymentMethod" class="form-control form-select">
+            <option value="CASH">{{ t('listing.paymentCash') }}</option>
+            <option value="BANK_TRANSFER">{{ t('listing.paymentBankTransfer') }}</option>
+            <option value="BOTH">{{ t('listing.paymentBoth') }}</option>
+          </select>
+        </div>
+
+        <div v-if="form.paymentMethod !== 'CASH'" class="row">
+          <div class="col-6">
+            <div class="form-group mb-3">
+              <label class="form-label">{{ t('listing.advancePercent') }}</label>
+              <input v-model.number="form.advancePercent" type="number" min="1" max="100" class="form-control" />
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="form-group mb-3">
+              <label class="form-label">{{ t('listing.paymentDeadlineHours') }}</label>
+              <input v-model.number="form.paymentDeadlineHours" type="number" min="12" max="168" class="form-control" />
+            </div>
           </div>
         </div>
+        <p v-if="form.paymentMethod !== 'CASH' && !hasBankAccount" class="form-error">
+          {{ t('listing.stepPricing') }}: <NuxtLink to="/kontrolna-tabla/podesavanja">{{ t('common.edit') }} →</NuxtLink>
+        </p>
 
-        <!-- Step 8: review -->
-        <div v-else-if="currentStep === 8">
-          <ul class="wizard-checklist mb-4">
-            <li v-for="(ok, key) in readiness?.checklist" :key="key" :class="ok ? 'text-success' : 'text-error'">
-              {{ ok ? '✓' : '✗' }} {{ t(`listing.checklist.${key}`) }}
-              <NuxtLink v-if="!ok && key === 'hasPhone'" to="/kontrolna-tabla/podesavanja">{{ t('common.edit') }} →</NuxtLink>
-            </li>
-          </ul>
-          <p v-if="!readiness?.ready" class="text-muted mb-3">{{ t('listing.notReadyYet') }}</p>
-          <NuxtLink v-else :to="`/oglasi/${listingId}/paket`" class="btn btn-primary-flat">
-            {{ t('listing.goToPackages') }}
-          </NuxtLink>
+        <div v-if="listing?.bookingModel !== 'NO_BOOKING'" class="form-group mt-3">
+          <label class="form-label">{{ t('listing.requestHandling') }}</label>
+          <select v-model="form.requiresApproval" class="form-control form-select">
+            <option :value="true">{{ t('listing.requestHandlingApproval') }}</option>
+            <option :value="false">{{ t('listing.requestHandlingInstant') }}</option>
+          </select>
         </div>
+      </div>
 
-        <p v-if="error" class="form-error mt-3">{{ error }}</p>
-
-        <div class="wizard-actions mt-4">
-          <button v-if="currentStep > 0" class="btn btn-tertiary" @click="currentStep--">{{ t('listing.back') }}</button>
-          <button class="btn btn-primary-flat" :disabled="saving" @click="saveCurrentStep">
-            {{ saving ? t('common.loading') : t('listing.saveAndContinue') }}
-          </button>
+      <!-- Step 6: availability rules -->
+      <div v-else-if="currentStep === 6">
+        <div class="row">
+          <div class="col-6">
+            <div class="form-group mb-3">
+              <label class="form-label">{{ t('listing.minDuration') }}</label>
+              <input v-model.number="form.minDuration" type="number" min="1" class="form-control" />
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="form-group mb-3">
+              <label class="form-label">{{ t('listing.maxDuration') }}</label>
+              <input v-model.number="form.maxDuration" type="number" min="1" class="form-control" />
+            </div>
+          </div>
         </div>
+        <div class="row">
+          <div class="col-6">
+            <div class="form-group mb-3">
+              <label class="form-label">{{ t('listing.minGuests') }}</label>
+              <input v-model.number="form.minGuests" type="number" min="1" class="form-control" />
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="form-group mb-3">
+              <label class="form-label">{{ t('listing.maxGuests') }}</label>
+              <input v-model.number="form.maxGuests" type="number" min="1" class="form-control" />
+            </div>
+          </div>
+        </div>
+        <div class="form-group mb-3">
+          <label class="form-label">{{ t('listing.gapAfterMinutes') }}</label>
+          <input v-model.number="form.gapAfterMinutes" type="number" min="0" class="form-control" />
+        </div>
+        <div class="row">
+          <div class="col-6">
+            <div class="form-group mb-3">
+              <label class="form-label">{{ t('listing.pickupTime') }}</label>
+              <input v-model="form.pickupTime" type="time" class="form-control" />
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="form-group mb-3">
+              <label class="form-label">{{ t('listing.returnTime') }}</label>
+              <input v-model="form.returnTime" type="time" class="form-control" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 7: cancellation -->
+      <div v-else-if="currentStep === 7">
+        <div class="form-group mb-3">
+          <label class="form-label">{{ t('listing.cancellationTerms') }}</label>
+          <textarea v-model="form.cancellationTerms" class="form-control" rows="5" maxlength="3000" />
+        </div>
+      </div>
+
+      <!-- Step 8: review -->
+      <div v-else-if="currentStep === 8">
+        <ul class="wizard-checklist mb-4">
+          <li v-for="(ok, key) in readiness?.checklist" :key="key" :class="ok ? 'text-success' : 'text-error'">
+            {{ ok ? '✓' : '✗' }} {{ t(`listing.checklist.${key}`) }}
+            <NuxtLink v-if="!ok && key === 'hasPhone'" to="/kontrolna-tabla/podesavanja">{{ t('common.edit') }} →</NuxtLink>
+          </li>
+        </ul>
+        <p v-if="!readiness?.ready" class="text-muted mb-3">{{ t('listing.notReadyYet') }}</p>
+        <NuxtLink v-else :to="`/oglasi/${listingId}/paket`" class="btn btn-primary-flat">
+          {{ t('listing.goToPackages') }}
+        </NuxtLink>
+      </div>
+
+      <p v-if="error" class="form-error mt-3">{{ error }}</p>
+
+      <div class="card-footer">
+        <button v-if="currentStep > 0" class="btn btn-ghost" @click="currentStep--">← {{ t('listing.back') }}</button>
+        <span v-else />
+        <div class="progress-text">{{ t('listing.wizardStepsProgress', { current: currentStep + 1, total: steps.length }) }}</div>
+        <button v-if="currentStep < steps.length - 1" class="btn btn-primary" :disabled="saving" @click="saveCurrentStep">
+          {{ saving ? t('common.loading') : t('listing.saveAndContinue') }} →
+        </button>
+        <span v-else />
       </div>
     </div>
   </div>
@@ -296,6 +354,9 @@ const photos = ref([])
 const regions = ref([])
 const cities = ref([])
 const cityAreas = ref([])
+const fileInput = ref(null)
+const dropzoneActive = ref(false)
+const draggedPhotoIndex = ref(null)
 
 // Refetch readiness any time the review step becomes active — via
 // save-and-advance, a tab click, or returning to an already-unlocked review
@@ -308,15 +369,15 @@ watch(currentStep, async (step) => {
 })
 
 const steps = [
-  { key: 'bookingModel', labelKey: 'listing.stepBookingModel' },
-  { key: 'basics', labelKey: 'listing.stepBasics' },
-  { key: 'attributes', labelKey: 'listing.stepAttributes' },
-  { key: 'location', labelKey: 'listing.stepLocation' },
-  { key: 'photos', labelKey: 'listing.stepPhotos' },
-  { key: 'pricing', labelKey: 'listing.stepPricing' },
-  { key: 'availability', labelKey: 'listing.stepAvailability' },
-  { key: 'cancellation', labelKey: 'listing.stepCancellation' },
-  { key: 'review', labelKey: 'listing.stepReview' },
+  { key: 'bookingModel', labelKey: 'listing.stepBookingModel', descKey: 'listing.stepBookingModelDesc' },
+  { key: 'basics', labelKey: 'listing.stepBasics', descKey: 'listing.stepBasicsDesc' },
+  { key: 'attributes', labelKey: 'listing.stepAttributes', descKey: 'listing.stepAttributesDesc' },
+  { key: 'location', labelKey: 'listing.stepLocation', descKey: 'listing.stepLocationDesc' },
+  { key: 'photos', labelKey: 'listing.stepPhotos', descKey: 'listing.stepPhotosDesc' },
+  { key: 'pricing', labelKey: 'listing.stepPricing', descKey: 'listing.stepPricingDesc' },
+  { key: 'availability', labelKey: 'listing.stepAvailability', descKey: 'listing.stepAvailabilityDesc' },
+  { key: 'cancellation', labelKey: 'listing.stepCancellation', descKey: 'listing.stepCancellationDesc' },
+  { key: 'review', labelKey: 'listing.stepReview', descKey: 'listing.stepReviewDesc' },
 ]
 
 const form = reactive({
@@ -346,6 +407,13 @@ const attributeValues = reactive({})
 const hasBankAccount = computed(() => !!auth.user?.bankAccount)
 
 const citiesInRegion = computed(() => cities.value.filter((c) => c.regionId === location.regionId))
+
+// A step reads as "done" (checkmark, solid connecting line) once it's been
+// saved and the wizard has moved past it — but not while it's the one
+// currently on screen, even if the user navigated back to re-edit it.
+function isStepDone(index) {
+  return index < maxStepReached.value && index !== currentStep.value
+}
 
 function unitLabel(unit) {
   return unit.charAt(0) + unit.slice(1).toLowerCase()
@@ -449,18 +517,55 @@ async function onCityChange() {
   cityAreas.value = city ? await api.get(`/locations/cities/${city.slug}/areas`) : []
 }
 
-async function uploadPhoto(evt) {
-  const file = evt.target.files[0]
-  if (!file) return
+async function uploadFile(file) {
   const formData = new FormData()
   formData.append('file', file)
   const photo = await api.post(`/listings/${listingId}/photos`, formData)
   photos.value.push(photo)
 }
 
+async function onFileInputChange(evt) {
+  const files = Array.from(evt.target.files || [])
+  evt.target.value = ''
+  for (const file of files) await uploadFile(file)
+}
+
+async function onDropFiles(evt) {
+  dropzoneActive.value = false
+  const files = Array.from(evt.dataTransfer?.files || []).filter((f) => f.type.startsWith('image/'))
+  for (const file of files) await uploadFile(file)
+}
+
 async function removePhoto(photoId) {
   await api.delete(`/listings/${listingId}/photos/${photoId}`)
   photos.value = photos.value.filter((p) => p.id !== photoId)
+}
+
+async function persistPhotoOrder() {
+  await api.patch(`/listings/${listingId}/photos/reorder`, { photoIds: photos.value.map((p) => p.id) })
+}
+
+function onPhotoDragStart(index) {
+  draggedPhotoIndex.value = index
+}
+
+function onPhotoDrop(targetIndex) {
+  if (draggedPhotoIndex.value === null || draggedPhotoIndex.value === targetIndex) return
+  const arr = [...photos.value]
+  const [moved] = arr.splice(draggedPhotoIndex.value, 1)
+  arr.splice(targetIndex, 0, moved)
+  photos.value = arr
+  draggedPhotoIndex.value = null
+  persistPhotoOrder()
+}
+
+function setCoverPhoto(index) {
+  if (index === 0) return
+  const arr = [...photos.value]
+  const [moved] = arr.splice(index, 1)
+  arr.unshift(moved)
+  photos.value = arr
+  persistPhotoOrder()
 }
 
 async function saveCurrentStep() {
@@ -480,7 +585,7 @@ async function saveCurrentStep() {
     } else if (step === 'location') {
       await api.patch(`/listings/${listingId}/location`, { ...location, cityAreaId: location.cityAreaId || undefined })
     } else if (step === 'photos') {
-      // photos already persisted per-upload
+      // photos already persisted per-upload/reorder
     } else if (step === 'review') {
       // nothing to save — navigation handled by the link itself
     } else {
@@ -516,61 +621,526 @@ useSeoMeta({ title: t('listing.wizardTitle') })
 </script>
 
 <style lang="scss" scoped>
-.wizard-page {
-  padding: 32px 0 64px;
+.wizard-wrap {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 14px 20px 80px;
 }
 
-.wizard-steps {
+@include respond-above(md) {
+  .wizard-wrap {
+    padding: 14px 32px 80px;
+  }
+}
+
+// ===== Hero band =====
+.hero-band {
+  position: relative;
+  overflow: hidden;
+  border-radius: 26px;
+  padding: 28px 24px 56px;
+  background:
+    radial-gradient(ellipse 680px 560px at 38% 60%, rgba(0, 215, 255, 0.7), transparent 65%),
+    radial-gradient(ellipse 520px 440px at 64% 10%, rgba(0, 195, 255, 0.4), transparent 60%),
+    $gradient-marketing;
+  box-shadow: 0 20px 60px -20px rgba(9, 87, 223, 0.45);
+  isolation: isolate;
+}
+
+@include respond-above(md) {
+  .hero-band {
+    border-radius: 36px;
+    padding: 36px 44px 64px;
+  }
+}
+
+.hero-rings {
+  position: absolute;
+  top: 50%;
+  right: -60px;
+  transform: translateY(-50%);
+  width: 380px;
+  height: 380px;
+  z-index: 0;
+  pointer-events: none;
+  display: none;
+}
+
+@include respond-above(md) {
+  .hero-rings {
+    display: block;
+  }
+}
+
+.hero-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: $radius-pill;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.hero-ring-2 {
+  inset: 55px;
+}
+
+.hero-ring-3 {
+  inset: 110px;
+}
+
+.hero-top {
+  position: relative;
+  z-index: 1;
+  margin-bottom: 24px;
+}
+
+@include respond-above(md) {
+  .hero-top {
+    margin-bottom: 30px;
+  }
+}
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: $color-surface;
+  background: rgba(255, 255, 255, 0.16);
+  padding: 6px 14px 6px 10px;
+  border-radius: $radius-pill;
+  letter-spacing: 0.02em;
+}
+
+.pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: $radius-pill;
+  background: #4ade80;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.pulse-dot::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: $radius-pill;
+  background: #4ade80;
+  opacity: 0.45;
+  animation: wizard-pulse 1.8s ease-out infinite;
+}
+
+@keyframes wizard-pulse {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+}
+
+.hero-top h1 {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 14px 0 6px;
+  color: $color-surface;
+}
+
+@include respond-above(md) {
+  .hero-top h1 {
+    font-size: 28px;
+  }
+}
+
+.hero-top p {
+  font-size: 14.5px;
+  color: rgba(255, 255, 255, 0.82);
+  margin: 0;
+  max-width: 480px;
+  line-height: 1.5;
+}
+
+// ===== Stepper =====
+.stepper {
+  position: relative;
+  z-index: 1;
   display: flex;
+  align-items: flex-start;
   flex-wrap: wrap;
-  gap: 4px;
-  overflow-x: auto;
+  row-gap: 20px;
+  background: none;
+  border: none;
+  padding: 0;
 }
 
-.wizard-step-tab {
-  padding: 8px 12px;
-  border-radius: $radius-button;
-  border: 1px solid $color-border;
-  background: $color-surface;
-  font-size: $font-size-muted;
-  color: $color-text-muted;
-  white-space: nowrap;
+.step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  min-width: 33%;
+  position: relative;
+  background: none;
+  border: none;
+  padding: 0;
   cursor: pointer;
 }
 
-.wizard-step-tab-disabled {
-  opacity: 0.5;
+@include respond-above(md) {
+  .step {
+    min-width: 78px;
+  }
+}
+
+.step:disabled {
   cursor: not-allowed;
 }
 
-.wizard-step-tab-active {
-  border-color: $color-primary;
-  color: $color-primary;
-  font-weight: 600;
+.step-line {
+  position: absolute;
+  top: 16px;
+  left: calc(-50% + 16px);
+  width: calc(100% - 32px);
+  height: 2px;
+  background: rgba(255, 255, 255, 0.28);
+  z-index: 0;
 }
 
-.wizard-actions {
+.step:first-child .step-line {
+  display: none;
+}
+
+.step.done .step-line {
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.step-circle {
+  width: 32px;
+  height: 32px;
+  border-radius: $radius-pill;
   display: flex;
-  justify-content: space-between;
+  align-items: center;
+  justify-content: center;
+  font-size: 12.5px;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1.5px solid rgba(255, 255, 255, 0.4);
+  color: rgba(255, 255, 255, 0.75);
+  z-index: 1;
+  position: relative;
 }
 
-.wizard-photo {
+.step.done .step-circle {
+  background: $color-surface;
+  border-color: $color-surface;
+  color: $color-primary;
+}
+
+.step.active .step-circle {
+  background: $color-surface;
+  border-color: $color-surface;
+  color: $color-primary;
+  box-shadow: 0 0 0 5px rgba(255, 255, 255, 0.22);
+}
+
+.step-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+  margin-top: 8px;
+  text-align: center;
+  line-height: 1.25;
+  max-width: 82px;
+}
+
+.step.active .step-label {
+  color: $color-surface;
+}
+
+// ===== Card =====
+.card {
+  position: relative;
+  z-index: 2;
+  background: $color-surface;
+  border-radius: $radius-card;
+  box-shadow: 0 24px 48px -16px rgba(9, 45, 120, 0.28), 0 2px 6px rgba(16, 29, 61, 0.06);
+  padding: 26px;
+  border: 1px solid $color-border;
+  margin: -30px 8px 0;
+}
+
+@include respond-above(md) {
+  .card {
+    border-radius: 28px;
+    padding: 40px;
+    margin: -40px 20px 0;
+  }
+}
+
+.card-head {
+  margin-bottom: 26px;
+}
+
+.card-head h2 {
+  font-size: 21px;
+  font-weight: 800;
+  margin: 0 0 6px;
+  letter-spacing: -0.01em;
+  color: $color-text;
+}
+
+.card-head p {
+  font-size: 14px;
+  color: $color-text-muted;
+  margin: 0;
+  line-height: 1.5;
+}
+
+// ===== Dropzone =====
+.dropzone {
+  border: 2px dashed #c9d4ee;
+  border-radius: $radius-card;
+  background: #fafbff;
+  padding: 38px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+  margin-bottom: 28px;
+}
+
+.dropzone:hover,
+.dropzone-active {
+  border-color: $color-primary;
+  background: #f2f6ff;
+}
+
+.dropzone-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  background: $gradient-marketing;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 14px;
+  box-shadow: 0 10px 20px -8px rgba(9, 87, 223, 0.5);
+}
+
+.dropzone strong {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 4px;
+  display: block;
+}
+
+.dropzone span {
+  font-size: 13px;
+  color: $color-text-muted;
+}
+
+// ===== Photo grid =====
+.photo-grid {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 0 -8px 14px;
+}
+
+.photo {
   position: relative;
   border-radius: $radius-input;
   overflow: hidden;
+  height: 150px;
+  background: #eef1f7;
   border: 1px solid $color-border;
+  cursor: grab;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  width: calc(50% - 16px);
+  margin: 0 8px 16px;
 }
 
-.wizard-photo img {
+@include respond-above(sm) {
+  .photo {
+    width: calc(25% - 16px);
+  }
+}
+
+.photo:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 24px -10px rgba(16, 29, 61, 0.25);
+}
+
+.photo img {
+  position: absolute;
+  inset: 0;
   width: 100%;
-  height: 120px;
+  height: 100%;
   object-fit: cover;
 }
 
-.wizard-photo-remove {
+.photo-badge {
   position: absolute;
-  bottom: 6px;
-  right: 6px;
+  top: 8px;
+  left: 8px;
+  background: $color-primary;
+  color: $color-surface;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 4px 9px;
+  border-radius: $radius-pill;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  box-shadow: 0 4px 10px -2px rgba(9, 87, 223, 0.5);
+  border: none;
+  cursor: pointer;
+}
+
+.photo-badge-inactive {
+  background: rgba(15, 23, 42, 0.45);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.photo:hover .photo-badge-inactive {
+  opacity: 1;
+}
+
+.photo-remove {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  border-radius: $radius-pill;
+  background: rgba(15, 23, 42, 0.55);
+  color: $color-surface;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  cursor: pointer;
+}
+
+.photo:hover .photo-remove {
+  opacity: 1;
+}
+
+.photo-drag {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.photo:hover .photo-drag {
+  opacity: 1;
+}
+
+.photo-add {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1.5px dashed #c9d4ee;
+  background: #fafbff;
+  color: $color-primary;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.photo-add:hover {
+  background: #f2f6ff;
+  border-color: $color-primary;
+}
+
+.grid-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: $color-text-muted;
+  margin-bottom: 12px;
+}
+
+.grid-hint svg {
+  flex-shrink: 0;
+  color: $color-primary;
+}
+
+// ===== Footer nav =====
+.card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid $color-border;
+  gap: 12px;
+}
+
+.progress-text {
+  font-size: 13px;
+  color: $color-text-muted;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.btn-ghost {
+  background: transparent;
+  color: $color-text-muted;
+  border: none;
+  padding: 11px 12px;
+  border-radius: $radius-button;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-ghost:hover {
+  color: $color-text;
+}
+
+.btn-primary {
+  background: $gradient-marketing;
+  color: $color-surface;
+  border: none;
+  padding: 11px 22px;
+  border-radius: $radius-button;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 10px 22px -8px rgba(9, 87, 223, 0.55);
+  transition: box-shadow 0.15s ease;
+}
+
+.btn-primary:hover:not(:disabled) {
+  box-shadow: 0 14px 26px -8px rgba(9, 87, 223, 0.65);
+}
+
+.btn-primary:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
 }
 
 .wizard-multiselect {

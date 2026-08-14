@@ -2,91 +2,142 @@
   <div>
     <section class="hero">
       <div class="container">
-        <h1 class="text-hero mb-3">
-          <span class="text-hero-strong">{{ t('home.heroTitleStrong') }}</span>
-          <span class="text-hero-light"> {{ t('home.heroTitleLight') }}</span>
-        </h1>
-        <p class="text-body mb-4 hero-tagline">{{ t('common.tagline') }}</p>
+        <div class="hero-card">
+          <h1 class="hero-title">
+            <span>{{ t('home.heroTitleLine1') }}</span>
+            <span>{{ t('home.heroTitleLine2') }}</span>
+          </h1>
+          <p class="hero-subtitle">{{ t('home.heroSubtitle') }}</p>
 
-        <div class="hero-search card">
-          <div class="row align-items-center">
-            <div class="col-12 col-md-4 mb-2 mb-md-0">
-              <select v-model="searchCategorySlug" class="form-control form-select">
-                <option value="">{{ t('home.searchCategoryAny') }}</option>
-                <option v-for="cat in categories" :key="cat.id" :value="cat.slug">{{ cat.name }}</option>
-              </select>
+          <div class="hero-search">
+            <div class="hero-search-field">
+              <label class="hero-search-label">{{ t('home.searchWhatLabel') }}</label>
+              <input v-model="searchQuery" type="text" :placeholder="t('home.searchWhatPlaceholder')" class="hero-search-input" />
             </div>
-            <div class="col-12 col-md-4 mb-2 mb-md-0">
-              <select v-model="searchCityId" class="form-control form-select">
+            <div class="hero-search-divider" aria-hidden="true" />
+            <div class="hero-search-field">
+              <label class="hero-search-label">{{ t('home.searchLocationLabel') }}</label>
+              <select v-model="searchCityId" class="hero-search-input hero-search-select">
                 <option value="">{{ t('home.searchCityAny') }}</option>
                 <option v-for="c in cities" :key="c.id" :value="c.id">{{ c.name }}</option>
               </select>
             </div>
-            <div class="col-12 col-md-4">
-              <NuxtLink :to="searchLink" class="btn btn-primary btn-block">{{ t('common.search') }}</NuxtLink>
+            <div class="hero-search-divider" aria-hidden="true" />
+            <div class="hero-search-field">
+              <label class="hero-search-label">{{ t('home.searchCategoryLabel') }}</label>
+              <select v-model="searchCategorySlug" class="hero-search-input hero-search-select">
+                <option value="">{{ t('home.searchCategoryAny') }}</option>
+                <option v-for="cat in categories" :key="cat.id" :value="cat.slug">{{ cat.name }}</option>
+              </select>
             </div>
+            <div class="hero-search-divider" aria-hidden="true" />
+            <div class="hero-search-field">
+              <label class="hero-search-label">{{ t('home.searchPriceLabel') }}</label>
+              <select v-model="searchPriceBucket" class="hero-search-input hero-search-select">
+                <option v-for="bucket in priceBuckets" :key="bucket.value" :value="bucket.value">{{ bucket.label }}</option>
+              </select>
+            </div>
+            <NuxtLink :to="searchLink" class="hero-search-btn" :aria-label="t('common.search')">
+              <span aria-hidden="true">→</span>
+            </NuxtLink>
+          </div>
+
+          <div class="hero-categories">
+            <NuxtLink v-for="cat in categories" :key="cat.id" :to="`/${cat.slug}`" class="hero-category-tile">
+              <span class="hero-category-icon">{{ useCategoryIcon(cat.icon) }}</span>
+              <span class="hero-category-name">{{ cat.name }}</span>
+            </NuxtLink>
           </div>
         </div>
       </div>
     </section>
 
-    <section class="container py-md-6 py-4">
-      <h2 class="text-section-title mb-3">{{ t('home.categoriesTitle') }}</h2>
-      <div class="category-grid">
-        <NuxtLink v-for="cat in categories" :key="cat.id" :to="`/${cat.slug}`" class="category-tile card card-interactive">
-          <span class="category-tile-icon">{{ useCategoryIcon(cat.icon) }}</span>
-          <span class="text-body category-tile-name">{{ cat.name }}</span>
-        </NuxtLink>
+    <section class="container featured-section">
+      <div class="featured-header">
+        <h2 class="section-title">
+          <span class="section-title-strong">{{ t('home.featuredTitleStrong') }}</span>&nbsp;<span class="section-title-light">{{ t('home.featuredTitleLight') }}</span>
+        </h2>
+        <NuxtLink to="/pretraga" class="featured-see-all">{{ t('home.seeAllListings') }} →</NuxtLink>
       </div>
-    </section>
 
-    <section v-for="row in categoryRows" :key="row.category.id" class="container py-4">
-      <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2 class="text-section-title">{{ t('home.featuredTitle', { name: row.category.name }) }}</h2>
-        <NuxtLink :to="`/${row.category.slug}`" class="text-body">{{ t('common.seeAll') }}</NuxtLink>
-      </div>
-      <p v-if="!row.listings.length" class="text-muted">{{ t('home.noListingsYet') }}</p>
-      <div v-else class="carousel-row">
-        <div v-for="listing in row.listings" :key="listing.id" class="carousel-item">
+      <p v-if="!featuredListings.length" class="text-muted">{{ t('home.noListingsYet') }}</p>
+      <div v-else class="featured-grid">
+        <div v-for="listing in featuredListings" :key="listing.id" class="featured-grid-item">
           <ListingCard :listing="listing" />
         </div>
       </div>
     </section>
 
-    <section class="how-it-works">
-      <div class="container py-6">
-        <h2 class="text-section-title mb-4">{{ t('home.howItWorksTitle') }}</h2>
-        <div class="row">
-          <div class="col-12 col-md-4 mb-4 mb-md-0">
-            <div class="how-step">
-              <span class="how-step-number">1</span>
-              <p class="text-body how-step-title">{{ t('home.step1Title') }}</p>
-              <p class="text-muted">{{ t('home.step1Text') }}</p>
+    <section class="container possibilities-section">
+      <h2 class="section-title-center">
+        <span class="section-title-strong">{{ t('home.possibilitiesTitleStrong') }}</span>&nbsp;<span class="section-title-light">{{ t('home.possibilitiesTitleLight') }}</span>
+      </h2>
+
+      <div class="possibilities-grid">
+        <div class="possibilities-list">
+          <button
+            v-for="(feature, index) in features"
+            :key="feature.titleKey"
+            class="possibility-item"
+            :class="{ 'possibility-item-active': activeFeature === index }"
+            @click="activeFeature = index"
+          >
+            <span class="possibility-number">{{ String(index + 1).padStart(2, '0') }}</span>
+            <span class="possibility-title">{{ t(feature.titleKey) }}</span>
+          </button>
+        </div>
+
+        <div class="possibilities-showcase">
+          <span class="possibilities-showcase-watermark">{{ String(activeFeature + 1).padStart(2, '0') }}</span>
+          <p class="possibilities-showcase-title">{{ t(features[activeFeature].titleKey) }}</p>
+          <p class="possibilities-showcase-text">{{ t(features[activeFeature].textKey) }}</p>
+
+          <div class="possibilities-mockup">
+            <div class="possibilities-mockup-header">
+              <div>
+                <p class="possibilities-mockup-label">{{ t('home.mockupGuestPayment') }}</p>
+                <p class="possibilities-mockup-name">{{ t('home.mockupGuestName') }}</p>
+              </div>
+              <span class="possibilities-mockup-status">✓ {{ t('home.mockupStatus') }}</span>
             </div>
-          </div>
-          <div class="col-12 col-md-4 mb-4 mb-md-0">
-            <div class="how-step">
-              <span class="how-step-number">2</span>
-              <p class="text-body how-step-title">{{ t('home.step2Title') }}</p>
-              <p class="text-muted">{{ t('home.step2Text') }}</p>
-            </div>
-          </div>
-          <div class="col-12 col-md-4">
-            <div class="how-step">
-              <span class="how-step-number">3</span>
-              <p class="text-body how-step-title">{{ t('home.step3Title') }}</p>
-              <p class="text-muted">{{ t('home.step3Text') }}</p>
+            <div class="possibilities-mockup-body">
+              <p class="possibilities-mockup-amount">€ 145.00</p>
+              <p class="possibilities-mockup-note">{{ t('home.mockupAmountNote') }}</p>
+              <span class="possibilities-mockup-commission">{{ t('home.mockupCommission') }}</span>
             </div>
           </div>
         </div>
       </div>
     </section>
 
-    <section class="owner-cta">
-      <div class="container py-6 text-center">
-        <h2 class="text-page-title mb-2">{{ t('home.ownerCtaTitle') }}</h2>
-        <p class="text-body owner-cta-text mb-4">{{ t('home.ownerCtaText') }}</p>
-        <NuxtLink to="/oglasi/novi" class="btn btn-primary">{{ t('home.ownerCtaButton') }}</NuxtLink>
+    <section class="container video-section">
+      <h2 class="section-title-center">
+        <span class="section-title-light">{{ t('home.howItWorksVideoTitleStrong') }}</span>&nbsp;<span class="section-title-strong">{{ t('home.howItWorksVideoTitleLight') }}</span>
+      </h2>
+      <div class="video-frame">
+        <span class="video-play-btn" aria-hidden="true">▶</span>
+      </div>
+    </section>
+
+    <section class="container faq-section">
+      <div class="faq-section-grid">
+        <h2 class="section-title">
+          <span class="section-title-strong">{{ t('home.faqSectionTitleStrong') }}</span>&nbsp;<span class="section-title-light">{{ t('home.faqSectionTitleLight') }}</span>
+        </h2>
+        <FaqAccordion :limit="6" />
+      </div>
+    </section>
+
+    <section class="container">
+      <div class="cta-banner">
+        <div class="cta-banner-rings" aria-hidden="true">
+          <span class="cta-ring cta-ring-1" />
+          <span class="cta-ring cta-ring-2" />
+          <span class="cta-ring cta-ring-3" />
+        </div>
+        <h2 class="cta-title">{{ t('home.ctaTitle') }}</h2>
+        <p class="cta-text">{{ t('home.ctaText') }}</p>
+        <NuxtLink to="/oglasi/novi" class="btn btn-tertiary cta-btn">{{ t('home.ctaButton') }}</NuxtLink>
       </div>
     </section>
   </div>
@@ -96,30 +147,53 @@
 const { t } = useI18n()
 const api = useApi()
 
+const searchQuery = ref('')
 const searchCategorySlug = ref('')
 const searchCityId = ref('')
+const searchPriceBucket = ref('')
+const activeFeature = ref(0)
+
+const priceBuckets = computed(() => [
+  { value: '', label: t('home.searchPriceLabel') },
+  { value: '0-3000', label: '0 – 3.000 RSD' },
+  { value: '3000-10000', label: '3.000 – 10.000 RSD' },
+  { value: '10000-30000', label: '10.000 – 30.000 RSD' },
+  { value: '30000-', label: '30.000+ RSD' },
+])
+
+const features = [
+  { titleKey: 'home.feature1Title', textKey: 'home.feature1Text' },
+  { titleKey: 'home.feature2Title', textKey: 'home.feature2Text' },
+  { titleKey: 'home.feature3Title', textKey: 'home.feature3Text' },
+  { titleKey: 'home.feature4Title', textKey: 'home.feature4Text' },
+  { titleKey: 'home.feature5Title', textKey: 'home.feature5Text' },
+  { titleKey: 'home.feature6Title', textKey: 'home.feature6Text' },
+]
 
 // One useAsyncData covering everything the page needs, fetched concurrently.
 const { data: homeData } = await useAsyncData('home-page-data', async () => {
-  const [categories, cities] = await Promise.all([api.get('/categories'), api.get('/locations/cities')])
-  const topCategories = categories.slice(0, 5)
-  const rows = await Promise.all(
-    topCategories.map(async (category) => {
-      const res = await api.post('/search', { categorySlug: category.slug, sort: 'newest', page: 1, pageSize: 6 })
-      return { category, listings: res.results }
-    }),
-  )
-  return { categories, cities, categoryRows: rows.filter((row) => row.listings.length > 0) }
+  const [categories, cities, search] = await Promise.all([
+    api.get('/categories'),
+    api.get('/locations/cities'),
+    api.post('/search', { sort: 'newest', page: 1, pageSize: 8 }),
+  ])
+  return { categories, cities, featuredListings: search.results }
 })
 
 const categories = computed(() => homeData.value?.categories || [])
 const cities = computed(() => homeData.value?.cities || [])
-const categoryRows = computed(() => homeData.value?.categoryRows || [])
+const featuredListings = computed(() => homeData.value?.featuredListings || [])
 
 const searchLink = computed(() => {
   const params = new URLSearchParams()
+  if (searchQuery.value) params.set('q', searchQuery.value)
   if (searchCategorySlug.value) params.set('categorySlug', searchCategorySlug.value)
   if (searchCityId.value) params.set('cityId', searchCityId.value)
+  if (searchPriceBucket.value) {
+    const [min, max] = searchPriceBucket.value.split('-')
+    if (min) params.set('priceMin', min)
+    if (max) params.set('priceMax', max)
+  }
   const qs = params.toString()
   return qs ? `/pretraga?${qs}` : '/pretraga'
 })
@@ -153,97 +227,523 @@ useHead({
 
 <style lang="scss" scoped>
 .hero {
+  padding: 24px 0;
+}
+
+.hero-card {
   background: $gradient-marketing;
-  padding: 64px 0 56px;
+  border-radius: 30px;
+  padding: 64px 32px 48px;
+  text-align: center;
   color: $color-surface;
 }
 
-.hero .text-hero-strong,
-.hero .text-hero-light {
+.hero-title {
+  display: flex;
+  flex-direction: column;
+  font-weight: 400;
+  font-size: 40px;
+  line-height: 1.15;
+  margin: 0 0 16px;
   color: $color-surface;
-}
-
-.hero-tagline {
-  color: rgba(255, 255, 255, 0.9);
-}
-
-.hero-search {
-  padding: 16px;
-  max-width: 720px;
-}
-
-.category-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
 }
 
 @include respond-above(md) {
-  .category-grid {
+  .hero-title {
+    font-size: 64px;
+  }
+}
+
+.hero-subtitle {
+  font-size: $font-size-body;
+  opacity: 0.9;
+  margin: 0 0 32px;
+}
+
+.hero-search {
+  background: $color-background;
+  border-radius: 14px;
+  padding: 8px;
+  max-width: 900px;
+  margin: 0 auto 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+@include respond-above(lg) {
+  .hero-search {
+    flex-direction: row;
+    align-items: center;
+    padding: 10px 10px 10px 24px;
+  }
+}
+
+.hero-search-field {
+  flex: 1;
+  text-align: left;
+  padding: 8px 12px;
+}
+
+.hero-search-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: -0.02em;
+  color: $color-text;
+  margin-bottom: 2px;
+}
+
+.hero-search-input {
+  border: none;
+  background: none;
+  padding: 0;
+  width: 100%;
+  font-size: $font-size-body;
+  color: $color-text-muted;
+}
+
+.hero-search-input:focus {
+  outline: none;
+}
+
+.hero-search-select {
+  appearance: none;
+  color: $color-text-muted;
+}
+
+.hero-search-divider {
+  display: none;
+  width: 1px;
+  height: 34px;
+  background: $color-border;
+}
+
+@include respond-above(lg) {
+  .hero-search-divider {
+    display: block;
+  }
+}
+
+.hero-search-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: $radius-input;
+  background: $color-surface;
+  color: $color-text;
+  font-size: 20px;
+  flex-shrink: 0;
+  box-shadow: $shadow-card;
+  margin: 0 auto;
+}
+
+@include respond-above(lg) {
+  .hero-search-btn {
+    margin: 0;
+  }
+}
+
+.hero-search-btn:hover {
+  text-decoration: none;
+}
+
+.hero-categories {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 24px 32px;
+}
+
+.hero-category-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: $color-surface;
+}
+
+.hero-category-tile:hover {
+  text-decoration: none;
+}
+
+.hero-category-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: $radius-input;
+  background: $color-surface;
+  font-size: 28px;
+  box-shadow: $shadow-card;
+}
+
+.hero-category-name {
+  font-weight: 500;
+  font-size: $font-size-muted;
+}
+
+// Section titles reused across the page ----------------------------------
+.section-title {
+  font-size: 32px;
+  font-weight: 400;
+  margin: 0;
+}
+
+.section-title-center {
+  font-size: 32px;
+  font-weight: 400;
+  margin: 0 0 40px;
+  text-align: center;
+}
+
+@include respond-above(md) {
+  .section-title,
+  .section-title-center {
+    font-size: 42px;
+  }
+}
+
+.section-title-strong {
+  color: $color-text;
+}
+
+.section-title-light {
+  color: $color-text-muted;
+}
+
+// Featured listings --------------------------------------------------------
+.featured-section {
+  padding: 56px 0;
+}
+
+.featured-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.featured-see-all {
+  color: $color-text;
+  font-weight: 500;
+  font-size: $font-size-body;
+  white-space: nowrap;
+}
+
+.featured-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+@include respond-above(md) {
+  .featured-grid {
     grid-template-columns: repeat(4, 1fr);
   }
 }
 
-.category-tile {
+// Possibilities / feature list ---------------------------------------------
+.possibilities-section {
+  padding: 56px 0;
+}
+
+.possibilities-grid {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 24px 12px;
-  text-align: center;
+  gap: 24px;
 }
 
-.category-tile-icon {
-  font-size: 28px;
+@include respond-above(lg) {
+  .possibilities-grid {
+    flex-direction: row;
+    align-items: stretch;
+  }
 }
 
-.category-tile-name {
-  font-weight: 600;
-}
-
-.carousel-row {
+.possibilities-list {
   display: flex;
-  gap: 16px;
-  overflow-x: auto;
-  padding-bottom: 8px;
-  scroll-snap-type: x proximity;
+  flex-direction: column;
+  flex: 1;
 }
 
-.carousel-item {
-  flex: 0 0 220px;
-  scroll-snap-align: start;
-}
-
-.how-it-works {
-  background: $color-background;
-}
-
-.how-step {
-  text-align: center;
-}
-
-.how-step-number {
-  display: inline-flex;
+.possibility-item {
+  display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 24px;
+  padding: 18px 8px;
+  border: none;
+  border-bottom: 1px solid $color-border;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.possibility-number {
+  font-size: 24px;
+  font-weight: 500;
+  color: $color-text-muted;
   width: 40px;
-  height: 40px;
-  border-radius: $radius-pill;
+  flex-shrink: 0;
+}
+
+.possibility-title {
+  font-size: $font-size-page-title;
+  color: $color-text;
+}
+
+.possibility-item-active {
+  background: $color-background;
+  border-color: $color-primary;
+  border-radius: $radius-card;
+}
+
+.possibility-item-active .possibility-number,
+.possibility-item-active .possibility-title {
+  color: $color-primary;
+}
+
+.possibilities-showcase {
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+  border-radius: 25px;
   background: $gradient-marketing;
   color: $color-surface;
-  font-weight: 700;
-  margin-bottom: 12px;
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
 }
 
-.how-step-title {
-  font-weight: 600;
-  margin-bottom: 4px;
+.possibilities-showcase-watermark {
+  position: absolute;
+  top: -20px;
+  right: 16px;
+  font-size: 160px;
+  font-weight: 500;
+  opacity: 0.1;
+  line-height: 1;
 }
 
-.owner-cta-text {
-  max-width: 560px;
-  margin-left: auto;
-  margin-right: auto;
+.possibilities-showcase-title {
+  font-size: 26px;
+  font-weight: 500;
+  margin: 0 0 12px;
+  position: relative;
+}
+
+.possibilities-showcase-text {
+  font-size: $font-size-body;
+  opacity: 0.9;
+  max-width: 380px;
+  margin: 0 0 24px;
+  position: relative;
+}
+
+.possibilities-mockup {
+  background: $color-surface;
+  border-radius: $radius-card;
+  padding: 20px;
+  margin-top: auto;
+  position: relative;
+}
+
+.possibilities-mockup-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid $color-border;
+}
+
+.possibilities-mockup-label {
+  color: $color-text-muted;
+  font-size: $font-size-muted;
+  margin: 0 0 4px;
+}
+
+.possibilities-mockup-name {
+  color: $color-text;
+  font-weight: 500;
+  font-size: $font-size-page-title;
+  margin: 0;
+}
+
+.possibilities-mockup-status {
+  background: #cdfad1;
+  color: #1db82b;
+  font-weight: 500;
+  font-size: $font-size-muted;
+  padding: 8px 14px;
+  border-radius: $radius-pill;
+  white-space: nowrap;
+}
+
+.possibilities-mockup-body {
+  padding-top: 16px;
+}
+
+.possibilities-mockup-amount {
+  font-size: 24px;
+  font-weight: 500;
+  color: $color-text;
+  margin: 0 0 6px;
+}
+
+.possibilities-mockup-note {
+  color: $color-text-muted;
+  font-size: $font-size-muted;
+  margin: 0 0 12px;
+}
+
+.possibilities-mockup-commission {
+  display: inline-block;
+  background: $color-background;
+  color: $color-primary;
+  font-weight: 500;
+  font-size: $font-size-muted;
+  padding: 6px 14px;
+  border-radius: $radius-pill;
+}
+
+// Video section -------------------------------------------------------------
+.video-section {
+  padding: 56px 0;
+}
+
+.video-frame {
+  position: relative;
+  height: 420px;
+  border-radius: 30px;
+  background: $color-dark;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.video-play-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  border-radius: $radius-pill;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: $color-surface;
+  font-size: 22px;
+  backdrop-filter: blur(6px);
+}
+
+// FAQ -------------------------------------------------------------------
+.faq-section {
+  padding: 56px 0;
+}
+
+.faq-section-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+@include respond-above(lg) {
+  .faq-section-grid {
+    flex-direction: row;
+  }
+
+  .faq-section-grid > .section-title {
+    flex: 0 0 320px;
+  }
+
+  .faq-section-grid > :deep(.faq-accordion) {
+    flex: 1;
+  }
+}
+
+// CTA banner --------------------------------------------------------------
+.cta-banner {
+  position: relative;
+  overflow: hidden;
+  border-radius: 30px;
+  background: $gradient-marketing;
+  color: $color-surface;
+  padding: 64px 32px;
+  margin: 24px 0 64px;
+}
+
+.cta-banner-rings {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.cta-ring {
+  position: absolute;
+  right: -80px;
+  top: 50%;
+  transform: translateY(-50%);
+  border-radius: $radius-pill;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.cta-ring-1 {
+  width: 500px;
+  height: 500px;
+  right: -160px;
+}
+
+.cta-ring-2 {
+  width: 350px;
+  height: 350px;
+  right: -80px;
+}
+
+.cta-ring-3 {
+  width: 200px;
+  height: 200px;
+  right: 0;
+}
+
+.cta-title {
+  position: relative;
+  font-size: 32px;
+  font-weight: 400;
+  max-width: 600px;
+  margin: 0 0 16px;
+  color: $color-surface;
+}
+
+@include respond-above(md) {
+  .cta-title {
+    font-size: 48px;
+  }
+}
+
+.cta-text {
+  position: relative;
+  font-size: $font-size-body;
+  opacity: 0.9;
+  max-width: 420px;
+  margin: 0 0 32px;
+}
+
+.cta-btn {
+  position: relative;
+  background: $color-surface;
+  border-color: $color-surface;
+  color: $color-text;
+}
+
+.cta-btn:hover {
+  background: $color-background;
+  border-color: $color-background;
+  color: $color-text;
 }
 </style>

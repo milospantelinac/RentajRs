@@ -1,8 +1,11 @@
 <template>
   <div class="notif-bell">
-    <button class="notif-bell-trigger" @click="toggle">
-      <span class="notif-bell-icon">🔔</span>
-      <span v-if="unreadCount > 0" class="notif-bell-badge">{{ unreadCount > 9 ? '9+' : unreadCount }}</span>
+    <button class="notif-bell-trigger" :aria-label="t('nav.notifications')" @click="toggle">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+        <path d="M6 10a6 6 0 1112 0c0 3.2 1 5 1.6 5.8.3.4 0 1-.5 1H4.9c-.5 0-.8-.6-.5-1C5 15 6 13.2 6 10Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" />
+        <path d="M10 20a2 2 0 004 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+      </svg>
+      <span v-if="unreadCount > 0" class="notif-bell-dot" />
     </button>
 
     <div v-if="open" class="notif-dropdown card">
@@ -81,29 +84,33 @@ onUnmounted(() => {
 
 .notif-bell-trigger {
   position: relative;
-  border: none;
-  background: none;
-  cursor: pointer;
-  padding: 6px;
-  font-size: 18px;
-  line-height: 1;
-}
-
-.notif-bell-badge {
-  position: absolute;
-  top: 0;
-  right: 0;
-  background: $color-error;
-  color: $color-surface;
-  font-size: 10px;
-  font-weight: 700;
-  min-width: 16px;
-  height: 16px;
+  width: 40px;
+  height: 40px;
   border-radius: $radius-pill;
+  border: none;
+  background: $color-background;
+  color: $color-text-muted;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0 3px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.notif-bell-trigger:hover {
+  background: $color-border;
+}
+
+.notif-bell-dot {
+  position: absolute;
+  top: 8px;
+  right: 9px;
+  width: 9px;
+  height: 9px;
+  border-radius: $radius-pill;
+  background: $color-error;
+  border: 2px solid $color-surface;
+  box-shadow: 0 0 0 1px rgba(229, 72, 77, 0.35);
 }
 
 .notif-dropdown {

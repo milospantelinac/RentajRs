@@ -4,15 +4,18 @@
 // platform reads as one product, including pages with no Figma reference.
 
 // Colors (Ch.18.2) ------------------------------------------------------
-$color-gradient-start: #2bb8f0;
-$color-gradient-end: #1b3fd8;
-$color-primary: #1b4fd8;
+// Refined 2026-08 to match the updated brand reference (Figma) — same
+// semantic roles, tighter values (near-black instead of pure gray, etc.).
+$color-gradient-start: #1abaf3;
+$color-gradient-mid: #0957df;
+$color-gradient-end: #001ed4;
+$color-primary: #0957df;
 $color-dark: #0f1b33; // buttons, tags
-$color-background: #f5f7fb;
+$color-background: #f9fafd;
 $color-surface: #ffffff;
-$color-text: #1a1a1a;
-$color-text-muted: #6b7280;
-$color-border: #e5e7eb;
+$color-text: #061b31;
+$color-text-muted: #637384;
+$color-border: #e4ebf2;
 $color-success: #12b76a;
 $color-warning: #f59e0b;
 $color-error: #e5484d;
@@ -20,7 +23,7 @@ $color-error: #e5484d;
 // R149: the blue gradient is reserved for marketing surfaces (Home Page
 // hero/CTAs) — never the dashboard or admin panel, which use flat
 // $color-background instead (Ch.18.1).
-$gradient-marketing: linear-gradient(135deg, $color-gradient-start, $color-gradient-end);
+$gradient-marketing: linear-gradient(135deg, $color-gradient-start 0%, $color-gradient-mid 55%, $color-gradient-end 100%);
 
 // Urgency colors reused for dashboard "needs your attention" cards and nav
 // badge counters (Ch.10.4/10.5) — not new colors, just named roles for the

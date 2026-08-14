@@ -27,15 +27,13 @@
               <li :class="pkg.hasReviews ? '' : 'package-feature-off'">{{ t('billing.featureReviews') }}</li>
               <li :class="pkg.hasIcal ? '' : 'package-feature-off'">{{ t('billing.featureIcal') }}</li>
             </ul>
-            <button class="btn btn-primary-flat btn-block" :disabled="purchasing" @click="purchase(pkg)">
+            <button class="btn btn-primary-flat btn-block" @click="goToCheckout(pkg)">
               {{ t('billing.selectPackage') }}
             </button>
           </div>
         </div>
       </div>
     </div>
-
-    <p v-if="error" class="form-error">{{ error }}</p>
   </div>
 </template>
 
@@ -47,28 +45,16 @@ const route = useRoute()
 
 const { data: packages } = await useAsyncData('packages', () => api.get('/packages'))
 const cycle = ref('MONTHLY')
-const purchasing = ref(false)
-const error = ref('')
 
 function formatPrice(value) {
   return `${new Intl.NumberFormat('sr-RS').format(value || 0)} RSD`
 }
 
-async function purchase(pkg) {
-  error.value = ''
-  purchasing.value = true
-  try {
-    await api.post('/subscriptions/purchase', {
-      listingId: route.params.id,
-      packageId: pkg.id,
-      billingCycle: cycle.value,
-    })
-    await navigateTo(`/oglasi/${route.params.id}/poslato`)
-  } catch (e) {
-    error.value = e?.data?.message?.[0] || e?.data?.message || t('auth.genericError')
-  } finally {
-    purchasing.value = false
-  }
+function goToCheckout(pkg) {
+  navigateTo({
+    path: `/oglasi/${route.params.id}/checkout`,
+    query: { packageId: pkg.id, billingCycle: cycle.value },
+  })
 }
 
 useSeoMeta({ title: t('billing.choosePackage') })

@@ -6,23 +6,38 @@
         <span class="site-logo-text">{{ t('common.appName') }}</span>
       </NuxtLink>
 
-      <nav class="site-nav d-none-mobile">
-        <NuxtLink to="/pretraga" class="site-nav-link">{{ t('nav.search') }}</NuxtLink>
-        <NuxtLink v-if="auth.isAuthenticated" to="/kontrolna-tabla" class="site-nav-link">
-          {{ t('nav.dashboard') }}
-        </NuxtLink>
-      </nav>
+      <div class="d-none-mobile site-nav-pill-wrap">
+        <nav class="site-nav-pill">
+          <NuxtLink to="/" class="site-nav-pill-link" exact-active-class="site-nav-pill-link-active">
+            {{ t('nav.home') }}
+          </NuxtLink>
+          <NuxtLink to="/cenovnik" class="site-nav-pill-link" active-class="site-nav-pill-link-active">
+            {{ t('nav.pricing') }}
+          </NuxtLink>
+          <NuxtLink to="/faq" class="site-nav-pill-link" active-class="site-nav-pill-link-active">
+            {{ t('nav.faq') }}
+          </NuxtLink>
+          <NuxtLink to="/kontakt" class="site-nav-pill-link" active-class="site-nav-pill-link-active">
+            {{ t('nav.contact') }}
+          </NuxtLink>
+        </nav>
+      </div>
 
       <div class="site-header-actions">
-        <NuxtLink to="/oglasi/novi" class="btn btn-primary btn-sm d-none-mobile">
-          {{ t('nav.addListing') }}
-        </NuxtLink>
-
         <template v-if="!auth.isAuthenticated">
-          <NuxtLink to="/prijava" class="btn btn-tertiary btn-sm">{{ t('nav.login') }}</NuxtLink>
+          <NuxtLink to="/prijava" class="site-header-pill-btn d-none-mobile">{{ t('nav.login') }}</NuxtLink>
         </template>
         <template v-else>
           <NotificationBell />
+          <NuxtLink to="/kontrolna-tabla" class="site-header-pill-btn d-none-mobile">{{ t('nav.dashboard') }}</NuxtLink>
+        </template>
+
+        <NuxtLink to="/oglasi/novi" class="site-header-cta-btn">
+          <span class="site-header-cta-icon" aria-hidden="true">+</span>
+          <span class="d-none-mobile">{{ t('nav.addListing') }}</span>
+        </NuxtLink>
+
+        <template v-if="auth.isAuthenticated">
           <button class="user-menu-trigger" @click="menuOpen = !menuOpen">
             <img v-if="auth.user?.avatarUrl" :src="auth.user.avatarUrl" alt="" class="user-menu-avatar" />
             <span v-else class="user-menu-avatar user-menu-avatar-placeholder">{{ initials }}</span>
@@ -71,6 +86,7 @@ function handleLogout() {
   justify-content: space-between;
   gap: 16px;
   height: 68px;
+  position: relative;
 }
 
 .site-logo {
@@ -99,17 +115,37 @@ function handleLogout() {
   font-weight: 700;
 }
 
-.site-nav {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  flex: 1;
+.site-nav-pill-wrap {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
 }
 
-.site-nav-link {
+.site-nav-pill {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: $color-background;
+  border-radius: $radius-input;
+  padding: 5px;
+}
+
+.site-nav-pill-link {
+  padding: 10px 20px;
+  border-radius: $radius-button;
+  font-weight: 600;
+  font-size: $font-size-muted;
   color: $color-text;
-  font-weight: 500;
-  font-size: $font-size-body;
+  white-space: nowrap;
+}
+
+.site-nav-pill-link:hover {
+  text-decoration: none;
+}
+
+.site-nav-pill-link-active {
+  background: $color-surface;
+  box-shadow: $shadow-card;
 }
 
 .site-header-actions {
@@ -117,6 +153,54 @@ function handleLogout() {
   align-items: center;
   gap: 12px;
   position: relative;
+  margin-left: auto;
+}
+
+.site-header-pill-btn {
+  padding: 14px 32px;
+  border-radius: $radius-input;
+  background: $color-background;
+  color: $color-text;
+  font-weight: 500;
+  font-size: $font-size-muted;
+  white-space: nowrap;
+}
+
+.site-header-pill-btn:hover {
+  text-decoration: none;
+  background: $color-border;
+}
+
+.site-header-cta-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px;
+  border-radius: $radius-input;
+  background: $color-background;
+  color: $color-text;
+  font-weight: 500;
+  font-size: $font-size-muted;
+  white-space: nowrap;
+}
+
+.site-header-cta-btn:hover {
+  text-decoration: none;
+  background: $color-border;
+}
+
+.site-header-cta-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: $radius-badge;
+  background: $gradient-marketing;
+  color: $color-surface;
+  font-size: 16px;
+  line-height: 1;
+  flex-shrink: 0;
 }
 
 .user-menu-trigger {

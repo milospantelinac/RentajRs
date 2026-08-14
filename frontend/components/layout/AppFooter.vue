@@ -7,25 +7,21 @@
             <span class="site-logo-mark">R</span>
             <span class="site-logo-text">{{ t('common.appName') }}</span>
           </div>
-          <p class="text-muted">{{ t('common.tagline') }}</p>
+          <p class="footer-tagline">{{ t('footer.description') }}</p>
         </div>
 
         <div class="col-6 col-md-2 mb-4 mb-md-0">
-          <div class="text-label mb-2">{{ t('footer.about') }}</div>
-          <NuxtLink to="/o-nama" class="footer-link">{{ t('footer.about') }}</NuxtLink>
-          <NuxtLink to="/kontakt" class="footer-link">{{ t('footer.contact') }}</NuxtLink>
-          <NuxtLink to="/pomoc" class="footer-link">{{ t('footer.help') }}</NuxtLink>
-        </div>
-
-        <div class="col-6 col-md-2 mb-4 mb-md-0">
-          <div class="text-label mb-2">{{ t('footer.terms') }}</div>
-          <NuxtLink to="/uslovi-koriscenja" class="footer-link">{{ t('footer.terms') }}</NuxtLink>
+          <div class="text-label mb-3">{{ t('footer.aboutGroup') }}</div>
+          <NuxtLink to="/cenovnik" class="footer-link">{{ t('nav.pricing') }}</NuxtLink>
           <NuxtLink to="/politika-privatnosti" class="footer-link">{{ t('footer.privacy') }}</NuxtLink>
-          <NuxtLink to="/kolacici" class="footer-link">{{ t('footer.cookies') }}</NuxtLink>
+          <NuxtLink to="/uslovi-koriscenja" class="footer-link">{{ t('footer.terms') }}</NuxtLink>
+          <NuxtLink to="/faq" class="footer-link">{{ t('nav.faq') }}</NuxtLink>
+          <NuxtLink to="/kontakt" class="footer-link">{{ t('footer.contact') }}</NuxtLink>
+          <NuxtLink to="/o-nama" class="footer-link">{{ t('footer.about') }}</NuxtLink>
         </div>
 
-        <div class="col-12 col-md-4">
-          <div class="text-label mb-2">{{ t('nav.search') }}</div>
+        <div class="col-6 col-md-2 mb-4 mb-md-0">
+          <div class="text-label mb-3">{{ t('footer.categoriesGroup') }}</div>
           <NuxtLink
             v-for="category in categories"
             :key="category.id"
@@ -35,10 +31,17 @@
             {{ category.name }}
           </NuxtLink>
         </div>
+
+        <div class="col-12 col-md-4">
+          <div class="text-label mb-3">{{ t('footer.platformGroup') }}</div>
+          <NuxtLink to="/pretraga" class="footer-link">{{ t('nav.search') }}</NuxtLink>
+          <NuxtLink to="/prijava" class="footer-link">{{ t('nav.login') }}</NuxtLink>
+          <NuxtLink to="/oglasi/novi" class="footer-link">{{ t('nav.addListing') }}</NuxtLink>
+        </div>
       </div>
 
       <div class="footer-bottom">
-        <span class="text-muted">© {{ year }} Rentaj. {{ t('footer.rights') }}</span>
+        <span class="text-muted">© {{ year }} {{ t('footer.rights') }}</span>
       </div>
     </div>
   </footer>
@@ -88,11 +91,18 @@ const { data: categories } = await useAsyncData('footer-categories', async () =>
   font-size: 13px;
 }
 
+.footer-tagline {
+  color: $color-text-muted;
+  font-size: $font-size-body;
+  line-height: 1.6;
+  max-width: 320px;
+}
+
 .footer-link {
   display: block;
   color: $color-text-muted;
   font-size: $font-size-muted;
-  padding: 4px 0;
+  padding: 6px 0;
 }
 
 .footer-link:hover {

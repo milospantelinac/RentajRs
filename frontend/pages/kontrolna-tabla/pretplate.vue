@@ -73,14 +73,14 @@ function formatPrice(value) {
 
 function statusLabel(status) {
   const map = {
-    PENDING_ACTIVATION: 'PendingActivation', ACTIVE: 'Active', GRACE: 'Grace',
+    AWAITING_PAYMENT: 'AwaitingPayment', PENDING_ACTIVATION: 'PendingActivation', ACTIVE: 'Active', GRACE: 'Grace',
     EXPIRED: 'Expired', CANCELLED: 'Cancelled',
   }
   return map[status] || 'Active'
 }
 function statusBadge(status) {
   const map = {
-    PENDING_ACTIVATION: 'badge-warning', ACTIVE: 'badge-success', GRACE: 'badge-warning',
+    AWAITING_PAYMENT: 'badge-neutral', PENDING_ACTIVATION: 'badge-warning', ACTIVE: 'badge-success', GRACE: 'badge-warning',
     EXPIRED: 'badge-critical', CANCELLED: 'badge-neutral',
   }
   return map[status] || 'badge-neutral'
