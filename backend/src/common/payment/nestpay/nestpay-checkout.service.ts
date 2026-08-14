@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { randomBytes } from 'crypto';
 import { PaymentSettingsService } from './payment-settings.service';
 import { buildNestPayRequestHash, verifyNestPayResponseHash } from './nestpay-hash.util';
+import { toNestPaySafeAscii } from '../../utils/ascii-transliterate';
 
 // ISO 4217 numeric currency codes — NestPay's `currency` field wants the
 // number, not the ISO alpha code the rest of the app (and the admin UI) uses.
@@ -76,15 +77,15 @@ export class NestPayCheckoutService {
       rnd,
       encoding: 'utf-8',
       email: input.billing.email,
-      BillToName: `${input.billing.firstName} ${input.billing.lastName}`.trim(),
-      description: input.description,
+      BillToName: toNestPaySafeAscii(`${input.billing.firstName} ${input.billing.lastName}`.trim()),
+      description: toNestPaySafeAscii(input.description),
     };
     if (input.billing.phone) fields.tel = input.billing.phone;
     if (creds.shopUrl) fields.shopurl = creds.shopUrl;
     if (input.billing.isCompany && input.billing.companyName) {
       fields.printBillTo = 'true';
-      fields.BillToCompany = input.billing.companyName;
-      if (input.billing.companyAddress) fields.BillToStreet1 = input.billing.companyAddress;
+      fields.BillToCompany = toNestPaySafeAscii(input.billing.companyName);
+      if (input.billing.companyAddress) fields.BillToStreet1 = toNestPaySafeAscii(input.billing.companyAddress);
     }
 
     return { actionUrl: `${creds.apiEndpoint}/fim/est3dgate`, fields };
