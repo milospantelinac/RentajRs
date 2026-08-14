@@ -4,6 +4,8 @@ import { I18nService } from 'nestjs-i18n';
 import { ProcessingStatus, Language } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
+import { PaymentSettingsService } from '../../common/payment/nestpay/payment-settings.service';
+import { UpdatePaymentSettingsDto } from '../../common/payment/nestpay/dto/payment-settings.dto';
 import {
   ReportListingDto,
   BlockUserDto,
@@ -21,6 +23,7 @@ export class AdminService {
     private users: UsersService,
     private i18n: I18nService,
     private events: EventEmitter2,
+    private paymentSettings: PaymentSettingsService,
   ) {}
 
   // -- Users -----------------------------------------------------------
@@ -139,6 +142,20 @@ export class AdminService {
     await this.prisma.setting.update({ where: { key }, data: { value: dto.value as any } });
     await this.logAction(adminId, 'update_setting', 'Setting', key, existing.value, dto.value);
     return { message: this.i18n.t('common.SUCCESS') };
+  }
+
+  // -- Payment settings (Banca Intesa NestPay connector) ----------------
+
+  async getPaymentSettings() {
+    return this.paymentSettings.getMasked();
+  }
+
+  async updatePaymentSettings(adminId: string, dto: UpdatePaymentSettingsDto) {
+    const before = await this.paymentSettings.getMasked();
+    const updated = await this.paymentSettings.update(dto);
+    // Masked before/after only — the audit log must never hold plaintext secrets.
+    await this.logAction(adminId, 'update_payment_settings', 'PaymentSettings', 'default', before, updated);
+    return updated;
   }
 
   // -- Email templates (R166) -----------------------------------------------

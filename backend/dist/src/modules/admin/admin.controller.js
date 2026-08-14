@@ -18,6 +18,7 @@ const swagger_1 = require("@nestjs/swagger");
 const client_1 = require("@prisma/client");
 const admin_service_1 = require("./admin.service");
 const admin_dto_1 = require("./dto/admin.dto");
+const payment_settings_dto_1 = require("../../common/payment/nestpay/dto/payment-settings.dto");
 const current_user_decorator_1 = require("../../common/decorators/current-user.decorator");
 const require_permissions_decorator_1 = require("../../common/decorators/require-permissions.decorator");
 let AdminController = class AdminController {
@@ -53,6 +54,12 @@ let AdminController = class AdminController {
     }
     updateSetting(adminId, key, dto) {
         return this.adminService.updateSetting(adminId, key, dto);
+    }
+    getPaymentSettings() {
+        return this.adminService.getPaymentSettings();
+    }
+    updatePaymentSettings(adminId, dto) {
+        return this.adminService.updatePaymentSettings(adminId, dto);
     }
     listEmailTemplates() {
         return this.adminService.listEmailTemplates();
@@ -161,6 +168,22 @@ __decorate([
     __metadata("design:paramtypes", [String, String, admin_dto_1.UpdateSettingDto]),
     __metadata("design:returntype", void 0)
 ], AdminController.prototype, "updateSetting", null);
+__decorate([
+    (0, require_permissions_decorator_1.RequirePermissions)('manage_settings'),
+    (0, common_1.Get)('admin/payment-settings'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", void 0)
+], AdminController.prototype, "getPaymentSettings", null);
+__decorate([
+    (0, require_permissions_decorator_1.RequirePermissions)('manage_settings'),
+    (0, common_1.Patch)('admin/payment-settings'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)('id')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, payment_settings_dto_1.UpdatePaymentSettingsDto]),
+    __metadata("design:returntype", void 0)
+], AdminController.prototype, "updatePaymentSettings", null);
 __decorate([
     (0, require_permissions_decorator_1.RequirePermissions)('manage_settings'),
     (0, common_1.Get)('admin/email-templates'),

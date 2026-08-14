@@ -15,13 +15,15 @@ const event_emitter_1 = require("@nestjs/event-emitter");
 const nestjs_i18n_1 = require("nestjs-i18n");
 const prisma_service_1 = require("../../prisma/prisma.service");
 const users_service_1 = require("../users/users.service");
+const payment_settings_service_1 = require("../../common/payment/nestpay/payment-settings.service");
 const PRIORITY_REPORT_THRESHOLD = 3;
 let AdminService = class AdminService {
-    constructor(prisma, users, i18n, events) {
+    constructor(prisma, users, i18n, events, paymentSettings) {
         this.prisma = prisma;
         this.users = users;
         this.i18n = i18n;
         this.events = events;
+        this.paymentSettings = paymentSettings;
     }
     async listUsers(search, blocked) {
         return this.prisma.user.findMany({
@@ -117,6 +119,15 @@ let AdminService = class AdminService {
         await this.logAction(adminId, 'update_setting', 'Setting', key, existing.value, dto.value);
         return { message: this.i18n.t('common.SUCCESS') };
     }
+    async getPaymentSettings() {
+        return this.paymentSettings.getMasked();
+    }
+    async updatePaymentSettings(adminId, dto) {
+        const before = await this.paymentSettings.getMasked();
+        const updated = await this.paymentSettings.update(dto);
+        await this.logAction(adminId, 'update_payment_settings', 'PaymentSettings', 'default', before, updated);
+        return updated;
+    }
     async listEmailTemplates() {
         return this.prisma.emailTemplate.findMany({ orderBy: [{ key: 'asc' }, { language: 'asc' }] });
     }
@@ -193,6 +204,7 @@ exports.AdminService = AdminService = __decorate([
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
         users_service_1.UsersService,
         nestjs_i18n_1.I18nService,
-        event_emitter_1.EventEmitter2])
+        event_emitter_1.EventEmitter2,
+        payment_settings_service_1.PaymentSettingsService])
 ], AdminService);
 //# sourceMappingURL=admin.service.js.map

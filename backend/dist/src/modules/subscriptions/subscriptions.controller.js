@@ -34,6 +34,15 @@ let SubscriptionsController = class SubscriptionsController {
     purchase(userId, dto) {
         return this.subscriptionsService.purchaseForListing(userId, dto);
     }
+    initCheckout(userId, dto) {
+        return this.subscriptionsService.initCheckout(userId, dto);
+    }
+    async nestpaySuccess(body) {
+        return { url: await this.subscriptionsService.handleNestPaySuccess(body), statusCode: 303 };
+    }
+    async nestpayFail(body) {
+        return { url: await this.subscriptionsService.handleNestPayFail(body), statusCode: 303 };
+    }
     cancel(userId, id, dto) {
         return this.subscriptionsService.cancelSubscription(userId, id, dto);
     }
@@ -76,6 +85,32 @@ __decorate([
     __metadata("design:paramtypes", [String, subscriptions_dto_1.PurchaseSubscriptionDto]),
     __metadata("design:returntype", void 0)
 ], SubscriptionsController.prototype, "purchase", null);
+__decorate([
+    (0, common_1.Post)('subscriptions/checkout/init'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)('id')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, subscriptions_dto_1.InitCheckoutDto]),
+    __metadata("design:returntype", void 0)
+], SubscriptionsController.prototype, "initCheckout", null);
+__decorate([
+    (0, public_decorator_1.Public)(),
+    (0, common_1.Redirect)(),
+    (0, common_1.Post)('subscriptions/nestpay/callback/success'),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], SubscriptionsController.prototype, "nestpaySuccess", null);
+__decorate([
+    (0, public_decorator_1.Public)(),
+    (0, common_1.Redirect)(),
+    (0, common_1.Post)('subscriptions/nestpay/callback/fail'),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], SubscriptionsController.prototype, "nestpayFail", null);
 __decorate([
     (0, common_1.Post)('subscriptions/:id/cancel'),
     __param(0, (0, current_user_decorator_1.CurrentUser)('id')),

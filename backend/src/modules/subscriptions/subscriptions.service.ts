@@ -1,12 +1,14 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
+import { ConfigService } from '@nestjs/config';
 import { I18nService } from 'nestjs-i18n';
 import { Prisma, Subscription, SubscriptionStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CacheService } from '../../common/cache/cache.service';
 import { ListingsService } from '../listings/listings.service';
 import { PaymentProvider } from '../../common/payment/payment-provider.interface';
+import { NestPayCheckoutService } from '../../common/payment/nestpay/nestpay-checkout.service';
 import { FiscalizationProvider } from '../../common/fiscalization/fiscalization-provider.interface';
 import { paraToRsd, rsdToPara } from '../../common/utils/money';
 import {
@@ -14,6 +16,7 @@ import {
   PurchaseFeaturedDto,
   CancelSubscriptionDto,
   AdjustPriceDto,
+  InitCheckoutDto,
 } from './dto/subscriptions.dto';
 
 const GRACE_PERIOD_DAYS = 7;
@@ -21,14 +24,18 @@ const RETRY_DAYS = [0, 3, 6];
 
 @Injectable()
 export class SubscriptionsService {
+  private readonly logger = new Logger(SubscriptionsService.name);
+
   constructor(
     private prisma: PrismaService,
     private cache: CacheService,
     private listings: ListingsService,
     private payment: PaymentProvider,
+    private nestpay: NestPayCheckoutService,
     private fiscalization: FiscalizationProvider,
     private i18n: I18nService,
     private events: EventEmitter2,
+    private config: ConfigService,
   ) {}
 
   // -- Packages --------------------------------------------------------
@@ -181,6 +188,174 @@ export class SubscriptionsService {
 
     this.events.emit('subscription.purchased', { userId, subscriptionId: subscription.id });
     return this.prisma.subscription.findUniqueOrThrow({ where: { id: subscription.id } });
+  }
+
+  // -- Checkout (Banca Intesa NestPay "3D Pay Hosting") -------------------
+
+  /**
+   * Starts a real-money checkout: creates the Subscription in
+   * AWAITING_PAYMENT (its id doubles as NestPay's `oid`, so the callback can
+   * find it again) and returns the hidden-form fields the frontend posts to
+   * NestPay's hosted payment page. Nothing about the listing changes yet —
+   * that only happens once handleNestPaySuccess() verifies real payment.
+   */
+  async initCheckout(userId: string, dto: InitCheckoutDto) {
+    const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: dto.listingId } });
+    if (listing.userId !== userId) throw new ForbiddenException();
+    if (!['DRAFT', 'REJECTED'].includes(listing.status)) {
+      throw new BadRequestException('Listing is not awaiting a package');
+    }
+    const pkg = await this.prisma.package.findUniqueOrThrow({ where: { id: dto.packageId } });
+    const price = dto.billingCycle === 'YEARLY' ? pkg.priceYearly : pkg.priceMonthly;
+
+    // Save billing details to the profile too — the whole point of asking is
+    // to not have to ask again next time (Task 1's explicit UX goal).
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        phone: dto.phone || undefined,
+        buyerType: dto.isCompany ? 'COMPANY' : 'PERSON',
+        ...(dto.isCompany
+          ? {
+              companyName: dto.companyName || undefined,
+              taxId: dto.taxId || undefined,
+              registrationNumber: dto.registrationNumber || undefined,
+              billingAddress: dto.companyAddress || undefined,
+            }
+          : {}),
+      },
+    });
+
+    const subscription = await this.prisma.subscription.create({
+      data: {
+        userId,
+        packageId: dto.packageId,
+        billingCycle: dto.billingCycle,
+        status: 'AWAITING_PAYMENT',
+        priceAtPurchase: price,
+        pendingListingId: dto.listingId,
+        autoRenew: !dto.isCompany, // R109 — legal entities renew manually
+      },
+    });
+
+    const { actionUrl, fields } = await this.nestpay.buildCheckoutForm({
+      oid: subscription.id,
+      amountRsd: paraToRsd(price) ?? 0,
+      billing: {
+        email: dto.email,
+        phone: dto.phone,
+        firstName: dto.firstName,
+        lastName: dto.lastName,
+        isCompany: dto.isCompany,
+        companyName: dto.companyName,
+        companyAddress: dto.companyAddress,
+      },
+      description: `Rentaj — ${pkg.key} (${dto.billingCycle})`,
+    });
+
+    return { actionUrl, fields };
+  }
+
+  /** okUrl target — NestPay POSTs the payment result here after 3D authentication. */
+  async handleNestPaySuccess(body: Record<string, string>) {
+    const frontendUrl = this.config.get<string>('frontendUrl');
+    const verification = await this.nestpay.verifyCallback(body);
+
+    if (!verification.valid) {
+      this.logger.error(`Rejected NestPay success callback: ${verification.reason} (oid=${verification.oid})`);
+      return `${frontendUrl}/kontrolna-tabla/pretplate?payment=invalid`;
+    }
+
+    const subscription = await this.prisma.subscription.findUnique({ where: { id: verification.oid } });
+    if (!subscription || subscription.status !== 'AWAITING_PAYMENT' || !subscription.pendingListingId) {
+      // Already processed (duplicate callback / user refresh) or unknown oid — safe no-op.
+      return `${frontendUrl}/kontrolna-tabla/pretplate?payment=unknown`;
+    }
+    const listingId = subscription.pendingListingId;
+
+    if (!verification.approved) {
+      await this.prisma.subscription.delete({ where: { id: subscription.id } });
+      await this.prisma.transaction.create({
+        data: {
+          userId: subscription.userId,
+          amount: subscription.priceAtPurchase,
+          status: 'FAILED',
+          type: 'SUBSCRIPTION',
+          errorMessage: verification.errMsg || `ProcReturnCode ${verification.procReturnCode}`,
+        },
+      });
+      return `${frontendUrl}/oglasi/${listingId}/placanje-neuspesno`;
+    }
+
+    await this.prisma.subscription.update({
+      where: { id: subscription.id },
+      data: { status: 'PENDING_ACTIVATION', pendingListingId: null },
+    });
+    await this.prisma.transaction.create({
+      data: {
+        userId: subscription.userId,
+        subscriptionId: subscription.id,
+        amount: subscription.priceAtPurchase,
+        status: 'SUCCESSFUL',
+        type: 'SUBSCRIPTION',
+        bankExternalId: verification.transId,
+      },
+    });
+
+    await this.listings.markPendingApproval(listingId, subscription.id);
+
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: subscription.userId } });
+    const pkg = await this.prisma.package.findUniqueOrThrow({ where: { id: subscription.packageId } });
+    const transaction = await this.prisma.transaction.findFirstOrThrow({
+      where: { subscriptionId: subscription.id, status: 'SUCCESSFUL' },
+      orderBy: { occurredAt: 'desc' },
+    });
+    const doc = await this.fiscalization.issueDocument({
+      documentType: 'FISCAL_RECEIPT',
+      amountRsd: paraToRsd(subscription.priceAtPurchase) ?? 0,
+      buyerName: user.buyerType === 'COMPANY' && user.companyName ? user.companyName : `${user.firstName} ${user.lastName}`,
+      buyerTaxId: user.taxId ?? undefined,
+      description: `Rentaj — ${pkg.key} (${subscription.billingCycle})`,
+    });
+    await this.prisma.invoice.create({
+      data: {
+        transactionId: transaction.id,
+        userId: subscription.userId,
+        documentType: 'FISCAL_RECEIPT',
+        documentNumber: doc.documentNumber,
+        amount: subscription.priceAtPurchase,
+        externalId: doc.externalId,
+      },
+    });
+
+    this.events.emit('subscription.purchased', { userId: subscription.userId, subscriptionId: subscription.id });
+    return `${frontendUrl}/oglasi/${listingId}/poslato`;
+  }
+
+  /** failUrl target — NestPay POSTs here when the customer's payment did not go through. */
+  async handleNestPayFail(body: Record<string, string>) {
+    const frontendUrl = this.config.get<string>('frontendUrl');
+    const verification = await this.nestpay.verifyCallback(body);
+    const subscription = verification.oid
+      ? await this.prisma.subscription.findUnique({ where: { id: verification.oid } })
+      : null;
+
+    if (!subscription || subscription.status !== 'AWAITING_PAYMENT') {
+      return `${frontendUrl}/kontrolna-tabla/pretplate?payment=failed`;
+    }
+    const listingId = subscription.pendingListingId;
+    await this.prisma.transaction.create({
+      data: {
+        userId: subscription.userId,
+        amount: subscription.priceAtPurchase,
+        status: 'FAILED',
+        type: 'SUBSCRIPTION',
+        errorMessage: verification.errMsg || 'Payment declined',
+      },
+    });
+    await this.prisma.subscription.delete({ where: { id: subscription.id } });
+
+    return listingId ? `${frontendUrl}/oglasi/${listingId}/placanje-neuspesno` : `${frontendUrl}/kontrolna-tabla/pretplate?payment=failed`;
   }
 
   private async bankRemainingDays(listingId: string, oldSubscription: Subscription & { package: { id: string } }) {

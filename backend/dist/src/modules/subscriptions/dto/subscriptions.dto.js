@@ -9,7 +9,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.AdjustPriceDto = exports.CancelSubscriptionDto = exports.PurchaseFeaturedDto = exports.PurchaseSubscriptionDto = void 0;
+exports.AdjustPriceDto = exports.InitCheckoutDto = exports.CancelSubscriptionDto = exports.PurchaseFeaturedDto = exports.PurchaseSubscriptionDto = void 0;
 const swagger_1 = require("@nestjs/swagger");
 const class_validator_1 = require("class-validator");
 const client_1 = require("@prisma/client");
@@ -60,6 +60,76 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", String)
 ], CancelSubscriptionDto.prototype, "reason", void 0);
+class InitCheckoutDto {
+}
+exports.InitCheckoutDto = InitCheckoutDto;
+__decorate([
+    (0, swagger_1.ApiProperty)(),
+    (0, class_validator_1.IsUUID)('4'),
+    __metadata("design:type", String)
+], InitCheckoutDto.prototype, "listingId", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)(),
+    (0, class_validator_1.IsUUID)('4'),
+    __metadata("design:type", String)
+], InitCheckoutDto.prototype, "packageId", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ enum: client_1.BillingCycle }),
+    (0, class_validator_1.IsEnum)(client_1.BillingCycle),
+    __metadata("design:type", String)
+], InitCheckoutDto.prototype, "billingCycle", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)(),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsNotEmpty)(),
+    __metadata("design:type", String)
+], InitCheckoutDto.prototype, "firstName", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)(),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsNotEmpty)(),
+    __metadata("design:type", String)
+], InitCheckoutDto.prototype, "lastName", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)(),
+    (0, class_validator_1.IsEmail)(),
+    __metadata("design:type", String)
+], InitCheckoutDto.prototype, "email", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)(),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], InitCheckoutDto.prototype, "phone", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: '"Želim račun na firmu (Pravno lice)"' }),
+    (0, class_validator_1.IsBoolean)(),
+    __metadata("design:type", Boolean)
+], InitCheckoutDto.prototype, "isCompany", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)(),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], InitCheckoutDto.prototype, "taxId", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)(),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], InitCheckoutDto.prototype, "registrationNumber", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)(),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], InitCheckoutDto.prototype, "companyName", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)(),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], InitCheckoutDto.prototype, "companyAddress", void 0);
 class AdjustPriceDto {
 }
 exports.AdjustPriceDto = AdjustPriceDto;

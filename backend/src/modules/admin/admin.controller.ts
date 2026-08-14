@@ -9,6 +9,7 @@ import {
   UpdateSettingDto,
   UpdateEmailTemplateDto,
 } from './dto/admin.dto';
+import { UpdatePaymentSettingsDto } from '../../common/payment/nestpay/dto/payment-settings.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 
@@ -88,6 +89,20 @@ export class AdminController {
   @Patch('admin/settings/:key')
   updateSetting(@CurrentUser('id') adminId: string, @Param('key') key: string, @Body() dto: UpdateSettingDto) {
     return this.adminService.updateSetting(adminId, key, dto);
+  }
+
+  // -- Admin: payment settings (Banca Intesa NestPay connector) --------
+
+  @RequirePermissions('manage_settings')
+  @Get('admin/payment-settings')
+  getPaymentSettings() {
+    return this.adminService.getPaymentSettings();
+  }
+
+  @RequirePermissions('manage_settings')
+  @Patch('admin/payment-settings')
+  updatePaymentSettings(@CurrentUser('id') adminId: string, @Body() dto: UpdatePaymentSettingsDto) {
+    return this.adminService.updatePaymentSettings(adminId, dto);
   }
 
   // -- Admin: email templates (R166) -----------------------------------

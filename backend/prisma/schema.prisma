@@ -127,6 +127,7 @@ enum OccupancySource {
 }
 
 enum SubscriptionStatus {
+  AWAITING_PAYMENT // created at checkout, before the NestPay redirect resolves — see nestpay callback handlers
   PENDING_ACTIVATION
   ACTIVE
   GRACE
@@ -831,6 +832,10 @@ model Subscription {
   graceUntil          DateTime?          @db.Timestamptz
   paymentAttemptCount Int                @default(0)
   cardToken           String? // opaque token from the payment provider, never card data (R118)
+  // Set only while status=AWAITING_PAYMENT — the listing this checkout is for,
+  // before the NestPay callback confirms payment and ListingsService.markPendingApproval()
+  // takes over as the authoritative link (Listing.subscriptionId). Not used afterwards.
+  pendingListingId    String?            @db.Uuid
   createdAt           DateTime           @default(now()) @db.Timestamptz
 
   user     User      @relation(fields: [userId], references: [id])
@@ -937,6 +942,31 @@ model FeaturedWaitlist {
   category Category @relation(fields: [categoryId], references: [id])
 
   @@index([categoryId])
+}
+
+/// Singleton row (id is always "default") holding the platform's Banca Intesa
+/// NestPay ("3D Pay Hosting") connector configuration, editable by admins at
+/// runtime instead of baked into env vars — see PaymentSettingsService.
+/// storeKeyEncrypted/apiPasswordEncrypted are AES-256-GCM ciphertext (see
+/// common/crypto/secret-crypto.util.ts), never plaintext, and are never sent
+/// back to the frontend — the admin UI only ever sees whether a value is set.
+model PaymentSettings {
+  id                   String   @id @default("default")
+  clientId             String   @default("")
+  storeKeyEncrypted    String?
+  apiUsername          String   @default("")
+  apiPasswordEncrypted String?
+  okUrl                String   @default("")
+  failUrl              String   @default("")
+  shopUrl              String   @default("")
+  apiEndpoint          String   @default("https://testsecurepay.eway2pay.com") // host only, test or production
+  transactionType      String   @default("Auth") // "Auth" (SMS) or "PreAuth" (DMS)
+  currency             String   @default("RSD") // "RSD" or "EUR"
+  testMode             Boolean  @default(true)
+  merchantName         String? // shown on the payment confirmation (EPM requirement)
+  merchantTaxId        String?
+  merchantAddress      String?
+  updatedAt            DateTime @updatedAt
 }
 
 // ---------------------------------------------------------------------------

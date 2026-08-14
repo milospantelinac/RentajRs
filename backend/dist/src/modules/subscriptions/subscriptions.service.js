@@ -8,29 +8,35 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
+var SubscriptionsService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SubscriptionsService = void 0;
 const common_1 = require("@nestjs/common");
 const schedule_1 = require("@nestjs/schedule");
 const event_emitter_1 = require("@nestjs/event-emitter");
+const config_1 = require("@nestjs/config");
 const nestjs_i18n_1 = require("nestjs-i18n");
 const prisma_service_1 = require("../../prisma/prisma.service");
 const cache_service_1 = require("../../common/cache/cache.service");
 const listings_service_1 = require("../listings/listings.service");
 const payment_provider_interface_1 = require("../../common/payment/payment-provider.interface");
+const nestpay_checkout_service_1 = require("../../common/payment/nestpay/nestpay-checkout.service");
 const fiscalization_provider_interface_1 = require("../../common/fiscalization/fiscalization-provider.interface");
 const money_1 = require("../../common/utils/money");
 const GRACE_PERIOD_DAYS = 7;
 const RETRY_DAYS = [0, 3, 6];
-let SubscriptionsService = class SubscriptionsService {
-    constructor(prisma, cache, listings, payment, fiscalization, i18n, events) {
+let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
+    constructor(prisma, cache, listings, payment, nestpay, fiscalization, i18n, events, config) {
         this.prisma = prisma;
         this.cache = cache;
         this.listings = listings;
         this.payment = payment;
+        this.nestpay = nestpay;
         this.fiscalization = fiscalization;
         this.i18n = i18n;
         this.events = events;
+        this.config = config;
+        this.logger = new common_1.Logger(SubscriptionsService_1.name);
     }
     async listPackages() {
         return this.cache.getOrSet('subscriptions:packages', 300, async () => {
@@ -164,6 +170,145 @@ let SubscriptionsService = class SubscriptionsService {
         });
         this.events.emit('subscription.purchased', { userId, subscriptionId: subscription.id });
         return this.prisma.subscription.findUniqueOrThrow({ where: { id: subscription.id } });
+    }
+    async initCheckout(userId, dto) {
+        const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: dto.listingId } });
+        if (listing.userId !== userId)
+            throw new common_1.ForbiddenException();
+        if (!['DRAFT', 'REJECTED'].includes(listing.status)) {
+            throw new common_1.BadRequestException('Listing is not awaiting a package');
+        }
+        const pkg = await this.prisma.package.findUniqueOrThrow({ where: { id: dto.packageId } });
+        const price = dto.billingCycle === 'YEARLY' ? pkg.priceYearly : pkg.priceMonthly;
+        await this.prisma.user.update({
+            where: { id: userId },
+            data: {
+                phone: dto.phone || undefined,
+                buyerType: dto.isCompany ? 'COMPANY' : 'PERSON',
+                ...(dto.isCompany
+                    ? {
+                        companyName: dto.companyName || undefined,
+                        taxId: dto.taxId || undefined,
+                        registrationNumber: dto.registrationNumber || undefined,
+                        billingAddress: dto.companyAddress || undefined,
+                    }
+                    : {}),
+            },
+        });
+        const subscription = await this.prisma.subscription.create({
+            data: {
+                userId,
+                packageId: dto.packageId,
+                billingCycle: dto.billingCycle,
+                status: 'AWAITING_PAYMENT',
+                priceAtPurchase: price,
+                pendingListingId: dto.listingId,
+                autoRenew: !dto.isCompany,
+            },
+        });
+        const { actionUrl, fields } = await this.nestpay.buildCheckoutForm({
+            oid: subscription.id,
+            amountRsd: (0, money_1.paraToRsd)(price) ?? 0,
+            billing: {
+                email: dto.email,
+                phone: dto.phone,
+                firstName: dto.firstName,
+                lastName: dto.lastName,
+                isCompany: dto.isCompany,
+                companyName: dto.companyName,
+                companyAddress: dto.companyAddress,
+            },
+            description: `Rentaj — ${pkg.key} (${dto.billingCycle})`,
+        });
+        return { actionUrl, fields };
+    }
+    async handleNestPaySuccess(body) {
+        const frontendUrl = this.config.get('frontendUrl');
+        const verification = await this.nestpay.verifyCallback(body);
+        if (!verification.valid) {
+            this.logger.error(`Rejected NestPay success callback: ${verification.reason} (oid=${verification.oid})`);
+            return `${frontendUrl}/kontrolna-tabla/pretplate?payment=invalid`;
+        }
+        const subscription = await this.prisma.subscription.findUnique({ where: { id: verification.oid } });
+        if (!subscription || subscription.status !== 'AWAITING_PAYMENT' || !subscription.pendingListingId) {
+            return `${frontendUrl}/kontrolna-tabla/pretplate?payment=unknown`;
+        }
+        const listingId = subscription.pendingListingId;
+        if (!verification.approved) {
+            await this.prisma.subscription.delete({ where: { id: subscription.id } });
+            await this.prisma.transaction.create({
+                data: {
+                    userId: subscription.userId,
+                    amount: subscription.priceAtPurchase,
+                    status: 'FAILED',
+                    type: 'SUBSCRIPTION',
+                    errorMessage: verification.errMsg || `ProcReturnCode ${verification.procReturnCode}`,
+                },
+            });
+            return `${frontendUrl}/oglasi/${listingId}/placanje-neuspesno`;
+        }
+        await this.prisma.subscription.update({
+            where: { id: subscription.id },
+            data: { status: 'PENDING_ACTIVATION', pendingListingId: null },
+        });
+        await this.prisma.transaction.create({
+            data: {
+                userId: subscription.userId,
+                subscriptionId: subscription.id,
+                amount: subscription.priceAtPurchase,
+                status: 'SUCCESSFUL',
+                type: 'SUBSCRIPTION',
+                bankExternalId: verification.transId,
+            },
+        });
+        await this.listings.markPendingApproval(listingId, subscription.id);
+        const user = await this.prisma.user.findUniqueOrThrow({ where: { id: subscription.userId } });
+        const pkg = await this.prisma.package.findUniqueOrThrow({ where: { id: subscription.packageId } });
+        const transaction = await this.prisma.transaction.findFirstOrThrow({
+            where: { subscriptionId: subscription.id, status: 'SUCCESSFUL' },
+            orderBy: { occurredAt: 'desc' },
+        });
+        const doc = await this.fiscalization.issueDocument({
+            documentType: 'FISCAL_RECEIPT',
+            amountRsd: (0, money_1.paraToRsd)(subscription.priceAtPurchase) ?? 0,
+            buyerName: user.buyerType === 'COMPANY' && user.companyName ? user.companyName : `${user.firstName} ${user.lastName}`,
+            buyerTaxId: user.taxId ?? undefined,
+            description: `Rentaj — ${pkg.key} (${subscription.billingCycle})`,
+        });
+        await this.prisma.invoice.create({
+            data: {
+                transactionId: transaction.id,
+                userId: subscription.userId,
+                documentType: 'FISCAL_RECEIPT',
+                documentNumber: doc.documentNumber,
+                amount: subscription.priceAtPurchase,
+                externalId: doc.externalId,
+            },
+        });
+        this.events.emit('subscription.purchased', { userId: subscription.userId, subscriptionId: subscription.id });
+        return `${frontendUrl}/oglasi/${listingId}/poslato`;
+    }
+    async handleNestPayFail(body) {
+        const frontendUrl = this.config.get('frontendUrl');
+        const verification = await this.nestpay.verifyCallback(body);
+        const subscription = verification.oid
+            ? await this.prisma.subscription.findUnique({ where: { id: verification.oid } })
+            : null;
+        if (!subscription || subscription.status !== 'AWAITING_PAYMENT') {
+            return `${frontendUrl}/kontrolna-tabla/pretplate?payment=failed`;
+        }
+        const listingId = subscription.pendingListingId;
+        await this.prisma.transaction.create({
+            data: {
+                userId: subscription.userId,
+                amount: subscription.priceAtPurchase,
+                status: 'FAILED',
+                type: 'SUBSCRIPTION',
+                errorMessage: verification.errMsg || 'Payment declined',
+            },
+        });
+        await this.prisma.subscription.delete({ where: { id: subscription.id } });
+        return listingId ? `${frontendUrl}/oglasi/${listingId}/placanje-neuspesno` : `${frontendUrl}/kontrolna-tabla/pretplate?payment=failed`;
     }
     async bankRemainingDays(listingId, oldSubscription) {
         if (!oldSubscription.expiresAt)
@@ -493,15 +638,17 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], SubscriptionsService.prototype, "expireBankedDayCoverage", null);
-exports.SubscriptionsService = SubscriptionsService = __decorate([
+exports.SubscriptionsService = SubscriptionsService = SubscriptionsService_1 = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
         cache_service_1.CacheService,
         listings_service_1.ListingsService,
         payment_provider_interface_1.PaymentProvider,
+        nestpay_checkout_service_1.NestPayCheckoutService,
         fiscalization_provider_interface_1.FiscalizationProvider,
         nestjs_i18n_1.I18nService,
-        event_emitter_1.EventEmitter2])
+        event_emitter_1.EventEmitter2,
+        config_1.ConfigService])
 ], SubscriptionsService);
 function addDays(date, days) {
     return new Date(date.getTime() + days * 86_400_000);

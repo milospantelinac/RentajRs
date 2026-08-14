@@ -1,0 +1,136 @@
+version: "3.9"
+
+name: rentaj
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: rentaj_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-rentaj}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-rentaj_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-rentaj}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-rentaj}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - rentaj_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: rentaj_redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - rentaj_network
+
+  maildev:
+    image: maildev/maildev:latest
+    container_name: rentaj_maildev
+    restart: unless-stopped
+    ports:
+      - "${MAILDEV_SMTP_PORT:-1025}:1025"
+      - "${MAILDEV_WEB_PORT:-1080}:1080"
+    networks:
+      - rentaj_network
+
+  adminer:
+    image: adminer:latest
+    container_name: rentaj_adminer
+    restart: unless-stopped
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+    ports:
+      - "${ADMINER_PORT:-8081}:8080"
+    depends_on:
+      - postgres
+    networks:
+      - rentaj_network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: development
+    container_name: rentaj_backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-rentaj}:${POSTGRES_PASSWORD:-rentaj_dev_password}@postgres:5432/${POSTGRES_DB:-rentaj}?schema=public
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      SMTP_HOST: maildev
+      SMTP_PORT: 1025
+      # Same reason as the frontend service below — Nest's --watch (also
+      # chokidar-based) misses change events over a Windows bind mount.
+      CHOKIDAR_USEPOLLING: "true"
+      CHOKIDAR_INTERVAL: "300"
+    ports:
+      - "${BACKEND_PORT:-3001}:3001"
+    volumes:
+      - ./backend:/app
+      - backend_node_modules:/app/node_modules
+      - uploads_data:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: sh -c "npx prisma migrate deploy && npx prisma db seed && npm run start:dev"
+    networks:
+      - rentaj_network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development
+    container_name: rentaj_frontend
+    restart: unless-stopped
+    env_file:
+      - ./frontend/.env
+    environment:
+      NUXT_PUBLIC_API_BASE: ${NUXT_PUBLIC_API_BASE:-http://localhost:3001/api/v1}
+      NUXT_API_BASE_INTERNAL: http://backend:3001/api/v1
+      # Vite's native fs watcher misses change events over a Windows bind
+      # mount (the container never sees them, so edits need a manual
+      # `docker compose restart frontend` without this) — polling fixes it
+      # at the cost of a bit of CPU, standard fix for this class of issue.
+      CHOKIDAR_USEPOLLING: "true"
+      CHOKIDAR_INTERVAL: "300"
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    depends_on:
+      - backend
+    networks:
+      - rentaj_network
+
+volumes:
+  postgres_data:
+  redis_data:
+  uploads_data:
+  backend_node_modules:
+  frontend_node_modules:
+
+networks:
+  rentaj_network:
+    driver: bridge

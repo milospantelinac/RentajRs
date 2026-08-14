@@ -10,14 +10,16 @@ exports.PaymentModule = void 0;
 const common_1 = require("@nestjs/common");
 const payment_provider_interface_1 = require("./payment-provider.interface");
 const mock_payment_provider_1 = require("./mock-payment.provider");
+const payment_settings_service_1 = require("./nestpay/payment-settings.service");
+const nestpay_checkout_service_1 = require("./nestpay/nestpay-checkout.service");
 let PaymentModule = class PaymentModule {
 };
 exports.PaymentModule = PaymentModule;
 exports.PaymentModule = PaymentModule = __decorate([
     (0, common_1.Global)(),
     (0, common_1.Module)({
-        providers: [{ provide: payment_provider_interface_1.PaymentProvider, useClass: mock_payment_provider_1.MockPaymentProvider }],
-        exports: [payment_provider_interface_1.PaymentProvider],
+        providers: [{ provide: payment_provider_interface_1.PaymentProvider, useClass: mock_payment_provider_1.MockPaymentProvider }, payment_settings_service_1.PaymentSettingsService, nestpay_checkout_service_1.NestPayCheckoutService],
+        exports: [payment_provider_interface_1.PaymentProvider, payment_settings_service_1.PaymentSettingsService, nestpay_checkout_service_1.NestPayCheckoutService],
     })
 ], PaymentModule);
 //# sourceMappingURL=payment.module.js.map

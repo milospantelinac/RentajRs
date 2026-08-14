@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, Redirect } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { SubscriptionsService } from './subscriptions.service';
 import {
@@ -6,6 +6,7 @@ import {
   PurchaseFeaturedDto,
   CancelSubscriptionDto,
   AdjustPriceDto,
+  InitCheckoutDto,
 } from './dto/subscriptions.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
@@ -31,6 +32,31 @@ export class SubscriptionsController {
   @Post('subscriptions/purchase')
   purchase(@CurrentUser('id') userId: string, @Body() dto: PurchaseSubscriptionDto) {
     return this.subscriptionsService.purchaseForListing(userId, dto);
+  }
+
+  // -- Checkout (Banca Intesa NestPay) ------------------------------------
+
+  @Post('subscriptions/checkout/init')
+  initCheckout(@CurrentUser('id') userId: string, @Body() dto: InitCheckoutDto) {
+    return this.subscriptionsService.initCheckout(userId, dto);
+  }
+
+  // These two are NestPay's okUrl/failUrl — the customer's browser is POSTed
+  // here directly by NestPay's hosted payment page, with no session/JWT of
+  // ours attached, so they must stay public. Integrity comes entirely from
+  // the HASH field (see NestPayCheckoutService.verifyCallback), not from auth.
+  @Public()
+  @Redirect()
+  @Post('subscriptions/nestpay/callback/success')
+  async nestpaySuccess(@Body() body: Record<string, string>) {
+    return { url: await this.subscriptionsService.handleNestPaySuccess(body), statusCode: 303 };
+  }
+
+  @Public()
+  @Redirect()
+  @Post('subscriptions/nestpay/callback/fail')
+  async nestpayFail(@Body() body: Record<string, string>) {
+    return { url: await this.subscriptionsService.handleNestPayFail(body), statusCode: 303 };
   }
 
   @Post('subscriptions/:id/cancel')

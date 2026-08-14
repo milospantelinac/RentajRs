@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsIn, IsInt, IsOptional, IsUUID } from 'class-validator';
+import { IsBoolean, IsEmail, IsEnum, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
 import { BillingCycle } from '@prisma/client';
 
 export class PurchaseSubscriptionDto {
@@ -37,6 +37,64 @@ export class CancelSubscriptionDto {
   @ApiPropertyOptional()
   @IsOptional()
   reason?: string;
+}
+
+/** ZADATAK 1 — checkout page → POST /subscriptions/checkout/init. */
+export class InitCheckoutDto {
+  @ApiProperty()
+  @IsUUID('4')
+  listingId: string;
+
+  @ApiProperty()
+  @IsUUID('4')
+  packageId: string;
+
+  @ApiProperty({ enum: BillingCycle })
+  @IsEnum(BillingCycle)
+  billingCycle: BillingCycle;
+
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  firstName: string;
+
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  lastName: string;
+
+  @ApiProperty()
+  @IsEmail()
+  email: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  phone?: string;
+
+  @ApiProperty({ description: '"Želim račun na firmu (Pravno lice)"' })
+  @IsBoolean()
+  isCompany: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  taxId?: string; // PIB
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  registrationNumber?: string; // Matični broj
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  companyName?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  companyAddress?: string;
 }
 
 export class AdjustPriceDto {
