@@ -61,7 +61,8 @@ let UploadsService = class UploadsService {
         if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
             throw new common_1.BadRequestException('Only JPEG, PNG or WEBP images are allowed');
         }
-        const maxSizeBytes = this.config.get('uploads.maxPhotoSizeMb') * 1024 * 1024;
+        const maxSizeMb = options.maxSizeMb ?? this.config.get('uploads.maxPhotoSizeMb');
+        const maxSizeBytes = maxSizeMb * 1024 * 1024;
         if (file.size > maxSizeBytes) {
             throw new common_1.BadRequestException('File is too large');
         }

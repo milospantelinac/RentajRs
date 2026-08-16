@@ -11,6 +11,7 @@
         <div>
           <div class="eyebrow"><span class="pulse-dot" />{{ t('listing.autoSaveNotice') }}</div>
           <h1>{{ t('listing.wizardTitle') }}</h1>
+          <p v-if="listing?.category?.name" class="wizard-category-name">{{ listing.category.name }}</p>
           <p>{{ t('listing.wizardStepCounter', { current: currentStep + 1, total: steps.length, label: t(steps[currentStep].labelKey) }) }}</p>
         </div>
       </div>
@@ -130,12 +131,29 @@
         </div>
         <div class="form-group mb-3">
           <label class="form-label">{{ t('listing.address') }}</label>
-          <input v-model="location.address" type="text" class="form-control" />
+          <input v-model="location.address" type="text" class="form-control" @blur="previewLocationOnMap" />
+        </div>
+
+        <div class="form-group mb-3">
+          <label class="form-label">{{ t('listing.mapPinLabel') }}</label>
+          <p class="text-muted mb-2">{{ t('listing.mapPinHint') }}</p>
+          <LocationPickerMap
+            :latitude="location.latitude"
+            :longitude="location.longitude"
+            @update:position="onPinDragged"
+          />
+        </div>
+
+        <div class="form-group mb-3">
+          <label class="form-label">{{ t('listing.googlePlaceIdLabel') }}</label>
+          <p class="text-muted mb-2">{{ t('listing.googlePlaceIdHint') }}</p>
+          <input v-model="location.googlePlaceId" type="text" class="form-control" placeholder="ChIJ..." />
         </div>
       </div>
 
       <!-- Step 4: photos -->
       <div v-else-if="currentStep === 4">
+        <p class="text-muted mb-3">{{ t('listing.photoCountRecommendation') }}</p>
         <div
           class="dropzone"
           :class="{ 'dropzone-active': dropzoneActive }"
@@ -209,13 +227,20 @@
           </div>
         </div>
 
+        <div v-if="form.priceUnit === 'NIGHT' || form.priceUnit === 'DAY'" class="form-group mb-3">
+          <label class="form-label">{{ t('listing.weekendPrice') }} (RSD)</label>
+          <input v-model.number="form.weekendPrice" type="number" min="0" class="form-control" :placeholder="String(form.price || 0)" />
+          <p class="text-muted mt-1">{{ t('listing.weekendPriceHint') }}</p>
+        </div>
+
         <div class="form-group mb-3">
           <label class="form-label">{{ t('listing.paymentMethod') }}</label>
-          <select v-model="form.paymentMethod" class="form-control form-select">
+          <select v-model="form.paymentMethod" class="form-control form-select" @change="onPaymentMethodChange">
             <option value="CASH">{{ t('listing.paymentCash') }}</option>
             <option value="BANK_TRANSFER">{{ t('listing.paymentBankTransfer') }}</option>
             <option value="BOTH">{{ t('listing.paymentBoth') }}</option>
           </select>
+          <p class="text-muted mt-1">{{ t(`listing.paymentMethodDesc${form.paymentMethod}`) }}</p>
         </div>
 
         <div v-if="form.paymentMethod !== 'CASH'" class="row">
@@ -240,8 +265,12 @@
           <label class="form-label">{{ t('listing.requestHandling') }}</label>
           <select v-model="form.requiresApproval" class="form-control form-select">
             <option :value="true">{{ t('listing.requestHandlingApproval') }}</option>
-            <option :value="false">{{ t('listing.requestHandlingInstant') }}</option>
+            <option :value="false" :disabled="form.paymentMethod === 'CASH'">{{ t('listing.requestHandlingInstant') }}</option>
           </select>
+          <p class="text-muted mt-1">
+            {{ t(form.requiresApproval ? 'listing.requestHandlingApprovalDesc' : 'listing.requestHandlingInstantDesc') }}
+          </p>
+          <p v-if="form.paymentMethod === 'CASH'" class="text-muted mt-1">{{ t('listing.requestHandlingCashNotice') }}</p>
         </div>
       </div>
 
@@ -293,14 +322,41 @@
             </div>
           </div>
         </div>
+
+        <!-- RNT-029 — manual date blocking for any bookable model, plus per-date
+             custom pricing for PER_STAY (night/day) listings. -->
+        <div v-if="form.bookingModel !== 'NO_BOOKING'" class="form-group mt-4">
+          <label class="form-label">{{ t('listing.calendarTitle') }}</label>
+          <p class="text-muted mb-2">{{ t('listing.calendarHint') }}</p>
+          <AvailabilityCalendar
+            :listing-id="listingId"
+            :base-price="form.price"
+            :weekend-price="form.weekendPrice"
+            :show-pricing="form.priceUnit === 'NIGHT' || form.priceUnit === 'DAY'"
+          />
+        </div>
+
+        <!-- RNT-092 — export/import only make sense once the listing is
+             actually live and bookable per-stay; the backend gates the same way. -->
+        <div v-if="listing?.status === 'ACTIVE' && form.bookingModel === 'PER_STAY'" class="form-group mt-4">
+          <label class="form-label">{{ t('listing.icalSectionTitle') }}</label>
+          <IcalSyncPanel :listing-id="listingId" :ical-export-token="listing?.icalExportToken" />
+        </div>
       </div>
 
       <!-- Step 7: cancellation -->
       <div v-else-if="currentStep === 7">
         <div class="form-group mb-3">
           <label class="form-label">{{ t('listing.cancellationTerms') }}</label>
-          <textarea v-model="form.cancellationTerms" class="form-control" rows="5" maxlength="3000" />
+          <select v-model="form.cancellationTerms" class="form-control form-select">
+            <option value="">—</option>
+            <option value="FLEXIBLE">{{ t('listing.cancellationFlexible') }}</option>
+            <option value="MODERATE">{{ t('listing.cancellationModerate') }}</option>
+            <option value="STRICT">{{ t('listing.cancellationStrict') }}</option>
+          </select>
+          <p v-if="form.cancellationTerms" class="text-muted mt-2">{{ t(`listing.cancellation${form.cancellationTerms.charAt(0)}${form.cancellationTerms.slice(1).toLowerCase()}Desc`) }}</p>
         </div>
+        <p class="text-muted">{{ t('listing.noPaymentThroughPlatformNotice') }}</p>
       </div>
 
       <!-- Step 8: review -->
@@ -312,9 +368,15 @@
           </li>
         </ul>
         <p v-if="!readiness?.ready" class="text-muted mb-3">{{ t('listing.notReadyYet') }}</p>
-        <NuxtLink v-else :to="`/oglasi/${listingId}/paket`" class="btn btn-primary-flat">
-          {{ t('listing.goToPackages') }}
-        </NuxtLink>
+
+        <div class="review-actions">
+          <NuxtLink :to="`/oglasi/${listingId}/pregled`" class="btn btn-tertiary">{{ t('listing.previewListing') }}</NuxtLink>
+          <NuxtLink to="/kontrolna-tabla/oglasi" class="btn btn-tertiary">{{ t('listing.saveAsDraft') }}</NuxtLink>
+          <NuxtLink v-if="readiness?.ready" :to="`/oglasi/${listingId}/paket`" class="btn btn-primary-flat">
+            {{ t('listing.goToPackages') }}
+          </NuxtLink>
+        </div>
+        <p class="text-muted mt-2">{{ t('listing.draftSavedExplain') }}</p>
       </div>
 
       <p v-if="error" class="form-error mt-3">{{ error }}</p>
@@ -388,6 +450,7 @@ const form = reactive({
   videoUrl: '',
   priceUnit: 'NIGHT',
   price: 0,
+  weekendPrice: null,
   paymentMethod: 'CASH',
   requiresApproval: true,
   advancePercent: null,
@@ -402,7 +465,27 @@ const form = reactive({
   cancellationTerms: '',
 })
 
-const location = reactive({ regionId: '', cityId: '', cityAreaId: '', address: '' })
+const location = reactive({ regionId: '', cityId: '', cityAreaId: '', address: '', latitude: null, longitude: null, googlePlaceId: '' })
+
+async function previewLocationOnMap() {
+  const city = cities.value.find((c) => c.id === location.cityId)
+  if (!location.address?.trim() || !city) return
+  try {
+    const coords = await api.get(`/geocoding/preview?address=${encodeURIComponent(location.address)}&city=${encodeURIComponent(city.name)}`)
+    if (coords) {
+      location.latitude = coords.latitude
+      location.longitude = coords.longitude
+    }
+  } catch {
+    // Preview is a convenience, not a required step — the final save still
+    // auto-geocodes server-side if no pin was ever placed.
+  }
+}
+
+function onPinDragged({ latitude, longitude }) {
+  location.latitude = latitude
+  location.longitude = longitude
+}
 const attributeValues = reactive({})
 const hasBankAccount = computed(() => !!auth.user?.bankAccount)
 
@@ -415,12 +498,51 @@ function isStepDone(index) {
   return index < maxStepReached.value && index !== currentStep.value
 }
 
+// RNT-028 — "send QR code instantly" only makes sense for bank-transfer
+// payment (the QR *is* the bank-transfer payment slip); a cash-only listing
+// switching to it left a request auto-confirmed with no actual payment
+// instructions ever sent.
+function onPaymentMethodChange() {
+  if (form.paymentMethod === 'CASH') form.requiresApproval = true
+}
+
 function unitLabel(unit) {
   return unit.charAt(0) + unit.slice(1).toLowerCase()
 }
 
 function compact(obj) {
-  return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== '' && v !== undefined))
+  return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== '' && v !== undefined && v !== null))
+}
+
+function isAttributeValueFilled(attr, v) {
+  if (attr.type === 'NUMBER') return v.valueNumber !== null && v.valueNumber !== undefined && v.valueNumber !== ''
+  if (attr.type === 'TEXT') return !!v.valueText
+  if (attr.type === 'BOOLEAN') return true // false is a real answer, not an empty one
+  if (attr.type === 'LIST') return !!v.singleOption
+  return (v.valueOptionIds || []).length > 0 // MULTISELECT
+}
+
+// RNT-022/023 — the wizard used to save-and-advance on every step no matter
+// what was in it (or wasn't), only surfacing missing required fields as a
+// checklist on the very last step. Blocking here catches it right where the
+// owner can actually fix it.
+function validateCurrentStep() {
+  const step = steps[currentStep.value].key
+  if (step === 'basics') {
+    if (!form.title?.trim() || !form.description?.trim()) return t('listing.validationBasicsRequired')
+  } else if (step === 'attributes') {
+    const missingRequired = (listing.value?.category?.attributes || []).some(
+      (attr) => attr.required && !isAttributeValueFilled(attr, attributeValues[attr.id]),
+    )
+    if (missingRequired) return t('listing.validationAttributesRequired')
+  } else if (step === 'location') {
+    if (!location.regionId || !location.cityId || !location.address?.trim()) return t('listing.validationLocationRequired')
+  } else if (step === 'photos') {
+    if (!photos.value.length) return t('listing.validationPhotosRequired')
+  } else if (step === 'pricing') {
+    if (!(Number(form.price) > 0)) return t('listing.validationPriceRequired')
+  }
+  return ''
 }
 
 async function loadListing() {
@@ -432,6 +554,7 @@ async function loadListing() {
   if (listing.value.category?.slug) {
     const categoryDetail = await api.get(`/categories/${listing.value.category.slug}`)
     const valueByAttributeId = new Map((listing.value.attributes || []).map((v) => [v.attributeId, v]))
+    listing.value.category.name = categoryDetail.name
     listing.value.category.attributes = categoryDetail.attributes.map((attr) => ({
       ...attr,
       value: valueByAttributeId.get(attr.id) || null,
@@ -446,6 +569,7 @@ async function loadListing() {
     videoUrl: listing.value.videoUrl || '',
     priceUnit: listing.value.priceUnit,
     price: listing.value.price || 0,
+    weekendPrice: listing.value.weekendPrice ? Number(listing.value.weekendPrice) : null,
     paymentMethod: listing.value.paymentMethod || 'CASH',
     requiresApproval: listing.value.requiresApproval ?? true,
     advancePercent: listing.value.advancePercent,
@@ -464,6 +588,9 @@ async function loadListing() {
     cityId: listing.value.cityId || '',
     cityAreaId: listing.value.cityAreaId || '',
     address: listing.value.address || '',
+    latitude: listing.value.latitude !== null && listing.value.latitude !== undefined ? Number(listing.value.latitude) : null,
+    longitude: listing.value.longitude !== null && listing.value.longitude !== undefined ? Number(listing.value.longitude) : null,
+    googlePlaceId: listing.value.googlePlaceId || '',
   })
   photos.value = listing.value.photos || []
 
@@ -477,7 +604,13 @@ async function loadListing() {
     }
   }
 
-  maxStepReached.value = Math.max(maxStepReached.value, computeMaxStepFromListing())
+  // RNT-032 — loadListing() only ever runs once, in onMounted; a returning
+  // user opening this URL directly used to always land back on step 1 even
+  // though every earlier step was already saved. Jump to the furthest
+  // incomplete step instead, matching what maxStepReached unlocks below.
+  const resumeStep = computeMaxStepFromListing()
+  currentStep.value = resumeStep
+  maxStepReached.value = Math.max(maxStepReached.value, resumeStep)
 }
 
 /**
@@ -517,7 +650,43 @@ async function onCityChange() {
   cityAreas.value = city ? await api.get(`/locations/cities/${city.slug}/areas`) : []
 }
 
-async function uploadFile(file) {
+// R160 — a phone photo can be several MB; shrinking it in the browser first
+// (matching the server's own 1920px cap in UploadsService.saveImage) means a
+// twenty-photo listing doesn't choke slow mobile uploads. Falls back to the
+// original file untouched for anything that isn't a decodable raster image.
+const DOWNSCALE_MAX_DIMENSION = 1920
+const DOWNSCALE_QUALITY = 0.85
+
+async function downscaleImage(file) {
+  if (!file.type.startsWith('image/') || file.type === 'image/svg+xml') return file
+
+  try {
+    const bitmap = await createImageBitmap(file)
+    const scale = Math.min(1, DOWNSCALE_MAX_DIMENSION / Math.max(bitmap.width, bitmap.height))
+    if (scale >= 1) {
+      bitmap.close?.()
+      return file
+    }
+
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.round(bitmap.width * scale)
+    canvas.height = Math.round(bitmap.height * scale)
+    const ctx = canvas.getContext('2d')
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+    bitmap.close?.()
+
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', DOWNSCALE_QUALITY))
+    if (!blob) return file
+    return new File([blob], file.name.replace(/\.\w+$/, '.jpg'), { type: 'image/jpeg' })
+  } catch {
+    // Decoding failed (corrupt file, unsupported format) — let the backend's
+    // own validation reject it with a proper error rather than failing silently here.
+    return file
+  }
+}
+
+async function uploadFile(rawFile) {
+  const file = await downscaleImage(rawFile)
   const formData = new FormData()
   formData.append('file', file)
   const photo = await api.post(`/listings/${listingId}/photos`, formData)
@@ -570,6 +739,11 @@ function setCoverPhoto(index) {
 
 async function saveCurrentStep() {
   error.value = ''
+  const validationError = validateCurrentStep()
+  if (validationError) {
+    error.value = validationError
+    return
+  }
   saving.value = true
   try {
     const step = steps[currentStep.value].key
@@ -583,7 +757,12 @@ async function saveCurrentStep() {
       }))
       await api.post(`/listings/${listingId}/attributes`, { values })
     } else if (step === 'location') {
-      await api.patch(`/listings/${listingId}/location`, { ...location, cityAreaId: location.cityAreaId || undefined })
+      await api.patch(`/listings/${listingId}/location`, {
+        ...location,
+        cityAreaId: location.cityAreaId || undefined,
+        latitude: location.latitude ?? undefined,
+        longitude: location.longitude ?? undefined,
+      })
     } else if (step === 'photos') {
       // photos already persisted per-upload/reorder
     } else if (step === 'review') {
@@ -602,7 +781,7 @@ async function saveCurrentStep() {
       if (currentStep.value > maxStepReached.value) maxStepReached.value = currentStep.value
     }
   } catch (e) {
-    error.value = e?.data?.message?.[0] || e?.data?.message || t('auth.genericError')
+    error.value = extractErrorMessage(e, t('auth.genericError'))
   } finally {
     saving.value = false
   }
@@ -710,6 +889,12 @@ useSeoMeta({ title: t('listing.wizardTitle') })
   padding: 6px 14px 6px 10px;
   border-radius: $radius-pill;
   letter-spacing: 0.02em;
+}
+
+.wizard-category-name {
+  margin-top: 10px;
+  font-size: $font-size-muted;
+  color: rgba(255, 255, 255, 0.75);
 }
 
 .pulse-dot {
@@ -1155,5 +1340,11 @@ useSeoMeta({ title: t('listing.wizardTitle') })
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+.review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 </style>

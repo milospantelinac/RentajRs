@@ -28,6 +28,12 @@ export class SearchController {
   }
 
   @Public()
+  @Get('indexed-cities')
+  getIndexedCitiesForCategory(@Query('categorySlug') categorySlug: string) {
+    return this.searchService.getIndexedCitiesForCategory(categorySlug);
+  }
+
+  @Public()
   @Post('relaxed')
   relaxedSearch(@Body() dto: SearchListingsDto) {
     return this.searchService.relaxedSearch(dto);

@@ -73,6 +73,19 @@ export class AdminEmailListener {
     );
   }
 
+  /** R144 — 3+ reports on the same listing escalate past the routine single-report notice. */
+  @OnEvent('admin.listing_report_priority')
+  async onListingReportPriority({ listingId, count }: { listingId: string; count: number }) {
+    const listing = await this.prisma.listing.findUnique({ where: { id: listingId } });
+    if (!listing) return;
+    await this.sendToAdmins(
+      'resolve_disputes',
+      'admin_listing_report_priority',
+      { oglas: listing.title, broj: String(count) },
+      `${this.frontendUrl}/admin/sporovi`,
+    );
+  }
+
   @OnEvent('booking.payment_disputed')
   async onPaymentDisputed({ bookingId }: { bookingId: string }) {
     const booking = await this.prisma.booking.findUnique({

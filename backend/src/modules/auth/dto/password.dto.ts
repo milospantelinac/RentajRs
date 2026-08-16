@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsNotEmpty, IsString } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsEmail, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 import { NotCommonPassword } from '../../../common/validators/not-common-password.validator';
 
 export class ForgotPasswordDto {
@@ -28,4 +28,9 @@ export class ChangePasswordDto {
   @ApiProperty()
   @NotCommonPassword()
   newPassword: string;
+
+  @ApiPropertyOptional({ description: 'The caller\'s own refresh token, so this one session survives the revoke-all-others sweep' })
+  @IsOptional()
+  @IsString()
+  currentRefreshToken?: string;
 }

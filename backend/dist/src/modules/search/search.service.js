@@ -33,10 +33,13 @@ let SearchService = class SearchService {
         const page = dto.page ?? 1;
         const pageSize = Math.min(dto.pageSize ?? DEFAULT_PAGE_SIZE, 50);
         const where = await this.buildWhere(dto);
-        if (dto.sort && dto.sort !== 'relevance') {
-            return this.searchWithDbSort(where, dto.sort, page, pageSize);
+        const result = dto.sort && dto.sort !== 'relevance'
+            ? await this.searchWithDbSort(where, dto.sort, page, pageSize)
+            : await this.searchWithRelevanceRanking(where, page, pageSize);
+        if (result.total === 0) {
+            await this.recordEmptySearch(dto).catch(() => undefined);
         }
-        return this.searchWithRelevanceRanking(where, page, pageSize);
+        return { ...result, indexThreshold: await this.getIndexThreshold() };
     }
     async searchWithDbSort(where, sort, page, pageSize) {
         const orderBy = sort === 'price_asc'
@@ -112,6 +115,26 @@ let SearchService = class SearchService {
         });
         return { message: 'ok' };
     }
+    async getIndexedCitiesForCategory(categorySlug) {
+        const category = await this.prisma.category.findUnique({ where: { slug: categorySlug } });
+        if (!category)
+            return [];
+        const categoryIds = await this.categorySubtreeIds(category.id);
+        const threshold = await this.getIndexThreshold();
+        const groups = await this.prisma.listing.groupBy({
+            by: ['cityId'],
+            where: { status: 'ACTIVE', categoryId: { in: categoryIds }, cityId: { not: null } },
+            _count: { _all: true },
+        });
+        const qualifyingCityIds = groups.filter((g) => g._count._all >= threshold).map((g) => g.cityId);
+        if (!qualifyingCityIds.length)
+            return [];
+        return this.prisma.city.findMany({
+            where: { id: { in: qualifyingCityIds } },
+            select: { id: true, name: true, slug: true },
+            orderBy: { name: 'asc' },
+        });
+    }
     async relaxedSearch(dto) {
         const relaxed = { ...dto, cityId: undefined, cityAreaId: undefined, dateFrom: undefined, dateTo: undefined };
         return this.search(relaxed);
@@ -131,9 +154,7 @@ let SearchService = class SearchService {
         if (dto.categorySlug) {
             const category = await this.prisma.category.findUnique({ where: { slug: dto.categorySlug } });
             if (category) {
-                const children = await this.prisma.category.findMany({ where: { parentId: category.id }, select: { id: true } });
-                const ids = [category.id, ...children.map((c) => c.id)];
-                where.categoryId = { in: ids };
+                where.categoryId = { in: await this.categorySubtreeIds(category.id) };
             }
         }
         if (dto.regionId)
@@ -144,8 +165,8 @@ let SearchService = class SearchService {
             where.cityAreaId = dto.cityAreaId;
         if (dto.priceMin !== undefined || dto.priceMax !== undefined) {
             where.price = {
-                ...(dto.priceMin !== undefined ? { gte: BigInt(Math.round(dto.priceMin * 100)) } : {}),
-                ...(dto.priceMax !== undefined ? { lte: BigInt(Math.round(dto.priceMax * 100)) } : {}),
+                ...(dto.priceMin !== undefined ? { gte: (0, money_1.rsdToPara)(dto.priceMin) } : {}),
+                ...(dto.priceMax !== undefined ? { lte: (0, money_1.rsdToPara)(dto.priceMax) } : {}),
             };
         }
         if (dto.guests) {
@@ -183,12 +204,20 @@ let SearchService = class SearchService {
         }
         if (dto.dateFrom && dto.dateTo) {
             where.bookingModel = { not: 'NO_BOOKING' };
+            const overlapping = await this.prisma.blockedTerm.findMany({
+                where: { startsAt: { lt: new Date(dto.dateTo) }, endsAt: { gt: new Date(dto.dateFrom) } },
+                select: { listingId: true },
+                distinct: ['listingId'],
+            });
+            if (overlapping.length) {
+                where.id = { notIn: overlapping.map((b) => b.listingId) };
+            }
         }
         return where;
     }
     resultInclude() {
         return {
-            photos: { where: { isCover: true }, take: 1 },
+            photos: { where: { isCover: true, pendingRemoval: false, versionId: null }, take: 1 },
             category: true,
             city: true,
             cityArea: true,
@@ -196,7 +225,7 @@ let SearchService = class SearchService {
         };
     }
     async getSitemapUrls() {
-        const [listings, categories] = await Promise.all([
+        const [listings, categories, cityCategoryGroups, threshold] = await Promise.all([
             this.prisma.listing.findMany({
                 where: { status: 'ACTIVE' },
                 select: { slug: true, publishedAt: true },
@@ -205,11 +234,51 @@ let SearchService = class SearchService {
                 where: { status: 'ACTIVE' },
                 select: { slug: true },
             }),
+            this.prisma.listing.groupBy({
+                by: ['categoryId', 'cityId'],
+                where: { status: 'ACTIVE', cityId: { not: null } },
+                _count: { _all: true },
+            }),
+            this.getIndexThreshold(),
         ]);
+        const qualifying = cityCategoryGroups.filter((g) => g._count._all >= threshold && g.cityId);
+        const categoryIds = [...new Set(qualifying.map((g) => g.categoryId))];
+        const cityIds = [...new Set(qualifying.map((g) => g.cityId))];
+        const [cats, cities] = await Promise.all([
+            this.prisma.category.findMany({ where: { id: { in: categoryIds } }, select: { id: true, slug: true } }),
+            this.prisma.city.findMany({ where: { id: { in: cityIds } }, select: { id: true, slug: true } }),
+        ]);
+        const categorySlugById = new Map(cats.map((c) => [c.id, c.slug]));
+        const citySlugById = new Map(cities.map((c) => [c.id, c.slug]));
         return {
             listings: listings.map((l) => ({ slug: l.slug, updatedAt: l.publishedAt })),
             categories: categories.map((c) => ({ slug: c.slug })),
+            categoryCities: qualifying
+                .map((g) => ({
+                categorySlug: categorySlugById.get(g.categoryId),
+                citySlug: citySlugById.get(g.cityId),
+            }))
+                .filter((g) => !!g.categorySlug && !!g.citySlug),
         };
+    }
+    async categorySubtreeIds(rootId) {
+        const ids = [rootId];
+        let frontier = [rootId];
+        for (let depth = 0; depth < 2 && frontier.length; depth++) {
+            const children = await this.prisma.category.findMany({
+                where: { parentId: { in: frontier } },
+                select: { id: true },
+            });
+            if (!children.length)
+                break;
+            frontier = children.map((c) => c.id);
+            ids.push(...frontier);
+        }
+        return ids;
+    }
+    async getIndexThreshold() {
+        const setting = await this.prisma.setting.findUnique({ where: { key: 'listing_index_threshold' } });
+        return typeof setting?.value === 'number' ? setting.value : 3;
     }
     serializeResult(listing) {
         return {

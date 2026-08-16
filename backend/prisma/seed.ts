@@ -141,6 +141,7 @@ async function seedSettings() {
   const settings: Array<{ key: string; value: any; description: string }> = [
     { key: 'search_result_counters_enabled', value: false, description: 'R44 — off in v1' },
     { key: 'max_featured_per_category', value: 10, description: 'R114' },
+    { key: 'featured_listing_prices', value: { '7': 890, '15': 1590, '30': 2490 }, description: 'Ch.11.3 — istaknut oglas, cena po trajanju (RSD)' },
     { key: 'auto_approve_listings', value: false, description: 'R119 — switch exists, off in v1' },
     {
       key: 'ranking_weights',

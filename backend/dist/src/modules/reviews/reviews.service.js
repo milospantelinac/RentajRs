@@ -15,7 +15,7 @@ const schedule_1 = require("@nestjs/schedule");
 const event_emitter_1 = require("@nestjs/event-emitter");
 const nestjs_i18n_1 = require("nestjs-i18n");
 const prisma_service_1 = require("../../prisma/prisma.service");
-const REVIEW_WINDOW_DAYS = 14;
+const DEFAULT_REVIEW_WINDOW_DAYS = 14;
 let ReviewsService = class ReviewsService {
     constructor(prisma, i18n, events) {
         this.prisma = prisma;
@@ -161,13 +161,18 @@ let ReviewsService = class ReviewsService {
         return { message: this.i18n.t('common.SUCCESS') };
     }
     async publishOverdueReviews() {
-        const cutoff = new Date(Date.now() - REVIEW_WINDOW_DAYS * 86_400_000);
+        const windowDays = await this.getReviewWindowDays();
+        const cutoff = new Date(Date.now() - windowDays * 86_400_000);
         const overdue = await this.prisma.review.findMany({
             where: { published: false, writtenAt: { lt: cutoff } },
         });
         for (const review of overdue) {
             await this.publishReviews([review.id]);
         }
+    }
+    async getReviewWindowDays() {
+        const setting = await this.prisma.setting.findUnique({ where: { key: 'review_window_days' } });
+        return typeof setting?.value === 'number' ? setting.value : DEFAULT_REVIEW_WINDOW_DAYS;
     }
     async sendReviewReminders() {
         const start = new Date(Date.now() - 7 * 86_400_000);

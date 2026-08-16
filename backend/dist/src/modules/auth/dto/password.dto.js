@@ -49,4 +49,10 @@ __decorate([
     (0, not_common_password_validator_1.NotCommonPassword)(),
     __metadata("design:type", String)
 ], ChangePasswordDto.prototype, "newPassword", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'The caller\'s own refresh token, so this one session survives the revoke-all-others sweep' }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], ChangePasswordDto.prototype, "currentRefreshToken", void 0);
 //# sourceMappingURL=password.dto.js.map

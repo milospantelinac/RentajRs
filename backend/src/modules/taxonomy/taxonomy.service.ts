@@ -72,7 +72,17 @@ export class TaxonomyService {
     ]);
     const attributes = await this.resolveAttributesForCategory(category.id);
 
-    const result = { ...category, name: name ?? category.slug, description, attributes };
+    // RNT-098 — the subcategory pages themselves render fine, but nothing
+    // ever linked to them; the parent category page is the first place a
+    // browsing guest would expect to find them.
+    const childCategories = await this.prisma.category.findMany({
+      where: { parentId: category.id, status: 'ACTIVE' },
+      orderBy: { displayOrder: 'asc' },
+    });
+    const childNames = await this.getTranslationMap('CATEGORY', childCategories.map((c) => c.id));
+    const children = childCategories.map((c) => ({ id: c.id, slug: c.slug, name: childNames.get(c.id) ?? c.slug }));
+
+    const result = { ...category, name: name ?? category.slug, description, attributes, children };
     await this.cache.set(`taxonomy:category:${slug}`, result, CACHE_TTL);
     return result;
   }
@@ -178,6 +188,10 @@ export class TaxonomyService {
   async proposeCategory(userId: string, dto: ProposeCategoryDto) {
     const parent = await this.prisma.category.findUnique({ where: { id: dto.parentId } });
     if (!parent) throw new NotFoundException();
+    // R24 — same app-level check adminCreateCategory() already has; without
+    // it here, only the DB trigger catches an over-deep proposal, with a
+    // generic un-localized error instead of this one.
+    if (parent.level >= 3) throw new BadRequestException(this.i18n.t('errors.CATEGORY_MAX_DEPTH'));
 
     const duplicates = await this.checkDuplicateCategory(dto.parentId, dto.name);
     const existingProposal = duplicates.find((d) => d.similarity > 0.6);

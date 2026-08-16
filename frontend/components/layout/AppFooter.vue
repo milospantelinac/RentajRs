@@ -18,6 +18,7 @@
           <NuxtLink to="/faq" class="footer-link">{{ t('nav.faq') }}</NuxtLink>
           <NuxtLink to="/kontakt" class="footer-link">{{ t('footer.contact') }}</NuxtLink>
           <NuxtLink to="/o-nama" class="footer-link">{{ t('footer.about') }}</NuxtLink>
+          <NuxtLink to="/kolacici" class="footer-link">{{ t('footer.cookies') }}</NuxtLink>
         </div>
 
         <div class="col-6 col-md-2 mb-4 mb-md-0">

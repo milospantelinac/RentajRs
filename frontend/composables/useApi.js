@@ -7,6 +7,11 @@
 export function useApi() {
   const config = useRuntimeConfig()
   const auth = useAuthStore()
+  // Read the locale straight from the same cookie @nuxtjs/i18n itself uses,
+  // rather than useI18n() — useApi() is also called from Pinia store actions
+  // (see stores/auth.js), which run outside an active component instance,
+  // and useI18n() throws in that context instead of just returning a default.
+  const localeCookie = useCookie('i18n_redirected')
 
   // Inside Docker, SSR fetches must hit the backend container by its
   // service name; the browser must hit the publicly reachable URL.
@@ -17,6 +22,11 @@ export function useApi() {
     if (auth.accessToken) {
       headers.Authorization = `Bearer ${auth.accessToken}`
     }
+    // Without this, backend error/validation messages fall back to the
+    // browser's OS-level Accept-Language header, which is often English even
+    // when the visitor is actively using the Serbian UI (see nestjs-i18n's
+    // resolver chain in i18n.module.ts — x-lang is checked before that).
+    headers['x-lang'] = localeCookie.value || 'sr'
 
     try {
       return await $fetch(path, { baseURL, ...options, headers })

@@ -52,6 +52,9 @@ let SubscriptionsController = class SubscriptionsController {
     getRotatedFeatured(categoryId, limit) {
         return this.subscriptionsService.getRotatedFeatured(categoryId, limit ? parseInt(limit, 10) : undefined);
     }
+    getFeaturedPrices() {
+        return this.subscriptionsService.getFeaturedPrices();
+    }
     adminList(status) {
         return this.subscriptionsService.adminListSubscriptions(status);
     }
@@ -60,6 +63,12 @@ let SubscriptionsController = class SubscriptionsController {
     }
     adminUpdatePrice(id, dto) {
         return this.subscriptionsService.adminUpdatePackagePrice(id, dto);
+    }
+    adminAssignFreeFeatured(adminId, listingId, dto) {
+        return this.subscriptionsService.adminAssignFreeFeatured(adminId, listingId, dto.durationDays);
+    }
+    adminGetFeaturedWaitlist() {
+        return this.subscriptionsService.adminGetFeaturedWaitlist();
     }
 };
 exports.SubscriptionsController = SubscriptionsController;
@@ -138,6 +147,13 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], SubscriptionsController.prototype, "getRotatedFeatured", null);
 __decorate([
+    (0, public_decorator_1.Public)(),
+    (0, common_1.Get)('featured/prices'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", void 0)
+], SubscriptionsController.prototype, "getFeaturedPrices", null);
+__decorate([
     (0, require_permissions_decorator_1.RequirePermissions)('manage_subscriptions'),
     (0, common_1.Get)('admin/subscriptions'),
     __param(0, (0, common_1.Query)('status')),
@@ -163,6 +179,23 @@ __decorate([
     __metadata("design:paramtypes", [String, subscriptions_dto_1.AdjustPriceDto]),
     __metadata("design:returntype", void 0)
 ], SubscriptionsController.prototype, "adminUpdatePrice", null);
+__decorate([
+    (0, require_permissions_decorator_1.RequirePermissions)('manage_featured'),
+    (0, common_1.Post)('admin/featured/:listingId/assign-free'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)('id')),
+    __param(1, (0, common_1.Param)('listingId')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, subscriptions_dto_1.AssignFreeFeaturedDto]),
+    __metadata("design:returntype", void 0)
+], SubscriptionsController.prototype, "adminAssignFreeFeatured", null);
+__decorate([
+    (0, require_permissions_decorator_1.RequirePermissions)('manage_featured'),
+    (0, common_1.Get)('admin/featured/waitlist'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", void 0)
+], SubscriptionsController.prototype, "adminGetFeaturedWaitlist", null);
 exports.SubscriptionsController = SubscriptionsController = __decorate([
     (0, swagger_1.ApiTags)('subscriptions'),
     (0, common_1.Controller)(),

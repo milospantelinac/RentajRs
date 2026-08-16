@@ -45,7 +45,7 @@ async function submit() {
     await api.post('/auth/reset-password', { token: route.query.token, password: password.value })
     success.value = true
   } catch (e) {
-    error.value = e?.data?.message?.[0] || e?.data?.message || t('auth.genericError')
+    error.value = extractErrorMessage(e, t('auth.genericError'))
   } finally {
     loading.value = false
   }

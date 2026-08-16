@@ -1,9 +1,11 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { undefinedIfBlank } from '../../../common/validators/undefined-if-blank.transform';
 import {
   IsArray,
   IsBoolean,
   IsEnum,
+  IsIn,
   IsInt,
   IsNotEmpty,
   IsNumber,
@@ -160,12 +162,14 @@ export class UpdateListingDto {
 
   @ApiPropertyOptional({ example: '14:00' })
   @IsOptional()
-  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  @undefinedIfBlank
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, { message: 'validation.TIME_INVALID' })
   pickupTime?: string;
 
   @ApiPropertyOptional({ example: '11:00' })
   @IsOptional()
-  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  @undefinedIfBlank
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, { message: 'validation.TIME_INVALID' })
   returnTime?: string;
 
   @ApiPropertyOptional()
@@ -174,11 +178,12 @@ export class UpdateListingDto {
   @Min(0)
   earliestBookingHours?: number;
 
-  // Korak 10
-  @ApiPropertyOptional()
+  // Korak 10 — RNT-030: fixed options instead of free text, so a guest can
+  // compare listings instead of reading everyone's own wording for the same
+  // three policies.
+  @ApiPropertyOptional({ enum: ['FLEXIBLE', 'MODERATE', 'STRICT'] })
   @IsOptional()
-  @IsString()
-  @MaxLength(3000)
+  @IsIn(['FLEXIBLE', 'MODERATE', 'STRICT'])
   cancellationTerms?: string;
 
   // R34 toggle, available on any status/package

@@ -101,21 +101,12 @@
               <span class="possibilities-mockup-status">✓ {{ t('home.mockupStatus') }}</span>
             </div>
             <div class="possibilities-mockup-body">
-              <p class="possibilities-mockup-amount">€ 145.00</p>
+              <p class="possibilities-mockup-amount">{{ t('home.mockupAmount') }}</p>
               <p class="possibilities-mockup-note">{{ t('home.mockupAmountNote') }}</p>
               <span class="possibilities-mockup-commission">{{ t('home.mockupCommission') }}</span>
             </div>
           </div>
         </div>
-      </div>
-    </section>
-
-    <section class="container video-section">
-      <h2 class="section-title-center">
-        <span class="section-title-light">{{ t('home.howItWorksVideoTitleStrong') }}</span>&nbsp;<span class="section-title-strong">{{ t('home.howItWorksVideoTitleLight') }}</span>
-      </h2>
-      <div class="video-frame">
-        <span class="video-play-btn" aria-hidden="true">▶</span>
       </div>
     </section>
 

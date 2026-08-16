@@ -71,10 +71,10 @@ let AuthController = class AuthController {
         return this.authService.resetPassword(dto);
     }
     changePassword(userId, dto) {
-        return this.authService.changePassword(userId, dto);
+        return this.authService.changePassword(userId, dto, dto.currentRefreshToken);
     }
-    generateTwoFactor(userId) {
-        return this.authService.generateTwoFactorSecret(userId);
+    generateTwoFactor(userId, dto) {
+        return this.authService.generateTwoFactorSecret(userId, dto.password);
     }
     confirmTwoFactor(userId, dto) {
         return this.authService.confirmTwoFactorSetup(userId, dto.code);
@@ -87,12 +87,12 @@ let AuthController = class AuthController {
     async googleCallback(req, res) {
         const profile = req.user;
         const result = await this.authService.loginWithGoogle(profile, this.meta(req));
+        const code = await this.authService.createGoogleExchangeCode(result.accessToken, result.refreshToken);
         const frontendUrl = this.config.get('frontendUrl');
-        const params = new URLSearchParams({
-            accessToken: result.accessToken,
-            refreshToken: result.refreshToken,
-        });
-        res.redirect(`${frontendUrl}/auth/google/callback?${params.toString()}`);
+        res.redirect(`${frontendUrl}/auth/google/callback?code=${code}`);
+    }
+    exchangeGoogleCode(code) {
+        return this.authService.exchangeGoogleCode(code);
     }
 };
 exports.AuthController = AuthController;
@@ -134,6 +134,7 @@ __decorate([
 ], AuthController.prototype, "login", null);
 __decorate([
     (0, public_decorator_1.Public)(),
+    (0, throttler_1.Throttle)({ default: { limit: 10, ttl: 60_000 } }),
     (0, common_1.Post)('login/2fa'),
     __param(0, (0, common_1.Body)()),
     __param(1, (0, common_1.Req)()),
@@ -151,6 +152,7 @@ __decorate([
 ], AuthController.prototype, "generateTwoFactorSetupAtLogin", null);
 __decorate([
     (0, public_decorator_1.Public)(),
+    (0, throttler_1.Throttle)({ default: { limit: 10, ttl: 60_000 } }),
     (0, common_1.Post)('login/2fa/setup-confirm'),
     __param(0, (0, common_1.Body)()),
     __param(1, (0, common_1.Req)()),
@@ -203,11 +205,13 @@ __decorate([
 __decorate([
     (0, common_1.Post)('2fa/generate'),
     __param(0, (0, current_user_decorator_1.CurrentUser)('id')),
+    __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
+    __metadata("design:paramtypes", [String, two_factor_dto_1.GenerateTwoFactorDto]),
     __metadata("design:returntype", void 0)
 ], AuthController.prototype, "generateTwoFactor", null);
 __decorate([
+    (0, throttler_1.Throttle)({ default: { limit: 10, ttl: 60_000 } }),
     (0, common_1.Post)('2fa/confirm'),
     __param(0, (0, current_user_decorator_1.CurrentUser)('id')),
     __param(1, (0, common_1.Body)()),
@@ -241,6 +245,15 @@ __decorate([
     __metadata("design:paramtypes", [Object, Object]),
     __metadata("design:returntype", Promise)
 ], AuthController.prototype, "googleCallback", null);
+__decorate([
+    (0, public_decorator_1.Public)(),
+    (0, throttler_1.Throttle)({ default: { limit: 10, ttl: 60_000 } }),
+    (0, common_1.Post)('google/exchange'),
+    __param(0, (0, common_1.Body)('code')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], AuthController.prototype, "exchangeGoogleCode", null);
 exports.AuthController = AuthController = __decorate([
     (0, swagger_1.ApiTags)('auth'),
     (0, common_1.Controller)('auth'),

@@ -7,6 +7,7 @@ import {
   IsInt,
   IsNotEmpty,
   IsOptional,
+  IsPositive,
   IsString,
   IsUrl,
   Matches,
@@ -23,11 +24,11 @@ class WorkingHoursRow {
   dayOfWeek: number;
 
   @ApiProperty({ example: '09:00' })
-  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, { message: 'validation.TIME_INVALID' })
   startsAt: string;
 
   @ApiProperty({ example: '17:00' })
-  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, { message: 'validation.TIME_INVALID' })
   endsAt: string;
 }
 
@@ -73,6 +74,17 @@ export class CreateManualBlockDto {
   @IsOptional()
   @IsString()
   note?: string;
+}
+
+export class SetDatePriceDto {
+  @ApiProperty({ example: '2026-12-31', description: 'Calendar date (YYYY-MM-DD), not a timestamp' })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'validation.DATE_INVALID' })
+  date: string;
+
+  @ApiProperty({ description: 'RSD, overrides the listing base/weekend price for this one date' })
+  @IsInt()
+  @IsPositive()
+  price: number;
 }
 
 export class AddIcalSourceDto {

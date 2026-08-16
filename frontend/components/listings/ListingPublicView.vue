@@ -1,6 +1,8 @@
 <template>
-  <div v-if="listing" class="listing-page">
+  <div class="listing-page">
     <div class="container py-4">
+      <p v-if="preview" class="preview-banner mb-3">{{ t('listing.previewBanner') }}</p>
+
       <nav class="breadcrumbs text-muted mb-3">
         <NuxtLink :to="`/${listing.category.slug}`">{{ listing.category.name }}</NuxtLink>
         <span> / </span>
@@ -81,16 +83,21 @@
                 {{ formatPrice(listing.price) }}
                 <span class="text-muted text-body"> / {{ t(`listing.unit${unitLabel(listing.priceUnit)}`) }}</span>
               </p>
-              <NuxtLink
-                v-if="listing.bookingModel !== 'NO_BOOKING'"
-                :to="`/oglasi/${listing.slug}/rezervisi`"
-                class="btn btn-primary-flat btn-block mt-3"
-              >
-                {{ t('listing.sendRequest') }}
-              </NuxtLink>
-              <NuxtLink v-else :to="`/oglasi/${listing.slug}/poruka`" class="btn btn-primary-flat btn-block mt-3">
-                {{ t('listing.contactOwner') }}
-              </NuxtLink>
+              <button v-if="preview" type="button" class="btn btn-primary-flat btn-block mt-3" disabled>
+                {{ listing.bookingModel !== 'NO_BOOKING' ? t('listing.sendRequest') : t('listing.contactOwner') }}
+              </button>
+              <template v-else>
+                <NuxtLink
+                  v-if="listing.bookingModel !== 'NO_BOOKING'"
+                  :to="`/oglasi/${listing.slug}/rezervisi`"
+                  class="btn btn-primary-flat btn-block mt-3"
+                >
+                  {{ t('listing.sendRequest') }}
+                </NuxtLink>
+                <NuxtLink v-else :to="`/oglasi/${listing.slug}/poruka`" class="btn btn-primary-flat btn-block mt-3">
+                  {{ t('listing.contactOwner') }}
+                </NuxtLink>
+              </template>
             </div>
           </div>
 
@@ -98,9 +105,10 @@
             <div class="card-body owner-card">
               <img v-if="listing.owner?.avatarUrl" :src="listing.owner.avatarUrl" alt="" class="owner-avatar" />
               <div>
-                <NuxtLink :to="`/vlasnik/${listing.owner?.profileSlug}`" class="text-body">
+                <NuxtLink v-if="listing.owner?.profileSlug" :to="`/vlasnik/${listing.owner.profileSlug}`" class="text-body">
                   <strong>{{ listing.owner?.firstName }} {{ listing.owner?.lastName }}</strong>
                 </NuxtLink>
+                <span v-else class="text-body"><strong>{{ listing.owner?.firstName }} {{ listing.owner?.lastName }}</strong></span>
                 <p class="text-muted mb-0">
                   {{ t('listing.memberSince') }} {{ new Date(listing.owner?.createdAt).getFullYear() }}
                 </p>
@@ -111,32 +119,20 @@
       </div>
     </div>
   </div>
-  <div v-else class="container py-6">
-    <p class="text-muted">{{ t('listing.noResults') }}</p>
-  </div>
 </template>
 
 <script setup>
-const { t } = useI18n()
-const api = useApi()
-const route = useRoute()
-const activePhoto = ref(0)
-
-const { data: listing } = await useAsyncData(`listing-${route.params.slug}`, async () => {
-  try {
-    return await api.get(`/listings/public/${route.params.slug}`)
-  } catch {
-    return null
-  }
+// Shared between the public listing page and the wizard's "preview as
+// guest" step (RNT-031) — the whole point of reusing this component is that
+// the preview can never drift from what publishing will actually look like.
+defineProps({
+  listing: { type: Object, required: true },
+  reviews: { type: Array, default: () => [] },
+  preview: { type: Boolean, default: false },
 })
 
-if (!listing.value) {
-  throw createError({ statusCode: 404, statusMessage: 'Listing not found' })
-}
-
-const { data: reviews } = await useAsyncData(`listing-reviews-${route.params.slug}`, () =>
-  api.get(`/listings/${listing.value.id}/reviews`),
-)
+const { t } = useI18n()
+const activePhoto = ref(0)
 
 function formatPrice(value) {
   return new Intl.NumberFormat('sr-RS').format(value || 0) + ' RSD'
@@ -153,49 +149,17 @@ function formatAttrValue(attr) {
   if (v.valueNumber !== null && v.valueNumber !== undefined) return `${v.valueNumber}${attr.unit ? ' ' + attr.unit : ''}`
   return v.valueText || ''
 }
-
-useSeoMeta({
-  title: () => listing.value?.title,
-  description: () => listing.value?.description?.slice(0, 160),
-  ogTitle: () => listing.value?.title,
-  ogImage: () => listing.value?.photos?.[0]?.url,
-})
-
-// Structured data (Ch.14.4) — Product schema is the closest fit for a
-// priced, bookable listing without inventing a custom vocabulary.
-useHead(() => ({
-  script: listing.value
-    ? [
-        {
-          type: 'application/ld+json',
-          innerHTML: JSON.stringify({
-            '@context': 'https://schema.org',
-            '@type': 'Product',
-            name: listing.value.title,
-            description: listing.value.description,
-            image: listing.value.photos?.map((p) => p.url) ?? [],
-            offers: {
-              '@type': 'Offer',
-              price: listing.value.price,
-              priceCurrency: 'RSD',
-            },
-            ...(listing.value.reviewCount > 0
-              ? {
-                  aggregateRating: {
-                    '@type': 'AggregateRating',
-                    ratingValue: listing.value.avgRating,
-                    reviewCount: listing.value.reviewCount,
-                  },
-                }
-              : {}),
-          }),
-        },
-      ]
-    : [],
-}))
 </script>
 
 <style lang="scss" scoped>
+.preview-banner {
+  background: $color-background;
+  border: 1px solid $color-border;
+  border-radius: $radius-button;
+  padding: 10px 16px;
+  font-size: $font-size-label;
+}
+
 .listing-gallery-main {
   width: 100%;
   height: 420px;

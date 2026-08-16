@@ -52,6 +52,7 @@ const prisma_service_1 = require("../../prisma/prisma.service");
 const notifications_service_1 = require("../../modules/notifications/notifications.service");
 const interpolate_1 = require("../utils/interpolate");
 const mjml_layout_1 = require("./mjml-layout");
+const critical_events_1 = require("./critical-events");
 let EmailService = EmailService_1 = class EmailService {
     constructor(config, prisma, notifications) {
         this.config = config;
@@ -70,6 +71,13 @@ let EmailService = EmailService_1 = class EmailService {
         this.fromAddress = mail.fromAddress;
     }
     async send(opts) {
+        if (opts.userId && !critical_events_1.CRITICAL_EMAIL_EVENTS.has(opts.key)) {
+            const setting = await this.prisma.notificationSetting.findUnique({
+                where: { userId_event: { userId: opts.userId, event: opts.key } },
+            });
+            if (setting && !setting.emailEnabled)
+                return;
+        }
         const language = opts.language ?? client_1.Language.SR;
         const template = await this.prisma.emailTemplate.findUnique({
             where: { key_language: { key: opts.key, language } },

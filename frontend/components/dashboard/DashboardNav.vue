@@ -10,7 +10,7 @@
     </template>
 
     <p class="text-label dash-nav-section">{{ t('dashboard.sectionBooking') }}</p>
-    <NuxtLink to="/kontrolna-tabla/rezervacije?role=guest" class="dash-nav-link">{{ t('nav.dashboard') }}</NuxtLink>
+    <NuxtLink to="/kontrolna-tabla/rezervacije?role=guest" class="dash-nav-link">{{ t('dashboard.myBookings') }}</NuxtLink>
     <NuxtLink to="/kontrolna-tabla/sacuvano" class="dash-nav-link">{{ t('nav.favorites') }}</NuxtLink>
 
     <p class="text-label dash-nav-section">{{ t('dashboard.sectionGeneral') }}</p>

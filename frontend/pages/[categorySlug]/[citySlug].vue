@@ -47,7 +47,8 @@ const { data: searchResponse } = await useAsyncData(
   () => api.post('/search', { categorySlug: route.params.categorySlug, cityId: city.value.id, pageSize: 24 }),
 )
 const results = computed(() => searchResponse.value?.results || [])
-const shouldIndex = computed(() => (searchResponse.value?.total || 0) >= 3)
+// Setting.listing_index_threshold (admin-editable, R135), not a hardcoded 3.
+const shouldIndex = computed(() => (searchResponse.value?.total || 0) >= (searchResponse.value?.indexThreshold ?? 3))
 
 useSeoMeta({
   title: () => `${category.value?.name} — ${city.value?.name}`,

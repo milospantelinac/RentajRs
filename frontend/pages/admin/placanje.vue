@@ -176,7 +176,7 @@ async function save() {
     form.apiPassword = ''
     saved.value = true
   } catch (e) {
-    error.value = e?.data?.message?.[0] || e?.data?.message || t('auth.genericError')
+    error.value = extractErrorMessage(e, t('auth.genericError'))
   } finally {
     saving.value = false
   }

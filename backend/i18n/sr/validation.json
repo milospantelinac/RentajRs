@@ -13,5 +13,10 @@
   "DATE": "Polje {property} mora biti ispravan datum",
   "ARRAY": "Polje {property} mora biti niz vrednosti",
   "PASSWORD_WEAK": "Lozinka mora imati najmanje 8 znakova i ne sme biti na listi najčešće korišćenih lozinki",
-  "PHONE_INVALID": "Broj telefona nije ispravan"
+  "PHONE_INVALID": "Broj telefona nije ispravan",
+  "BANK_ACCOUNT_INVALID": "Tekući račun mora biti u formatu 000-0000000000000-00",
+  "TIME_INVALID": "Vreme mora biti u formatu ČČ:MM",
+  "DATE_INVALID": "Datum mora biti u formatu GGGG-MM-DD",
+  "REGION_REQUIRED": "Izaberite region",
+  "CITY_REQUIRED": "Izaberite grad"
 }

@@ -16,6 +16,11 @@
   "CATEGORY_HAS_LISTINGS": "Kategorija sa oglasima se ne može obrisati — spojite je ili arhivirajte",
   "SUBSCRIPTION_LISTING_LIMIT": "Dostigli ste broj oglasa dozvoljen na trenutnom paketu",
   "PHOTO_LIMIT_EXCEEDED": "Oglas može imati najviše {max} fotografija",
+  "PHOTO_NOT_FOUND": "Fotografija nije pronađena ili ne pripada ovom oglasu",
   "PERMISSION_DENIED": "Nemate dozvolu za ovu radnju",
-  "RATE_LIMITED": "Previše zahteva. Pokušajte ponovo kasnije"
+  "RATE_LIMITED": "Previše zahteva. Pokušajte ponovo kasnije",
+  "PACKAGE_FEATURE_NOT_INCLUDED": "Vaš trenutni paket za ovaj oglas ne uključuje ovu funkciju. Nadogradite paket da biste je koristili",
+  "GUEST_COUNT_OUT_OF_RANGE": "Broj gostiju mora biti između {min} i {max}",
+  "ACCOUNT_RESTRICTED": "Nalog je privremeno ograničen zbog kršenja pravila platforme i ne može da izvrši ovu radnju",
+  "PACKAGE_INCOMPATIBLE_BOOKING_MODEL": "Osnovni paket ne uključuje rezervacioni sistem. Izaberite Standard ili Pro paket, ili prvo promenite način rezervisanja na oglasu na „bez rezervacija”"
 }

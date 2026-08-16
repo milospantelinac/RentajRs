@@ -13,32 +13,30 @@ exports.DashboardService = void 0;
 const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../../prisma/prisma.service");
 const reviews_service_1 = require("../reviews/reviews.service");
+const users_service_1 = require("../users/users.service");
 const money_1 = require("../../common/utils/money");
 let DashboardService = class DashboardService {
-    constructor(prisma, reviews) {
+    constructor(prisma, reviews, users) {
         this.prisma = prisma;
         this.reviews = reviews;
+        this.users = users;
     }
     async getDashboard(userId) {
-        const isOwner = await this.isOwner(userId);
+        const isOwner = await this.users.isOwner(userId);
         const [ownerAttention, guestAttention, stats, onboarding, upcoming] = await Promise.all([
             isOwner ? this.getOwnerAttention(userId) : [],
             this.getGuestAttention(userId),
             this.getStats(userId, isOwner),
-            isOwner ? this.getOnboarding(userId) : null,
+            this.getOnboarding(userId),
             this.getUpcoming(userId),
         ]);
         return {
             isOwner,
             attentionItems: [...ownerAttention, ...guestAttention],
             stats,
-            onboarding,
+            onboarding: onboarding.allDone ? null : onboarding,
             upcomingBookings: upcoming,
         };
-    }
-    async isOwner(userId) {
-        const count = await this.prisma.listing.count({ where: { userId, status: 'ACTIVE' } });
-        return count > 0;
     }
     async getOwnerAttention(userId) {
         const items = [];
@@ -46,7 +44,7 @@ let DashboardService = class DashboardService {
             where: { ownerId: userId, status: 'AWAITING_PAYMENT' },
         });
         if (awaitingConfirmation) {
-            items.push({ urgency: 'critical', title: 'payment_confirmation', actionUrl: '/kontrolna-tabla/rezervacije?status=AWAITING_PAYMENT', count: awaitingConfirmation });
+            items.push({ urgency: 'critical', title: 'payment_confirmation', actionUrl: '/kontrolna-tabla/rezervacije?role=owner&status=AWAITING_PAYMENT', count: awaitingConfirmation });
         }
         const termConflicts = await this.prisma.dispute.count({ where: { type: 'TERM_CONFLICT', status: 'NEW', listing: { userId } } });
         if (termConflicts) {
@@ -54,7 +52,7 @@ let DashboardService = class DashboardService {
         }
         const newRequests = await this.prisma.booking.count({ where: { ownerId: userId, status: 'REQUESTED' } });
         if (newRequests) {
-            items.push({ urgency: 'decision', title: 'new_requests', actionUrl: '/kontrolna-tabla/rezervacije?status=REQUESTED', count: newRequests });
+            items.push({ urgency: 'decision', title: 'new_requests', actionUrl: '/kontrolna-tabla/rezervacije?role=owner&status=REQUESTED', count: newRequests });
         }
         const expiringSoon = await this.prisma.subscription.count({
             where: { userId, status: 'ACTIVE', expiresAt: { lt: new Date(Date.now() + 7 * 86_400_000) } },
@@ -76,7 +74,7 @@ let DashboardService = class DashboardService {
         const items = [];
         const awaitingPayment = await this.prisma.booking.count({ where: { guestId: userId, status: 'AWAITING_PAYMENT' } });
         if (awaitingPayment) {
-            items.push({ urgency: 'critical', title: 'payment_deadline', actionUrl: '/kontrolna-tabla/rezervacije', count: awaitingPayment });
+            items.push({ urgency: 'critical', title: 'payment_deadline', actionUrl: '/kontrolna-tabla/rezervacije?role=guest&status=AWAITING_PAYMENT', count: awaitingPayment });
         }
         const pendingReviews = await this.reviews.getMyPendingReviews(userId);
         if (pendingReviews.length) {
@@ -148,6 +146,7 @@ exports.DashboardService = DashboardService;
 exports.DashboardService = DashboardService = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
-        reviews_service_1.ReviewsService])
+        reviews_service_1.ReviewsService,
+        users_service_1.UsersService])
 ], DashboardService);
 //# sourceMappingURL=dashboard.service.js.map

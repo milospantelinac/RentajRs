@@ -1,7 +1,13 @@
 import { Body, Controller, Delete, Get, Header, Param, Post, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { AvailabilityService } from './availability.service';
-import { SetWorkingHoursDto, CreateDefinedSlotDto, CreateManualBlockDto, AddIcalSourceDto } from './dto/availability.dto';
+import {
+  SetWorkingHoursDto,
+  CreateDefinedSlotDto,
+  CreateManualBlockDto,
+  SetDatePriceDto,
+  AddIcalSourceDto,
+} from './dto/availability.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 
@@ -42,6 +48,16 @@ export class AvailabilityController {
   @Delete('blocks/:blockId')
   deleteBlock(@CurrentUser('id') userId: string, @Param('id') id: string, @Param('blockId') blockId: string) {
     return this.availabilityService.deleteManualBlock(userId, id, blockId);
+  }
+
+  @Post('date-price')
+  setDatePrice(@CurrentUser('id') userId: string, @Param('id') id: string, @Body() dto: SetDatePriceDto) {
+    return this.availabilityService.setDatePrice(userId, id, dto);
+  }
+
+  @Delete('date-price/:date')
+  deleteDatePrice(@CurrentUser('id') userId: string, @Param('id') id: string, @Param('date') date: string) {
+    return this.availabilityService.deleteDatePrice(userId, id, date);
   }
 
   @Get('ical-sources')

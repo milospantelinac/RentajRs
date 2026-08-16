@@ -8,7 +8,7 @@
           </div>
           <div class="col-6 col-md-3 mb-2 mb-md-0">
             <select v-model="query.cityId" class="form-control form-select" @change="runSearch">
-              <option value="">{{ t('listing.city') }}</option>
+              <option value="">{{ t('search.allCities') }}</option>
               <option v-for="c in cities" :key="c.id" :value="c.id">{{ c.name }}</option>
             </select>
           </div>
@@ -19,6 +19,14 @@
               <option value="price_desc">{{ t('search.sortPriceDesc') }}</option>
               <option value="newest">{{ t('search.sortNewest') }}</option>
             </select>
+          </div>
+        </div>
+        <div class="row align-items-center mt-2">
+          <div class="col-6 col-md-3 mb-2 mb-md-0">
+            <input v-model="query.dateFrom" type="date" class="form-control" :aria-label="t('search.dateFrom')" @change="runSearch" />
+          </div>
+          <div class="col-6 col-md-3 mb-2 mb-md-0">
+            <input v-model="query.dateTo" type="date" class="form-control" :aria-label="t('search.dateTo')" @change="runSearch" />
           </div>
           <div class="col-12 col-md-2">
             <button class="btn btn-primary-flat btn-block" @click="runSearch">{{ t('common.search') }}</button>
@@ -74,7 +82,13 @@
         <aside class="col-12 col-md-3 mb-4 mb-md-0 d-none-mobile">
           <div class="card">
             <div class="card-body">
-              <FilterFields :query="query" :filterable-attributes="filterableAttributes" @set-attr="setAttrFilter" @search="runSearch" />
+              <FilterFields
+                :query="query"
+                :filterable-attributes="filterableAttributes"
+                :show-search-button="false"
+                @set-attr="setAttrFilter"
+                @search="runSearch"
+              />
             </div>
           </div>
         </aside>
@@ -89,9 +103,17 @@
             </button>
           </div>
 
+          <div v-if="activeFilterChips.length" class="active-filters mb-3">
+            <span class="active-filter-chip" v-for="chip in activeFilterChips" :key="chip.key" @click="chip.clear">
+              {{ chip.label }} ✕
+            </span>
+            <button class="active-filter-clear-all" @click="clearAllFilters">{{ t('search.clearAllFilters') }}</button>
+          </div>
+
           <div v-if="loading" class="text-muted">{{ t('common.loading') }}</div>
 
           <template v-else-if="results.length">
+            <p class="text-muted results-count mb-3">{{ t('search.resultsCount', { count: total }) }}</p>
             <!-- R158: list and map toggle on mobile, sit side by side (stacked here) on desktop. -->
             <div class="row mb-4" :class="{ 'mobile-hidden': mapOpenMobile }">
               <div v-for="listing in results" :key="listing.id" class="col-6 col-md-4 mb-4">
@@ -99,6 +121,9 @@
               </div>
             </div>
             <div class="search-map-wrap mb-4" :class="{ 'mobile-hidden': !mapOpenMobile }">
+              <button v-if="mapMovedManually" class="btn btn-primary-flat btn-sm map-search-area-btn" @click="searchThisArea">
+                {{ t('search.searchThisArea') }}
+              </button>
               <ListingMap :listings="results" @bounds-change="onBoundsChange" />
             </div>
 
@@ -115,7 +140,7 @@
 
           <div v-else class="empty-results card">
             <div class="card-body text-center">
-              <p class="text-body mb-3">{{ t('search.noResults') }}</p>
+              <p class="text-body mb-3">{{ activeFilterChips.length ? t('search.noResultsWithFilters') : t('search.noResults') }}</p>
               <button class="btn btn-tertiary mb-3" @click="tryRelaxedSearch">{{ t('search.relaxSearch') }}</button>
               <div class="form-row-inline notify-form">
                 <input v-model="notifyEmail" type="email" class="form-control" :placeholder="t('auth.email')" />
@@ -147,6 +172,7 @@ const filtersOpenMobile = ref(false)
 const mapOpenMobile = ref(false)
 const notifyEmail = ref('')
 const notifySent = ref(false)
+const mapMovedManually = ref(false)
 
 const query = reactive({
   q: route.query.q || '',
@@ -154,8 +180,10 @@ const query = reactive({
   cityId: route.query.cityId || '',
   priceMin: route.query.priceMin ? Number(route.query.priceMin) : null,
   priceMax: route.query.priceMax ? Number(route.query.priceMax) : null,
-  onlineBookingOnly: false,
-  sort: 'relevance',
+  dateFrom: route.query.dateFrom || '',
+  dateTo: route.query.dateTo || '',
+  onlineBookingOnly: route.query.onlineBookingOnly === '1',
+  sort: route.query.sort || 'relevance',
   page: 1,
   pageSize: 24,
 })
@@ -163,6 +191,76 @@ const query = reactive({
 const attributeFilters = reactive(new Map())
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / query.pageSize)))
+
+// RNT-053 — filters used to live only in component state: a refresh or a
+// shared link silently dropped everything the visitor had just set up.
+function syncUrlFromQuery() {
+  router.replace({
+    query: {
+      q: query.q || undefined,
+      categorySlug: query.categorySlug || undefined,
+      cityId: query.cityId || undefined,
+      priceMin: query.priceMin || undefined,
+      priceMax: query.priceMax || undefined,
+      dateFrom: query.dateFrom || undefined,
+      dateTo: query.dateTo || undefined,
+      onlineBookingOnly: query.onlineBookingOnly ? '1' : undefined,
+      sort: query.sort !== 'relevance' ? query.sort : undefined,
+    },
+  })
+}
+
+const activeFilterChips = computed(() => {
+  const chips = []
+  if (query.cityId) {
+    const city = cities.value.find((c) => c.id === query.cityId)
+    if (city) chips.push({ key: 'city', label: city.name, clear: () => { query.cityId = ''; runSearch() } })
+  }
+  if (query.dateFrom && query.dateTo) {
+    chips.push({
+      key: 'date',
+      label: `${query.dateFrom} → ${query.dateTo}`,
+      clear: () => { query.dateFrom = ''; query.dateTo = ''; runSearch() },
+    })
+  }
+  if (query.priceMin || query.priceMax) {
+    const label = query.priceMin && query.priceMax
+      ? `${query.priceMin}–${query.priceMax} RSD`
+      : query.priceMin
+        ? `${query.priceMin}+ RSD`
+        : `${t('listing.price')} < ${query.priceMax} RSD`
+    chips.push({ key: 'price', label, clear: () => { query.priceMin = null; query.priceMax = null; runSearch() } })
+  }
+  if (query.onlineBookingOnly) {
+    chips.push({ key: 'onlineBooking', label: t('search.onlineBookingOnly'), clear: () => { query.onlineBookingOnly = false; runSearch() } })
+  }
+  if (selectedCategory.value) {
+    chips.push({ key: 'category', label: selectedCategory.value.name, clear: () => clearCategory() })
+  }
+  return chips
+})
+
+function clearCategory() {
+  selectedCategory.value = null
+  query.categorySlug = ''
+  attributeFilters.clear()
+  filterableAttributes.value = []
+  runSearch()
+}
+
+function clearAllFilters() {
+  query.cityId = ''
+  query.priceMin = null
+  query.priceMax = null
+  query.dateFrom = ''
+  query.dateTo = ''
+  query.onlineBookingOnly = false
+  selectedCategory.value = null
+  query.categorySlug = ''
+  attributeFilters.clear()
+  filterableAttributes.value = []
+  runSearch()
+}
 
 function setAttrFilter(attributeId, key, value) {
   const current = attributeFilters.get(attributeId) || { attributeId };
@@ -188,6 +286,20 @@ function selectSubcategory(child) {
 }
 
 async function runSearch() {
+  // A fresh top-level search (search bar, filters, category) should override
+  // whatever area the user had previously framed on the map — otherwise
+  // typing a new query while panned across the country silently returns
+  // nothing.
+  query.mapNorth = query.mapSouth = query.mapEast = query.mapWest = undefined
+  mapMovedManually.value = false
+  loading.value = true
+  query.page = 1
+  await executeSearch()
+  loading.value = false
+}
+
+async function searchThisArea() {
+  mapMovedManually.value = false
   loading.value = true
   query.page = 1
   await executeSearch()
@@ -202,12 +314,15 @@ async function goToPage(page) {
 }
 
 async function executeSearch() {
+  syncUrlFromQuery()
   const body = {
     ...query,
     priceMin: query.priceMin || undefined,
     priceMax: query.priceMax || undefined,
     cityId: query.cityId || undefined,
     categorySlug: query.categorySlug || undefined,
+    dateFrom: query.dateFrom || undefined,
+    dateTo: query.dateTo || undefined,
     attributes: attributeFilters.size ? Array.from(attributeFilters.values()) : undefined,
   }
   const response = await api.post('/search', body)
@@ -233,6 +348,9 @@ function onBoundsChange(bounds) {
   query.mapSouth = bounds.south
   query.mapEast = bounds.east
   query.mapWest = bounds.west
+  // Doesn't search yet — surfaces the "Pretraži ovo područje" button instead,
+  // same UX the Bible itself describes (Ch.24.5) for this feature.
+  mapMovedManually.value = true
 }
 
 onMounted(async () => {
@@ -312,7 +430,17 @@ useSeoMeta({ title: t('common.search') })
 }
 
 .search-map-wrap {
+  position: relative;
   height: 500px;
+}
+
+.map-search-area-btn {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: $z-dropdown;
+  box-shadow: $shadow-card;
 }
 
 .filter-drawer-backdrop {
@@ -367,6 +495,43 @@ useSeoMeta({ title: t('common.search') })
 
 .empty-results {
   padding: 32px;
+}
+
+.results-count {
+  font-size: $font-size-muted;
+}
+
+.active-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.active-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: $radius-pill;
+  border: 1px solid $color-border;
+  background: $color-surface;
+  font-size: $font-size-muted;
+  color: $color-text;
+  cursor: pointer;
+}
+
+.active-filter-chip:hover {
+  border-color: $color-primary;
+  color: $color-primary;
+}
+
+.active-filter-clear-all {
+  border: none;
+  background: none;
+  color: $color-text-muted;
+  font-size: $font-size-muted;
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 .notify-form {

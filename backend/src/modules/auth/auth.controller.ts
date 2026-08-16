@@ -19,7 +19,7 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto, VerifyTwoFactorDto } from './dto/login.dto';
 import { RefreshTokenDto, VerifyEmailDto } from './dto/refresh-token.dto';
 import { ForgotPasswordDto, ResetPasswordDto, ChangePasswordDto } from './dto/password.dto';
-import { ConfirmTwoFactorSetupDto, DisableTwoFactorDto } from './dto/two-factor.dto';
+import { ConfirmTwoFactorSetupDto, DisableTwoFactorDto, GenerateTwoFactorDto } from './dto/two-factor.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
@@ -66,6 +66,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('login/2fa')
   verifyTwoFactorLogin(@Body() dto: VerifyTwoFactorDto, @Req() req: Request) {
     return this.authService.verifyTwoFactorLogin(dto, this.meta(req));
@@ -78,6 +79,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('login/2fa/setup-confirm')
   confirmTwoFactorSetupAtLogin(
     @Body() dto: ConfirmTwoFactorSetupDto & { tempToken: string },
@@ -118,14 +120,15 @@ export class AuthController {
 
   @Post('change-password')
   changePassword(@CurrentUser('id') userId: string, @Body() dto: ChangePasswordDto) {
-    return this.authService.changePassword(userId, dto);
+    return this.authService.changePassword(userId, dto, dto.currentRefreshToken);
   }
 
   @Post('2fa/generate')
-  generateTwoFactor(@CurrentUser('id') userId: string) {
-    return this.authService.generateTwoFactorSecret(userId);
+  generateTwoFactor(@CurrentUser('id') userId: string, @Body() dto: GenerateTwoFactorDto) {
+    return this.authService.generateTwoFactorSecret(userId, dto.password);
   }
 
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('2fa/confirm')
   confirmTwoFactor(@CurrentUser('id') userId: string, @Body() dto: ConfirmTwoFactorSetupDto) {
     return this.authService.confirmTwoFactorSetup(userId, dto.code);
@@ -151,11 +154,17 @@ export class AuthController {
   async googleCallback(@Req() req: Request, @Res() res: Response) {
     const profile = req.user as GoogleProfile;
     const result = await this.authService.loginWithGoogle(profile, this.meta(req));
+    // R19 fix: the real tokens never go in the URL — only a one-time code
+    // that's exchanged for them via POST /auth/google/exchange below.
+    const code = await this.authService.createGoogleExchangeCode(result.accessToken, result.refreshToken);
     const frontendUrl = this.config.get<string>('frontendUrl');
-    const params = new URLSearchParams({
-      accessToken: result.accessToken,
-      refreshToken: result.refreshToken,
-    });
-    res.redirect(`${frontendUrl}/auth/google/callback?${params.toString()}`);
+    res.redirect(`${frontendUrl}/auth/google/callback?code=${code}`);
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('google/exchange')
+  exchangeGoogleCode(@Body('code') code: string) {
+    return this.authService.exchangeGoogleCode(code);
   }
 }

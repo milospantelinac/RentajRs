@@ -23,7 +23,7 @@ const payment_provider_interface_1 = require("../../common/payment/payment-provi
 const nestpay_checkout_service_1 = require("../../common/payment/nestpay/nestpay-checkout.service");
 const fiscalization_provider_interface_1 = require("../../common/fiscalization/fiscalization-provider.interface");
 const money_1 = require("../../common/utils/money");
-const GRACE_PERIOD_DAYS = 7;
+const DEFAULT_GRACE_PERIOD_DAYS = 7;
 const RETRY_DAYS = [0, 3, 6];
 let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
     constructor(prisma, cache, listings, payment, nestpay, fiscalization, i18n, events, config) {
@@ -52,8 +52,10 @@ let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
         const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: dto.listingId } });
         if (listing.userId !== userId)
             throw new common_1.ForbiddenException();
-        if (!['DRAFT', 'REJECTED'].includes(listing.status)) {
-            throw new common_1.BadRequestException('Listing is not awaiting a package');
+        const wasActive = listing.status === 'ACTIVE';
+        const eligibleStatuses = dto.existingSubscriptionId ? ['DRAFT', 'REJECTED', 'ACTIVE'] : ['DRAFT', 'REJECTED'];
+        if (!eligibleStatuses.includes(listing.status)) {
+            throw new common_1.BadRequestException('Listing is not eligible for this package change');
         }
         const previousSubscription = listing.subscriptionId
             ? await this.prisma.subscription.findUnique({ where: { id: listing.subscriptionId }, include: { package: true } })
@@ -66,14 +68,29 @@ let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
             if (!dto.packageId || !dto.billingCycle) {
                 throw new common_1.BadRequestException('packageId and billingCycle are required to buy a new subscription');
             }
+            await this.assertPackageCompatibleWithListing(listing.id, dto.packageId);
             subscription = await this.createAndChargeSubscription(userId, dto.packageId, dto.billingCycle);
         }
         const newPackage = await this.prisma.package.findUniqueOrThrow({ where: { id: subscription.packageId } });
         if (previousSubscription && previousSubscription.package.key !== 'PRO' && newPackage.key === 'PRO') {
             await this.bankRemainingDays(listing.id, previousSubscription);
         }
+        if (wasActive) {
+            await this.prisma.listing.update({ where: { id: listing.id }, data: { subscriptionId: subscription.id } });
+            this.events.emit('subscription.listing_attached', { listingId: listing.id, subscriptionId: subscription.id });
+            return { listing: await this.listings.getOwned(userId, listing.id), subscription: this.serialize(subscription) };
+        }
         const updatedListing = await this.listings.markPendingApproval(listing.id, subscription.id);
         return { listing: updatedListing, subscription: this.serialize(subscription) };
+    }
+    async assertPackageCompatibleWithListing(listingId, packageId) {
+        const [listing, pkg] = await Promise.all([
+            this.prisma.listing.findUniqueOrThrow({ where: { id: listingId } }),
+            this.prisma.package.findUniqueOrThrow({ where: { id: packageId } }),
+        ]);
+        if (listing.bookingModel !== 'NO_BOOKING' && !pkg.hasBookings) {
+            throw new common_1.BadRequestException(this.i18n.t('errors.PACKAGE_INCOMPATIBLE_BOOKING_MODEL'));
+        }
     }
     async attachToExistingSubscription(userId, subscriptionId) {
         const subscription = await this.prisma.subscription.findUniqueOrThrow({
@@ -175,10 +192,11 @@ let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
         const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: dto.listingId } });
         if (listing.userId !== userId)
             throw new common_1.ForbiddenException();
-        if (!['DRAFT', 'REJECTED'].includes(listing.status)) {
-            throw new common_1.BadRequestException('Listing is not awaiting a package');
+        if (!['DRAFT', 'REJECTED', 'ACTIVE'].includes(listing.status)) {
+            throw new common_1.BadRequestException('Listing is not eligible for a package purchase');
         }
         const pkg = await this.prisma.package.findUniqueOrThrow({ where: { id: dto.packageId } });
+        await this.assertPackageCompatibleWithListing(listing.id, dto.packageId);
         const price = dto.billingCycle === 'YEARLY' ? pkg.priceYearly : pkg.priceMonthly;
         await this.prisma.user.update({
             where: { id: userId },
@@ -247,10 +265,6 @@ let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
             });
             return `${frontendUrl}/oglasi/${listingId}/placanje-neuspesno`;
         }
-        await this.prisma.subscription.update({
-            where: { id: subscription.id },
-            data: { status: 'PENDING_ACTIVATION', pendingListingId: null },
-        });
         await this.prisma.transaction.create({
             data: {
                 userId: subscription.userId,
@@ -261,7 +275,38 @@ let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
                 bankExternalId: verification.transId,
             },
         });
-        await this.listings.markPendingApproval(listingId, subscription.id);
+        const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: listingId } });
+        let redirectPath;
+        if (listing.status === 'ACTIVE') {
+            const previousSubscription = listing.subscriptionId
+                ? await this.prisma.subscription.findUnique({ where: { id: listing.subscriptionId }, include: { package: true } })
+                : null;
+            const newPackage = await this.prisma.package.findUniqueOrThrow({ where: { id: subscription.packageId } });
+            if (previousSubscription && previousSubscription.package.key !== 'PRO' && newPackage.key === 'PRO') {
+                await this.bankRemainingDays(listingId, previousSubscription);
+            }
+            const cycleDays = subscription.billingCycle === 'YEARLY' ? 365 : 30;
+            await this.prisma.subscription.update({
+                where: { id: subscription.id },
+                data: {
+                    status: 'ACTIVE',
+                    startsAt: new Date(),
+                    expiresAt: new Date(Date.now() + cycleDays * 86_400_000),
+                    pendingListingId: null,
+                },
+            });
+            await this.prisma.listing.update({ where: { id: listingId }, data: { subscriptionId: subscription.id } });
+            this.events.emit('subscription.listing_attached', { listingId, subscriptionId: subscription.id });
+            redirectPath = `/kontrolna-tabla/pretplate?upgraded=1`;
+        }
+        else {
+            await this.prisma.subscription.update({
+                where: { id: subscription.id },
+                data: { status: 'PENDING_ACTIVATION', pendingListingId: null },
+            });
+            await this.listings.markPendingApproval(listingId, subscription.id);
+            redirectPath = `/oglasi/${listingId}/poslato`;
+        }
         const user = await this.prisma.user.findUniqueOrThrow({ where: { id: subscription.userId } });
         const pkg = await this.prisma.package.findUniqueOrThrow({ where: { id: subscription.packageId } });
         const transaction = await this.prisma.transaction.findFirstOrThrow({
@@ -286,7 +331,7 @@ let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
             },
         });
         this.events.emit('subscription.purchased', { userId: subscription.userId, subscriptionId: subscription.id });
-        return `${frontendUrl}/oglasi/${listingId}/poslato`;
+        return `${frontendUrl}${redirectPath}`;
     }
     async handleNestPayFail(body) {
         const frontendUrl = this.config.get('frontendUrl');
@@ -339,8 +384,8 @@ let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
         const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: dto.listingId } });
         if (listing.userId !== userId)
             throw new common_1.ForbiddenException();
-        const priceTable = { 7: 89_000, 15: 159_000, 30: 249_000 };
-        const price = BigInt(priceTable[dto.durationDays]);
+        const priceTable = await this.getFeaturedPriceTable();
+        const price = (0, money_1.rsdToPara)(priceTable[dto.durationDays]);
         const maxSetting = await this.prisma.setting.findUnique({ where: { key: 'max_featured_per_category' } });
         const maxPerCategory = maxSetting?.value ?? 10;
         const activeCount = await this.prisma.featuredListing.count({
@@ -426,6 +471,36 @@ let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
         await this.cache.del('subscriptions:packages');
         return { message: this.i18n.t('common.SUCCESS') };
     }
+    async getFeaturedPrices() {
+        return this.getFeaturedPriceTable();
+    }
+    async adminAssignFreeFeatured(adminId, listingId, durationDays) {
+        const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: listingId } });
+        const featured = await this.prisma.featuredListing.create({
+            data: {
+                listingId: listing.id,
+                durationDays,
+                price: 0n,
+                startsAt: new Date(),
+                expiresAt: new Date(Date.now() + durationDays * 86_400_000),
+                free: true,
+                assignedByUserId: adminId,
+            },
+        });
+        await this.prisma.featuredWaitlist.deleteMany({ where: { listingId: listing.id } });
+        this.events.emit('subscriptions.featured_assigned_free', { listingId: listing.id, adminId });
+        return { ...featured, price: (0, money_1.paraToRsd)(featured.price) };
+    }
+    async adminGetFeaturedWaitlist() {
+        const entries = await this.prisma.featuredWaitlist.findMany({
+            orderBy: { requestedAt: 'asc' },
+            include: {
+                listing: { select: { id: true, title: true, slug: true } },
+                category: { select: { id: true, slug: true } },
+            },
+        });
+        return entries;
+    }
     async adminListSubscriptions(status) {
         const subscriptions = await this.prisma.subscription.findMany({
             where: status ? { status } : undefined,
@@ -505,6 +580,7 @@ let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
             where: { status: 'ACTIVE', autoRenew: true, expiresAt: { lte: new Date() } },
             include: { package: true },
         });
+        const gracePeriodDays = await this.getGracePeriodDays();
         for (const sub of dueToday) {
             const charge = await this.payment.chargeCard({
                 amountRsd: (0, money_1.paraToRsd)(sub.priceAtPurchase) ?? 0,
@@ -533,7 +609,7 @@ let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
             else {
                 await this.prisma.subscription.update({
                     where: { id: sub.id },
-                    data: { status: 'GRACE', graceUntil: addDays(new Date(), GRACE_PERIOD_DAYS), paymentAttemptCount: 1 },
+                    data: { status: 'GRACE', graceUntil: addDays(new Date(), gracePeriodDays), paymentAttemptCount: 1 },
                 });
                 this.events.emit('subscription.payment_failed', { subscriptionId: sub.id, attempt: 0 });
             }
@@ -541,8 +617,9 @@ let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
     }
     async processGracePeriod() {
         const inGrace = await this.prisma.subscription.findMany({ where: { status: 'GRACE' }, include: { package: true } });
+        const gracePeriodDays = await this.getGracePeriodDays();
         for (const sub of inGrace) {
-            const daysSinceGraceStart = GRACE_PERIOD_DAYS - Math.ceil(((sub.graceUntil?.getTime() ?? 0) - Date.now()) / 86_400_000);
+            const daysSinceGraceStart = gracePeriodDays - Math.ceil(((sub.graceUntil?.getTime() ?? 0) - Date.now()) / 86_400_000);
             if (!RETRY_DAYS.includes(daysSinceGraceStart))
                 continue;
             const charge = await this.payment.chargeCard({
@@ -608,6 +685,19 @@ let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
                 await this.prisma.listing.update({ where: { id: banked.listingId }, data: { status: 'EXPIRED' } });
             }
         }
+    }
+    async getFeaturedPriceTable() {
+        const setting = await this.prisma.setting.findUnique({ where: { key: 'featured_listing_prices' } });
+        const value = setting?.value;
+        return {
+            7: value?.['7'] ?? 890,
+            15: value?.['15'] ?? 1590,
+            30: value?.['30'] ?? 2490,
+        };
+    }
+    async getGracePeriodDays() {
+        const setting = await this.prisma.setting.findUnique({ where: { key: 'grace_period_days' } });
+        return typeof setting?.value === 'number' ? setting.value : DEFAULT_GRACE_PERIOD_DAYS;
     }
     serialize(subscription) {
         return { ...subscription, priceAtPurchase: (0, money_1.paraToRsd)(subscription.priceAtPurchase) };

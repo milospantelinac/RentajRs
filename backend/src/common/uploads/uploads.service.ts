@@ -23,13 +23,17 @@ export class UploadsService {
   async saveImage(
     file: Express.Multer.File,
     folder: string,
-    options: { maxWidth: number; maxHeight?: number } = { maxWidth: 1600 },
+    options: { maxWidth: number; maxHeight?: number; maxSizeMb?: number } = { maxWidth: 1600 },
   ): Promise<{ url: string; relativePath: string }> {
     if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
       throw new BadRequestException('Only JPEG, PNG or WEBP images are allowed');
     }
 
-    const maxSizeBytes = this.config.get<number>('uploads.maxPhotoSizeMb')! * 1024 * 1024;
+    // R85 needs a tighter cap for message images (5MB) than the general
+    // listing-photo/avatar default (uploads.maxPhotoSizeMb, 8MB) — callers
+    // that care pass maxSizeMb explicitly; everyone else keeps today's limit.
+    const maxSizeMb = options.maxSizeMb ?? this.config.get<number>('uploads.maxPhotoSizeMb')!;
+    const maxSizeBytes = maxSizeMb * 1024 * 1024;
     if (file.size > maxSizeBytes) {
       throw new BadRequestException('File is too large');
     }

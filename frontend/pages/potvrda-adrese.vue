@@ -38,7 +38,7 @@ async function verify() {
     await api.post('/auth/verify-email', { token: route.query.token })
     success.value = true
   } catch (e) {
-    error.value = e?.data?.message?.[0] || e?.data?.message || ''
+    error.value = extractErrorMessage(e, '')
   } finally {
     loading.value = false
   }

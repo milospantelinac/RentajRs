@@ -6,7 +6,7 @@ import { ReviewDirection } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateReviewDto, ReplyToReviewDto } from './dto/reviews.dto';
 
-const REVIEW_WINDOW_DAYS = 14;
+const DEFAULT_REVIEW_WINDOW_DAYS = 14;
 
 @Injectable()
 export class ReviewsService {
@@ -178,13 +178,20 @@ export class ReviewsService {
   /** R96 fallback — publish solo once 14 days pass without the counterpart writing theirs. */
   @Cron(CronExpression.EVERY_DAY_AT_2AM)
   async publishOverdueReviews() {
-    const cutoff = new Date(Date.now() - REVIEW_WINDOW_DAYS * 86_400_000);
+    const windowDays = await this.getReviewWindowDays();
+    const cutoff = new Date(Date.now() - windowDays * 86_400_000);
     const overdue = await this.prisma.review.findMany({
       where: { published: false, writtenAt: { lt: cutoff } },
     });
     for (const review of overdue) {
       await this.publishReviews([review.id]);
     }
+  }
+
+  /** R171 — admin-editable in /admin/podesavanja (Setting.review_window_days). */
+  private async getReviewWindowDays(): Promise<number> {
+    const setting = await this.prisma.setting.findUnique({ where: { key: 'review_window_days' } });
+    return typeof setting?.value === 'number' ? setting.value : DEFAULT_REVIEW_WINDOW_DAYS;
   }
 
   /**

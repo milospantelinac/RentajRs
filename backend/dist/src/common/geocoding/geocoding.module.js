@@ -9,12 +9,14 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.GeocodingModule = void 0;
 const common_1 = require("@nestjs/common");
 const geocoding_service_1 = require("./geocoding.service");
+const geocoding_controller_1 = require("./geocoding.controller");
 let GeocodingModule = class GeocodingModule {
 };
 exports.GeocodingModule = GeocodingModule;
 exports.GeocodingModule = GeocodingModule = __decorate([
     (0, common_1.Global)(),
     (0, common_1.Module)({
+        controllers: [geocoding_controller_1.GeocodingController],
         providers: [geocoding_service_1.GeocodingService],
         exports: [geocoding_service_1.GeocodingService],
     })

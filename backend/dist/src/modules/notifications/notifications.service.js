@@ -45,6 +45,26 @@ let NotificationsService = class NotificationsService {
             data: { userId: opts.userId, event: opts.event, title: opts.title, content: opts.content, linkUrl: opts.linkUrl },
         });
     }
+    async getMySettings(userId) {
+        const rows = await this.prisma.notificationSetting.findMany({ where: { userId } });
+        return rows.map((r) => ({ event: r.event, emailEnabled: r.emailEnabled, appEnabled: r.appEnabled }));
+    }
+    async updateSetting(userId, event, emailEnabled, appEnabled) {
+        await this.prisma.notificationSetting.upsert({
+            where: { userId_event: { userId, event } },
+            update: { emailEnabled, appEnabled },
+            create: { userId, event, emailEnabled, appEnabled },
+        });
+        return { message: 'ok' };
+    }
+    async updateSettingsBulk(userId, events, emailEnabled, appEnabled) {
+        await this.prisma.$transaction(events.map((event) => this.prisma.notificationSetting.upsert({
+            where: { userId_event: { userId, event } },
+            update: { emailEnabled, appEnabled },
+            create: { userId, event, emailEnabled, appEnabled },
+        })));
+        return { message: 'ok' };
+    }
 };
 exports.NotificationsService = NotificationsService;
 exports.NotificationsService = NotificationsService = __decorate([

@@ -43,7 +43,7 @@ async function confirm() {
     success.value = true
     await auth.clearSessionAndCookies()
   } catch (e) {
-    error.value = e?.data?.message?.[0] || e?.data?.message || t('auth.genericError')
+    error.value = extractErrorMessage(e, t('auth.genericError'))
   } finally {
     loading.value = false
   }

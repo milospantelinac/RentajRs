@@ -7,7 +7,8 @@
             <h1 class="text-page-title mb-4">{{ t('nav.register') }}</h1>
 
             <div v-if="success" class="text-body">
-              {{ t('auth.registerSuccess') }}
+              <p>{{ t('auth.registerSuccess') }}</p>
+              <NuxtLink :to="loginLink">{{ t('auth.haveAccount') }}</NuxtLink>
             </div>
 
             <form v-else @submit.prevent="submit">
@@ -54,7 +55,7 @@
               </button>
 
               <div class="auth-links">
-                <NuxtLink to="/prijava">{{ t('auth.haveAccount') }}</NuxtLink>
+                <NuxtLink :to="loginLink">{{ t('auth.haveAccount') }}</NuxtLink>
               </div>
             </form>
           </div>
@@ -67,6 +68,11 @@
 <script setup>
 const { t } = useI18n()
 const auth = useAuthStore()
+const route = useRoute()
+
+const loginLink = computed(() =>
+  route.query.redirect ? { path: '/prijava', query: { redirect: route.query.redirect } } : '/prijava',
+)
 
 const form = reactive({
   firstName: '',
@@ -94,7 +100,7 @@ async function submit() {
     })
     success.value = true
   } catch (e) {
-    error.value = e?.data?.message?.[0] || e?.data?.message || t('auth.genericError')
+    error.value = extractErrorMessage(e, t('auth.genericError'))
   } finally {
     loading.value = false
   }

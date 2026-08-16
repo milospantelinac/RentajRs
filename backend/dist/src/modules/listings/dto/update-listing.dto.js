@@ -12,6 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.UpdateListingDto = void 0;
 const swagger_1 = require("@nestjs/swagger");
 const class_transformer_1 = require("class-transformer");
+const undefined_if_blank_transform_1 = require("../../../common/validators/undefined-if-blank.transform");
 const class_validator_1 = require("class-validator");
 const client_1 = require("@prisma/client");
 class MandatoryFeeDto {
@@ -168,13 +169,15 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ example: '14:00' }),
     (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.Matches)(/^([01]\d|2[0-3]):[0-5]\d$/),
+    undefined_if_blank_transform_1.undefinedIfBlank,
+    (0, class_validator_1.Matches)(/^([01]\d|2[0-3]):[0-5]\d$/, { message: 'validation.TIME_INVALID' }),
     __metadata("design:type", String)
 ], UpdateListingDto.prototype, "pickupTime", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ example: '11:00' }),
     (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.Matches)(/^([01]\d|2[0-3]):[0-5]\d$/),
+    undefined_if_blank_transform_1.undefinedIfBlank,
+    (0, class_validator_1.Matches)(/^([01]\d|2[0-3]):[0-5]\d$/, { message: 'validation.TIME_INVALID' }),
     __metadata("design:type", String)
 ], UpdateListingDto.prototype, "returnTime", void 0);
 __decorate([
@@ -185,10 +188,9 @@ __decorate([
     __metadata("design:type", Number)
 ], UpdateListingDto.prototype, "earliestBookingHours", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)(),
+    (0, swagger_1.ApiPropertyOptional)({ enum: ['FLEXIBLE', 'MODERATE', 'STRICT'] }),
     (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsString)(),
-    (0, class_validator_1.MaxLength)(3000),
+    (0, class_validator_1.IsIn)(['FLEXIBLE', 'MODERATE', 'STRICT']),
     __metadata("design:type", String)
 ], UpdateListingDto.prototype, "cancellationTerms", void 0);
 __decorate([

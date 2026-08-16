@@ -60,21 +60,36 @@ let BookingsService = class BookingsService {
         this.events = events;
     }
     async createRequest(guestId, listingId, dto) {
-        const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: listingId } });
+        const listing = await this.prisma.listing.findUniqueOrThrow({
+            where: { id: listingId },
+            include: { subscription: { include: { package: true } } },
+        });
+        const guest = await this.prisma.user.findUniqueOrThrow({ where: { id: guestId } });
+        if (!guest.emailVerified)
+            throw new common_1.ForbiddenException(this.i18n.t('errors.EMAIL_NOT_VERIFIED'));
+        if (guest.restrictedUntil && guest.restrictedUntil.getTime() > Date.now()) {
+            throw new common_1.ForbiddenException(this.i18n.t('errors.ACCOUNT_RESTRICTED'));
+        }
         if (listing.status !== 'ACTIVE')
             throw new common_1.BadRequestException(this.i18n.t('errors.LISTING_NOT_BOOKABLE'));
         if (listing.bookingModel === 'NO_BOOKING')
             throw new common_1.BadRequestException(this.i18n.t('errors.LISTING_NOT_BOOKABLE'));
         if (listing.userId === guestId)
             throw new common_1.BadRequestException(this.i18n.t('errors.CANNOT_BOOK_OWN_LISTING'));
+        if (!listing.subscription?.package.hasBookings) {
+            throw new common_1.ForbiddenException(this.i18n.t('errors.PACKAGE_FEATURE_NOT_INCLUDED'));
+        }
         const { startsAt, endsAt, slotPrice } = await this.resolveRequestedTerm(listing, dto);
-        this.assertTermRules(listing, startsAt, endsAt);
+        this.assertTermRules(listing, startsAt, endsAt, dto.guestCount);
         const pricePerUnit = slotPrice ?? listing.price;
         const unitCount = computeUnitCount(listing.priceUnit, startsAt, endsAt);
         const extraServicesTotal = await this.resolveExtraServicesTotal(listingId, dto.extraServices);
         const mandatoryFeesTotal = sumMandatoryFees(listing.mandatoryFees);
         const guestFee = listing.pricePerGuest && dto.guestCount ? listing.pricePerGuest * BigInt(dto.guestCount) : 0n;
-        const totalAmount = pricePerUnit * BigInt(unitCount) + guestFee + mandatoryFeesTotal + extraServicesTotal;
+        const unitPriceTotal = !slotPrice && (listing.priceUnit === 'NIGHT' || listing.priceUnit === 'DAY')
+            ? (await this.availability.getNightlyPrices(listingId, startsAt, endsAt, listing.price, listing.weekendPrice)).reduce((sum, p) => sum + p, 0n)
+            : pricePerUnit * BigInt(unitCount);
+        const totalAmount = unitPriceTotal + guestFee + mandatoryFeesTotal + extraServicesTotal;
         const amountDue = listing.advancePercent
             ? (totalAmount * BigInt(listing.advancePercent)) / 100n
             : totalAmount;
@@ -133,7 +148,7 @@ let BookingsService = class BookingsService {
         }
         return { startsAt: new Date(dto.startsAt), endsAt: new Date(dto.endsAt) };
     }
-    assertTermRules(listing, startsAt, endsAt) {
+    assertTermRules(listing, startsAt, endsAt, guestCount) {
         if (endsAt <= startsAt)
             throw new common_1.BadRequestException(this.i18n.t('bookings.END_BEFORE_START'));
         if (listing.earliestBookingHours) {
@@ -148,6 +163,13 @@ let BookingsService = class BookingsService {
         }
         if (listing.maxDuration && unitCount > listing.maxDuration) {
             throw new common_1.BadRequestException(this.i18n.t('bookings.MAX_DURATION', { args: { max: listing.maxDuration } }));
+        }
+        if ((listing.minGuests || listing.maxGuests) && guestCount !== undefined) {
+            const min = listing.minGuests ?? 1;
+            const max = listing.maxGuests ?? Number.MAX_SAFE_INTEGER;
+            if (guestCount < min || guestCount > max) {
+                throw new common_1.BadRequestException(this.i18n.t('errors.GUEST_COUNT_OUT_OF_RANGE', { args: { min, max: listing.maxGuests ?? min } }));
+            }
         }
     }
     async resolveExtraServicesTotal(listingId, selections) {
@@ -171,7 +193,10 @@ let BookingsService = class BookingsService {
         const booking = await this.assertOwnerAccess(ownerId, bookingId, ['REQUESTED']);
         const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: booking.listingId } });
         if (listing.paymentMethod === 'CASH') {
-            const updated = await this.applyStatus(booking, 'CONFIRMED', ownerId, { paymentConfirmedAt: new Date() });
+            const updated = await this.applyStatus(booking, 'CONFIRMED', ownerId, {
+                paymentConfirmedAt: new Date(),
+                phoneUnlocked: true,
+            });
             this.events.emit('booking.confirmed', { bookingId: booking.id, viaCash: true });
             return updated;
         }
@@ -277,17 +302,20 @@ let BookingsService = class BookingsService {
     async getOne(userId, bookingId) {
         const booking = await this.prisma.booking.findUnique({
             where: { id: bookingId },
-            include: { listing: { select: { title: true, slug: true } } },
+            include: { listing: { select: { title: true, slug: true } }, guest: { select: { phone: true } } },
         });
         if (!booking)
             throw new common_1.NotFoundException();
         if (booking.guestId !== userId && booking.ownerId !== userId)
             throw new common_1.ForbiddenException();
-        return this.serialize(booking);
+        return this.serialize(booking, userId);
     }
-    async listMine(userId, role) {
+    async listMine(userId, role, status) {
         const bookings = await this.prisma.booking.findMany({
-            where: role === 'guest' ? { guestId: userId } : { ownerId: userId },
+            where: {
+                ...(role === 'guest' ? { guestId: userId } : { ownerId: userId }),
+                ...(status ? { status } : {}),
+            },
             orderBy: { createdAt: 'desc' },
             include: { listing: { select: { title: true, slug: true } } },
         });
@@ -400,12 +428,15 @@ let BookingsService = class BookingsService {
             data: { bookingId, oldStatus: oldStatus ?? undefined, newStatus, changedByUserId, automatic },
         });
     }
-    serialize(booking) {
+    serialize(booking, requestingUserId) {
+        const { guest, ...rest } = booking;
+        const showGuestPhone = !!guest && requestingUserId === booking.ownerId && booking.phoneUnlocked;
         return {
-            ...booking,
+            ...rest,
             pricePerUnit: (0, money_1.paraToRsd)(booking.pricePerUnit),
             totalAmount: (0, money_1.paraToRsd)(booking.totalAmount),
             amountDue: (0, money_1.paraToRsd)(booking.amountDue),
+            ...(showGuestPhone ? { guestPhone: guest.phone } : {}),
         };
     }
 };

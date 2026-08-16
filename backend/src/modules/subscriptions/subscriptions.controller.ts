@@ -7,6 +7,7 @@ import {
   CancelSubscriptionDto,
   AdjustPriceDto,
   InitCheckoutDto,
+  AssignFreeFeaturedDto,
 } from './dto/subscriptions.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
@@ -75,6 +76,12 @@ export class SubscriptionsController {
     return this.subscriptionsService.getRotatedFeatured(categoryId, limit ? parseInt(limit, 10) : undefined);
   }
 
+  @Public()
+  @Get('featured/prices')
+  getFeaturedPrices() {
+    return this.subscriptionsService.getFeaturedPrices();
+  }
+
   // -- Admin -------------------------------------------------------------
 
   @RequirePermissions('manage_subscriptions')
@@ -93,5 +100,26 @@ export class SubscriptionsController {
   @Post('admin/packages/:id/price')
   adminUpdatePrice(@Param('id') id: string, @Body() dto: AdjustPriceDto) {
     return this.subscriptionsService.adminUpdatePackagePrice(id, dto);
+  }
+
+  // Featured-listing prices live in Setting like everything else in
+  // Ch.23's "admin changes data" list — edited through the generic
+  // /admin/podesavanja panel (PATCH /admin/settings/:key), not a
+  // dedicated endpoint here (see key "featured_listing_prices").
+
+  @RequirePermissions('manage_featured')
+  @Post('admin/featured/:listingId/assign-free')
+  adminAssignFreeFeatured(
+    @CurrentUser('id') adminId: string,
+    @Param('listingId') listingId: string,
+    @Body() dto: AssignFreeFeaturedDto,
+  ) {
+    return this.subscriptionsService.adminAssignFreeFeatured(adminId, listingId, dto.durationDays);
+  }
+
+  @RequirePermissions('manage_featured')
+  @Get('admin/featured/waitlist')
+  adminGetFeaturedWaitlist() {
+    return this.subscriptionsService.adminGetFeaturedWaitlist();
   }
 }
