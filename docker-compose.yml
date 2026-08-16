@@ -92,7 +92,12 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: sh -c "npx prisma migrate deploy && npx prisma db seed && npm run start:dev"
+    # prisma generate runs here (not just at image build time) because
+    # backend_node_modules is a named volume that shadows whatever the
+    # Dockerfile generated into the image — once populated, it survives
+    # image rebuilds, so a schema change (new migration) would otherwise
+    # keep running against a stale generated client until this re-syncs it.
+    command: sh -c "npx prisma generate && npx prisma migrate deploy && npx prisma db seed && npm run start:dev"
     networks:
       - rentaj_network
 
