@@ -53,18 +53,23 @@ const crypto = __importStar(require("crypto"));
 const speakeasy = __importStar(require("speakeasy"));
 const QRCode = __importStar(require("qrcode"));
 const prisma_service_1 = require("../../prisma/prisma.service");
+const cache_service_1 = require("../../common/cache/cache.service");
+const users_service_1 = require("../users/users.service");
 const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000;
 const EMAIL_VERIFICATION_TTL = '1d';
 const TWO_FACTOR_PENDING_TTL = '5m';
 const LOCKOUT_THRESHOLD = 5;
 const LOCKOUT_MINUTES = 15;
+const GOOGLE_EXCHANGE_TTL_SECONDS = 30;
 let AuthService = class AuthService {
-    constructor(prisma, jwtService, config, i18n, events) {
+    constructor(prisma, jwtService, config, i18n, events, cache, users) {
         this.prisma = prisma;
         this.jwtService = jwtService;
         this.config = config;
         this.i18n = i18n;
         this.events = events;
+        this.cache = cache;
+        this.users = users;
     }
     async register(dto, meta) {
         if (dto.website) {
@@ -104,7 +109,7 @@ let AuthService = class AuthService {
     }
     async login(dto, meta) {
         const user = await this.validateCredentials(dto.email, dto.password);
-        const isAdmin = await this.isAdmin(user.id);
+        const isAdmin = await this.users.isAdmin(user.id);
         if (isAdmin && !user.twoFactorEnabled) {
             const tempToken = this.signPurposeToken(user.id, '2fa-setup-required', TWO_FACTOR_PENDING_TTL);
             return { twoFactorSetupRequired: true, tempToken };
@@ -118,7 +123,11 @@ let AuthService = class AuthService {
     async verifyTwoFactorLogin(dto, meta) {
         const payload = this.verifyPurposeToken(dto.tempToken, '2fa-pending');
         const user = await this.prisma.user.findUniqueOrThrow({ where: { id: payload.sub } });
-        this.assertTotpValid(user.twoFactorSecret, dto.code);
+        const totpValid = !!user.twoFactorSecret &&
+            speakeasy.totp.verify({ secret: user.twoFactorSecret, encoding: 'base32', token: dto.code, window: 1 });
+        if (!totpValid && !(await this.consumeBackupCode(user.id, user.twoFactorBackupCodes, dto.code))) {
+            throw new common_1.UnauthorizedException(this.i18n.t('errors.TWO_FACTOR_INVALID'));
+        }
         return this.issueSession(user.id, false, meta);
     }
     async validateCredentials(email, password) {
@@ -150,10 +159,6 @@ let AuthService = class AuthService {
             });
         }
         return user;
-    }
-    async isAdmin(userId) {
-        const count = await this.prisma.userPermission.count({ where: { userId } });
-        return count > 0;
     }
     async loginWithGoogle(profile, meta) {
         if (!profile.email) {
@@ -193,6 +198,22 @@ let AuthService = class AuthService {
             throw new common_1.ForbiddenException(this.i18n.t('errors.ACCOUNT_BLOCKED', { args: { reason: user.blockedReason ?? '' } }));
         }
         return this.issueSession(user.id, true, meta);
+    }
+    async createGoogleExchangeCode(accessToken, refreshToken) {
+        const code = crypto.randomBytes(24).toString('hex');
+        await this.cache.set(this.googleExchangeCacheKey(code), { accessToken, refreshToken }, GOOGLE_EXCHANGE_TTL_SECONDS);
+        return code;
+    }
+    async exchangeGoogleCode(code) {
+        const key = this.googleExchangeCacheKey(code);
+        const payload = await this.cache.get(key);
+        if (!payload)
+            throw new common_1.UnauthorizedException(this.i18n.t('errors.INVALID_OR_EXPIRED_TOKEN'));
+        await this.cache.del(key);
+        return payload;
+    }
+    googleExchangeCacheKey(code) {
+        return `auth:google-exchange:${code}`;
     }
     async issueSession(userId, rememberMe, meta) {
         const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
@@ -281,13 +302,22 @@ let AuthService = class AuthService {
         });
         if (!reset)
             throw new common_1.UnauthorizedException(this.i18n.t('errors.INVALID_OR_EXPIRED_TOKEN'));
+        const user = await this.prisma.user.findUniqueOrThrow({ where: { id: reset.userId } });
         const passwordHash = await argon2.hash(dto.password);
         await this.prisma.$transaction([
-            this.prisma.user.update({ where: { id: reset.userId }, data: { passwordHash } }),
+            this.prisma.user.update({
+                where: { id: reset.userId },
+                data: user.twoFactorEnabled
+                    ? { passwordHash, twoFactorEnabled: false, twoFactorSecret: null, twoFactorBackupCodes: [] }
+                    : { passwordHash },
+            }),
             this.prisma.passwordReset.update({ where: { id: reset.id }, data: { usedAt: new Date() } }),
         ]);
         await this.logoutAllSessions(reset.userId);
         this.events.emit('auth.password_changed', { userId: reset.userId });
+        if (user.twoFactorEnabled) {
+            this.events.emit('auth.two_factor_reset_by_password_reset', { userId: reset.userId });
+        }
         return { message: this.i18n.t('auth.PASSWORD_RESET_SUCCESS') };
     }
     async changePassword(userId, dto, currentSessionRefreshToken) {
@@ -310,10 +340,16 @@ let AuthService = class AuthService {
         this.events.emit('auth.password_changed', { userId });
         return { message: this.i18n.t('auth.PASSWORD_CHANGED') };
     }
-    async generateTwoFactorSecret(userId) {
+    async generateTwoFactorSecret(userId, password) {
         const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+        if (!user.passwordHash || !(await argon2.verify(user.passwordHash, password))) {
+            throw new common_1.UnauthorizedException(this.i18n.t('errors.INVALID_CREDENTIALS'));
+        }
+        return this.createTwoFactorSecret(user.id, user.email);
+    }
+    async createTwoFactorSecret(userId, email) {
         const secret = speakeasy.generateSecret({
-            name: `${this.config.get('twoFactor.appName')} (${user.email})`,
+            name: `${this.config.get('twoFactor.appName')} (${email})`,
         });
         await this.prisma.user.update({
             where: { id: userId },
@@ -325,19 +361,29 @@ let AuthService = class AuthService {
     async confirmTwoFactorSetup(userId, code) {
         const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
         this.assertTotpValid(user.twoFactorSecret, code);
-        await this.prisma.user.update({ where: { id: userId }, data: { twoFactorEnabled: true } });
-        return { message: this.i18n.t('auth.TWO_FACTOR_ENABLED') };
+        const { plaintext, hashes } = await this.generateBackupCodes();
+        await this.prisma.user.update({
+            where: { id: userId },
+            data: { twoFactorEnabled: true, twoFactorBackupCodes: hashes },
+        });
+        return { message: this.i18n.t('auth.TWO_FACTOR_ENABLED'), backupCodes: plaintext };
     }
     async generateTwoFactorSecretWithTempToken(tempToken) {
         const payload = this.verifyPurposeToken(tempToken, '2fa-setup-required');
-        return this.generateTwoFactorSecret(payload.sub);
+        const user = await this.prisma.user.findUniqueOrThrow({ where: { id: payload.sub } });
+        return this.createTwoFactorSecret(user.id, user.email);
     }
     async confirmTwoFactorSetupWithTempToken(tempToken, code, meta) {
         const payload = this.verifyPurposeToken(tempToken, '2fa-setup-required');
         const user = await this.prisma.user.findUniqueOrThrow({ where: { id: payload.sub } });
         this.assertTotpValid(user.twoFactorSecret, code);
-        await this.prisma.user.update({ where: { id: user.id }, data: { twoFactorEnabled: true } });
-        return this.issueSession(user.id, false, meta);
+        const { plaintext, hashes } = await this.generateBackupCodes();
+        await this.prisma.user.update({
+            where: { id: user.id },
+            data: { twoFactorEnabled: true, twoFactorBackupCodes: hashes },
+        });
+        const session = await this.issueSession(user.id, false, meta);
+        return { ...session, backupCodes: plaintext };
     }
     async disableTwoFactor(userId, password) {
         const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
@@ -346,9 +392,27 @@ let AuthService = class AuthService {
         }
         await this.prisma.user.update({
             where: { id: userId },
-            data: { twoFactorEnabled: false, twoFactorSecret: null },
+            data: { twoFactorEnabled: false, twoFactorSecret: null, twoFactorBackupCodes: [] },
         });
         return { message: this.i18n.t('auth.TWO_FACTOR_DISABLED') };
+    }
+    async generateBackupCodes() {
+        const plaintext = Array.from({ length: 8 }, () => crypto.randomBytes(5).toString('hex').toUpperCase());
+        const hashes = await Promise.all(plaintext.map((code) => argon2.hash(code)));
+        return { plaintext, hashes };
+    }
+    async consumeBackupCode(userId, hashes, code) {
+        const normalized = code.trim().toUpperCase();
+        for (const hash of hashes) {
+            if (await argon2.verify(hash, normalized)) {
+                await this.prisma.user.update({
+                    where: { id: userId },
+                    data: { twoFactorBackupCodes: hashes.filter((h) => h !== hash) },
+                });
+                return true;
+            }
+        }
+        return false;
     }
     assertTotpValid(secret, code) {
         if (!secret)
@@ -403,6 +467,8 @@ exports.AuthService = AuthService = __decorate([
         jwt_1.JwtService,
         config_1.ConfigService,
         nestjs_i18n_1.I18nService,
-        event_emitter_1.EventEmitter2])
+        event_emitter_1.EventEmitter2,
+        cache_service_1.CacheService,
+        users_service_1.UsersService])
 ], AuthService);
 //# sourceMappingURL=auth.service.js.map

@@ -69,6 +69,19 @@ export class AccountEmailListener {
     });
   }
 
+  @OnEvent('auth.two_factor_reset_by_password_reset')
+  async onTwoFactorResetByPasswordReset({ userId }: { userId: string }) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) return;
+    await this.email.send({
+      key: 'two_factor_reset_by_password_reset',
+      to: user.email,
+      language: user.language,
+      userId,
+      buttonUrl: `${this.frontendUrl}/kontrolna-tabla/podesavanja`,
+    });
+  }
+
   @OnEvent('auth.new_device_login')
   async onNewDeviceLogin({ userId, device }: { userId: string; device?: string; ip?: string }) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });

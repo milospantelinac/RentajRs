@@ -38,4 +38,35 @@ export class NotificationsService {
       data: { userId: opts.userId, event: opts.event, title: opts.title, content: opts.content, linkUrl: opts.linkUrl },
     });
   }
+
+  // -- Preferences (R87) -------------------------------------------------
+
+  /** Every row that exists for this user, keyed by event — missing events default to both channels on. */
+  async getMySettings(userId: string) {
+    const rows = await this.prisma.notificationSetting.findMany({ where: { userId } });
+    return rows.map((r) => ({ event: r.event, emailEnabled: r.emailEnabled, appEnabled: r.appEnabled }));
+  }
+
+  async updateSetting(userId: string, event: string, emailEnabled: boolean, appEnabled: boolean) {
+    await this.prisma.notificationSetting.upsert({
+      where: { userId_event: { userId, event } },
+      update: { emailEnabled, appEnabled },
+      create: { userId, event, emailEnabled, appEnabled },
+    });
+    return { message: 'ok' };
+  }
+
+  /** The UI groups events into categories (see frontend) and toggles every event in one together. */
+  async updateSettingsBulk(userId: string, events: string[], emailEnabled: boolean, appEnabled: boolean) {
+    await this.prisma.$transaction(
+      events.map((event) =>
+        this.prisma.notificationSetting.upsert({
+          where: { userId_event: { userId, event } },
+          update: { emailEnabled, appEnabled },
+          create: { userId, event, emailEnabled, appEnabled },
+        }),
+      ),
+    );
+    return { message: 'ok' };
+  }
 }

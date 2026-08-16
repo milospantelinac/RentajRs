@@ -43,14 +43,20 @@
       </div>
     </div>
 
-    <button class="btn btn-tertiary btn-block" @click="$emit('search')">{{ t('common.search') }}</button>
+    <button v-if="showSearchButton" class="btn btn-tertiary btn-block" @click="$emit('search')">{{ t('common.search') }}</button>
   </div>
 </template>
 
 <script setup>
+// RNT-053 — this renders in both the always-visible desktop sidebar and the
+// mobile filter drawer; the drawer needs its own "apply" button since it's a
+// modal the top search bar isn't reachable from, but the sidebar sits right
+// next to that same top bar, so a second button there was a literal
+// duplicate action on the same screen.
 defineProps({
   query: { type: Object, required: true },
   filterableAttributes: { type: Array, default: () => [] },
+  showSearchButton: { type: Boolean, default: true },
 })
 defineEmits(['set-attr', 'search'])
 const { t } = useI18n()

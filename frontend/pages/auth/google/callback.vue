@@ -5,22 +5,29 @@
 </template>
 
 <script setup>
-// Backend's /auth/google/callback redirects here with tokens in the query
-// string (see AuthController.googleCallback) — this page's only job is to
-// hand them to the auth store and continue on.
+// Backend's /auth/google/callback redirects here with a one-time code in the
+// query string (see AuthController.googleCallback) — real tokens never sit
+// in a URL. This page's only job is to exchange that code for the actual
+// session via POST, then hand it to the auth store.
 const { t } = useI18n()
 const route = useRoute()
+const api = useApi()
 const auth = useAuthStore()
 
 onMounted(async () => {
-  const { accessToken, refreshToken } = route.query
-  if (accessToken && refreshToken) {
-    await auth.setTokens(accessToken, refreshToken)
-    await auth.fetchMe()
-    await navigateTo('/kontrolna-tabla')
-  } else {
-    await navigateTo('/prijava')
+  const { code } = route.query
+  if (code) {
+    try {
+      const { accessToken, refreshToken } = await api.post('/auth/google/exchange', { code })
+      await auth.setTokens(accessToken, refreshToken)
+      await auth.fetchMe()
+      await navigateTo('/kontrolna-tabla')
+      return
+    } catch {
+      // falls through to /prijava below
+    }
   }
+  await navigateTo('/prijava')
 })
 
 definePageMeta({ layout: false })

@@ -31,6 +31,9 @@ let SearchController = class SearchController {
     getSitemapUrls() {
         return this.searchService.getSitemapUrls();
     }
+    getIndexedCitiesForCategory(categorySlug) {
+        return this.searchService.getIndexedCitiesForCategory(categorySlug);
+    }
     relaxedSearch(dto) {
         return this.searchService.relaxedSearch(dto);
     }
@@ -62,6 +65,14 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", void 0)
 ], SearchController.prototype, "getSitemapUrls", null);
+__decorate([
+    (0, public_decorator_1.Public)(),
+    (0, common_1.Get)('indexed-cities'),
+    __param(0, (0, common_1.Query)('categorySlug')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], SearchController.prototype, "getIndexedCitiesForCategory", null);
 __decorate([
     (0, public_decorator_1.Public)(),
     (0, common_1.Post)('relaxed'),

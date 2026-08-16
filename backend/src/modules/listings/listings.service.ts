@@ -24,10 +24,10 @@ import { UpsertFaqsDto } from './dto/upsert-faqs.dto';
 import { UpsertExtraServicesDto } from './dto/upsert-extra-services.dto';
 import { RejectListingDto, RejectVersionDto } from './dto/reject-listing.dto';
 
-// Fields that, once a listing is ACTIVE, must go through the moderation
-// queue instead of writing straight to the live row (R31). Location and
-// photos are handled by their own dedicated methods below.
-const MODERATED_FIELDS = new Set(['title']);
+// Once a listing is ACTIVE, title/location/photos must go through the
+// moderation queue instead of writing straight to the live row (R31) — each
+// is handled by its own dedicated method below (updateListing's title branch,
+// updateLocation, addPhoto/removePhoto/reorderPhotos).
 
 const MAX_PHOTOS = 20;
 const MODERATION_SLA_HOURS = 24;
@@ -48,6 +48,11 @@ export class ListingsService {
   // -- Owner-facing --------------------------------------------------------
 
   async createDraft(userId: string, dto: CreateListingDto) {
+    const owner = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    if (owner.restrictedUntil && owner.restrictedUntil.getTime() > Date.now()) {
+      throw new ForbiddenException(this.i18n.t('errors.ACCOUNT_RESTRICTED'));
+    }
+
     const category = await this.prisma.category.findUnique({ where: { id: dto.categoryId } });
     if (!category) throw new NotFoundException(this.i18n.t('errors.LISTING_NOT_FOUND'));
 
@@ -73,7 +78,13 @@ export class ListingsService {
     const listings = await this.prisma.listing.findMany({
       where: { userId, status: { not: ListingStatus.DELETED } },
       orderBy: { createdAt: 'desc' },
-      include: { photos: { where: { isCover: true }, take: 1 }, category: true },
+      include: {
+        photos: { where: { isCover: true }, take: 1 },
+        category: true,
+        // RNT-060 — "Moji oglasi" is where an owner sees what their
+        // subscription paid for, per listing, not just the listing itself.
+        subscription: { select: { package: { select: { key: true } }, status: true, expiresAt: true } },
+      },
     });
     return listings.map((l) => this.serialize(l));
   }
@@ -127,7 +138,12 @@ export class ListingsService {
   async updateLocation(userId: string, listingId: string, dto: UpdateLocationDto) {
     const listing = await this.assertOwnership(userId, listingId);
     const city = await this.prisma.city.findUniqueOrThrow({ where: { id: dto.cityId } });
-    const coords = await this.geocoding.geocode(dto.address, city.name);
+    // RNT-026 — a dragged pin from the wizard's map wins over auto-geocoding;
+    // otherwise fall back to R40's original automatic behavior.
+    const coords =
+      dto.latitude !== undefined && dto.longitude !== undefined
+        ? { latitude: dto.latitude, longitude: dto.longitude }
+        : await this.geocoding.geocode(dto.address, city.name);
 
     const locationData = {
       regionId: dto.regionId,
@@ -136,6 +152,7 @@ export class ListingsService {
       address: dto.address,
       latitude: coords?.latitude,
       longitude: coords?.longitude,
+      ...(dto.googlePlaceId !== undefined ? { googlePlaceId: dto.googlePlaceId } : {}),
     };
 
     if (listing.status === ListingStatus.ACTIVE) {
@@ -151,31 +168,58 @@ export class ListingsService {
   async upsertAttributes(userId: string, listingId: string, dto: UpsertAttributesDto) {
     const listing = await this.assertOwnership(userId, listingId);
     const allowedAttributes = await this.taxonomy.resolveAttributesForCategory(listing.categoryId);
-    const allowedIds = new Set(allowedAttributes.map((a) => a.id));
+    const attributesById = new Map(allowedAttributes.map((a) => [a.id, a]));
 
-    await this.prisma.$transaction(
-      dto.values
-        .filter((v) => allowedIds.has(v.attributeId))
-        .map((v) =>
-          this.prisma.listingAttribute.upsert({
-            where: { listingId_attributeId: { listingId: listing.id, attributeId: v.attributeId } },
-            update: {
-              valueNumber: v.valueNumber,
-              valueText: v.valueText,
-              valueBoolean: v.valueBoolean,
-              valueOptionIds: v.valueOptionIds ?? [],
-            },
-            create: {
-              listingId: listing.id,
-              attributeId: v.attributeId,
-              valueNumber: v.valueNumber,
-              valueText: v.valueText,
-              valueBoolean: v.valueBoolean,
-              valueOptionIds: v.valueOptionIds ?? [],
-            },
-          }),
-        ),
-    );
+    const submitted = dto.values.filter((v) => attributesById.has(v.attributeId));
+    // RNT-023 — the wizard sends one entry per attribute regardless of
+    // whether the owner actually filled it in, so a naive upsert would
+    // create a "value" row for an untouched required field and the review
+    // checklist (which only checks "does a row exist") would call it done.
+    // A BOOLEAN has no empty state (false is a real answer), so it always
+    // counts as filled; every other type needs its value present.
+    const toWrite = submitted.filter((v) => {
+      const type = attributesById.get(v.attributeId)!.type;
+      if (type === 'NUMBER') return v.valueNumber !== null && v.valueNumber !== undefined;
+      if (type === 'TEXT') return !!v.valueText;
+      if (type === 'BOOLEAN') return true;
+      return (v.valueOptionIds ?? []).length > 0; // LIST / MULTISELECT
+    });
+    const toClear = submitted.filter((v) => !toWrite.includes(v)).map((v) => v.attributeId);
+
+    // Only the field matching the attribute's own type gets written — the
+    // DTO carries all four value slots per entry regardless of type, and
+    // writing them verbatim left every attribute's unused slots non-null
+    // (e.g. a NUMBER attribute stored with valueBoolean: false), which made
+    // any code reading "which field is set" to infer the type — like the
+    // guest-facing display — misread a number as an unanswered boolean "No".
+    const typedValue = (v: (typeof toWrite)[number]) => {
+      const type = attributesById.get(v.attributeId)!.type;
+      return {
+        valueNumber: type === 'NUMBER' ? v.valueNumber : null,
+        valueText: type === 'TEXT' ? v.valueText : null,
+        valueBoolean: type === 'BOOLEAN' ? v.valueBoolean : null,
+        valueOptionIds: type === 'LIST' || type === 'MULTISELECT' ? (v.valueOptionIds ?? []) : [],
+      };
+    };
+
+    await this.prisma.$transaction([
+      ...toWrite.map((v) =>
+        this.prisma.listingAttribute.upsert({
+          where: { listingId_attributeId: { listingId: listing.id, attributeId: v.attributeId } },
+          update: typedValue(v),
+          create: {
+            listingId: listing.id,
+            attributeId: v.attributeId,
+            ...typedValue(v),
+          },
+        }),
+      ),
+      // A field the owner cleared back out shouldn't leave a stale row
+      // behind — that would let it keep counting as "filled" too.
+      this.prisma.listingAttribute.deleteMany({
+        where: { listingId: listing.id, attributeId: { in: toClear } },
+      }),
+    ]);
     return { message: this.i18n.t('common.SUCCESS') };
   }
 
@@ -251,8 +295,23 @@ export class ListingsService {
     return { message: this.i18n.t('common.SUCCESS') };
   }
 
+  /** R31/R32: reordering (and the cover-photo change it implies) is a moderated edit on an ACTIVE listing. */
   async reorderPhotos(userId: string, listingId: string, photoIds: string[]) {
     const listing = await this.assertOwnership(userId, listingId);
+    const livePhotos = await this.prisma.listingPhoto.findMany({
+      where: { listingId: listing.id, versionId: null, pendingRemoval: false },
+      select: { id: true },
+    });
+    const liveIds = new Set(livePhotos.map((p) => p.id));
+    if (photoIds.length !== liveIds.size || photoIds.some((id) => !liveIds.has(id))) {
+      throw new BadRequestException(this.i18n.t('errors.PHOTO_NOT_FOUND'));
+    }
+
+    if (listing.status === ListingStatus.ACTIVE) {
+      await this.queueModeratedChange(listing.id, { photoOrder: photoIds });
+      return { message: this.i18n.t('common.SUCCESS') };
+    }
+
     await this.prisma.$transaction(
       photoIds.map((id, index) =>
         this.prisma.listingPhoto.update({
@@ -261,7 +320,6 @@ export class ListingsService {
         }),
       ),
     );
-    void listing;
     return { message: this.i18n.t('common.SUCCESS') };
   }
 
@@ -303,19 +361,34 @@ export class ListingsService {
     if (listing.status !== ListingStatus.DRAFT && listing.status !== ListingStatus.REJECTED) {
       throw new BadRequestException('Listing is not awaiting submission');
     }
+    // R126 — a listing can't go public (leave DRAFT) until the owner has
+    // confirmed their email. This is the single choke point every publish
+    // path (checkout, admin activation) funnels through.
+    const owner = await this.prisma.user.findUniqueOrThrow({ where: { id: listing.userId } });
+    if (!owner.emailVerified) {
+      throw new ForbiddenException(this.i18n.t('errors.EMAIL_NOT_VERIFIED'));
+    }
     const updated = await this.prisma.listing.update({
       where: { id: listingId },
       data: { status: ListingStatus.PENDING_APPROVAL, subscriptionId },
     });
     const checkResults = await this.runAutomaticChecks(listingId);
+    const hasWarnings = Object.values(checkResults).some((v) => v === 'WARNING');
     await this.prisma.listingModeration.create({
       data: {
         listingId,
         checkResults: checkResults as unknown as Prisma.InputJsonValue,
-        hasWarnings: Object.values(checkResults).some((v) => v === 'WARNING'),
+        hasWarnings,
       },
     });
     this.events.emit('listing.submitted_for_approval', { listingId });
+
+    // R119 — the switch is off by default (auto_approve_listings=false in the
+    // seed), but once an admin flips it on, a submission with zero automated
+    // warnings skips the queue entirely instead of the toggle sitting inert.
+    if (!hasWarnings && (await this.getAutoApproveEnabled())) {
+      return this.adminApprove(null, listingId, true);
+    }
     return this.serialize(updated);
   }
 
@@ -341,49 +414,73 @@ export class ListingsService {
   async getPublicBySlug(slug: string) {
     const listing = await this.prisma.listing.findUnique({
       where: { slug },
-      include: {
-        photos: { where: { pendingRemoval: false, versionId: null }, orderBy: { displayOrder: 'asc' } },
-        faqs: { orderBy: { displayOrder: 'asc' } },
-        extraServices: true,
-        category: true,
-        region: true,
-        city: true,
-        cityArea: true,
-        user: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            avatarUrl: true,
-            profileSlug: true,
-            avgResponseTimeMinutes: true,
-            verified: true,
-            createdAt: true,
-          },
-        },
-      },
+      include: this.publicDisplayInclude(),
     });
     if (!listing || listing.status !== ListingStatus.ACTIVE) {
       throw new NotFoundException(this.i18n.t('errors.LISTING_NOT_FOUND'));
     }
 
+    await this.recordView(listing.id);
+    return this.buildDisplayPayload(listing);
+  }
+
+  /**
+   * RNT-031 — the review step's checklist told an owner everything was ready
+   * without ever showing what a guest would actually see; this reuses the
+   * exact same display shape as the public page (ownership-gated instead of
+   * ACTIVE-gated, and no view-count side effect) so the preview can't drift
+   * from what publishing will actually look like.
+   */
+  async getOwnerPreview(userId: string, listingId: string) {
+    await this.assertOwnership(userId, listingId);
+    const listing = await this.prisma.listing.findUnique({
+      where: { id: listingId },
+      include: this.publicDisplayInclude(),
+    });
+    if (!listing) throw new NotFoundException(this.i18n.t('errors.LISTING_NOT_FOUND'));
+    return this.buildDisplayPayload(listing);
+  }
+
+  private publicDisplayInclude() {
+    return {
+      photos: { where: { pendingRemoval: false, versionId: null }, orderBy: { displayOrder: 'asc' as const } },
+      faqs: { orderBy: { displayOrder: 'asc' as const } },
+      extraServices: true,
+      category: true,
+      region: true,
+      city: true,
+      cityArea: true,
+      user: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          avatarUrl: true,
+          profileSlug: true,
+          avgResponseTimeMinutes: true,
+          verified: true,
+          createdAt: true,
+        },
+      },
+    };
+  }
+
+  private async buildDisplayPayload(listing: any) {
     const attributes = await this.taxonomy.resolveAttributesForCategory(listing.categoryId);
     const values = await this.prisma.listingAttribute.findMany({ where: { listingId: listing.id } });
     const valueMap = new Map(values.map((v) => [v.attributeId, v]));
-
-    await this.recordView(listing.id);
 
     return {
       ...this.serialize(listing),
       photos: listing.photos,
       faqs: listing.faqs,
-      extraServices: listing.extraServices.map((s) => ({ ...s, price: paraToRsd(s.price) })),
+      extraServices: listing.extraServices.map((s: any) => ({ ...s, price: paraToRsd(s.price) })),
       category: listing.category,
       region: listing.region,
       city: listing.city,
       cityArea: listing.cityArea,
       owner: listing.user,
-      attributes: attributes.map((a) => ({ ...a, value: valueMap.get(a.id) ?? null })),
+      attributes: attributes.map((a: any) => ({ ...a, value: valueMap.get(a.id) ?? null })),
     };
   }
 
@@ -405,7 +502,15 @@ export class ListingsService {
       this.prisma.listing.findMany({
         where: { status: ListingStatus.PENDING_APPROVAL },
         orderBy: { createdAt: 'asc' },
-        include: { user: { select: { id: true, firstName: true, lastName: true, email: true } }, category: true, photos: true },
+        include: {
+          user: { select: { id: true, firstName: true, lastName: true, email: true } },
+          category: true,
+          photos: true,
+          // Ch.12.4 — the admin should see only the WARNINGS an automated
+          // check raised, not the whole listing. The undecided moderation
+          // row created in markPendingApproval() carries exactly that.
+          moderations: { where: { decision: null }, orderBy: { createdAt: 'desc' }, take: 1 },
+        },
       }),
       this.prisma.listingVersion.findMany({
         where: { status: VersionStatus.PENDING },
@@ -413,14 +518,30 @@ export class ListingsService {
         include: { listing: { include: { user: { select: { id: true, firstName: true, lastName: true } } } } },
       }),
     ]);
+    const slaHours = await this.getModerationSlaHours();
     return {
-      newListings: listings.map((l) => ({ ...this.serialize(l), waitingHours: this.hoursSince(l.createdAt) })),
-      pendingEdits: versions.map((v) => ({ ...v, waitingHours: this.hoursSince(v.submittedAt) })),
-      slaHours: MODERATION_SLA_HOURS,
+      newListings: listings.map((l) => {
+        const { moderations, ...listingFields } = l;
+        const latestModeration = moderations[0];
+        return {
+          ...this.serialize(listingFields),
+          waitingHours: this.hoursSince(l.createdAt),
+          checkResults: latestModeration?.checkResults ?? null,
+          hasWarnings: latestModeration?.hasWarnings ?? false,
+        };
+      }),
+      // BigInt price fields on the nested listing must be converted here too —
+      // JSON.stringify throws on a raw BigInt, and this endpoint used to leak one.
+      pendingEdits: versions.map((v) => ({
+        ...v,
+        listing: this.serialize(v.listing),
+        waitingHours: this.hoursSince(v.submittedAt),
+      })),
+      slaHours,
     };
   }
 
-  async adminApprove(adminUserId: string, listingId: string) {
+  async adminApprove(adminUserId: string | null, listingId: string, automatic = false) {
     const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: listingId } });
     const isFirstApproval = !listing.publishedAt;
 
@@ -430,7 +551,12 @@ export class ListingsService {
     });
     await this.prisma.listingModeration.updateMany({
       where: { listingId, decision: null },
-      data: { decision: ModerationDecision.APPROVED, decidedByUserId: adminUserId, decidedAt: new Date() },
+      data: {
+        decision: ModerationDecision.APPROVED,
+        decidedByUserId: adminUserId,
+        decidedAt: new Date(),
+        automatic,
+      },
     });
 
     if (isFirstApproval) {
@@ -466,13 +592,45 @@ export class ListingsService {
     const fields = version.changedFields as Record<string, unknown>;
 
     await this.prisma.$transaction(async (tx) => {
-      const { photosChanged, ...listingFields } = fields as any;
+      const { photosChanged, photoOrder, workingHoursPending, pendingSlotsAdd, ...listingFields } = fields as any;
       if (Object.keys(listingFields).length) {
         await tx.listing.update({ where: { id: version.listingId }, data: listingFields });
       }
       if (photosChanged) {
         await tx.listingPhoto.deleteMany({ where: { versionId: version.id, pendingRemoval: true } });
         await tx.listingPhoto.updateMany({ where: { versionId: version.id }, data: { versionId: null } });
+      }
+      if (Array.isArray(photoOrder)) {
+        for (let index = 0; index < photoOrder.length; index++) {
+          await tx.listingPhoto.update({
+            where: { id: photoOrder[index] as string },
+            data: { displayOrder: index, isCover: index === 0 },
+          });
+        }
+      }
+      // R31/R32 — availability edits queued by AvailabilityService.queueAvailabilityEdit()
+      // only take effect here, on approval; see its doc comment.
+      if (Array.isArray(workingHoursPending)) {
+        await tx.workingHours.deleteMany({ where: { listingId: version.listingId } });
+        await tx.workingHours.createMany({
+          data: workingHoursPending.map((h: any) => ({
+            listingId: version.listingId,
+            dayOfWeek: h.dayOfWeek,
+            startsAt: h.startsAt,
+            endsAt: h.endsAt,
+          })),
+        });
+      }
+      if (Array.isArray(pendingSlotsAdd) && pendingSlotsAdd.length) {
+        await tx.definedSlot.createMany({
+          data: pendingSlotsAdd.map((s: any) => ({
+            listingId: version.listingId,
+            startsAt: new Date(s.startsAt),
+            endsAt: new Date(s.endsAt),
+            price: s.price ? rsdToPara(s.price) : null,
+            maxBookings: s.maxBookings ?? 1,
+          })),
+        });
       }
       await tx.listingVersion.update({
         where: { id: version.id },
@@ -594,6 +752,17 @@ export class ListingsService {
       priceInRange: 'OK', // category price-range heuristics are a documented future improvement
       priorRejections: priorRejections > 0 ? 'WARNING' : 'OK',
     };
+  }
+
+  /** R171 — admin-editable in /admin/podesavanja (Setting.moderation_sla_hours), falls back to the seeded default. */
+  private async getModerationSlaHours(): Promise<number> {
+    const setting = await this.prisma.setting.findUnique({ where: { key: 'moderation_sla_hours' } });
+    return typeof setting?.value === 'number' ? setting.value : MODERATION_SLA_HOURS;
+  }
+
+  private async getAutoApproveEnabled(): Promise<boolean> {
+    const setting = await this.prisma.setting.findUnique({ where: { key: 'auto_approve_listings' } });
+    return typeof setting?.value === 'boolean' ? setting.value : false;
   }
 
   private hoursSince(date: Date): number {

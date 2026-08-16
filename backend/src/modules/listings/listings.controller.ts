@@ -43,6 +43,11 @@ export class ListingsController {
     return this.listingsService.getOwned(userId, id);
   }
 
+  @Get('listings/:id/preview')
+  getOwnerPreview(@CurrentUser('id') userId: string, @Param('id') id: string) {
+    return this.listingsService.getOwnerPreview(userId, id);
+  }
+
   @Patch('listings/:id')
   update(@CurrentUser('id') userId: string, @Param('id') id: string, @Body() dto: UpdateListingDto) {
     return this.listingsService.updateListing(userId, id, dto);

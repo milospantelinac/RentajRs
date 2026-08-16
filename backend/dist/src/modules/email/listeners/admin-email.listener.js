@@ -53,6 +53,12 @@ let AdminEmailListener = class AdminEmailListener {
             return;
         await this.sendToAdmins('resolve_disputes', 'admin_listing_reported', { oglas: listing.title }, `${this.frontendUrl}/admin/sporovi`);
     }
+    async onListingReportPriority({ listingId, count }) {
+        const listing = await this.prisma.listing.findUnique({ where: { id: listingId } });
+        if (!listing)
+            return;
+        await this.sendToAdmins('resolve_disputes', 'admin_listing_report_priority', { oglas: listing.title, broj: String(count) }, `${this.frontendUrl}/admin/sporovi`);
+    }
     async onPaymentDisputed({ bookingId }) {
         const booking = await this.prisma.booking.findUnique({
             where: { id: bookingId },
@@ -103,6 +109,12 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], AdminEmailListener.prototype, "onListingReported", null);
+__decorate([
+    (0, event_emitter_1.OnEvent)('admin.listing_report_priority'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], AdminEmailListener.prototype, "onListingReportPriority", null);
 __decorate([
     (0, event_emitter_1.OnEvent)('booking.payment_disputed'),
     __metadata("design:type", Function),

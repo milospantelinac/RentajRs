@@ -39,21 +39,22 @@ export class UsersService {
     private events: EventEmitter2,
   ) {}
 
-  /** R13: "owner" is never stored — it's whether the user has >=1 ACTIVE listing. */
+  /** R13: "owner" is never stored — it's whether the user has >=1 ACTIVE listing. Single source of truth — see AuthService/DashboardService. */
   async isOwner(userId: string): Promise<boolean> {
     const count = await this.prisma.listing.count({ where: { userId, status: 'ACTIVE' } });
     return count > 0;
   }
 
+  /** P6/R12: "admin" has no stored role either — same derivation as owner, just off holding any permission grant at all. */
+  async isAdmin(userId: string): Promise<boolean> {
+    const count = await this.prisma.userPermission.count({ where: { userId } });
+    return count > 0;
+  }
+
   async getMe(userId: string) {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: ME_SELECT });
-    const [isOwner, permissionCount] = await Promise.all([
-      this.isOwner(userId),
-      this.prisma.userPermission.count({ where: { userId } }),
-    ]);
-    // "Admin" has no stored role either (P6/R12) — same derivation as owner, just off a
-    // different fact: holding any permission grant at all.
-    return { ...user, isOwner, isAdmin: permissionCount > 0 };
+    const [isOwner, isAdmin] = await Promise.all([this.isOwner(userId), this.isAdmin(userId)]);
+    return { ...user, isOwner, isAdmin };
   }
 
   async updateMe(userId: string, dto: UpdateProfileDto) {

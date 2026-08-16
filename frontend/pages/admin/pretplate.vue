@@ -55,6 +55,40 @@
         <button class="btn btn-primary-flat btn-sm" @click="updatePrice(pkg.id)">{{ t('common.save') }}</button>
       </div>
     </div>
+
+    <h2 class="text-section-title mb-2">{{ t('admin.featuredWaitlist') }}</h2>
+    <p class="text-muted mb-3">{{ t('admin.featuredWaitlistHint') }}</p>
+    <p v-if="!waitlist?.length" class="text-muted mb-5">{{ t('admin.noItems') }}</p>
+    <table v-else class="table table-responsive-cards mb-5">
+      <thead>
+        <tr>
+          <th>{{ t('admin.newListings') }}</th>
+          <th>{{ t('admin.categories') }}</th>
+          <th>{{ t('admin.waitlistedSince') }}</th>
+          <th>{{ t('admin.durationDays') }}</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-for="entry in waitlist" :key="entry.id">
+          <td :data-label="t('admin.newListings')">
+            <NuxtLink :to="`/oglasi/${entry.listing.slug}`" target="_blank">{{ entry.listing.title }}</NuxtLink>
+          </td>
+          <td :data-label="t('admin.categories')">{{ entry.category?.slug }}</td>
+          <td :data-label="t('admin.waitlistedSince')">{{ new Date(entry.requestedAt).toLocaleDateString('sr-RS') }}</td>
+          <td :data-label="t('admin.durationDays')">
+            <select v-model.number="durationForms[entry.id]" class="form-control form-select">
+              <option :value="7">7</option>
+              <option :value="15">15</option>
+              <option :value="30">30</option>
+            </select>
+          </td>
+          <td :data-label="''">
+            <button class="btn btn-primary-flat btn-sm" @click="assignFree(entry)">{{ t('admin.assignFree') }}</button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
   </div>
 </template>
 
@@ -90,6 +124,21 @@ for (const pkg of packages.value || []) {
 
 async function updatePrice(packageId) {
   await api.post(`/admin/packages/${packageId}/price`, priceForms[packageId])
+}
+
+const { data: waitlist, refresh: refreshWaitlist } = await useAsyncData('admin-featured-waitlist', () =>
+  api.get('/admin/featured/waitlist'),
+)
+const durationForms = reactive({})
+for (const entry of waitlist.value || []) {
+  durationForms[entry.id] = 7
+}
+
+async function assignFree(entry) {
+  await api.post(`/admin/featured/${entry.listing.id}/assign-free`, {
+    durationDays: durationForms[entry.id] || 7,
+  })
+  await refreshWaitlist()
 }
 
 onMounted(load)

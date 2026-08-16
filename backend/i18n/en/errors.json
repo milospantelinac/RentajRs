@@ -16,6 +16,11 @@
   "CATEGORY_HAS_LISTINGS": "A category with listings cannot be deleted — merge or archive it instead",
   "SUBSCRIPTION_LISTING_LIMIT": "You've reached the listing limit for your current package",
   "PHOTO_LIMIT_EXCEEDED": "A listing can have at most {max} photos",
+  "PHOTO_NOT_FOUND": "Photo not found or does not belong to this listing",
   "PERMISSION_DENIED": "You do not have permission to perform this action",
-  "RATE_LIMITED": "Too many requests. Please try again later"
+  "RATE_LIMITED": "Too many requests. Please try again later",
+  "PACKAGE_FEATURE_NOT_INCLUDED": "Your current package for this listing does not include this feature. Upgrade your package to use it",
+  "GUEST_COUNT_OUT_OF_RANGE": "Guest count must be between {min} and {max}",
+  "ACCOUNT_RESTRICTED": "This account is temporarily restricted for a platform-rules violation and cannot perform this action",
+  "PACKAGE_INCOMPATIBLE_BOOKING_MODEL": "The Basic package doesn't include the booking system. Choose Standard or Pro, or first switch the listing's booking model to \"no booking\""
 }

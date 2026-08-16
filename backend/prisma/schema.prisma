@@ -224,42 +224,48 @@ enum EmailStatus {
 /// No `role` field exists by design — role is derived from state (R13): a user
 /// is an "owner" iff they have >=1 ACTIVE listing. See UsersService.isOwner().
 model User {
-  id                     String     @id @default(uuid()) @db.Uuid
-  firstName              String
-  lastName               String
-  email                  String     @unique
-  emailVerified          Boolean    @default(false)
+  id                       String     @id @default(uuid()) @db.Uuid
+  firstName                String
+  lastName                 String
+  email                    String     @unique
+  emailVerified            Boolean    @default(false)
   /// Not in the Bible's §4.1 field list, but required by the profile URL
   /// pattern in Ch.14.2 (rentaj.rs/vlasnik/marko-petrovic) — generated the
   /// moment a user publishes their first listing (their Gost->Vlasnik
   /// transition, R14), see UsersService.ensureProfileSlug().
-  profileSlug            String?    @unique
-  passwordHash           String?
-  phone                  String?
-  avatarUrl              String?
-  language               Language   @default(SR)
-  buyerType              BuyerType?
-  companyName            String?
-  taxId                  String? // PIB
-  registrationNumber     String? // maticni broj
-  billingAddress         String?
-  bankAccount            String? // for IPS QR generation on their own listings (R51/R57)
-  verified               Boolean    @default(false) // reserved for future "verified owner" badge
-  blocked                Boolean    @default(false)
-  blockedReason          String?
-  twoFactorEnabled       Boolean    @default(false)
-  twoFactorSecret        String?
-  avgResponseTimeMinutes Int?
-  completedBookingsCount Int        @default(0)
-  failedLoginAttempts    Int        @default(0)
-  lockedUntil            DateTime?  @db.Timestamptz
-  createdAt              DateTime   @default(now()) @db.Timestamptz
-  lastLoginAt            DateTime?  @db.Timestamptz
-  anonymizedAt           DateTime?  @db.Timestamptz
+  profileSlug              String?    @unique
+  passwordHash             String?
+  phone                    String?
+  avatarUrl                String?
+  language                 Language   @default(SR)
+  buyerType                BuyerType?
+  companyName              String?
+  taxId                    String? // PIB
+  registrationNumber       String? // maticni broj
+  billingAddress           String?
+  bankAccount              String? // for IPS QR generation on their own listings (R51/R57)
+  verified                 Boolean    @default(false) // reserved for future "verified owner" badge
+  blocked                  Boolean    @default(false)
+  blockedReason            String?
+  twoFactorEnabled         Boolean    @default(false)
+  twoFactorSecret          String?
+  twoFactorBackupCodes     String[]   @default([]) // argon2 hashes, single-use (RNT-014)
+  avgResponseTimeMinutes   Int?
+  completedBookingsCount   Int        @default(0)
+  failedLoginAttempts      Int        @default(0)
+  lockedUntil              DateTime?  @db.Timestamptz
+  createdAt                DateTime   @default(now()) @db.Timestamptz
+  lastLoginAt              DateTime?  @db.Timestamptz
+  anonymizedAt             DateTime?  @db.Timestamptz
   /// R175's "confirmed from the registered address" gate for account deletion (Ch.22.4) — a one-shot,
   /// short-lived hashed token, same shape as the password-reset flow.
   pendingDeletionTokenHash String?
-  pendingDeletionExpiresAt DateTime? @db.Timestamptz
+  pendingDeletionExpiresAt DateTime?  @db.Timestamptz
+  /// Ch.6.7/ADR-019 dispute outcomes (R61) — WARNING increments this counter (visible to admins,
+  /// no functional effect on its own); RESTRICTION sets restrictedUntil, which blocks new listings
+  /// and new booking requests until it passes. Only BLOCK (User.blocked) is permanent.
+  warningsCount            Int        @default(0)
+  restrictedUntil          DateTime?  @db.Timestamptz
 
   logins                  UserLogin[]
   permissions             UserPermission[]
@@ -555,6 +561,9 @@ model Listing {
   address                 String? // never shown publicly pre-confirmation
   latitude                Decimal?       @db.Decimal(10, 7)
   longitude               Decimal?       @db.Decimal(10, 7)
+  /// RNT-102 — lets guest reviews already on Google Maps show alongside Rentaj's own; display/import
+  /// logic needs a Google Places API key to actually pull reviews, so only storage lives here for now.
+  googlePlaceId           String?
   videoUrl                String?
   viewCount               Int            @default(0)
   avgRating               Decimal?       @db.Decimal(2, 1) // shown only after 3 reviews (R102)
@@ -571,26 +580,27 @@ model Listing {
   city         City?         @relation(fields: [cityId], references: [id])
   cityArea     CityArea?     @relation(fields: [cityAreaId], references: [id])
 
-  attributes       ListingAttribute[]
-  photos           ListingPhoto[]
-  faqs             ListingFaq[]
-  versions         ListingVersion[]
-  moderations      ListingModeration[]
-  extraServices    ListingExtraService[]
-  blockedTerms     BlockedTerm[]
-  workingHours     WorkingHours[]
-  definedSlots     DefinedSlot[]
-  icalSources      IcalSource[]
-  bankedDays       BankedDay[]
-  featuredPeriods  FeaturedListing[]
-  featuredWaitlist FeaturedWaitlist[]
-  bookings         Booking[]
-  conversations    Conversation[]
-  reviews          Review[]
-  favorites        Favorite[]
-  reports          Report[]
-  disputes         Dispute[]
-  viewStats        ListingViewStat[]
+  attributes         ListingAttribute[]
+  photos             ListingPhoto[]
+  faqs               ListingFaq[]
+  versions           ListingVersion[]
+  moderations        ListingModeration[]
+  extraServices      ListingExtraService[]
+  blockedTerms       BlockedTerm[]
+  workingHours       WorkingHours[]
+  definedSlots       DefinedSlot[]
+  datePriceOverrides DatePriceOverride[]
+  icalSources        IcalSource[]
+  bankedDays         BankedDay[]
+  featuredPeriods    FeaturedListing[]
+  featuredWaitlist   FeaturedWaitlist[]
+  bookings           Booking[]
+  conversations      Conversation[]
+  reviews            Review[]
+  favorites          Favorite[]
+  reports            Report[]
+  disputes           Dispute[]
+  viewStats          ListingViewStat[]
 
   @@index([status, available])
   @@index([categoryId, cityId])
@@ -741,6 +751,22 @@ model WorkingHours {
 
   listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
 
+  @@index([listingId])
+}
+
+/// RNT-029 — per-calendar-date price override for PER_STAY listings (NIGHT/DAY
+/// price units), so an owner can set a higher price for a specific date (a
+/// holiday, an event weekend) without that becoming the new base `price`.
+/// One row per date; absence of a row means "use the listing's base/weekend price".
+model DatePriceOverride {
+  id        String   @id @default(uuid()) @db.Uuid
+  listingId String   @db.Uuid
+  date      DateTime @db.Date
+  price     BigInt // in para, same convention as Listing.price
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@unique([listingId, date])
   @@index([listingId])
 }
 
@@ -1256,13 +1282,13 @@ model EmailLog {
 /// still assembled in code and injected as `extraHtml` — this table only
 /// owns the parts that are genuinely free text (R171 "tekstovi").
 model EmailTemplate {
-  key          String
-  language     Language
-  subject      String
-  heading      String
-  bodyText     String
-  buttonLabel  String?
-  updatedAt    DateTime @updatedAt @db.Timestamptz
+  key         String
+  language    Language
+  subject     String
+  heading     String
+  bodyText    String
+  buttonLabel String?
+  updatedAt   DateTime @updatedAt @db.Timestamptz
 
   @@id([key, language])
 }

@@ -20,15 +20,15 @@ const CONSTRAINT_KEY_MAP = {
     isDate: 'validation.DATE',
     isArray: 'validation.ARRAY',
     notCommonPassword: 'validation.PASSWORD_WEAK',
-    matches: 'validation.PHONE_INVALID',
 };
+const I18N_KEY_PATTERN = /^[a-zA-Z]+(\.[A-Za-z0-9_]+)+$/;
 function flattenValidationErrors(errors, i18n, parentPath = '') {
     const out = [];
     for (const err of errors) {
         const field = parentPath ? `${parentPath}.${err.property}` : err.property;
         if (err.constraints) {
             for (const [constraintKey, fallback] of Object.entries(err.constraints)) {
-                const i18nKey = CONSTRAINT_KEY_MAP[constraintKey];
+                const i18nKey = I18N_KEY_PATTERN.test(fallback) ? fallback : CONSTRAINT_KEY_MAP[constraintKey];
                 const message = i18nKey ? String(i18n?.t(i18nKey, { args: { property: field } }) ?? fallback) : fallback;
                 out.push({ field, message });
             }

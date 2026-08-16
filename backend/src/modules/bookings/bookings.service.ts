@@ -23,14 +23,31 @@ export class BookingsService {
   // -- Guest: create request -----------------------------------------
 
   async createRequest(guestId: string, listingId: string, dto: CreateBookingRequestDto) {
-    const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: listingId } });
+    const listing = await this.prisma.listing.findUniqueOrThrow({
+      where: { id: listingId },
+      include: { subscription: { include: { package: true } } },
+    });
+
+    // R126 — email must be confirmed before the first booking.
+    const guest = await this.prisma.user.findUniqueOrThrow({ where: { id: guestId } });
+    if (!guest.emailVerified) throw new ForbiddenException(this.i18n.t('errors.EMAIL_NOT_VERIFIED'));
+    // Ch.6.7/ADR-019 — a RESTRICTION dispute outcome temporarily blocks new bookings too.
+    if (guest.restrictedUntil && guest.restrictedUntil.getTime() > Date.now()) {
+      throw new ForbiddenException(this.i18n.t('errors.ACCOUNT_RESTRICTED'));
+    }
 
     if (listing.status !== 'ACTIVE') throw new BadRequestException(this.i18n.t('errors.LISTING_NOT_BOOKABLE'));
     if (listing.bookingModel === 'NO_BOOKING') throw new BadRequestException(this.i18n.t('errors.LISTING_NOT_BOOKABLE'));
     if (listing.userId === guestId) throw new BadRequestException(this.i18n.t('errors.CANNOT_BOOK_OWN_LISTING'));
+    // Ch.11.2 — the Osnovni/BASIC package doesn't include the booking system
+    // at all; a listing sitting on it must never accept a request even if
+    // its bookingModel field says otherwise (e.g. after a downgrade).
+    if (!listing.subscription?.package.hasBookings) {
+      throw new ForbiddenException(this.i18n.t('errors.PACKAGE_FEATURE_NOT_INCLUDED'));
+    }
 
     const { startsAt, endsAt, slotPrice } = await this.resolveRequestedTerm(listing, dto);
-    this.assertTermRules(listing, startsAt, endsAt);
+    this.assertTermRules(listing, startsAt, endsAt, dto.guestCount);
 
     const pricePerUnit = slotPrice ?? listing.price;
     const unitCount = computeUnitCount(listing.priceUnit, startsAt, endsAt);
@@ -38,7 +55,18 @@ export class BookingsService {
     const mandatoryFeesTotal = sumMandatoryFees(listing.mandatoryFees);
     const guestFee = listing.pricePerGuest && dto.guestCount ? listing.pricePerGuest * BigInt(dto.guestCount) : 0n;
 
-    const totalAmount = pricePerUnit * BigInt(unitCount) + guestFee + mandatoryFeesTotal + extraServicesTotal;
+    // RNT-029 — per-stay (night/day) bookings price each date individually
+    // (weekend price, or an owner's per-date override) rather than a flat
+    // rate x nights; slot bookings and other units keep the flat calculation.
+    const unitPriceTotal =
+      !slotPrice && (listing.priceUnit === 'NIGHT' || listing.priceUnit === 'DAY')
+        ? (await this.availability.getNightlyPrices(listingId, startsAt, endsAt, listing.price, listing.weekendPrice)).reduce(
+            (sum, p) => sum + p,
+            0n,
+          )
+        : pricePerUnit * BigInt(unitCount);
+
+    const totalAmount = unitPriceTotal + guestFee + mandatoryFeesTotal + extraServicesTotal;
     const amountDue = listing.advancePercent
       ? (totalAmount * BigInt(listing.advancePercent)) / 100n
       : totalAmount;
@@ -117,6 +145,7 @@ export class BookingsService {
     },
     startsAt: Date,
     endsAt: Date,
+    guestCount?: number,
   ) {
     if (endsAt <= startsAt) throw new BadRequestException(this.i18n.t('bookings.END_BEFORE_START'));
 
@@ -133,6 +162,16 @@ export class BookingsService {
     }
     if (listing.maxDuration && unitCount > listing.maxDuration) {
       throw new BadRequestException(this.i18n.t('bookings.MAX_DURATION', { args: { max: listing.maxDuration } }));
+    }
+
+    if ((listing.minGuests || listing.maxGuests) && guestCount !== undefined) {
+      const min = listing.minGuests ?? 1;
+      const max = listing.maxGuests ?? Number.MAX_SAFE_INTEGER;
+      if (guestCount < min || guestCount > max) {
+        throw new BadRequestException(
+          this.i18n.t('errors.GUEST_COUNT_OUT_OF_RANGE', { args: { min, max: listing.maxGuests ?? min } }),
+        );
+      }
     }
   }
 
@@ -163,7 +202,10 @@ export class BookingsService {
 
     if (listing.paymentMethod === 'CASH') {
       // R181 — cash bookings confirm immediately, no payment-instructions email.
-      const updated = await this.applyStatus(booking, 'CONFIRMED', ownerId, { paymentConfirmedAt: new Date() });
+      const updated = await this.applyStatus(booking, 'CONFIRMED', ownerId, {
+        paymentConfirmedAt: new Date(),
+        phoneUnlocked: true,
+      });
       this.events.emit('booking.confirmed', { bookingId: booking.id, viaCash: true });
       return updated;
     }
@@ -284,16 +326,19 @@ export class BookingsService {
   async getOne(userId: string, bookingId: string) {
     const booking = await this.prisma.booking.findUnique({
       where: { id: bookingId },
-      include: { listing: { select: { title: true, slug: true } } },
+      include: { listing: { select: { title: true, slug: true } }, guest: { select: { phone: true } } },
     });
     if (!booking) throw new NotFoundException();
     if (booking.guestId !== userId && booking.ownerId !== userId) throw new ForbiddenException();
-    return this.serialize(booking);
+    return this.serialize(booking, userId);
   }
 
-  async listMine(userId: string, role: 'guest' | 'owner') {
+  async listMine(userId: string, role: 'guest' | 'owner', status?: BookingStatus) {
     const bookings = await this.prisma.booking.findMany({
-      where: role === 'guest' ? { guestId: userId } : { ownerId: userId },
+      where: {
+        ...(role === 'guest' ? { guestId: userId } : { ownerId: userId }),
+        ...(status ? { status } : {}),
+      },
       orderBy: { createdAt: 'desc' },
       include: { listing: { select: { title: true, slug: true } } },
     });
@@ -439,12 +484,21 @@ export class BookingsService {
     });
   }
 
-  private serialize(booking: Booking) {
+  /**
+   * `requestingUserId` + a `guest` relation on `booking` (only getOne()
+   * fetches it) together gate the guest's phone number: visible to the
+   * owner, and only once phoneUnlocked is set (R98/schema comment —
+   * "guest phone visible to owner after acceptance").
+   */
+  private serialize(booking: Booking & { guest?: { phone: string | null } }, requestingUserId?: string) {
+    const { guest, ...rest } = booking;
+    const showGuestPhone = !!guest && requestingUserId === booking.ownerId && booking.phoneUnlocked;
     return {
-      ...booking,
+      ...rest,
       pricePerUnit: paraToRsd(booking.pricePerUnit),
       totalAmount: paraToRsd(booking.totalAmount),
       amountDue: paraToRsd(booking.amountDue),
+      ...(showGuestPhone ? { guestPhone: guest!.phone } : {}),
     };
   }
 }

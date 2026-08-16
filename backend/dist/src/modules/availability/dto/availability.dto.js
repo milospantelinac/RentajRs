@@ -9,7 +9,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.AddIcalSourceDto = exports.CreateManualBlockDto = exports.CreateDefinedSlotDto = exports.SetWorkingHoursDto = void 0;
+exports.AddIcalSourceDto = exports.SetDatePriceDto = exports.CreateManualBlockDto = exports.CreateDefinedSlotDto = exports.SetWorkingHoursDto = void 0;
 const swagger_1 = require("@nestjs/swagger");
 const class_transformer_1 = require("class-transformer");
 const class_validator_1 = require("class-validator");
@@ -24,12 +24,12 @@ __decorate([
 ], WorkingHoursRow.prototype, "dayOfWeek", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ example: '09:00' }),
-    (0, class_validator_1.Matches)(/^([01]\d|2[0-3]):[0-5]\d$/),
+    (0, class_validator_1.Matches)(/^([01]\d|2[0-3]):[0-5]\d$/, { message: 'validation.TIME_INVALID' }),
     __metadata("design:type", String)
 ], WorkingHoursRow.prototype, "startsAt", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ example: '17:00' }),
-    (0, class_validator_1.Matches)(/^([01]\d|2[0-3]):[0-5]\d$/),
+    (0, class_validator_1.Matches)(/^([01]\d|2[0-3]):[0-5]\d$/, { message: 'validation.TIME_INVALID' }),
     __metadata("design:type", String)
 ], WorkingHoursRow.prototype, "endsAt", void 0);
 class SetWorkingHoursDto {
@@ -87,6 +87,20 @@ __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateManualBlockDto.prototype, "note", void 0);
+class SetDatePriceDto {
+}
+exports.SetDatePriceDto = SetDatePriceDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '2026-12-31', description: 'Calendar date (YYYY-MM-DD), not a timestamp' }),
+    (0, class_validator_1.Matches)(/^\d{4}-\d{2}-\d{2}$/, { message: 'validation.DATE_INVALID' }),
+    __metadata("design:type", String)
+], SetDatePriceDto.prototype, "date", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'RSD, overrides the listing base/weekend price for this one date' }),
+    (0, class_validator_1.IsInt)(),
+    (0, class_validator_1.IsPositive)(),
+    __metadata("design:type", Number)
+], SetDatePriceDto.prototype, "price", void 0);
 class AddIcalSourceDto {
 }
 exports.AddIcalSourceDto = AddIcalSourceDto;

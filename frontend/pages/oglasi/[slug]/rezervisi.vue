@@ -78,8 +78,8 @@ const { t } = useI18n()
 const api = useApi()
 const route = useRoute()
 
-const { data: listing } = await useAsyncData(`booking-listing-${route.params.oglasSlug}`, () =>
-  api.get(`/listings/public/${route.params.oglasSlug}`),
+const { data: listing } = await useAsyncData(`booking-listing-${route.params.slug}`, () =>
+  api.get(`/listings/public/${route.params.slug}`),
 )
 
 const slots = ref([])
@@ -143,7 +143,7 @@ async function submit() {
     const booking = await api.post(`/listings/${listing.value.id}/bookings`, payload)
     await navigateTo(`/rezervacije/${booking.id}`)
   } catch (e) {
-    error.value = e?.data?.message?.[0] || e?.data?.message || t('auth.genericError')
+    error.value = extractErrorMessage(e, t('auth.genericError'))
   } finally {
     submitting.value = false
   }

@@ -20,14 +20,25 @@ export class MessagingService {
 
   /** R76/R77 — a fresh question-before-booking thread; daily new-conversation cap only applies here. */
   async startConversation(guestId: string, dto: StartConversationDto) {
-    const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: dto.listingId } });
+    const listing = await this.prisma.listing.findUniqueOrThrow({
+      where: { id: dto.listingId },
+      include: { subscription: { include: { package: true } } },
+    });
     if (listing.userId === guestId) throw new BadRequestException('Cannot message your own listing');
 
     const existing = await this.prisma.conversation.findFirst({
       where: { listingId: dto.listingId, guestId, bookingId: dto.bookingId ?? null },
     });
     if (existing) {
+      // Replying is never gated by package (R77 only limits *new* threads) —
+      // a downgrade shouldn't strand an already-open conversation.
       return this.sendMessage(guestId, existing.id, dto.content);
+    }
+
+    // R108 — Osnovni/BASIC doesn't include internal messaging; the owner's
+    // phone number is the contact point instead.
+    if (!listing.subscription?.package.hasMessaging) {
+      throw new ForbiddenException(this.i18n.t('errors.PACKAGE_FEATURE_NOT_INCLUDED'));
     }
 
     await this.assertDailyLimitNotReached(guestId);
@@ -94,7 +105,7 @@ export class MessagingService {
 
     const { url } = file.mimetype === 'application/pdf'
       ? await this.uploads.saveRawFile(file, 'messages', ATTACHMENT_ALLOWED_TYPES, 5)
-      : await this.uploads.saveImage(file, 'messages', { maxWidth: 1600 });
+      : await this.uploads.saveImage(file, 'messages', { maxWidth: 1600, maxSizeMb: 5 });
 
     return this.prisma.messageAttachment.create({
       data: { messageId, url, type: file.mimetype, size: file.size, filename: file.originalname },

@@ -13,6 +13,7 @@ exports.UpdateProfileDto = void 0;
 const swagger_1 = require("@nestjs/swagger");
 const class_validator_1 = require("class-validator");
 const client_1 = require("@prisma/client");
+const undefined_if_blank_transform_1 = require("../../../common/validators/undefined-if-blank.transform");
 class UpdateProfileDto {
 }
 exports.UpdateProfileDto = UpdateProfileDto;
@@ -33,6 +34,7 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiPropertyOptional)(),
     (0, class_validator_1.IsOptional)(),
+    undefined_if_blank_transform_1.undefinedIfBlank,
     (0, class_validator_1.Matches)(/^\+?[0-9\s()-]{6,20}$/, { message: 'validation.PHONE_INVALID' }),
     __metadata("design:type", String)
 ], UpdateProfileDto.prototype, "phone", void 0);
@@ -45,8 +47,9 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Serbian current account (tekući račun), needed to accept bookings' }),
     (0, class_validator_1.IsOptional)(),
+    undefined_if_blank_transform_1.undefinedIfBlank,
     (0, class_validator_1.IsString)(),
-    (0, class_validator_1.Matches)(/^\d{3}-\d{1,13}-\d{2}$/, { message: 'Bank account must be in the format 000-0000000000000-00' }),
+    (0, class_validator_1.Matches)(/^\d{3}-\d{1,13}-\d{2}$/, { message: 'validation.BANK_ACCOUNT_INVALID' }),
     __metadata("design:type", String)
 ], UpdateProfileDto.prototype, "bankAccount", void 0);
 __decorate([

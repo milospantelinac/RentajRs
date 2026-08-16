@@ -10,6 +10,7 @@
         <tr>
           <th>{{ t('auth.email') }}</th>
           <th>{{ t('admin.statusLabel') }}</th>
+          <th>{{ t('admin.disputeHistory') }}</th>
           <th></th>
         </tr>
       </thead>
@@ -23,6 +24,10 @@
             <span class="badge" :class="u.blocked ? 'badge-critical' : 'badge-success'">
               {{ u.blocked ? t('admin.blocked') : t('common.yes') }}
             </span>
+          </td>
+          <td :data-label="t('admin.disputeHistory')">
+            <span v-if="u.warningsCount" class="badge badge-warning mr-1">{{ t('admin.warningsCount', { count: u.warningsCount }) }}</span>
+            <span v-if="isRestricted(u)" class="badge badge-critical">{{ t('admin.restrictedUntil', { date: formatDate(u.restrictedUntil) }) }}</span>
           </td>
           <td :data-label="''">
             <button v-if="!u.blocked" class="btn btn-danger btn-sm" @click="openBlock(u)">{{ t('admin.blockUser') }}</button>
@@ -77,6 +82,13 @@ async function confirmBlock() {
 async function unblock(id) {
   await api.post(`/admin/users/${id}/unblock`, {})
   await load()
+}
+
+function isRestricted(u) {
+  return u.restrictedUntil && new Date(u.restrictedUntil).getTime() > Date.now()
+}
+function formatDate(value) {
+  return new Date(value).toLocaleDateString('sr-RS')
 }
 
 onMounted(load)

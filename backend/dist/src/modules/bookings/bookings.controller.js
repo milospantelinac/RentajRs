@@ -15,6 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.BookingsController = void 0;
 const common_1 = require("@nestjs/common");
 const swagger_1 = require("@nestjs/swagger");
+const client_1 = require("@prisma/client");
 const bookings_service_1 = require("./bookings.service");
 const create_booking_request_dto_1 = require("./dto/create-booking-request.dto");
 const booking_actions_dto_1 = require("./dto/booking-actions.dto");
@@ -26,8 +27,8 @@ let BookingsController = class BookingsController {
     create(guestId, listingId, dto) {
         return this.bookingsService.createRequest(guestId, listingId, dto);
     }
-    listMine(userId, role = 'guest') {
-        return this.bookingsService.listMine(userId, role);
+    listMine(userId, role = 'guest', status) {
+        return this.bookingsService.listMine(userId, role, status);
     }
     getOne(userId, id) {
         return this.bookingsService.getOne(userId, id);
@@ -74,8 +75,9 @@ __decorate([
     (0, common_1.Get)('bookings/mine'),
     __param(0, (0, current_user_decorator_1.CurrentUser)('id')),
     __param(1, (0, common_1.Query)('role')),
+    __param(2, (0, common_1.Query)('status')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:paramtypes", [String, String, String]),
     __metadata("design:returntype", void 0)
 ], BookingsController.prototype, "listMine", null);
 __decorate([

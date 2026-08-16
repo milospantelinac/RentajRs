@@ -1,7 +1,7 @@
 <template>
   <nav class="bottom-nav">
     <NuxtLink to="/kontrolna-tabla" class="bottom-nav-item">{{ t('dashboard.overview') }}</NuxtLink>
-    <NuxtLink to="/kontrolna-tabla/rezervacije" class="bottom-nav-item">{{ t('dashboard.requests') }}</NuxtLink>
+    <NuxtLink :to="bookingsLink" class="bottom-nav-item">{{ auth.user?.isOwner ? t('dashboard.requests') : t('dashboard.myBookings') }}</NuxtLink>
     <NuxtLink to="/kontrolna-tabla/poruke" class="bottom-nav-item">{{ t('nav.messages') }}</NuxtLink>
     <NuxtLink to="/kontrolna-tabla/podesavanja" class="bottom-nav-item">{{ t('dashboard.settings') }}</NuxtLink>
   </nav>
@@ -10,6 +10,10 @@
 <script setup>
 // R156 — mobile navigation for dashboard-area screens is a fixed bottom bar.
 const { t } = useI18n()
+const auth = useAuthStore()
+// RNT-063 — "Zahtevi za rezervaciju" (booking requests) only makes sense
+// from the owner's side; a guest has bookings, not requests to approve.
+const bookingsLink = computed(() => (auth.user?.isOwner ? '/kontrolna-tabla/rezervacije?role=owner' : '/kontrolna-tabla/rezervacije?role=guest'))
 </script>
 
 <style lang="scss" scoped>

@@ -82,13 +82,14 @@ let UsersService = class UsersService {
         const count = await this.prisma.listing.count({ where: { userId, status: 'ACTIVE' } });
         return count > 0;
     }
+    async isAdmin(userId) {
+        const count = await this.prisma.userPermission.count({ where: { userId } });
+        return count > 0;
+    }
     async getMe(userId) {
         const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: ME_SELECT });
-        const [isOwner, permissionCount] = await Promise.all([
-            this.isOwner(userId),
-            this.prisma.userPermission.count({ where: { userId } }),
-        ]);
-        return { ...user, isOwner, isAdmin: permissionCount > 0 };
+        const [isOwner, isAdmin] = await Promise.all([this.isOwner(userId), this.isAdmin(userId)]);
+        return { ...user, isOwner, isAdmin };
     }
     async updateMe(userId, dto) {
         const user = await this.prisma.user.update({ where: { id: userId }, data: dto, select: ME_SELECT });

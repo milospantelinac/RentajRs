@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CacheService } from '../../common/cache/cache.service';
 import { TaxonomyService } from '../taxonomy/taxonomy.service';
-import { paraToRsd } from '../../common/utils/money';
+import { paraToRsd, rsdToPara } from '../../common/utils/money';
 import { SearchListingsDto } from './dto/search-listings.dto';
 
 const RELEVANCE_CANDIDATE_POOL = 200;
@@ -30,10 +30,18 @@ export class SearchService {
     const pageSize = Math.min(dto.pageSize ?? DEFAULT_PAGE_SIZE, 50);
     const where = await this.buildWhere(dto);
 
-    if (dto.sort && dto.sort !== 'relevance') {
-      return this.searchWithDbSort(where, dto.sort, page, pageSize);
+    const result =
+      dto.sort && dto.sort !== 'relevance'
+        ? await this.searchWithDbSort(where, dto.sort, page, pageSize)
+        : await this.searchWithRelevanceRanking(where, page, pageSize);
+
+    // R45/R46 — every empty result is demand data, not just the ones where the
+    // visitor bothers to leave an email via /search/notify-empty afterwards.
+    if (result.total === 0) {
+      await this.recordEmptySearch(dto).catch(() => undefined);
     }
-    return this.searchWithRelevanceRanking(where, page, pageSize);
+
+    return { ...result, indexThreshold: await this.getIndexThreshold() };
   }
 
   private async searchWithDbSort(
@@ -144,6 +152,34 @@ export class SearchService {
     return { message: 'ok' };
   }
 
+  /**
+   * R135/R11 (Bible Ch.14.3) — which cities have enough listings in this
+   * category (including its subcategories) to have an indexable combo page.
+   * Used both to render "browse by city" links on the category page (so the
+   * page actually has an internal path to it, not just a URL that exists)
+   * and could equally back the sitemap generator.
+   */
+  async getIndexedCitiesForCategory(categorySlug: string) {
+    const category = await this.prisma.category.findUnique({ where: { slug: categorySlug } });
+    if (!category) return [];
+
+    const categoryIds = await this.categorySubtreeIds(category.id);
+    const threshold = await this.getIndexThreshold();
+    const groups = await this.prisma.listing.groupBy({
+      by: ['cityId'],
+      where: { status: 'ACTIVE', categoryId: { in: categoryIds }, cityId: { not: null } },
+      _count: { _all: true },
+    });
+    const qualifyingCityIds = groups.filter((g) => g._count._all >= threshold).map((g) => g.cityId as string);
+    if (!qualifyingCityIds.length) return [];
+
+    return this.prisma.city.findMany({
+      where: { id: { in: qualifyingCityIds } },
+      select: { id: true, name: true, slug: true },
+      orderBy: { name: 'asc' },
+    });
+  }
+
   /** Same query with location/date constraints dropped — offered to the user after an empty result set. */
   async relaxedSearch(dto: SearchListingsDto) {
     const relaxed: SearchListingsDto = { ...dto, cityId: undefined, cityAreaId: undefined, dateFrom: undefined, dateTo: undefined };
@@ -167,10 +203,10 @@ export class SearchService {
     if (dto.categorySlug) {
       const category = await this.prisma.category.findUnique({ where: { slug: dto.categorySlug } });
       if (category) {
-        // Selecting a main category includes its subcategories (R49).
-        const children = await this.prisma.category.findMany({ where: { parentId: category.id }, select: { id: true } });
-        const ids = [category.id, ...children.map((c) => c.id)];
-        where.categoryId = { in: ids };
+        // Selecting a category includes every descendant, not just direct
+        // children — the tree can be 3 levels deep (R24), so a top-level
+        // pick must also reach grandchildren (R49).
+        where.categoryId = { in: await this.categorySubtreeIds(category.id) };
       }
     }
 
@@ -180,8 +216,8 @@ export class SearchService {
 
     if (dto.priceMin !== undefined || dto.priceMax !== undefined) {
       where.price = {
-        ...(dto.priceMin !== undefined ? { gte: BigInt(Math.round(dto.priceMin * 100)) } : {}),
-        ...(dto.priceMax !== undefined ? { lte: BigInt(Math.round(dto.priceMax * 100)) } : {}),
+        ...(dto.priceMin !== undefined ? { gte: rsdToPara(dto.priceMin) } : {}),
+        ...(dto.priceMax !== undefined ? { lte: rsdToPara(dto.priceMax) } : {}),
       };
     }
 
@@ -221,13 +257,21 @@ export class SearchService {
       where.AND = [...((where.AND as Prisma.ListingWhereInput[]) ?? []), ...attributeConditions];
     }
 
-    // Date-range availability filtering (does this listing have a free slot
-    // covering [dateFrom, dateTo]?) requires the Availability module's
-    // blocked-term overlap check — wired in Phase 5; until then, a date
-    // filter narrows to bookable listings only rather than false-excluding
-    // everything.
+    // RNT-053 — "does this listing have a free slot covering [dateFrom,
+    // dateTo]?" via the Availability module's own BlockedTerm rows (the same
+    // source lockTerm()/getAvailability() use): a listing is excluded only
+    // when something already overlaps the requested range, regardless of
+    // source (booking, manual block, gap, iCal import).
     if (dto.dateFrom && dto.dateTo) {
       where.bookingModel = { not: 'NO_BOOKING' };
+      const overlapping = await this.prisma.blockedTerm.findMany({
+        where: { startsAt: { lt: new Date(dto.dateTo) }, endsAt: { gt: new Date(dto.dateFrom) } },
+        select: { listingId: true },
+        distinct: ['listingId'],
+      });
+      if (overlapping.length) {
+        where.id = { notIn: overlapping.map((b) => b.listingId) };
+      }
     }
 
     return where;
@@ -235,7 +279,10 @@ export class SearchService {
 
   private resultInclude() {
     return {
-      photos: { where: { isCover: true }, take: 1 },
+      // Same last-approved-state guarantee as getPublicBySlug (R32) — a
+      // search card must never show a photo the listing's own page would
+      // hide because it's pending removal or still awaiting approval.
+      photos: { where: { isCover: true, pendingRemoval: false, versionId: null }, take: 1 },
       category: true,
       city: true,
       cityArea: true,
@@ -245,7 +292,7 @@ export class SearchService {
 
   /** Feeds the frontend's dynamic sitemap — every publicly reachable, genuinely indexable URL. */
   async getSitemapUrls() {
-    const [listings, categories] = await Promise.all([
+    const [listings, categories, cityCategoryGroups, threshold] = await Promise.all([
       this.prisma.listing.findMany({
         where: { status: 'ACTIVE' },
         select: { slug: true, publishedAt: true },
@@ -254,11 +301,59 @@ export class SearchService {
         where: { status: 'ACTIVE' },
         select: { slug: true },
       }),
+      this.prisma.listing.groupBy({
+        by: ['categoryId', 'cityId'],
+        where: { status: 'ACTIVE', cityId: { not: null } },
+        _count: { _all: true },
+      }),
+      this.getIndexThreshold(),
     ]);
+
+    // R135 — only combinations that clear the indexing threshold get a
+    // sitemap entry; below that they're visitor-reachable but intentionally
+    // absent here (they self-report noindex too).
+    const qualifying = cityCategoryGroups.filter((g) => g._count._all >= threshold && g.cityId);
+    const categoryIds = [...new Set(qualifying.map((g) => g.categoryId))];
+    const cityIds = [...new Set(qualifying.map((g) => g.cityId as string))];
+    const [cats, cities] = await Promise.all([
+      this.prisma.category.findMany({ where: { id: { in: categoryIds } }, select: { id: true, slug: true } }),
+      this.prisma.city.findMany({ where: { id: { in: cityIds } }, select: { id: true, slug: true } }),
+    ]);
+    const categorySlugById = new Map(cats.map((c) => [c.id, c.slug]));
+    const citySlugById = new Map(cities.map((c) => [c.id, c.slug]));
+
     return {
       listings: listings.map((l) => ({ slug: l.slug, updatedAt: l.publishedAt })),
       categories: categories.map((c) => ({ slug: c.slug })),
+      categoryCities: qualifying
+        .map((g) => ({
+          categorySlug: categorySlugById.get(g.categoryId),
+          citySlug: citySlugById.get(g.cityId as string),
+        }))
+        .filter((g): g is { categorySlug: string; citySlug: string } => !!g.categorySlug && !!g.citySlug),
     };
+  }
+
+  /** R24 — walks up to 2 levels below the given category; the tree never goes deeper. */
+  private async categorySubtreeIds(rootId: string): Promise<string[]> {
+    const ids = [rootId];
+    let frontier = [rootId];
+    for (let depth = 0; depth < 2 && frontier.length; depth++) {
+      const children = await this.prisma.category.findMany({
+        where: { parentId: { in: frontier } },
+        select: { id: true },
+      });
+      if (!children.length) break;
+      frontier = children.map((c) => c.id);
+      ids.push(...frontier);
+    }
+    return ids;
+  }
+
+  /** R171 — admin-editable in /admin/podesavanja (Setting.listing_index_threshold). */
+  private async getIndexThreshold(): Promise<number> {
+    const setting = await this.prisma.setting.findUnique({ where: { key: 'listing_index_threshold' } });
+    return typeof setting?.value === 'number' ? setting.value : 3;
   }
 
   private serializeResult(listing: any) {

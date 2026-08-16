@@ -9,7 +9,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.AdjustPriceDto = exports.InitCheckoutDto = exports.CancelSubscriptionDto = exports.PurchaseFeaturedDto = exports.PurchaseSubscriptionDto = void 0;
+exports.AssignFreeFeaturedDto = exports.AdjustPriceDto = exports.InitCheckoutDto = exports.CancelSubscriptionDto = exports.PurchaseFeaturedDto = exports.PurchaseSubscriptionDto = void 0;
 const swagger_1 = require("@nestjs/swagger");
 const class_validator_1 = require("class-validator");
 const client_1 = require("@prisma/client");
@@ -143,4 +143,12 @@ __decorate([
     (0, class_validator_1.IsInt)(),
     __metadata("design:type", Number)
 ], AdjustPriceDto.prototype, "priceYearlyRsd", void 0);
+class AssignFreeFeaturedDto {
+}
+exports.AssignFreeFeaturedDto = AssignFreeFeaturedDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ enum: [7, 15, 30] }),
+    (0, class_validator_1.IsIn)([7, 15, 30]),
+    __metadata("design:type", Number)
+], AssignFreeFeaturedDto.prototype, "durationDays", void 0);
 //# sourceMappingURL=subscriptions.dto.js.map

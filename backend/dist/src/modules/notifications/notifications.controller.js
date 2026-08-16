@@ -17,6 +17,7 @@ const common_1 = require("@nestjs/common");
 const swagger_1 = require("@nestjs/swagger");
 const notifications_service_1 = require("./notifications.service");
 const current_user_decorator_1 = require("../../common/decorators/current-user.decorator");
+const notification_settings_dto_1 = require("./dto/notification-settings.dto");
 let NotificationsController = class NotificationsController {
     constructor(notificationsService) {
         this.notificationsService = notificationsService;
@@ -32,6 +33,15 @@ let NotificationsController = class NotificationsController {
     }
     markAllRead(userId) {
         return this.notificationsService.markAllRead(userId);
+    }
+    getSettings(userId) {
+        return this.notificationsService.getMySettings(userId);
+    }
+    updateSetting(userId, event, dto) {
+        return this.notificationsService.updateSetting(userId, event, dto.emailEnabled, dto.appEnabled);
+    }
+    updateSettingsBulk(userId, dto) {
+        return this.notificationsService.updateSettingsBulk(userId, dto.events, dto.emailEnabled, dto.appEnabled);
     }
 };
 exports.NotificationsController = NotificationsController;
@@ -64,6 +74,30 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", void 0)
 ], NotificationsController.prototype, "markAllRead", null);
+__decorate([
+    (0, common_1.Get)('settings'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], NotificationsController.prototype, "getSettings", null);
+__decorate([
+    (0, common_1.Patch)('settings/:event'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)('id')),
+    __param(1, (0, common_1.Param)('event')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, notification_settings_dto_1.UpdateNotificationSettingDto]),
+    __metadata("design:returntype", void 0)
+], NotificationsController.prototype, "updateSetting", null);
+__decorate([
+    (0, common_1.Patch)('settings'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)('id')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, notification_settings_dto_1.UpdateNotificationSettingsBulkDto]),
+    __metadata("design:returntype", void 0)
+], NotificationsController.prototype, "updateSettingsBulk", null);
 exports.NotificationsController = NotificationsController = __decorate([
     (0, swagger_1.ApiTags)('notifications'),
     (0, common_1.Controller)('notifications'),

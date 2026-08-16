@@ -15,6 +15,7 @@ const common_1 = require("@nestjs/common");
 const crypto_1 = require("crypto");
 const payment_settings_service_1 = require("./payment-settings.service");
 const nestpay_hash_util_1 = require("./nestpay-hash.util");
+const ascii_transliterate_1 = require("../../utils/ascii-transliterate");
 const CURRENCY_NUMERIC_CODE = { RSD: '941', EUR: '978' };
 let NestPayCheckoutService = NestPayCheckoutService_1 = class NestPayCheckoutService {
     constructor(settings) {
@@ -53,8 +54,8 @@ let NestPayCheckoutService = NestPayCheckoutService_1 = class NestPayCheckoutSer
             rnd,
             encoding: 'utf-8',
             email: input.billing.email,
-            BillToName: `${input.billing.firstName} ${input.billing.lastName}`.trim(),
-            description: input.description,
+            BillToName: (0, ascii_transliterate_1.toNestPaySafeAscii)(`${input.billing.firstName} ${input.billing.lastName}`.trim()),
+            description: (0, ascii_transliterate_1.toNestPaySafeAscii)(input.description),
         };
         if (input.billing.phone)
             fields.tel = input.billing.phone;
@@ -62,9 +63,9 @@ let NestPayCheckoutService = NestPayCheckoutService_1 = class NestPayCheckoutSer
             fields.shopurl = creds.shopUrl;
         if (input.billing.isCompany && input.billing.companyName) {
             fields.printBillTo = 'true';
-            fields.BillToCompany = input.billing.companyName;
+            fields.BillToCompany = (0, ascii_transliterate_1.toNestPaySafeAscii)(input.billing.companyName);
             if (input.billing.companyAddress)
-                fields.BillToStreet1 = input.billing.companyAddress;
+                fields.BillToStreet1 = (0, ascii_transliterate_1.toNestPaySafeAscii)(input.billing.companyAddress);
         }
         return { actionUrl: `${creds.apiEndpoint}/fim/est3dgate`, fields };
     }

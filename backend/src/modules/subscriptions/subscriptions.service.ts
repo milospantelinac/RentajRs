@@ -19,7 +19,7 @@ import {
   InitCheckoutDto,
 } from './dto/subscriptions.dto';
 
-const GRACE_PERIOD_DAYS = 7;
+const DEFAULT_GRACE_PERIOD_DAYS = 7;
 const RETRY_DAYS = [0, 3, 6];
 
 @Injectable()
@@ -53,12 +53,25 @@ export class SubscriptionsService {
 
   // -- Purchase / attach --------------------------------------------------
 
-  /** Korak 11 of the listing wizard — the moment a subscription actually gets attached to a listing. */
+  /**
+   * Korak 11 of the listing wizard for a DRAFT/REJECTED listing — the moment
+   * a subscription actually gets attached to it. Also doubles as the *free*
+   * upgrade path for an already-ACTIVE listing (dto.existingSubscriptionId):
+   * attaching it to an existing Pro subscription with room, which is the
+   * one reachable trigger for ADR-005's banked-days transfer that doesn't
+   * involve a real charge. A paid upgrade (buying a brand-new package for an
+   * ACTIVE listing) goes through NestPay checkout instead — see
+   * initCheckout()/handleNestPaySuccess() below — so this method never
+   * charges a card for a listing that's already live.
+   */
   async purchaseForListing(userId: string, dto: PurchaseSubscriptionDto) {
     const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: dto.listingId } });
     if (listing.userId !== userId) throw new ForbiddenException();
-    if (!['DRAFT', 'REJECTED'].includes(listing.status)) {
-      throw new BadRequestException('Listing is not awaiting a package');
+
+    const wasActive = listing.status === 'ACTIVE';
+    const eligibleStatuses = dto.existingSubscriptionId ? ['DRAFT', 'REJECTED', 'ACTIVE'] : ['DRAFT', 'REJECTED'];
+    if (!eligibleStatuses.includes(listing.status)) {
+      throw new BadRequestException('Listing is not eligible for this package change');
     }
 
     const previousSubscription = listing.subscriptionId
@@ -72,6 +85,7 @@ export class SubscriptionsService {
       if (!dto.packageId || !dto.billingCycle) {
         throw new BadRequestException('packageId and billingCycle are required to buy a new subscription');
       }
+      await this.assertPackageCompatibleWithListing(listing.id, dto.packageId);
       subscription = await this.createAndChargeSubscription(userId, dto.packageId, dto.billingCycle);
     }
 
@@ -81,8 +95,26 @@ export class SubscriptionsService {
       await this.bankRemainingDays(listing.id, previousSubscription);
     }
 
+    if (wasActive) {
+      // Already live — just repoint it at the new subscription, no re-approval detour.
+      await this.prisma.listing.update({ where: { id: listing.id }, data: { subscriptionId: subscription.id } });
+      this.events.emit('subscription.listing_attached', { listingId: listing.id, subscriptionId: subscription.id });
+      return { listing: await this.listings.getOwned(userId, listing.id), subscription: this.serialize(subscription) };
+    }
+
     const updatedListing = await this.listings.markPendingApproval(listing.id, subscription.id);
     return { listing: updatedListing, subscription: this.serialize(subscription) };
+  }
+
+  /** Ch.3 §10 — Osnovni/BASIC can't be picked for a listing whose model actually needs the booking system. */
+  private async assertPackageCompatibleWithListing(listingId: string, packageId: string) {
+    const [listing, pkg] = await Promise.all([
+      this.prisma.listing.findUniqueOrThrow({ where: { id: listingId } }),
+      this.prisma.package.findUniqueOrThrow({ where: { id: packageId } }),
+    ]);
+    if (listing.bookingModel !== 'NO_BOOKING' && !pkg.hasBookings) {
+      throw new BadRequestException(this.i18n.t('errors.PACKAGE_INCOMPATIBLE_BOOKING_MODEL'));
+    }
   }
 
   private async attachToExistingSubscription(userId: string, subscriptionId: string): Promise<Subscription> {
@@ -202,10 +234,14 @@ export class SubscriptionsService {
   async initCheckout(userId: string, dto: InitCheckoutDto) {
     const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: dto.listingId } });
     if (listing.userId !== userId) throw new ForbiddenException();
-    if (!['DRAFT', 'REJECTED'].includes(listing.status)) {
-      throw new BadRequestException('Listing is not awaiting a package');
+    // ACTIVE is allowed too — this is also the paid path for upgrading an
+    // already-live listing to a bigger package (ADR-005); handleNestPaySuccess
+    // branches on the listing's status to tell a fresh publish from an upgrade.
+    if (!['DRAFT', 'REJECTED', 'ACTIVE'].includes(listing.status)) {
+      throw new BadRequestException('Listing is not eligible for a package purchase');
     }
     const pkg = await this.prisma.package.findUniqueOrThrow({ where: { id: dto.packageId } });
+    await this.assertPackageCompatibleWithListing(listing.id, dto.packageId);
     const price = dto.billingCycle === 'YEARLY' ? pkg.priceYearly : pkg.priceMonthly;
 
     // Save billing details to the profile too — the whole point of asking is
@@ -287,10 +323,6 @@ export class SubscriptionsService {
       return `${frontendUrl}/oglasi/${listingId}/placanje-neuspesno`;
     }
 
-    await this.prisma.subscription.update({
-      where: { id: subscription.id },
-      data: { status: 'PENDING_ACTIVATION', pendingListingId: null },
-    });
     await this.prisma.transaction.create({
       data: {
         userId: subscription.userId,
@@ -302,7 +334,40 @@ export class SubscriptionsService {
       },
     });
 
-    await this.listings.markPendingApproval(listingId, subscription.id);
+    const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: listingId } });
+    let redirectPath: string;
+    if (listing.status === 'ACTIVE') {
+      // ADR-005 upgrade path: the listing is already live, so there's no
+      // moderation step to gate this on — bank whatever's left on the old
+      // subscription, attach the new one, and start its clock immediately.
+      const previousSubscription = listing.subscriptionId
+        ? await this.prisma.subscription.findUnique({ where: { id: listing.subscriptionId }, include: { package: true } })
+        : null;
+      const newPackage = await this.prisma.package.findUniqueOrThrow({ where: { id: subscription.packageId } });
+      if (previousSubscription && previousSubscription.package.key !== 'PRO' && newPackage.key === 'PRO') {
+        await this.bankRemainingDays(listingId, previousSubscription);
+      }
+      const cycleDays = subscription.billingCycle === 'YEARLY' ? 365 : 30;
+      await this.prisma.subscription.update({
+        where: { id: subscription.id },
+        data: {
+          status: 'ACTIVE',
+          startsAt: new Date(),
+          expiresAt: new Date(Date.now() + cycleDays * 86_400_000),
+          pendingListingId: null,
+        },
+      });
+      await this.prisma.listing.update({ where: { id: listingId }, data: { subscriptionId: subscription.id } });
+      this.events.emit('subscription.listing_attached', { listingId, subscriptionId: subscription.id });
+      redirectPath = `/kontrolna-tabla/pretplate?upgraded=1`;
+    } else {
+      await this.prisma.subscription.update({
+        where: { id: subscription.id },
+        data: { status: 'PENDING_ACTIVATION', pendingListingId: null },
+      });
+      await this.listings.markPendingApproval(listingId, subscription.id);
+      redirectPath = `/oglasi/${listingId}/poslato`;
+    }
 
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: subscription.userId } });
     const pkg = await this.prisma.package.findUniqueOrThrow({ where: { id: subscription.packageId } });
@@ -329,7 +394,7 @@ export class SubscriptionsService {
     });
 
     this.events.emit('subscription.purchased', { userId: subscription.userId, subscriptionId: subscription.id });
-    return `${frontendUrl}/oglasi/${listingId}/poslato`;
+    return `${frontendUrl}${redirectPath}`;
   }
 
   /** failUrl target — NestPay POSTs here when the customer's payment did not go through. */
@@ -391,8 +456,8 @@ export class SubscriptionsService {
     const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: dto.listingId } });
     if (listing.userId !== userId) throw new ForbiddenException();
 
-    const priceTable: Record<number, number> = { 7: 89_000, 15: 159_000, 30: 249_000 };
-    const price = BigInt(priceTable[dto.durationDays]);
+    const priceTable = await this.getFeaturedPriceTable();
+    const price = rsdToPara(priceTable[dto.durationDays]);
 
     const maxSetting = await this.prisma.setting.findUnique({ where: { key: 'max_featured_per_category' } });
     const maxPerCategory = (maxSetting?.value as number) ?? 10;
@@ -493,6 +558,46 @@ export class SubscriptionsService {
     return { message: this.i18n.t('common.SUCCESS') };
   }
 
+  // Featured-listing prices (P7/R116, no longer hardcoded — see
+  // getFeaturedPriceTable() below) are edited like every other Setting, via
+  // the generic /admin/podesavanja panel (key "featured_listing_prices").
+
+  async getFeaturedPrices() {
+    return this.getFeaturedPriceTable();
+  }
+
+  /** R145 — administrator can hand out a featured slot for free, bypassing payment entirely. */
+  async adminAssignFreeFeatured(adminId: string, listingId: string, durationDays: 7 | 15 | 30) {
+    const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: listingId } });
+    const featured = await this.prisma.featuredListing.create({
+      data: {
+        listingId: listing.id,
+        durationDays,
+        price: 0n,
+        startsAt: new Date(),
+        expiresAt: new Date(Date.now() + durationDays * 86_400_000),
+        free: true,
+        assignedByUserId: adminId,
+      },
+    });
+    // A free grant resolves the listing's own place in the queue, if any.
+    await this.prisma.featuredWaitlist.deleteMany({ where: { listingId: listing.id } });
+    this.events.emit('subscriptions.featured_assigned_free', { listingId: listing.id, adminId });
+    return { ...featured, price: paraToRsd(featured.price) };
+  }
+
+  /** Feeds the admin "assign free featured" list — the concrete, already-expressed demand (R114 waitlist). */
+  async adminGetFeaturedWaitlist() {
+    const entries = await this.prisma.featuredWaitlist.findMany({
+      orderBy: { requestedAt: 'asc' },
+      include: {
+        listing: { select: { id: true, title: true, slug: true } },
+        category: { select: { id: true, slug: true } },
+      },
+    });
+    return entries;
+  }
+
   async adminListSubscriptions(status?: SubscriptionStatus) {
     const subscriptions = await this.prisma.subscription.findMany({
       where: status ? { status } : undefined,
@@ -590,6 +695,7 @@ export class SubscriptionsService {
       where: { status: 'ACTIVE', autoRenew: true, expiresAt: { lte: new Date() } },
       include: { package: true },
     });
+    const gracePeriodDays = await this.getGracePeriodDays();
     for (const sub of dueToday) {
       const charge = await this.payment.chargeCard({
         amountRsd: paraToRsd(sub.priceAtPurchase) ?? 0,
@@ -618,7 +724,7 @@ export class SubscriptionsService {
       } else {
         await this.prisma.subscription.update({
           where: { id: sub.id },
-          data: { status: 'GRACE', graceUntil: addDays(new Date(), GRACE_PERIOD_DAYS), paymentAttemptCount: 1 },
+          data: { status: 'GRACE', graceUntil: addDays(new Date(), gracePeriodDays), paymentAttemptCount: 1 },
         });
         this.events.emit('subscription.payment_failed', { subscriptionId: sub.id, attempt: 0 });
       }
@@ -627,8 +733,9 @@ export class SubscriptionsService {
 
   private async processGracePeriod() {
     const inGrace = await this.prisma.subscription.findMany({ where: { status: 'GRACE' }, include: { package: true } });
+    const gracePeriodDays = await this.getGracePeriodDays();
     for (const sub of inGrace) {
-      const daysSinceGraceStart = GRACE_PERIOD_DAYS - Math.ceil(((sub.graceUntil?.getTime() ?? 0) - Date.now()) / 86_400_000);
+      const daysSinceGraceStart = gracePeriodDays - Math.ceil(((sub.graceUntil?.getTime() ?? 0) - Date.now()) / 86_400_000);
       if (!RETRY_DAYS.includes(daysSinceGraceStart)) continue;
 
       const charge = await this.payment.chargeCard({
@@ -705,6 +812,22 @@ export class SubscriptionsService {
         await this.prisma.listing.update({ where: { id: banked.listingId }, data: { status: 'EXPIRED' } });
       }
     }
+  }
+
+  private async getFeaturedPriceTable(): Promise<Record<7 | 15 | 30, number>> {
+    const setting = await this.prisma.setting.findUnique({ where: { key: 'featured_listing_prices' } });
+    const value = setting?.value as Record<string, number> | undefined;
+    return {
+      7: value?.['7'] ?? 890,
+      15: value?.['15'] ?? 1590,
+      30: value?.['30'] ?? 2490,
+    };
+  }
+
+  /** R171 — admin-editable in /admin/podesavanja (Setting.grace_period_days). */
+  private async getGracePeriodDays(): Promise<number> {
+    const setting = await this.prisma.setting.findUnique({ where: { key: 'grace_period_days' } });
+    return typeof setting?.value === 'number' ? setting.value : DEFAULT_GRACE_PERIOD_DAYS;
   }
 
   private serialize(subscription: Subscription) {

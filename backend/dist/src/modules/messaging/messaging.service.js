@@ -26,7 +26,10 @@ let MessagingService = class MessagingService {
         this.events = events;
     }
     async startConversation(guestId, dto) {
-        const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: dto.listingId } });
+        const listing = await this.prisma.listing.findUniqueOrThrow({
+            where: { id: dto.listingId },
+            include: { subscription: { include: { package: true } } },
+        });
         if (listing.userId === guestId)
             throw new common_1.BadRequestException('Cannot message your own listing');
         const existing = await this.prisma.conversation.findFirst({
@@ -34,6 +37,9 @@ let MessagingService = class MessagingService {
         });
         if (existing) {
             return this.sendMessage(guestId, existing.id, dto.content);
+        }
+        if (!listing.subscription?.package.hasMessaging) {
+            throw new common_1.ForbiddenException(this.i18n.t('errors.PACKAGE_FEATURE_NOT_INCLUDED'));
         }
         await this.assertDailyLimitNotReached(guestId);
         const conversation = await this.prisma.conversation.create({
@@ -89,7 +95,7 @@ let MessagingService = class MessagingService {
             throw new common_1.ForbiddenException();
         const { url } = file.mimetype === 'application/pdf'
             ? await this.uploads.saveRawFile(file, 'messages', ATTACHMENT_ALLOWED_TYPES, 5)
-            : await this.uploads.saveImage(file, 'messages', { maxWidth: 1600 });
+            : await this.uploads.saveImage(file, 'messages', { maxWidth: 1600, maxSizeMb: 5 });
         return this.prisma.messageAttachment.create({
             data: { messageId, url, type: file.mimetype, size: file.size, filename: file.originalname },
         });

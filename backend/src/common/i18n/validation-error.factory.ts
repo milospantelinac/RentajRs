@@ -29,8 +29,14 @@ const CONSTRAINT_KEY_MAP: Record<string, string> = {
   isDate: 'validation.DATE',
   isArray: 'validation.ARRAY',
   notCommonPassword: 'validation.PASSWORD_WEAK',
-  matches: 'validation.PHONE_INVALID',
+  // No generic entry for 'matches' — it's class-validator's constraint name
+  // for every @Matches() in the app (phone, bank account, time-of-day, ...),
+  // so a single shared translation is always wrong for most of them. Each
+  // @Matches() must supply its own `message` i18n key instead (see below).
 };
+
+/** A decorator's own `message: 'validation.SOMETHING'` looks like this — dotted, no spaces. */
+const I18N_KEY_PATTERN = /^[a-zA-Z]+(\.[A-Za-z0-9_]+)+$/;
 
 export interface FlatValidationMessage {
   field: string;
@@ -49,7 +55,11 @@ export function flattenValidationErrors(
 
     if (err.constraints) {
       for (const [constraintKey, fallback] of Object.entries(err.constraints)) {
-        const i18nKey = CONSTRAINT_KEY_MAP[constraintKey];
+        // A decorator's own `message: 'validation.X'` (e.g. @Matches(re, {
+        // message: 'validation.BANK_ACCOUNT_INVALID' })) lands in `fallback`
+        // verbatim — prefer it over the generic per-constraint-type map,
+        // which can't tell one @Matches() field from another.
+        const i18nKey = I18N_KEY_PATTERN.test(fallback) ? fallback : CONSTRAINT_KEY_MAP[constraintKey];
         const message = i18nKey ? String(i18n?.t(i18nKey, { args: { property: field } }) ?? fallback) : fallback;
         out.push({ field, message });
       }

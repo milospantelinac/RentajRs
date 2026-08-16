@@ -17,6 +17,7 @@ const prisma_service_1 = require("../../prisma/prisma.service");
 const users_service_1 = require("../users/users.service");
 const payment_settings_service_1 = require("../../common/payment/nestpay/payment-settings.service");
 const PRIORITY_REPORT_THRESHOLD = 3;
+const RESTRICTION_DAYS = 30;
 let AdminService = class AdminService {
     constructor(prisma, users, i18n, events, paymentSettings) {
         this.prisma = prisma;
@@ -34,6 +35,7 @@ let AdminService = class AdminService {
             select: {
                 id: true, firstName: true, lastName: true, email: true, blocked: true, verified: true,
                 completedBookingsCount: true, createdAt: true, lastLoginAt: true,
+                warningsCount: true, restrictedUntil: true,
             },
             orderBy: { createdAt: 'desc' },
             take: 200,
@@ -99,6 +101,15 @@ let AdminService = class AdminService {
             if (dto.outcome === 'BLOCK') {
                 await this.prisma.user.update({ where: { id: dto.targetUserId }, data: { blocked: true, blockedReason: `Dispute ${disputeId}: ${dto.adminNote ?? ''}` } });
                 await this.prisma.session.updateMany({ where: { userId: dto.targetUserId, revokedAt: null }, data: { revokedAt: new Date() } });
+            }
+            else if (dto.outcome === 'WARNING') {
+                await this.prisma.user.update({ where: { id: dto.targetUserId }, data: { warningsCount: { increment: 1 } } });
+            }
+            else if (dto.outcome === 'RESTRICTION') {
+                await this.prisma.user.update({
+                    where: { id: dto.targetUserId },
+                    data: { restrictedUntil: new Date(Date.now() + RESTRICTION_DAYS * 86_400_000) },
+                });
             }
             this.events.emit('admin.dispute_outcome_applied', { userId: dto.targetUserId, outcome: dto.outcome, disputeId });
         }

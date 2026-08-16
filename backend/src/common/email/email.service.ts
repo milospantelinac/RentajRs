@@ -6,6 +6,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationsService } from '../../modules/notifications/notifications.service';
 import { interpolate } from '../utils/interpolate';
 import { renderEmailHtml } from './mjml-layout';
+import { CRITICAL_EMAIL_EVENTS } from './critical-events';
 
 export interface SendEmailOptions {
   /** EmailTemplate.key — also doubles as the EmailLog.event/template value. */
@@ -53,6 +54,16 @@ export class EmailService {
    * out (the failure itself is what EmailLog is for).
    */
   async send(opts: SendEmailOptions): Promise<void> {
+    // R87/R90 — an event outside the always-on critical set respects the
+    // recipient's own opt-out (NotificationSetting.emailEnabled); the in-app
+    // bell has its own, separate appEnabled check inside createFromEmail().
+    if (opts.userId && !CRITICAL_EMAIL_EVENTS.has(opts.key)) {
+      const setting = await this.prisma.notificationSetting.findUnique({
+        where: { userId_event: { userId: opts.userId, event: opts.key } },
+      });
+      if (setting && !setting.emailEnabled) return;
+    }
+
     const language = opts.language ?? Language.SR;
     const template = await this.prisma.emailTemplate.findUnique({
       where: { key_language: { key: opts.key, language } },

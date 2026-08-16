@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import { BookingStatus } from '@prisma/client';
 import { BookingsService } from './bookings.service';
 import { CreateBookingRequestDto } from './dto/create-booking-request.dto';
 import { CancelBookingDto, DisputeNoShowDto, RejectBookingDto } from './dto/booking-actions.dto';
@@ -16,8 +17,12 @@ export class BookingsController {
   }
 
   @Get('bookings/mine')
-  listMine(@CurrentUser('id') userId: string, @Query('role') role: 'guest' | 'owner' = 'guest') {
-    return this.bookingsService.listMine(userId, role);
+  listMine(
+    @CurrentUser('id') userId: string,
+    @Query('role') role: 'guest' | 'owner' = 'guest',
+    @Query('status') status?: BookingStatus,
+  ) {
+    return this.bookingsService.listMine(userId, role, status);
   }
 
   @Get('bookings/:id')

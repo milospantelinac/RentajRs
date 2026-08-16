@@ -19,6 +19,10 @@
               <div class="col-6 text-muted">{{ t('booking.payAmount') }}</div>
               <div class="col-6">{{ formatPrice(booking.amountDue) }}</div>
             </div>
+            <div v-if="isOwner && booking.guestPhone" class="row mb-2">
+              <div class="col-6 text-muted">{{ t('booking.guestPhone') }}</div>
+              <div class="col-6"><a :href="`tel:${booking.guestPhone}`">{{ booking.guestPhone }}</a></div>
+            </div>
           </div>
         </div>
 
@@ -181,7 +185,7 @@ async function submitReview() {
     })
     reviewStatus.value = await api.get(`/bookings/${route.params.id}/reviews`)
   } catch (e) {
-    reviewError.value = e?.data?.message?.[0] || e?.data?.message || t('auth.genericError')
+    reviewError.value = extractErrorMessage(e, t('auth.genericError'))
   } finally {
     submittingReview.value = false
   }
@@ -193,7 +197,7 @@ async function act(action) {
     await api.post(`/bookings/${route.params.id}/${action}`, {})
     await load()
   } catch (e) {
-    error.value = e?.data?.message?.[0] || e?.data?.message || t('auth.genericError')
+    error.value = extractErrorMessage(e, t('auth.genericError'))
   }
 }
 

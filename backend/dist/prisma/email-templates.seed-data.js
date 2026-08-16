@@ -63,6 +63,21 @@ exports.emailTemplates = [
         },
     },
     {
+        key: 'two_factor_reset_by_password_reset',
+        sr: {
+            subject: 'Dvofaktorska autentikacija je isključena',
+            heading: 'Dvofaktorska autentikacija je isključena',
+            bodyText: 'Pošto ste upravo resetovali lozinku, dvofaktorska autentikacija na vašem nalogu je isključena — tako se rešava zaključavanje kada izgubite pristup aplikaciji za kodove. Ako ste administrator, moraćete da je ponovo podesite pri sledećoj prijavi. Ako niste vi zatražili resetovanje lozinke, odmah kontaktirajte podršku.',
+            buttonLabel: 'Otvori nalog',
+        },
+        en: {
+            subject: 'Two-factor authentication has been turned off',
+            heading: 'Two-factor authentication has been turned off',
+            bodyText: 'Since you just reset your password, two-factor authentication on your account has been turned off — that\'s how a lockout from your authenticator app gets resolved. If you\'re an admin, you\'ll need to set it up again on your next login. If you didn\'t request this password reset, contact support immediately.',
+            buttonLabel: 'Open account',
+        },
+    },
+    {
         key: 'new_device_login',
         sr: {
             subject: 'Nova prijava na vaš nalog',
@@ -585,6 +600,21 @@ exports.emailTemplates = [
             heading: 'A listing was reported',
             bodyText: '"{oglas}" was reported by a user and is waiting for review.',
             buttonLabel: 'Review report',
+        },
+    },
+    {
+        key: 'admin_listing_report_priority',
+        sr: {
+            subject: 'Hitno: {oglas} ima više prijava',
+            heading: 'Oglas je dostigao prag za prioritetnu proveru',
+            bodyText: 'Oglas "{oglas}" je prijavljen {broj} puta — dostignut je prag za prioritetnu proveru (R144).',
+            buttonLabel: 'Pregledaj prijave',
+        },
+        en: {
+            subject: 'Urgent: {oglas} has multiple reports',
+            heading: 'A listing crossed the priority-review threshold',
+            bodyText: '"{oglas}" has been reported {broj} times — this crosses the priority-review threshold (R144).',
+            buttonLabel: 'Review reports',
         },
     },
     {

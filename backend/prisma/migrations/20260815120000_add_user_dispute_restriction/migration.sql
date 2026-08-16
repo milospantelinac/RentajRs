@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "User" ADD COLUMN "warningsCount" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "User" ADD COLUMN "restrictedUntil" TIMESTAMPTZ;

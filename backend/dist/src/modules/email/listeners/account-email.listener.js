@@ -70,6 +70,18 @@ let AccountEmailListener = class AccountEmailListener {
             buttonUrl: `${this.frontendUrl}/kontrolna-tabla/podesavanja`,
         });
     }
+    async onTwoFactorResetByPasswordReset({ userId }) {
+        const user = await this.prisma.user.findUnique({ where: { id: userId } });
+        if (!user)
+            return;
+        await this.email.send({
+            key: 'two_factor_reset_by_password_reset',
+            to: user.email,
+            language: user.language,
+            userId,
+            buttonUrl: `${this.frontendUrl}/kontrolna-tabla/podesavanja`,
+        });
+    }
     async onNewDeviceLogin({ userId, device }) {
         const user = await this.prisma.user.findUnique({ where: { id: userId } });
         if (!user)
@@ -122,6 +134,12 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], AccountEmailListener.prototype, "onPasswordChanged", null);
+__decorate([
+    (0, event_emitter_1.OnEvent)('auth.two_factor_reset_by_password_reset'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], AccountEmailListener.prototype, "onTwoFactorResetByPasswordReset", null);
 __decorate([
     (0, event_emitter_1.OnEvent)('auth.new_device_login'),
     __metadata("design:type", Function),

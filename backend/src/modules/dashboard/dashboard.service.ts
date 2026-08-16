@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ReviewsService } from '../reviews/reviews.service';
+import { UsersService } from '../users/users.service';
 import { paraToRsd } from '../../common/utils/money';
 
 interface AttentionItem {
@@ -21,15 +22,16 @@ export class DashboardService {
   constructor(
     private prisma: PrismaService,
     private reviews: ReviewsService,
+    private users: UsersService,
   ) {}
 
   async getDashboard(userId: string) {
-    const isOwner = await this.isOwner(userId);
+    const isOwner = await this.users.isOwner(userId);
     const [ownerAttention, guestAttention, stats, onboarding, upcoming] = await Promise.all([
       isOwner ? this.getOwnerAttention(userId) : [],
       this.getGuestAttention(userId),
       this.getStats(userId, isOwner),
-      isOwner ? this.getOnboarding(userId) : null,
+      this.getOnboarding(userId),
       this.getUpcoming(userId),
     ]);
 
@@ -37,14 +39,12 @@ export class DashboardService {
       isOwner,
       attentionItems: [...ownerAttention, ...guestAttention],
       stats,
-      onboarding,
+      // R106 — this is aimed at exactly the user who *isn't* an owner yet
+      // (that's the whole point of "objavi svoj prvi oglas"), so it must
+      // never be gated on isOwner; it disappears on its own once allDone.
+      onboarding: onboarding.allDone ? null : onboarding,
       upcomingBookings: upcoming,
     };
-  }
-
-  private async isOwner(userId: string): Promise<boolean> {
-    const count = await this.prisma.listing.count({ where: { userId, status: 'ACTIVE' } });
-    return count > 0;
   }
 
   private async getOwnerAttention(userId: string): Promise<AttentionItem[]> {
@@ -54,7 +54,7 @@ export class DashboardService {
       where: { ownerId: userId, status: 'AWAITING_PAYMENT' },
     });
     if (awaitingConfirmation) {
-      items.push({ urgency: 'critical', title: 'payment_confirmation', actionUrl: '/kontrolna-tabla/rezervacije?status=AWAITING_PAYMENT', count: awaitingConfirmation });
+      items.push({ urgency: 'critical', title: 'payment_confirmation', actionUrl: '/kontrolna-tabla/rezervacije?role=owner&status=AWAITING_PAYMENT', count: awaitingConfirmation });
     }
 
     const termConflicts = await this.prisma.dispute.count({ where: { type: 'TERM_CONFLICT', status: 'NEW', listing: { userId } } });
@@ -64,7 +64,7 @@ export class DashboardService {
 
     const newRequests = await this.prisma.booking.count({ where: { ownerId: userId, status: 'REQUESTED' } });
     if (newRequests) {
-      items.push({ urgency: 'decision', title: 'new_requests', actionUrl: '/kontrolna-tabla/rezervacije?status=REQUESTED', count: newRequests });
+      items.push({ urgency: 'decision', title: 'new_requests', actionUrl: '/kontrolna-tabla/rezervacije?role=owner&status=REQUESTED', count: newRequests });
     }
 
     const expiringSoon = await this.prisma.subscription.count({
@@ -92,7 +92,7 @@ export class DashboardService {
 
     const awaitingPayment = await this.prisma.booking.count({ where: { guestId: userId, status: 'AWAITING_PAYMENT' } });
     if (awaitingPayment) {
-      items.push({ urgency: 'critical', title: 'payment_deadline', actionUrl: '/kontrolna-tabla/rezervacije', count: awaitingPayment });
+      items.push({ urgency: 'critical', title: 'payment_deadline', actionUrl: '/kontrolna-tabla/rezervacije?role=guest&status=AWAITING_PAYMENT', count: awaitingPayment });
     }
 
     const pendingReviews = await this.reviews.getMyPendingReviews(userId);

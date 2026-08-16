@@ -70,11 +70,15 @@
               <span class="text-body checkout-summary-price">{{ formatPrice(priceForCycle) }}</span>
             </div>
             <p class="text-muted checkout-listing-title mb-3">{{ listing.title }}</p>
+            <p class="text-muted checkout-vat-note mb-3">{{ t('billing.notVatRegistered') }}</p>
 
             <div class="checkout-security-note mb-3">
               <span aria-hidden="true">🔒</span>
               {{ t('billing.securePaymentNote') }}
             </div>
+
+            <p class="text-muted checkout-info-note mb-2">{{ t('billing.autoRenewalNotice') }}</p>
+            <p class="text-muted checkout-info-note mb-3">{{ t('billing.afterPaymentNotice') }}</p>
 
             <p class="text-muted checkout-terms mb-4">
               {{ t('billing.termsPrefix') }}
@@ -85,6 +89,9 @@
             <button class="btn btn-primary-flat btn-block" :disabled="submitting" @click="submitCheckout">
               {{ submitting ? t('common.loading') : t('billing.payAndPublish') }}
             </button>
+            <NuxtLink :to="`/oglasi/${route.params.id}/paket`" class="btn btn-tertiary btn-block mt-2">
+              ← {{ t('billing.backToPackages') }}
+            </NuxtLink>
           </div>
         </div>
       </div>
@@ -163,7 +170,7 @@ async function submitCheckout() {
     await nextTick()
     nestpayFormEl.value.submit()
   } catch (e) {
-    error.value = e?.data?.message?.[0] || e?.data?.message || t('auth.genericError')
+    error.value = extractErrorMessage(e, t('auth.genericError'))
     submitting.value = false
   }
 }
@@ -206,7 +213,9 @@ useSeoMeta({ title: t('billing.checkoutTitle') })
   color: $color-text-muted;
 }
 
-.checkout-terms {
+.checkout-terms,
+.checkout-vat-note,
+.checkout-info-note {
   font-size: $font-size-muted;
 }
 

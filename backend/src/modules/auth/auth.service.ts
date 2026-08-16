@@ -14,6 +14,8 @@ import * as crypto from 'crypto';
 import * as speakeasy from 'speakeasy';
 import * as QRCode from 'qrcode';
 import { PrismaService } from '../../prisma/prisma.service';
+import { CacheService } from '../../common/cache/cache.service';
+import { UsersService } from '../users/users.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto, VerifyTwoFactorDto } from './dto/login.dto';
 import { ForgotPasswordDto, ResetPasswordDto, ChangePasswordDto } from './dto/password.dto';
@@ -29,6 +31,7 @@ const EMAIL_VERIFICATION_TTL = '1d';
 const TWO_FACTOR_PENDING_TTL = '5m';
 const LOCKOUT_THRESHOLD = 5;
 const LOCKOUT_MINUTES = 15;
+const GOOGLE_EXCHANGE_TTL_SECONDS = 30;
 
 @Injectable()
 export class AuthService {
@@ -38,6 +41,8 @@ export class AuthService {
     private config: ConfigService,
     private i18n: I18nService,
     private events: EventEmitter2,
+    private cache: CacheService,
+    private users: UsersService,
   ) {}
 
   // -- Registration ----------------------------------------------------
@@ -91,7 +96,7 @@ export class AuthService {
   async login(dto: LoginDto, meta: RequestMeta) {
     const user = await this.validateCredentials(dto.email, dto.password);
 
-    const isAdmin = await this.isAdmin(user.id);
+    const isAdmin = await this.users.isAdmin(user.id);
     if (isAdmin && !user.twoFactorEnabled) {
       // R127: 2FA is mandatory for admins. Instead of allowing an unprotected
       // login, we hand back a setup-required signal with the same pending
@@ -111,7 +116,12 @@ export class AuthService {
   async verifyTwoFactorLogin(dto: VerifyTwoFactorDto, meta: RequestMeta) {
     const payload = this.verifyPurposeToken(dto.tempToken, '2fa-pending');
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: payload.sub } });
-    this.assertTotpValid(user.twoFactorSecret, dto.code);
+    const totpValid =
+      !!user.twoFactorSecret &&
+      speakeasy.totp.verify({ secret: user.twoFactorSecret, encoding: 'base32', token: dto.code, window: 1 });
+    if (!totpValid && !(await this.consumeBackupCode(user.id, user.twoFactorBackupCodes, dto.code))) {
+      throw new UnauthorizedException(this.i18n.t('errors.TWO_FACTOR_INVALID'));
+    }
     return this.issueSession(user.id, false, meta);
   }
 
@@ -149,11 +159,6 @@ export class AuthService {
       });
     }
     return user;
-  }
-
-  private async isAdmin(userId: string): Promise<boolean> {
-    const count = await this.prisma.userPermission.count({ where: { userId } });
-    return count > 0;
   }
 
   // -- Google OAuth --------------------------------------------------------
@@ -200,6 +205,32 @@ export class AuthService {
       );
     }
     return this.issueSession(user.id, true, meta);
+  }
+
+  /**
+   * R19 fix: the OAuth callback used to hand real access/refresh tokens back
+   * to the browser as URL query params, where they'd sit in history and any
+   * referrer header. Instead it mints a random one-time code, stashes the
+   * already-issued session tokens behind it for 30s, and the frontend
+   * exchanges that code for the real tokens via a follow-up POST
+   * (exchangeGoogleCode below) — the tokens themselves never touch a URL.
+   */
+  async createGoogleExchangeCode(accessToken: string, refreshToken: string): Promise<string> {
+    const code = crypto.randomBytes(24).toString('hex');
+    await this.cache.set(this.googleExchangeCacheKey(code), { accessToken, refreshToken }, GOOGLE_EXCHANGE_TTL_SECONDS);
+    return code;
+  }
+
+  async exchangeGoogleCode(code: string): Promise<{ accessToken: string; refreshToken: string }> {
+    const key = this.googleExchangeCacheKey(code);
+    const payload = await this.cache.get<{ accessToken: string; refreshToken: string }>(key);
+    if (!payload) throw new UnauthorizedException(this.i18n.t('errors.INVALID_OR_EXPIRED_TOKEN'));
+    await this.cache.del(key); // one-time use
+    return payload;
+  }
+
+  private googleExchangeCacheKey(code: string): string {
+    return `auth:google-exchange:${code}`;
   }
 
   // -- Tokens / sessions -----------------------------------------------
@@ -297,6 +328,13 @@ export class AuthService {
     return { message: this.i18n.t('auth.PASSWORD_RESET_EMAIL_SENT') };
   }
 
+  /**
+   * RNT-014 — the only self-service way back in for an admin locked out of
+   * 2FA (lost/reinstalled authenticator, no backup code saved). Proving
+   * ownership of the account email is the same trust boundary the reset
+   * token itself already relies on, so clearing 2FA here doesn't weaken
+   * anything — it's already what "I own this account" means at this point.
+   */
   async resetPassword(dto: ResetPasswordDto) {
     const tokenHash = this.hashToken(dto.token);
     const reset = await this.prisma.passwordReset.findFirst({
@@ -304,13 +342,22 @@ export class AuthService {
     });
     if (!reset) throw new UnauthorizedException(this.i18n.t('errors.INVALID_OR_EXPIRED_TOKEN'));
 
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: reset.userId } });
     const passwordHash = await argon2.hash(dto.password);
     await this.prisma.$transaction([
-      this.prisma.user.update({ where: { id: reset.userId }, data: { passwordHash } }),
+      this.prisma.user.update({
+        where: { id: reset.userId },
+        data: user.twoFactorEnabled
+          ? { passwordHash, twoFactorEnabled: false, twoFactorSecret: null, twoFactorBackupCodes: [] }
+          : { passwordHash },
+      }),
       this.prisma.passwordReset.update({ where: { id: reset.id }, data: { usedAt: new Date() } }),
     ]);
     await this.logoutAllSessions(reset.userId);
     this.events.emit('auth.password_changed', { userId: reset.userId });
+    if (user.twoFactorEnabled) {
+      this.events.emit('auth.two_factor_reset_by_password_reset', { userId: reset.userId });
+    }
     return { message: this.i18n.t('auth.PASSWORD_RESET_SUCCESS') };
   }
 
@@ -339,10 +386,24 @@ export class AuthService {
 
   // -- Two-factor authentication ------------------------------------------
 
-  async generateTwoFactorSecret(userId: string) {
+  /**
+   * R17 fix: regenerating a secret silently turns off 2FA protection until
+   * setup is re-confirmed, so — like disableTwoFactor() — it must re-check
+   * the password rather than trusting a bare access token. The bootstrap
+   * path (generateTwoFactorSecretWithTempToken) skips this on purpose: the
+   * tempToken itself is only issued right after a correct-password login.
+   */
+  async generateTwoFactorSecret(userId: string, password: string) {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    if (!user.passwordHash || !(await argon2.verify(user.passwordHash, password))) {
+      throw new UnauthorizedException(this.i18n.t('errors.INVALID_CREDENTIALS'));
+    }
+    return this.createTwoFactorSecret(user.id, user.email);
+  }
+
+  private async createTwoFactorSecret(userId: string, email: string) {
     const secret = speakeasy.generateSecret({
-      name: `${this.config.get('twoFactor.appName')} (${user.email})`,
+      name: `${this.config.get('twoFactor.appName')} (${email})`,
     });
     await this.prisma.user.update({
       where: { id: userId },
@@ -355,8 +416,12 @@ export class AuthService {
   async confirmTwoFactorSetup(userId: string, code: string) {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     this.assertTotpValid(user.twoFactorSecret, code);
-    await this.prisma.user.update({ where: { id: userId }, data: { twoFactorEnabled: true } });
-    return { message: this.i18n.t('auth.TWO_FACTOR_ENABLED') };
+    const { plaintext, hashes } = await this.generateBackupCodes();
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { twoFactorEnabled: true, twoFactorBackupCodes: hashes },
+    });
+    return { message: this.i18n.t('auth.TWO_FACTOR_ENABLED'), backupCodes: plaintext };
   }
 
   /**
@@ -368,7 +433,8 @@ export class AuthService {
    */
   async generateTwoFactorSecretWithTempToken(tempToken: string) {
     const payload = this.verifyPurposeToken(tempToken, '2fa-setup-required');
-    return this.generateTwoFactorSecret(payload.sub);
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: payload.sub } });
+    return this.createTwoFactorSecret(user.id, user.email);
   }
 
   /** Used right after login when an admin has no 2FA configured yet (see login()). */
@@ -376,8 +442,13 @@ export class AuthService {
     const payload = this.verifyPurposeToken(tempToken, '2fa-setup-required');
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: payload.sub } });
     this.assertTotpValid(user.twoFactorSecret, code);
-    await this.prisma.user.update({ where: { id: user.id }, data: { twoFactorEnabled: true } });
-    return this.issueSession(user.id, false, meta);
+    const { plaintext, hashes } = await this.generateBackupCodes();
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { twoFactorEnabled: true, twoFactorBackupCodes: hashes },
+    });
+    const session = await this.issueSession(user.id, false, meta);
+    return { ...session, backupCodes: plaintext };
   }
 
   async disableTwoFactor(userId: string, password: string) {
@@ -387,9 +458,35 @@ export class AuthService {
     }
     await this.prisma.user.update({
       where: { id: userId },
-      data: { twoFactorEnabled: false, twoFactorSecret: null },
+      data: { twoFactorEnabled: false, twoFactorSecret: null, twoFactorBackupCodes: [] },
     });
     return { message: this.i18n.t('auth.TWO_FACTOR_DISABLED') };
+  }
+
+  /**
+   * RNT-014 — an admin whose only authenticator device is unavailable had no
+   * way back in. 8 single-use codes, generated once 2FA is actually enabled
+   * (never for an abandoned setup), shown to the user exactly once and
+   * stored as argon2 hashes like a password — never in plaintext.
+   */
+  private async generateBackupCodes(): Promise<{ plaintext: string[]; hashes: string[] }> {
+    const plaintext = Array.from({ length: 8 }, () => crypto.randomBytes(5).toString('hex').toUpperCase());
+    const hashes = await Promise.all(plaintext.map((code) => argon2.hash(code)));
+    return { plaintext, hashes };
+  }
+
+  private async consumeBackupCode(userId: string, hashes: string[], code: string): Promise<boolean> {
+    const normalized = code.trim().toUpperCase();
+    for (const hash of hashes) {
+      if (await argon2.verify(hash, normalized)) {
+        await this.prisma.user.update({
+          where: { id: userId },
+          data: { twoFactorBackupCodes: hashes.filter((h) => h !== hash) },
+        });
+        return true;
+      }
+    }
+    return false;
   }
 
   private assertTotpValid(secret: string | null, code: string) {

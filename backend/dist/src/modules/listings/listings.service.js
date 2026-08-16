@@ -23,7 +23,6 @@ const taxonomy_service_1 = require("../taxonomy/taxonomy.service");
 const users_service_1 = require("../users/users.service");
 const contact_detector_1 = require("../../common/utils/contact-detector");
 const money_1 = require("../../common/utils/money");
-const MODERATED_FIELDS = new Set(['title']);
 const MAX_PHOTOS = 20;
 const MODERATION_SLA_HOURS = 24;
 let ListingsService = class ListingsService {
@@ -38,6 +37,10 @@ let ListingsService = class ListingsService {
         this.events = events;
     }
     async createDraft(userId, dto) {
+        const owner = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+        if (owner.restrictedUntil && owner.restrictedUntil.getTime() > Date.now()) {
+            throw new common_1.ForbiddenException(this.i18n.t('errors.ACCOUNT_RESTRICTED'));
+        }
         const category = await this.prisma.category.findUnique({ where: { id: dto.categoryId } });
         if (!category)
             throw new common_1.NotFoundException(this.i18n.t('errors.LISTING_NOT_FOUND'));
@@ -62,7 +65,11 @@ let ListingsService = class ListingsService {
         const listings = await this.prisma.listing.findMany({
             where: { userId, status: { not: client_1.ListingStatus.DELETED } },
             orderBy: { createdAt: 'desc' },
-            include: { photos: { where: { isCover: true }, take: 1 }, category: true },
+            include: {
+                photos: { where: { isCover: true }, take: 1 },
+                category: true,
+                subscription: { select: { package: { select: { key: true } }, status: true, expiresAt: true } },
+            },
         });
         return listings.map((l) => this.serialize(l));
     }
@@ -106,7 +113,9 @@ let ListingsService = class ListingsService {
     async updateLocation(userId, listingId, dto) {
         const listing = await this.assertOwnership(userId, listingId);
         const city = await this.prisma.city.findUniqueOrThrow({ where: { id: dto.cityId } });
-        const coords = await this.geocoding.geocode(dto.address, city.name);
+        const coords = dto.latitude !== undefined && dto.longitude !== undefined
+            ? { latitude: dto.latitude, longitude: dto.longitude }
+            : await this.geocoding.geocode(dto.address, city.name);
         const locationData = {
             regionId: dto.regionId,
             cityId: dto.cityId,
@@ -114,6 +123,7 @@ let ListingsService = class ListingsService {
             address: dto.address,
             latitude: coords?.latitude,
             longitude: coords?.longitude,
+            ...(dto.googlePlaceId !== undefined ? { googlePlaceId: dto.googlePlaceId } : {}),
         };
         if (listing.status === client_1.ListingStatus.ACTIVE) {
             await this.queueModeratedChange(listing.id, locationData);
@@ -125,26 +135,42 @@ let ListingsService = class ListingsService {
     async upsertAttributes(userId, listingId, dto) {
         const listing = await this.assertOwnership(userId, listingId);
         const allowedAttributes = await this.taxonomy.resolveAttributesForCategory(listing.categoryId);
-        const allowedIds = new Set(allowedAttributes.map((a) => a.id));
-        await this.prisma.$transaction(dto.values
-            .filter((v) => allowedIds.has(v.attributeId))
-            .map((v) => this.prisma.listingAttribute.upsert({
-            where: { listingId_attributeId: { listingId: listing.id, attributeId: v.attributeId } },
-            update: {
-                valueNumber: v.valueNumber,
-                valueText: v.valueText,
-                valueBoolean: v.valueBoolean,
-                valueOptionIds: v.valueOptionIds ?? [],
-            },
-            create: {
-                listingId: listing.id,
-                attributeId: v.attributeId,
-                valueNumber: v.valueNumber,
-                valueText: v.valueText,
-                valueBoolean: v.valueBoolean,
-                valueOptionIds: v.valueOptionIds ?? [],
-            },
-        })));
+        const attributesById = new Map(allowedAttributes.map((a) => [a.id, a]));
+        const submitted = dto.values.filter((v) => attributesById.has(v.attributeId));
+        const toWrite = submitted.filter((v) => {
+            const type = attributesById.get(v.attributeId).type;
+            if (type === 'NUMBER')
+                return v.valueNumber !== null && v.valueNumber !== undefined;
+            if (type === 'TEXT')
+                return !!v.valueText;
+            if (type === 'BOOLEAN')
+                return true;
+            return (v.valueOptionIds ?? []).length > 0;
+        });
+        const toClear = submitted.filter((v) => !toWrite.includes(v)).map((v) => v.attributeId);
+        const typedValue = (v) => {
+            const type = attributesById.get(v.attributeId).type;
+            return {
+                valueNumber: type === 'NUMBER' ? v.valueNumber : null,
+                valueText: type === 'TEXT' ? v.valueText : null,
+                valueBoolean: type === 'BOOLEAN' ? v.valueBoolean : null,
+                valueOptionIds: type === 'LIST' || type === 'MULTISELECT' ? (v.valueOptionIds ?? []) : [],
+            };
+        };
+        await this.prisma.$transaction([
+            ...toWrite.map((v) => this.prisma.listingAttribute.upsert({
+                where: { listingId_attributeId: { listingId: listing.id, attributeId: v.attributeId } },
+                update: typedValue(v),
+                create: {
+                    listingId: listing.id,
+                    attributeId: v.attributeId,
+                    ...typedValue(v),
+                },
+            })),
+            this.prisma.listingAttribute.deleteMany({
+                where: { listingId: listing.id, attributeId: { in: toClear } },
+            }),
+        ]);
         return { message: this.i18n.t('common.SUCCESS') };
     }
     async upsertFaqs(userId, listingId, dto) {
@@ -214,11 +240,22 @@ let ListingsService = class ListingsService {
     }
     async reorderPhotos(userId, listingId, photoIds) {
         const listing = await this.assertOwnership(userId, listingId);
+        const livePhotos = await this.prisma.listingPhoto.findMany({
+            where: { listingId: listing.id, versionId: null, pendingRemoval: false },
+            select: { id: true },
+        });
+        const liveIds = new Set(livePhotos.map((p) => p.id));
+        if (photoIds.length !== liveIds.size || photoIds.some((id) => !liveIds.has(id))) {
+            throw new common_1.BadRequestException(this.i18n.t('errors.PHOTO_NOT_FOUND'));
+        }
+        if (listing.status === client_1.ListingStatus.ACTIVE) {
+            await this.queueModeratedChange(listing.id, { photoOrder: photoIds });
+            return { message: this.i18n.t('common.SUCCESS') };
+        }
         await this.prisma.$transaction(photoIds.map((id, index) => this.prisma.listingPhoto.update({
             where: { id },
             data: { displayOrder: index, isCover: index === 0 },
         })));
-        void listing;
         return { message: this.i18n.t('common.SUCCESS') };
     }
     async getReadiness(userId, listingId) {
@@ -247,19 +284,27 @@ let ListingsService = class ListingsService {
         if (listing.status !== client_1.ListingStatus.DRAFT && listing.status !== client_1.ListingStatus.REJECTED) {
             throw new common_1.BadRequestException('Listing is not awaiting submission');
         }
+        const owner = await this.prisma.user.findUniqueOrThrow({ where: { id: listing.userId } });
+        if (!owner.emailVerified) {
+            throw new common_1.ForbiddenException(this.i18n.t('errors.EMAIL_NOT_VERIFIED'));
+        }
         const updated = await this.prisma.listing.update({
             where: { id: listingId },
             data: { status: client_1.ListingStatus.PENDING_APPROVAL, subscriptionId },
         });
         const checkResults = await this.runAutomaticChecks(listingId);
+        const hasWarnings = Object.values(checkResults).some((v) => v === 'WARNING');
         await this.prisma.listingModeration.create({
             data: {
                 listingId,
                 checkResults: checkResults,
-                hasWarnings: Object.values(checkResults).some((v) => v === 'WARNING'),
+                hasWarnings,
             },
         });
         this.events.emit('listing.submitted_for_approval', { listingId });
+        if (!hasWarnings && (await this.getAutoApproveEnabled())) {
+            return this.adminApprove(null, listingId, true);
+        }
         return this.serialize(updated);
     }
     async deleteListing(userId, listingId) {
@@ -279,35 +324,51 @@ let ListingsService = class ListingsService {
     async getPublicBySlug(slug) {
         const listing = await this.prisma.listing.findUnique({
             where: { slug },
-            include: {
-                photos: { where: { pendingRemoval: false, versionId: null }, orderBy: { displayOrder: 'asc' } },
-                faqs: { orderBy: { displayOrder: 'asc' } },
-                extraServices: true,
-                category: true,
-                region: true,
-                city: true,
-                cityArea: true,
-                user: {
-                    select: {
-                        id: true,
-                        firstName: true,
-                        lastName: true,
-                        avatarUrl: true,
-                        profileSlug: true,
-                        avgResponseTimeMinutes: true,
-                        verified: true,
-                        createdAt: true,
-                    },
-                },
-            },
+            include: this.publicDisplayInclude(),
         });
         if (!listing || listing.status !== client_1.ListingStatus.ACTIVE) {
             throw new common_1.NotFoundException(this.i18n.t('errors.LISTING_NOT_FOUND'));
         }
+        await this.recordView(listing.id);
+        return this.buildDisplayPayload(listing);
+    }
+    async getOwnerPreview(userId, listingId) {
+        await this.assertOwnership(userId, listingId);
+        const listing = await this.prisma.listing.findUnique({
+            where: { id: listingId },
+            include: this.publicDisplayInclude(),
+        });
+        if (!listing)
+            throw new common_1.NotFoundException(this.i18n.t('errors.LISTING_NOT_FOUND'));
+        return this.buildDisplayPayload(listing);
+    }
+    publicDisplayInclude() {
+        return {
+            photos: { where: { pendingRemoval: false, versionId: null }, orderBy: { displayOrder: 'asc' } },
+            faqs: { orderBy: { displayOrder: 'asc' } },
+            extraServices: true,
+            category: true,
+            region: true,
+            city: true,
+            cityArea: true,
+            user: {
+                select: {
+                    id: true,
+                    firstName: true,
+                    lastName: true,
+                    avatarUrl: true,
+                    profileSlug: true,
+                    avgResponseTimeMinutes: true,
+                    verified: true,
+                    createdAt: true,
+                },
+            },
+        };
+    }
+    async buildDisplayPayload(listing) {
         const attributes = await this.taxonomy.resolveAttributesForCategory(listing.categoryId);
         const values = await this.prisma.listingAttribute.findMany({ where: { listingId: listing.id } });
         const valueMap = new Map(values.map((v) => [v.attributeId, v]));
-        await this.recordView(listing.id);
         return {
             ...this.serialize(listing),
             photos: listing.photos,
@@ -336,7 +397,12 @@ let ListingsService = class ListingsService {
             this.prisma.listing.findMany({
                 where: { status: client_1.ListingStatus.PENDING_APPROVAL },
                 orderBy: { createdAt: 'asc' },
-                include: { user: { select: { id: true, firstName: true, lastName: true, email: true } }, category: true, photos: true },
+                include: {
+                    user: { select: { id: true, firstName: true, lastName: true, email: true } },
+                    category: true,
+                    photos: true,
+                    moderations: { where: { decision: null }, orderBy: { createdAt: 'desc' }, take: 1 },
+                },
             }),
             this.prisma.listingVersion.findMany({
                 where: { status: client_1.VersionStatus.PENDING },
@@ -344,13 +410,27 @@ let ListingsService = class ListingsService {
                 include: { listing: { include: { user: { select: { id: true, firstName: true, lastName: true } } } } },
             }),
         ]);
+        const slaHours = await this.getModerationSlaHours();
         return {
-            newListings: listings.map((l) => ({ ...this.serialize(l), waitingHours: this.hoursSince(l.createdAt) })),
-            pendingEdits: versions.map((v) => ({ ...v, waitingHours: this.hoursSince(v.submittedAt) })),
-            slaHours: MODERATION_SLA_HOURS,
+            newListings: listings.map((l) => {
+                const { moderations, ...listingFields } = l;
+                const latestModeration = moderations[0];
+                return {
+                    ...this.serialize(listingFields),
+                    waitingHours: this.hoursSince(l.createdAt),
+                    checkResults: latestModeration?.checkResults ?? null,
+                    hasWarnings: latestModeration?.hasWarnings ?? false,
+                };
+            }),
+            pendingEdits: versions.map((v) => ({
+                ...v,
+                listing: this.serialize(v.listing),
+                waitingHours: this.hoursSince(v.submittedAt),
+            })),
+            slaHours,
         };
     }
-    async adminApprove(adminUserId, listingId) {
+    async adminApprove(adminUserId, listingId, automatic = false) {
         const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: listingId } });
         const isFirstApproval = !listing.publishedAt;
         const updated = await this.prisma.listing.update({
@@ -359,7 +439,12 @@ let ListingsService = class ListingsService {
         });
         await this.prisma.listingModeration.updateMany({
             where: { listingId, decision: null },
-            data: { decision: client_1.ModerationDecision.APPROVED, decidedByUserId: adminUserId, decidedAt: new Date() },
+            data: {
+                decision: client_1.ModerationDecision.APPROVED,
+                decidedByUserId: adminUserId,
+                decidedAt: new Date(),
+                automatic,
+            },
         });
         if (isFirstApproval) {
             await this.users.ensureProfileSlug(listing.userId);
@@ -391,13 +476,43 @@ let ListingsService = class ListingsService {
         const version = await this.prisma.listingVersion.findUniqueOrThrow({ where: { id: versionId } });
         const fields = version.changedFields;
         await this.prisma.$transaction(async (tx) => {
-            const { photosChanged, ...listingFields } = fields;
+            const { photosChanged, photoOrder, workingHoursPending, pendingSlotsAdd, ...listingFields } = fields;
             if (Object.keys(listingFields).length) {
                 await tx.listing.update({ where: { id: version.listingId }, data: listingFields });
             }
             if (photosChanged) {
                 await tx.listingPhoto.deleteMany({ where: { versionId: version.id, pendingRemoval: true } });
                 await tx.listingPhoto.updateMany({ where: { versionId: version.id }, data: { versionId: null } });
+            }
+            if (Array.isArray(photoOrder)) {
+                for (let index = 0; index < photoOrder.length; index++) {
+                    await tx.listingPhoto.update({
+                        where: { id: photoOrder[index] },
+                        data: { displayOrder: index, isCover: index === 0 },
+                    });
+                }
+            }
+            if (Array.isArray(workingHoursPending)) {
+                await tx.workingHours.deleteMany({ where: { listingId: version.listingId } });
+                await tx.workingHours.createMany({
+                    data: workingHoursPending.map((h) => ({
+                        listingId: version.listingId,
+                        dayOfWeek: h.dayOfWeek,
+                        startsAt: h.startsAt,
+                        endsAt: h.endsAt,
+                    })),
+                });
+            }
+            if (Array.isArray(pendingSlotsAdd) && pendingSlotsAdd.length) {
+                await tx.definedSlot.createMany({
+                    data: pendingSlotsAdd.map((s) => ({
+                        listingId: version.listingId,
+                        startsAt: new Date(s.startsAt),
+                        endsAt: new Date(s.endsAt),
+                        price: s.price ? (0, money_1.rsdToPara)(s.price) : null,
+                        maxBookings: s.maxBookings ?? 1,
+                    })),
+                });
             }
             await tx.listingVersion.update({
                 where: { id: version.id },
@@ -505,6 +620,14 @@ let ListingsService = class ListingsService {
             priceInRange: 'OK',
             priorRejections: priorRejections > 0 ? 'WARNING' : 'OK',
         };
+    }
+    async getModerationSlaHours() {
+        const setting = await this.prisma.setting.findUnique({ where: { key: 'moderation_sla_hours' } });
+        return typeof setting?.value === 'number' ? setting.value : MODERATION_SLA_HOURS;
+    }
+    async getAutoApproveEnabled() {
+        const setting = await this.prisma.setting.findUnique({ where: { key: 'auto_approve_listings' } });
+        return typeof setting?.value === 'boolean' ? setting.value : false;
     }
     hoursSince(date) {
         return Math.round((Date.now() - date.getTime()) / (60 * 60 * 1000));

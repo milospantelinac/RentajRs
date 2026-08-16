@@ -30,15 +30,16 @@
 
               <div class="auth-links">
                 <NuxtLink to="/zaboravljena-lozinka">{{ t('auth.forgotPassword') }}</NuxtLink>
-                <NuxtLink to="/registracija">{{ t('auth.noAccount') }}</NuxtLink>
+                <NuxtLink :to="registerLink">{{ t('auth.noAccount') }}</NuxtLink>
               </div>
             </form>
 
             <form v-else-if="step === 'twoFactor'" @submit.prevent="submitTwoFactor">
               <p class="text-body mb-3">{{ t('auth.twoFactorPrompt') }}</p>
+              <p class="text-muted mb-3">{{ t('auth.twoFactorBackupCodeHint') }}</p>
               <div class="form-group mb-4">
                 <label class="form-label" for="code">{{ t('auth.twoFactorCode') }}</label>
-                <input id="code" v-model="code" type="text" inputmode="numeric" class="form-control" required />
+                <input id="code" v-model="code" type="text" class="form-control" required />
               </div>
               <p v-if="error" class="form-error mb-3">{{ error }}</p>
               <button type="submit" class="btn btn-primary-flat btn-block" :disabled="loading">
@@ -62,6 +63,17 @@
                 {{ t('common.confirm') }}
               </button>
             </form>
+
+            <div v-else-if="step === 'backupCodes'">
+              <p class="text-body mb-3">{{ t('auth.backupCodesIntro') }}</p>
+              <ul class="backup-codes-list mb-3">
+                <li v-for="backupCode in backupCodes" :key="backupCode">{{ backupCode }}</li>
+              </ul>
+              <p class="text-muted mb-4">{{ t('auth.backupCodesWarning') }}</p>
+              <button type="button" class="btn btn-primary-flat btn-block" @click="finishTwoFactorSetup">
+                {{ t('auth.backupCodesSavedConfirm') }}
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -74,6 +86,17 @@ const { t } = useI18n()
 const auth = useAuthStore()
 const config = useRuntimeConfig()
 const api = useApi()
+const route = useRoute()
+
+const redirectTarget = computed(() => {
+  const value = route.query.redirect
+  // Only ever follow an internal path — never let an open query param send
+  // a logged-in session off to an arbitrary external URL.
+  return typeof value === 'string' && value.startsWith('/') ? value : '/kontrolna-tabla'
+})
+const registerLink = computed(() =>
+  route.query.redirect ? { path: '/registracija', query: { redirect: route.query.redirect } } : '/registracija',
+)
 
 const step = ref('credentials')
 const email = ref('')
@@ -83,6 +106,7 @@ const code = ref('')
 const tempToken = ref('')
 const secret = ref('')
 const qrCodeDataUrl = ref('')
+const backupCodes = ref([])
 const error = ref('')
 const loading = ref(false)
 
@@ -103,10 +127,10 @@ async function submitCredentials() {
       qrCodeDataUrl.value = setup.qrCodeDataUrl
       step.value = 'twoFactorSetup'
     } else {
-      await navigateTo('/kontrolna-tabla')
+      await navigateTo(redirectTarget.value)
     }
   } catch (e) {
-    error.value = e?.data?.message?.[0] || e?.data?.message || t('auth.genericError')
+    error.value = extractErrorMessage(e, t('auth.genericError'))
   } finally {
     loading.value = false
   }
@@ -117,9 +141,9 @@ async function submitTwoFactor() {
   loading.value = true
   try {
     await auth.verifyTwoFactor(tempToken.value, code.value)
-    await navigateTo('/kontrolna-tabla')
+    await navigateTo(redirectTarget.value)
   } catch (e) {
-    error.value = e?.data?.message?.[0] || e?.data?.message || t('auth.genericError')
+    error.value = extractErrorMessage(e, t('auth.genericError'))
   } finally {
     loading.value = false
   }
@@ -132,12 +156,17 @@ async function submitTwoFactorSetup() {
     const result = await api.post('/auth/login/2fa/setup-confirm', { tempToken: tempToken.value, code: code.value })
     await auth.setTokens(result.accessToken, result.refreshToken)
     await auth.fetchMe()
-    await navigateTo('/kontrolna-tabla')
+    backupCodes.value = result.backupCodes || []
+    step.value = 'backupCodes'
   } catch (e) {
-    error.value = e?.data?.message?.[0] || e?.data?.message || t('auth.genericError')
+    error.value = extractErrorMessage(e, t('auth.genericError'))
   } finally {
     loading.value = false
   }
+}
+
+async function finishTwoFactorSetup() {
+  await navigateTo(redirectTarget.value)
 }
 
 useSeoMeta({ title: t('nav.login') })
@@ -169,5 +198,22 @@ useSeoMeta({ title: t('nav.login') })
   text-align: center;
   letter-spacing: 0.05em;
   word-break: break-all;
+}
+
+.backup-codes-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 16px;
+  margin: 0;
+  background: $color-background;
+  border-radius: $radius-input;
+  list-style: none;
+}
+
+.backup-codes-list li {
+  font-family: monospace;
+  text-align: center;
+  letter-spacing: 0.05em;
 }
 </style>

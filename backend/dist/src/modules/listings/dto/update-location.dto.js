@@ -12,17 +12,18 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.UpdateLocationDto = void 0;
 const swagger_1 = require("@nestjs/swagger");
 const class_validator_1 = require("class-validator");
+const undefined_if_blank_transform_1 = require("../../../common/validators/undefined-if-blank.transform");
 class UpdateLocationDto {
 }
 exports.UpdateLocationDto = UpdateLocationDto;
 __decorate([
     (0, swagger_1.ApiProperty)(),
-    (0, class_validator_1.IsUUID)('4'),
+    (0, class_validator_1.IsUUID)('4', { message: 'validation.REGION_REQUIRED' }),
     __metadata("design:type", String)
 ], UpdateLocationDto.prototype, "regionId", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)(),
-    (0, class_validator_1.IsUUID)('4'),
+    (0, class_validator_1.IsUUID)('4', { message: 'validation.CITY_REQUIRED' }),
     __metadata("design:type", String)
 ], UpdateLocationDto.prototype, "cityId", void 0);
 __decorate([
@@ -37,4 +38,24 @@ __decorate([
     (0, class_validator_1.IsNotEmpty)(),
     __metadata("design:type", String)
 ], UpdateLocationDto.prototype, "address", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)(),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsLatitude)(),
+    __metadata("design:type", Number)
+], UpdateLocationDto.prototype, "latitude", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)(),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsLongitude)(),
+    __metadata("design:type", Number)
+], UpdateLocationDto.prototype, "longitude", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)(),
+    (0, class_validator_1.IsOptional)(),
+    undefined_if_blank_transform_1.undefinedIfBlank,
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.MaxLength)(200),
+    __metadata("design:type", String)
+], UpdateLocationDto.prototype, "googlePlaceId", void 0);
 //# sourceMappingURL=update-location.dto.js.map

@@ -9,6 +9,10 @@
       <button class="btn btn-sm" :class="role === 'owner' ? 'btn-primary-flat' : 'btn-tertiary'" @click="setRole('owner')">
         {{ t('dashboard.bookingsAsOwner') }}
       </button>
+      <select v-model="status" class="form-control form-select status-filter" @change="load">
+        <option value="">{{ t('common.all') }}</option>
+        <option v-for="s in statuses" :key="s" :value="s">{{ t(`booking.status${statusLabel(s)}`) }}</option>
+      </select>
     </div>
 
     <p v-if="!bookings?.length" class="text-muted">{{ t('dashboard.noUpcoming') }}</p>
@@ -42,11 +46,18 @@ const { t } = useI18n()
 const api = useApi()
 const route = useRoute()
 
+const statuses = ['REQUESTED', 'AWAITING_PAYMENT', 'CONFIRMED', 'COMPLETED', 'CANCELLED', 'EXPIRED', 'NO_SHOW']
 const role = ref(route.query.role === 'owner' ? 'owner' : 'guest')
+// Deep links from the dashboard's "needs your attention" cards carry a
+// status too (e.g. ?role=owner&status=REQUESTED) — this used to be silently
+// ignored, landing the owner on an unfiltered list instead of the one item
+// the card was actually about.
+const status = ref(statuses.includes(route.query.status) ? route.query.status : '')
 const bookings = ref([])
 
 async function load() {
-  bookings.value = await api.get(`/bookings/mine?role=${role.value}`)
+  const query = status.value ? `role=${role.value}&status=${status.value}` : `role=${role.value}`
+  bookings.value = await api.get(`/bookings/mine?${query}`)
 }
 
 function setRole(r) {
@@ -76,5 +87,9 @@ useSeoMeta({ title: t('dashboard.myBookings') })
 <style lang="scss" scoped>
 .booking-row {
   cursor: pointer;
+}
+
+.status-filter {
+  max-width: 220px;
 }
 </style>

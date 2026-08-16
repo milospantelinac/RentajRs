@@ -16,6 +16,7 @@
               <button type="submit" class="btn btn-primary-flat btn-block" :disabled="loading">
                 {{ loading ? t('common.loading') : t('common.continue') }}
               </button>
+              <p class="text-muted mt-3 mb-0">{{ t('auth.forgotPasswordTwoFactorNote') }}</p>
             </form>
           </div>
         </div>

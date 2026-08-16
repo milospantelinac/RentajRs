@@ -13,5 +13,10 @@
   "DATE": "{property} must be a valid date",
   "ARRAY": "{property} must be a list of values",
   "PASSWORD_WEAK": "Password must be at least 8 characters and must not be a commonly used password",
-  "PHONE_INVALID": "Phone number is not valid"
+  "PHONE_INVALID": "Phone number is not valid",
+  "BANK_ACCOUNT_INVALID": "Bank account must be in the format 000-0000000000000-00",
+  "TIME_INVALID": "Time must be in HH:MM format",
+  "DATE_INVALID": "Date must be in YYYY-MM-DD format",
+  "REGION_REQUIRED": "Please select a region",
+  "CITY_REQUIRED": "Please select a city"
 }

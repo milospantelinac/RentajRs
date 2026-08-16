@@ -64,7 +64,13 @@ let TaxonomyService = class TaxonomyService {
             this.getTranslation('CATEGORY', category.id, 'description'),
         ]);
         const attributes = await this.resolveAttributesForCategory(category.id);
-        const result = { ...category, name: name ?? category.slug, description, attributes };
+        const childCategories = await this.prisma.category.findMany({
+            where: { parentId: category.id, status: 'ACTIVE' },
+            orderBy: { displayOrder: 'asc' },
+        });
+        const childNames = await this.getTranslationMap('CATEGORY', childCategories.map((c) => c.id));
+        const children = childCategories.map((c) => ({ id: c.id, slug: c.slug, name: childNames.get(c.id) ?? c.slug }));
+        const result = { ...category, name: name ?? category.slug, description, attributes, children };
         await this.cache.set(`taxonomy:category:${slug}`, result, CACHE_TTL);
         return result;
     }
@@ -143,6 +149,8 @@ let TaxonomyService = class TaxonomyService {
         const parent = await this.prisma.category.findUnique({ where: { id: dto.parentId } });
         if (!parent)
             throw new common_1.NotFoundException();
+        if (parent.level >= 3)
+            throw new common_1.BadRequestException(this.i18n.t('errors.CATEGORY_MAX_DEPTH'));
         const duplicates = await this.checkDuplicateCategory(dto.parentId, dto.name);
         const existingProposal = duplicates.find((d) => d.similarity > 0.6);
         if (existingProposal) {
