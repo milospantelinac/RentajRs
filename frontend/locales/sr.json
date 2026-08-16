@@ -271,6 +271,8 @@
     "deleteListing": "Obriši",
     "confirmDelete": "Da li ste sigurni da želite da obrišete ovaj oglas? Ova radnja je trajna.",
     "contactOwner": "Kontaktiraj vlasnika",
+    "callOwner": "Pozovite vlasnika",
+    "contactUnavailable": "Kontakt informacije trenutno nisu dostupne za ovaj oglas.",
     "sendRequest": "Pošalji zahtev za rezervaciju",
     "reviews": "recenzija",
     "memberSince": "Član od",

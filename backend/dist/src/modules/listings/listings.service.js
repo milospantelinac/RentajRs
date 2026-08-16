@@ -361,14 +361,19 @@ let ListingsService = class ListingsService {
                     avgResponseTimeMinutes: true,
                     verified: true,
                     createdAt: true,
+                    phone: true,
                 },
             },
+            subscription: { select: { package: { select: { hasBookings: true, hasMessaging: true } } } },
         };
     }
     async buildDisplayPayload(listing) {
         const attributes = await this.taxonomy.resolveAttributesForCategory(listing.categoryId);
         const values = await this.prisma.listingAttribute.findMany({ where: { listingId: listing.id } });
         const valueMap = new Map(values.map((v) => [v.attributeId, v]));
+        const canBook = listing.subscription?.package?.hasBookings ?? false;
+        const canMessage = listing.subscription?.package?.hasMessaging ?? false;
+        const { phone, ...ownerRest } = listing.user;
         return {
             ...this.serialize(listing),
             photos: listing.photos,
@@ -378,8 +383,10 @@ let ListingsService = class ListingsService {
             region: listing.region,
             city: listing.city,
             cityArea: listing.cityArea,
-            owner: listing.user,
+            owner: { ...ownerRest, phone: canMessage ? undefined : phone },
             attributes: attributes.map((a) => ({ ...a, value: valueMap.get(a.id) ?? null })),
+            canBook,
+            canMessage,
         };
     }
     async recordView(listingId) {

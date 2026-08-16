@@ -84,19 +84,23 @@
                 <span class="text-muted text-body"> / {{ t(`listing.unit${unitLabel(listing.priceUnit)}`) }}</span>
               </p>
               <button v-if="preview" type="button" class="btn btn-primary-flat btn-block mt-3" disabled>
-                {{ listing.bookingModel !== 'NO_BOOKING' ? t('listing.sendRequest') : t('listing.contactOwner') }}
+                {{ ctaLabel }}
               </button>
               <template v-else>
                 <NuxtLink
-                  v-if="listing.bookingModel !== 'NO_BOOKING'"
+                  v-if="showBookingCta"
                   :to="`/oglasi/${listing.slug}/rezervisi`"
                   class="btn btn-primary-flat btn-block mt-3"
                 >
                   {{ t('listing.sendRequest') }}
                 </NuxtLink>
-                <NuxtLink v-else :to="`/oglasi/${listing.slug}/poruka`" class="btn btn-primary-flat btn-block mt-3">
+                <NuxtLink v-else-if="listing.canMessage" :to="`/oglasi/${listing.slug}/poruka`" class="btn btn-primary-flat btn-block mt-3">
                   {{ t('listing.contactOwner') }}
                 </NuxtLink>
+                <a v-else-if="listing.owner?.phone" :href="`tel:${listing.owner.phone}`" class="btn btn-primary-flat btn-block mt-3">
+                  {{ t('listing.callOwner') }}: {{ listing.owner.phone }}
+                </a>
+                <p v-else class="text-muted mt-3 mb-0">{{ t('listing.contactUnavailable') }}</p>
               </template>
             </div>
           </div>
@@ -125,7 +129,7 @@
 // Shared between the public listing page and the wizard's "preview as
 // guest" step (RNT-031) — the whole point of reusing this component is that
 // the preview can never drift from what publishing will actually look like.
-defineProps({
+const props = defineProps({
   listing: { type: Object, required: true },
   reviews: { type: Array, default: () => [] },
   preview: { type: Boolean, default: false },
@@ -133,6 +137,18 @@ defineProps({
 
 const { t } = useI18n()
 const activePhoto = ref(0)
+
+// The listing's bookingModel is the owner's preference; canBook/canMessage
+// reflect what the listing's current package actually supports (Osnovni/
+// BASIC has neither) — both must hold before the guest is offered a CTA
+// the backend would otherwise reject.
+const showBookingCta = computed(() => props.listing.bookingModel !== 'NO_BOOKING' && props.listing.canBook)
+const ctaLabel = computed(() => {
+  if (showBookingCta.value) return t('listing.sendRequest')
+  if (props.listing.canMessage) return t('listing.contactOwner')
+  if (props.listing.owner?.phone) return t('listing.callOwner')
+  return t('listing.contactUnavailable')
+})
 
 function formatPrice(value) {
   return new Intl.NumberFormat('sr-RS').format(value || 0) + ' RSD'

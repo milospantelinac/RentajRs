@@ -460,8 +460,10 @@ export class ListingsService {
           avgResponseTimeMinutes: true,
           verified: true,
           createdAt: true,
+          phone: true,
         },
       },
+      subscription: { select: { package: { select: { hasBookings: true, hasMessaging: true } } } },
     };
   }
 
@@ -469,6 +471,15 @@ export class ListingsService {
     const attributes = await this.taxonomy.resolveAttributesForCategory(listing.categoryId);
     const values = await this.prisma.listingAttribute.findMany({ where: { listingId: listing.id } });
     const valueMap = new Map(values.map((v) => [v.attributeId, v]));
+
+    // Ch.11.2/R108 — a listing's package can lack the booking system and/or
+    // internal messaging (Osnovni/BASIC has neither). The guest-facing page
+    // must know this up front so it never offers a CTA the backend will
+    // reject; when neither is available, the owner's phone becomes the
+    // contact point, so it's only exposed in that fallback case.
+    const canBook = listing.subscription?.package?.hasBookings ?? false;
+    const canMessage = listing.subscription?.package?.hasMessaging ?? false;
+    const { phone, ...ownerRest } = listing.user;
 
     return {
       ...this.serialize(listing),
@@ -479,8 +490,10 @@ export class ListingsService {
       region: listing.region,
       city: listing.city,
       cityArea: listing.cityArea,
-      owner: listing.user,
+      owner: { ...ownerRest, phone: canMessage ? undefined : phone },
       attributes: attributes.map((a: any) => ({ ...a, value: valueMap.get(a.id) ?? null })),
+      canBook,
+      canMessage,
     };
   }
 

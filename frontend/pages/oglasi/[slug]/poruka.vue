@@ -29,6 +29,10 @@ const { data: listing } = await useAsyncData(`msg-listing-${route.params.slug}`,
   api.get(`/listings/public/${route.params.slug}`),
 )
 
+if (listing.value && !listing.value.canMessage) {
+  await navigateTo(`/oglasi/${listing.value.slug}`)
+}
+
 const content = ref('')
 const error = ref('')
 const sending = ref(false)

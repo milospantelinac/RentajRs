@@ -271,6 +271,8 @@
     "deleteListing": "Delete",
     "confirmDelete": "Are you sure you want to delete this listing? This action is permanent.",
     "contactOwner": "Contact owner",
+    "callOwner": "Call owner",
+    "contactUnavailable": "Contact information isn't currently available for this listing.",
     "sendRequest": "Send booking request",
     "reviews": "reviews",
     "memberSince": "Member since",

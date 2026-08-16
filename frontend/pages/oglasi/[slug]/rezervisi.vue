@@ -82,6 +82,10 @@ const { data: listing } = await useAsyncData(`booking-listing-${route.params.slu
   api.get(`/listings/public/${route.params.slug}`),
 )
 
+if (listing.value && (listing.value.bookingModel === 'NO_BOOKING' || !listing.value.canBook)) {
+  await navigateTo(`/oglasi/${listing.value.slug}`)
+}
+
 const slots = ref([])
 const form = reactive({
   startsAt: '',
