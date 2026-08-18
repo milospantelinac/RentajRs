@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { ProcessingStatus, Language } from '@prisma/client';
 import { AdminService } from './admin.service';
@@ -8,6 +8,9 @@ import {
   ResolveDisputeDto,
   UpdateSettingDto,
   UpdateEmailTemplateDto,
+  UpdateStaticPageDto,
+  CreateFaqDto,
+  UpdateFaqDto,
 } from './dto/admin.dto';
 import { UpdatePaymentSettingsDto } from '../../common/payment/nestpay/dto/payment-settings.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -122,6 +125,51 @@ export class AdminController {
     @Body() dto: UpdateEmailTemplateDto,
   ) {
     return this.adminService.updateEmailTemplate(adminId, key, language, dto);
+  }
+
+  // -- Admin: static pages (legal/about, Rich Text Editor) --------------
+
+  @RequirePermissions('manage_settings')
+  @Get('admin/static-pages')
+  listStaticPages() {
+    return this.adminService.listStaticPages();
+  }
+
+  @RequirePermissions('manage_settings')
+  @Patch('admin/static-pages/:slug/:language')
+  updateStaticPage(
+    @CurrentUser('id') adminId: string,
+    @Param('slug') slug: string,
+    @Param('language') language: Language,
+    @Body() dto: UpdateStaticPageDto,
+  ) {
+    return this.adminService.updateStaticPage(adminId, slug, language, dto);
+  }
+
+  // -- Admin: FAQ ---------------------------------------------------------
+
+  @RequirePermissions('manage_settings')
+  @Get('admin/faqs')
+  listFaqsAdmin() {
+    return this.adminService.listFaqsAdmin();
+  }
+
+  @RequirePermissions('manage_settings')
+  @Post('admin/faqs')
+  createFaq(@CurrentUser('id') adminId: string, @Body() dto: CreateFaqDto) {
+    return this.adminService.createFaq(adminId, dto);
+  }
+
+  @RequirePermissions('manage_settings')
+  @Patch('admin/faqs/:id')
+  updateFaq(@CurrentUser('id') adminId: string, @Param('id') id: string, @Body() dto: UpdateFaqDto) {
+    return this.adminService.updateFaq(adminId, id, dto);
+  }
+
+  @RequirePermissions('manage_settings')
+  @Delete('admin/faqs/:id')
+  deleteFaq(@CurrentUser('id') adminId: string, @Param('id') id: string) {
+    return this.adminService.deleteFaq(adminId, id);
   }
 
   // -- Admin: reports for ops -----------------------------------------

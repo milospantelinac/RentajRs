@@ -153,6 +153,55 @@ let AdminService = class AdminService {
         await this.logAction(adminId, 'update_email_template', 'EmailTemplate', `${key}:${language}`, existing, dto);
         return { message: this.i18n.t('common.SUCCESS') };
     }
+    async listStaticPages() {
+        return this.prisma.staticPage.findMany({ orderBy: [{ slug: 'asc' }, { language: 'asc' }] });
+    }
+    async updateStaticPage(adminId, slug, language, dto) {
+        const existing = await this.prisma.staticPage.findUnique({ where: { slug_language: { slug, language } } });
+        const data = { title: dto.title, bodyHtml: dto.bodyHtml, published: dto.published ?? true };
+        await this.prisma.staticPage.upsert({
+            where: { slug_language: { slug, language } },
+            update: data,
+            create: { slug, language, ...data },
+        });
+        await this.logAction(adminId, 'update_static_page', 'StaticPage', `${slug}:${language}`, existing, dto);
+        return { message: this.i18n.t('common.SUCCESS') };
+    }
+    async listFaqsAdmin() {
+        return this.prisma.faq.findMany({ orderBy: [{ language: 'asc' }, { displayOrder: 'asc' }] });
+    }
+    async createFaq(adminId, dto) {
+        const maxOrder = await this.prisma.faq.aggregate({
+            where: { language: dto.language },
+            _max: { displayOrder: true },
+        });
+        const faq = await this.prisma.faq.create({
+            data: {
+                language: dto.language,
+                question: dto.question,
+                answer: dto.answer,
+                displayOrder: (maxOrder._max.displayOrder ?? -1) + 1,
+            },
+        });
+        await this.logAction(adminId, 'create_faq', 'Faq', faq.id, null, dto);
+        return faq;
+    }
+    async updateFaq(adminId, id, dto) {
+        const existing = await this.prisma.faq.findUnique({ where: { id } });
+        if (!existing)
+            throw new common_1.NotFoundException();
+        const faq = await this.prisma.faq.update({ where: { id }, data: dto });
+        await this.logAction(adminId, 'update_faq', 'Faq', id, existing, dto);
+        return faq;
+    }
+    async deleteFaq(adminId, id) {
+        const existing = await this.prisma.faq.findUnique({ where: { id } });
+        if (!existing)
+            throw new common_1.NotFoundException();
+        await this.prisma.faq.delete({ where: { id } });
+        await this.logAction(adminId, 'delete_faq', 'Faq', id, existing, null);
+        return { message: this.i18n.t('common.SUCCESS') };
+    }
     async getEmptySearchReport(days = 30) {
         const since = new Date(Date.now() - days * 86_400_000);
         const searches = await this.prisma.emptySearch.findMany({

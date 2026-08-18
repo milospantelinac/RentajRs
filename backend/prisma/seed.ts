@@ -1,6 +1,8 @@
 import { PrismaClient, Language, BookingModel, PriceUnit, AttributeType, FilterType } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { emailTemplates } from './email-templates.seed-data';
+import { staticPages } from './static-pages.seed-data';
+import { faqs } from './faqs.seed-data';
 
 const prisma = new PrismaClient();
 
@@ -513,6 +515,38 @@ async function seedEmailTemplates() {
   console.log(`Seeded ${emailTemplates.length} email templates x 2 languages`);
 }
 
+// Create-only, unlike seedEmailTemplates above — this container reseeds on
+// every restart (see docker-compose.yml), and once an admin has edited a
+// page or FAQ item through /admin/sadrzaj, a reseed must never clobber it.
+async function seedStaticPages() {
+  let created = 0;
+  for (const page of staticPages) {
+    for (const language of [Language.SR, Language.EN] as const) {
+      const copy = page[language === Language.SR ? 'sr' : 'en'];
+      const existing = await prisma.staticPage.findUnique({ where: { slug_language: { slug: page.slug, language } } });
+      if (existing) continue;
+      await prisma.staticPage.create({ data: { slug: page.slug, language, ...copy } });
+      created += 1;
+    }
+  }
+  console.log(created > 0 ? `Seeded ${created} static page rows` : 'Static pages already seeded, skipped');
+}
+
+async function seedFaqs() {
+  const existingCount = await prisma.faq.count();
+  if (existingCount > 0) {
+    console.log('FAQ already seeded, skipped');
+    return;
+  }
+  for (const [index, faq] of faqs.entries()) {
+    for (const language of [Language.SR, Language.EN] as const) {
+      const copy = faq[language === Language.SR ? 'sr' : 'en'];
+      await prisma.faq.create({ data: { language, displayOrder: index, ...copy } });
+    }
+  }
+  console.log(`Seeded ${faqs.length} FAQ items x 2 languages`);
+}
+
 async function main() {
   await seedPackages();
   await seedPermissionsAndAdmin();
@@ -520,6 +554,8 @@ async function main() {
   await seedLocations();
   await seedCategories();
   await seedEmailTemplates();
+  await seedStaticPages();
+  await seedFaqs();
 }
 
 main()

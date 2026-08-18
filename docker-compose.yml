@@ -126,6 +126,11 @@ services:
       - frontend_node_modules:/app/node_modules
     depends_on:
       - backend
+    # Same reasoning as the backend's prisma generate step — frontend_node_modules
+    # is a named volume that shadows whatever the image had at build time, so a
+    # new dependency in package.json (like this session's Tiptap editor) needs
+    # this to actually reach the running container instead of erroring at import.
+    command: sh -c "npm install && npm run dev"
     networks:
       - rentaj_network
 

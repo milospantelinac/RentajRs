@@ -67,6 +67,24 @@ let AdminController = class AdminController {
     updateEmailTemplate(adminId, key, language, dto) {
         return this.adminService.updateEmailTemplate(adminId, key, language, dto);
     }
+    listStaticPages() {
+        return this.adminService.listStaticPages();
+    }
+    updateStaticPage(adminId, slug, language, dto) {
+        return this.adminService.updateStaticPage(adminId, slug, language, dto);
+    }
+    listFaqsAdmin() {
+        return this.adminService.listFaqsAdmin();
+    }
+    createFaq(adminId, dto) {
+        return this.adminService.createFaq(adminId, dto);
+    }
+    updateFaq(adminId, id, dto) {
+        return this.adminService.updateFaq(adminId, id, dto);
+    }
+    deleteFaq(adminId, id) {
+        return this.adminService.deleteFaq(adminId, id);
+    }
     emptySearchReport(days) {
         return this.adminService.getEmptySearchReport(days ? parseInt(days, 10) : undefined);
     }
@@ -202,6 +220,59 @@ __decorate([
     __metadata("design:paramtypes", [String, String, String, admin_dto_1.UpdateEmailTemplateDto]),
     __metadata("design:returntype", void 0)
 ], AdminController.prototype, "updateEmailTemplate", null);
+__decorate([
+    (0, require_permissions_decorator_1.RequirePermissions)('manage_settings'),
+    (0, common_1.Get)('admin/static-pages'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", void 0)
+], AdminController.prototype, "listStaticPages", null);
+__decorate([
+    (0, require_permissions_decorator_1.RequirePermissions)('manage_settings'),
+    (0, common_1.Patch)('admin/static-pages/:slug/:language'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)('id')),
+    __param(1, (0, common_1.Param)('slug')),
+    __param(2, (0, common_1.Param)('language')),
+    __param(3, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, String, admin_dto_1.UpdateStaticPageDto]),
+    __metadata("design:returntype", void 0)
+], AdminController.prototype, "updateStaticPage", null);
+__decorate([
+    (0, require_permissions_decorator_1.RequirePermissions)('manage_settings'),
+    (0, common_1.Get)('admin/faqs'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", void 0)
+], AdminController.prototype, "listFaqsAdmin", null);
+__decorate([
+    (0, require_permissions_decorator_1.RequirePermissions)('manage_settings'),
+    (0, common_1.Post)('admin/faqs'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)('id')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, admin_dto_1.CreateFaqDto]),
+    __metadata("design:returntype", void 0)
+], AdminController.prototype, "createFaq", null);
+__decorate([
+    (0, require_permissions_decorator_1.RequirePermissions)('manage_settings'),
+    (0, common_1.Patch)('admin/faqs/:id'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)('id')),
+    __param(1, (0, common_1.Param)('id')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, admin_dto_1.UpdateFaqDto]),
+    __metadata("design:returntype", void 0)
+], AdminController.prototype, "updateFaq", null);
+__decorate([
+    (0, require_permissions_decorator_1.RequirePermissions)('manage_settings'),
+    (0, common_1.Delete)('admin/faqs/:id'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)('id')),
+    __param(1, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", void 0)
+], AdminController.prototype, "deleteFaq", null);
 __decorate([
     (0, require_permissions_decorator_1.RequirePermissions)('view_admin_logs'),
     (0, common_1.Get)('admin/reports/empty-searches'),
