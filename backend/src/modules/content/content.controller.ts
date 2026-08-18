@@ -24,4 +24,10 @@ export class ContentController {
   listFaqs(@Headers('x-lang') xLang?: string) {
     return this.contentService.listFaqs(resolveLanguage(xLang));
   }
+
+  @Public()
+  @Get('homepage-video-url')
+  getHomepageVideoUrl() {
+    return this.contentService.getHomepageVideoUrl();
+  }
 }

@@ -161,15 +161,21 @@ async function seedSettings() {
             value: true,
             description: 'R182 — admin can turn off the "new booking" admin email once volume makes it noisy',
         },
+        {
+            key: 'homepage_video_url',
+            value: null,
+            description: 'Ch.18.3 — YouTube/Vimeo/direct video URL for the homepage "how it works" section; section is hidden entirely while this is empty',
+        },
     ];
+    let created = 0;
     for (const setting of settings) {
-        await prisma.setting.upsert({
-            where: { key: setting.key },
-            update: { value: setting.value, description: setting.description },
-            create: setting,
-        });
+        const existing = await prisma.setting.findUnique({ where: { key: setting.key } });
+        if (existing)
+            continue;
+        await prisma.setting.create({ data: setting });
+        created += 1;
     }
-    console.log(`Seeded ${settings.length} settings`);
+    console.log(created > 0 ? `Seeded ${created} settings` : 'Settings already seeded, skipped');
 }
 async function seedLocations() {
     const data = {

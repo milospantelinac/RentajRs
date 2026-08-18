@@ -23,4 +23,10 @@ export class ContentService {
       select: { id: true, question: true, answer: true },
     });
   }
+
+  async getHomepageVideoUrl() {
+    const setting = await this.prisma.setting.findUnique({ where: { key: 'homepage_video_url' } });
+    const url = setting?.value;
+    return { url: typeof url === 'string' && url.trim() ? url.trim() : null };
+  }
 }

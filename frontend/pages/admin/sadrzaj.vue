@@ -13,6 +13,11 @@
         :class="tab === 'faq' ? 'btn-primary-flat' : 'btn-tertiary'"
         @click="tab = 'faq'"
       >{{ t('admin.faqManagement') }}</button>
+      <button
+        class="btn btn-sm"
+        :class="tab === 'video' ? 'btn-primary-flat' : 'btn-tertiary'"
+        @click="tab = 'video'"
+      >{{ t('admin.homepageVideo') }}</button>
     </div>
 
     <!-- Static pages (Rich Text Editor) -->
@@ -56,7 +61,7 @@
     </section>
 
     <!-- FAQ (plain text) -->
-    <section v-else>
+    <section v-else-if="tab === 'faq'">
       <div class="form-row-inline mb-3">
         <button
           class="btn btn-sm"
@@ -95,6 +100,24 @@
       </div>
 
       <button class="btn btn-tertiary btn-sm" @click="addFaq">+ {{ t('admin.addFaqItem') }}</button>
+    </section>
+
+    <!-- Homepage video -->
+    <section v-else>
+      <div class="card">
+        <div class="card-body">
+          <p class="text-muted mb-3">{{ t('admin.homepageVideoHint') }}</p>
+          <div class="form-group mb-3">
+            <label class="form-label">{{ t('admin.videoUrl') }}</label>
+            <input v-model="videoUrlForm" type="url" class="form-control" placeholder="https://www.youtube.com/watch?v=..." />
+          </div>
+          <p v-if="savedVideo" class="text-success mb-2">{{ t('dashboard.changesSaved') }}</p>
+          <div class="form-row-inline">
+            <button class="btn btn-primary-flat btn-sm" @click="saveVideoUrl">{{ t('common.save') }}</button>
+            <button class="btn btn-tertiary btn-sm" :disabled="!videoUrlForm" @click="clearVideoUrl">{{ t('admin.clearVideoUrl') }}</button>
+          </div>
+        </div>
+      </div>
     </section>
   </div>
 </template>
@@ -178,6 +201,27 @@ async function reorderFaq(item, direction) {
     api.patch(`/admin/faqs/${item.id}`, { displayOrder: item.displayOrder }),
     api.patch(`/admin/faqs/${swapWith.id}`, { displayOrder: swapWith.displayOrder }),
   ])
+}
+
+// -- Homepage video ---------------------------------------------------------
+
+const { data: settings } = await useAsyncData('admin-settings-for-content', () => api.get('/admin/settings'))
+const videoSetting = (settings.value || []).find((s) => s.key === 'homepage_video_url')
+const videoUrlForm = ref(typeof videoSetting?.value === 'string' ? videoSetting.value : '')
+const savedVideo = ref(false)
+
+async function saveVideoUrl() {
+  // UpdateSettingDto's @IsDefined() rejects null, so an empty string is the
+  // "no video" sentinel here — getHomepageVideoUrl() already treats a blank
+  // string the same as unset.
+  await api.patch('/admin/settings/homepage_video_url', { value: videoUrlForm.value.trim() })
+  savedVideo.value = true
+  setTimeout(() => { savedVideo.value = false }, 2000)
+}
+
+function clearVideoUrl() {
+  videoUrlForm.value = ''
+  saveVideoUrl()
 }
 
 useSeoMeta({ title: t('admin.content') })

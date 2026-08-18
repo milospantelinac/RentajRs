@@ -31,6 +31,9 @@ let ContentController = class ContentController {
     listFaqs(xLang) {
         return this.contentService.listFaqs(resolveLanguage(xLang));
     }
+    getHomepageVideoUrl() {
+        return this.contentService.getHomepageVideoUrl();
+    }
 };
 exports.ContentController = ContentController;
 __decorate([
@@ -50,6 +53,13 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", void 0)
 ], ContentController.prototype, "listFaqs", null);
+__decorate([
+    (0, public_decorator_1.Public)(),
+    (0, common_1.Get)('homepage-video-url'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", void 0)
+], ContentController.prototype, "getHomepageVideoUrl", null);
 exports.ContentController = ContentController = __decorate([
     (0, swagger_1.ApiTags)('content'),
     (0, common_1.Controller)(),
