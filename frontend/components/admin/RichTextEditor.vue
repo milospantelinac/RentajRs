@@ -45,8 +45,32 @@
 
 <script setup>
 import { Editor, EditorContent } from '@tiptap/vue-3'
+import { Extension } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
 import Link from '@tiptap/extension-link'
+
+// StarterKit's default schema doesn't know about a "class" attribute on
+// paragraphs/headings, so it silently drops one on load (e.g. the
+// "lead-paragraph" class used to style the intro line on o-nama) — this
+// keeps whatever class was already on the element through the parse/save
+// round-trip instead of stripping it.
+const PreserveClass = Extension.create({
+  name: 'preserveClass',
+  addGlobalAttributes() {
+    return [
+      {
+        types: ['paragraph', 'heading'],
+        attributes: {
+          class: {
+            default: null,
+            parseHTML: (element) => element.getAttribute('class'),
+            renderHTML: (attributes) => (attributes.class ? { class: attributes.class } : {}),
+          },
+        },
+      },
+    ]
+  },
+})
 
 const props = defineProps({
   modelValue: { type: String, default: '' },
@@ -57,7 +81,7 @@ const editor = shallowRef(null)
 
 onMounted(() => {
   editor.value = new Editor({
-    extensions: [StarterKit, Link.configure({ openOnClick: false })],
+    extensions: [StarterKit, Link.configure({ openOnClick: false }), PreserveClass],
     content: props.modelValue || '',
     onUpdate: ({ editor: e }) => emit('update:modelValue', e.getHTML()),
   })
