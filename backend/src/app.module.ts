@@ -20,6 +20,7 @@ import { AppController } from './app.controller';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { TaxonomyModule } from './modules/taxonomy/taxonomy.module';
+import { ContentModule } from './modules/content/content.module';
 import { ListingsModule } from './modules/listings/listings.module';
 import { SearchModule } from './modules/search/search.module';
 import { AvailabilityModule } from './modules/availability/availability.module';
@@ -69,6 +70,7 @@ import { EmailModule } from './modules/email/email.module';
     AuthModule,
     UsersModule,
     TaxonomyModule,
+    ContentModule,
     ListingsModule,
     SearchModule,
     AvailabilityModule,

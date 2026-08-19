@@ -1350,11 +1350,33 @@ model Setting {
   updatedAt   DateTime @updatedAt
 }
 
+/// Admin-editable content (Rich Text Editor) for the legal/about pages —
+/// slug is one of politika-privatnosti/uslovi-koriscenja/o-nama, matching
+/// the page routes 1:1. Composite key mirrors EmailTemplate's [key,
+/// language] convention.
 model StaticPage {
-  id          String  @id @default(uuid()) @db.Uuid
-  slug        String  @unique
-  published   Boolean @default(true)
-  footerOrder Int?
+  slug      String
+  language  Language
+  title     String
+  bodyHtml  String   @db.Text
+  published Boolean  @default(true)
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@id([slug, language])
+}
+
+/// Admin-editable FAQ shown on the homepage and /faq — plain text (no rich
+/// text needed), ordered via displayOrder.
+model Faq {
+  id           String   @id @default(uuid()) @db.Uuid
+  language     Language
+  question     String
+  answer       String   @db.Text
+  displayOrder Int      @default(0)
+  published    Boolean  @default(true)
+  updatedAt    DateTime @updatedAt @db.Timestamptz
+
+  @@index([language, published, displayOrder])
 }
 
 /// Needed whenever a slug changes (R133), a category merges (R134), or a

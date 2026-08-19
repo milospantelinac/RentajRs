@@ -9,7 +9,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.UpdateEmailTemplateDto = exports.UpdateSettingDto = exports.ResolveDisputeDto = exports.BlockUserDto = exports.ReportListingDto = void 0;
+exports.UpdateFaqDto = exports.CreateFaqDto = exports.UpdateStaticPageDto = exports.UpdateEmailTemplateDto = exports.UpdateSettingDto = exports.ResolveDisputeDto = exports.BlockUserDto = exports.ReportListingDto = void 0;
 const swagger_1 = require("@nestjs/swagger");
 const class_validator_1 = require("class-validator");
 const REPORT_REASONS = ['FRAUD', 'INACCURATE_INFO', 'INAPPROPRIATE_CONTENT', 'DUPLICATE', 'OTHER'];
@@ -92,4 +92,74 @@ __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], UpdateEmailTemplateDto.prototype, "buttonLabel", void 0);
+class UpdateStaticPageDto {
+}
+exports.UpdateStaticPageDto = UpdateStaticPageDto;
+__decorate([
+    (0, swagger_1.ApiProperty)(),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsNotEmpty)(),
+    __metadata("design:type", String)
+], UpdateStaticPageDto.prototype, "title", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'HTML produced by the admin Rich Text Editor' }),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsNotEmpty)(),
+    __metadata("design:type", String)
+], UpdateStaticPageDto.prototype, "bodyHtml", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)(),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsBoolean)(),
+    __metadata("design:type", Boolean)
+], UpdateStaticPageDto.prototype, "published", void 0);
+class CreateFaqDto {
+}
+exports.CreateFaqDto = CreateFaqDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ enum: ['SR', 'EN'] }),
+    (0, class_validator_1.IsIn)(['SR', 'EN']),
+    __metadata("design:type", String)
+], CreateFaqDto.prototype, "language", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)(),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsNotEmpty)(),
+    __metadata("design:type", String)
+], CreateFaqDto.prototype, "question", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)(),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsNotEmpty)(),
+    __metadata("design:type", String)
+], CreateFaqDto.prototype, "answer", void 0);
+class UpdateFaqDto {
+}
+exports.UpdateFaqDto = UpdateFaqDto;
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)(),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsNotEmpty)(),
+    __metadata("design:type", String)
+], UpdateFaqDto.prototype, "question", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)(),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsNotEmpty)(),
+    __metadata("design:type", String)
+], UpdateFaqDto.prototype, "answer", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)(),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsInt)(),
+    __metadata("design:type", Number)
+], UpdateFaqDto.prototype, "displayOrder", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)(),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsBoolean)(),
+    __metadata("design:type", Boolean)
+], UpdateFaqDto.prototype, "published", void 0);
 //# sourceMappingURL=admin.dto.js.map

@@ -31,6 +31,7 @@ const app_controller_1 = require("./app.controller");
 const auth_module_1 = require("./modules/auth/auth.module");
 const users_module_1 = require("./modules/users/users.module");
 const taxonomy_module_1 = require("./modules/taxonomy/taxonomy.module");
+const content_module_1 = require("./modules/content/content.module");
 const listings_module_1 = require("./modules/listings/listings.module");
 const search_module_1 = require("./modules/search/search.module");
 const availability_module_1 = require("./modules/availability/availability.module");
@@ -81,6 +82,7 @@ exports.AppModule = AppModule = __decorate([
             auth_module_1.AuthModule,
             users_module_1.UsersModule,
             taxonomy_module_1.TaxonomyModule,
+            content_module_1.ContentModule,
             listings_module_1.ListingsModule,
             search_module_1.SearchModule,
             availability_module_1.AvailabilityModule,

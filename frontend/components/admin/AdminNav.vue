@@ -7,6 +7,7 @@
     <NuxtLink to="/admin/placanje" class="admin-nav-link">{{ t('admin.paymentSettings') }}</NuxtLink>
     <NuxtLink to="/admin/sporovi" class="admin-nav-link">{{ t('admin.disputes') }}</NuxtLink>
     <NuxtLink to="/admin/email-sabloni" class="admin-nav-link">{{ t('admin.emailTemplates') }}</NuxtLink>
+    <NuxtLink to="/admin/sadrzaj" class="admin-nav-link">{{ t('admin.content') }}</NuxtLink>
     <NuxtLink to="/admin/podesavanja" class="admin-nav-link">{{ t('admin.settings') }}</NuxtLink>
   </nav>
 </template>

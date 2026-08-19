@@ -36,6 +36,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const client_1 = require("@prisma/client");
 const argon2 = __importStar(require("argon2"));
 const email_templates_seed_data_1 = require("./email-templates.seed-data");
+const static_pages_seed_data_1 = require("./static-pages.seed-data");
+const faqs_seed_data_1 = require("./faqs.seed-data");
 const prisma = new client_1.PrismaClient();
 async function setTranslation(entityType, entityId, field, sr) {
     await prisma.translation.upsert({
@@ -159,15 +161,21 @@ async function seedSettings() {
             value: true,
             description: 'R182 — admin can turn off the "new booking" admin email once volume makes it noisy',
         },
+        {
+            key: 'homepage_video_url',
+            value: null,
+            description: 'Ch.18.3 — YouTube/Vimeo/direct video URL for the homepage "how it works" section; section is hidden entirely while this is empty',
+        },
     ];
+    let created = 0;
     for (const setting of settings) {
-        await prisma.setting.upsert({
-            where: { key: setting.key },
-            update: { value: setting.value, description: setting.description },
-            create: setting,
-        });
+        const existing = await prisma.setting.findUnique({ where: { key: setting.key } });
+        if (existing)
+            continue;
+        await prisma.setting.create({ data: setting });
+        created += 1;
     }
-    console.log(`Seeded ${settings.length} settings`);
+    console.log(created > 0 ? `Seeded ${created} settings` : 'Settings already seeded, skipped');
 }
 async function seedLocations() {
     const data = {
@@ -460,6 +468,34 @@ async function seedEmailTemplates() {
     }
     console.log(`Seeded ${email_templates_seed_data_1.emailTemplates.length} email templates x 2 languages`);
 }
+async function seedStaticPages() {
+    let created = 0;
+    for (const page of static_pages_seed_data_1.staticPages) {
+        for (const language of [client_1.Language.SR, client_1.Language.EN]) {
+            const copy = page[language === client_1.Language.SR ? 'sr' : 'en'];
+            const existing = await prisma.staticPage.findUnique({ where: { slug_language: { slug: page.slug, language } } });
+            if (existing)
+                continue;
+            await prisma.staticPage.create({ data: { slug: page.slug, language, ...copy } });
+            created += 1;
+        }
+    }
+    console.log(created > 0 ? `Seeded ${created} static page rows` : 'Static pages already seeded, skipped');
+}
+async function seedFaqs() {
+    const existingCount = await prisma.faq.count();
+    if (existingCount > 0) {
+        console.log('FAQ already seeded, skipped');
+        return;
+    }
+    for (const [index, faq] of faqs_seed_data_1.faqs.entries()) {
+        for (const language of [client_1.Language.SR, client_1.Language.EN]) {
+            const copy = faq[language === client_1.Language.SR ? 'sr' : 'en'];
+            await prisma.faq.create({ data: { language, displayOrder: index, ...copy } });
+        }
+    }
+    console.log(`Seeded ${faqs_seed_data_1.faqs.length} FAQ items x 2 languages`);
+}
 async function main() {
     await seedPackages();
     await seedPermissionsAndAdmin();
@@ -467,6 +503,8 @@ async function main() {
     await seedLocations();
     await seedCategories();
     await seedEmailTemplates();
+    await seedStaticPages();
+    await seedFaqs();
 }
 main()
     .catch((e) => {

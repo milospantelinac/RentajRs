@@ -110,6 +110,24 @@
       </div>
     </section>
 
+    <section v-if="videoEmbedUrl" class="container video-section">
+      <h2 class="section-title-center">
+        <span class="section-title-light">{{ t('home.howItWorksVideoTitleStrong') }}</span>&nbsp;<span class="section-title-strong">{{ t('home.howItWorksVideoTitleLight') }}</span>
+      </h2>
+      <div class="video-frame">
+        <iframe
+          v-if="videoEmbedUrl.type === 'iframe'"
+          :src="videoEmbedUrl.src"
+          class="video-iframe"
+          title="Rentaj"
+          frameborder="0"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowfullscreen
+        />
+        <video v-else :src="videoEmbedUrl.src" class="video-native" controls />
+      </div>
+    </section>
+
     <section class="container faq-section">
       <div class="faq-section-grid">
         <h2 class="section-title">
@@ -143,6 +161,24 @@ const searchCategorySlug = ref('')
 const searchCityId = ref('')
 const searchPriceBucket = ref('')
 const activeFeature = ref(0)
+
+// Admin-set via /admin/sadrzaj (Setting key homepage_video_url) — the
+// section only renders once a URL is actually set (RNT-052: an empty
+// placeholder here used to show a black box with no video).
+const { data: videoData } = await useAsyncData('homepage-video-url', () => api.get('/homepage-video-url'))
+const videoEmbedUrl = computed(() => {
+  const url = videoData.value?.url
+  if (!url) return null
+  if (/\.(mp4|webm|ogg)$/i.test(url)) return { type: 'video', src: url }
+
+  const youtubeMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([\w-]+)/)
+  if (youtubeMatch) return { type: 'iframe', src: `https://www.youtube.com/embed/${youtubeMatch[1]}` }
+
+  const vimeoMatch = url.match(/vimeo\.com\/(?:video\/)?(\d+)/)
+  if (vimeoMatch) return { type: 'iframe', src: `https://player.vimeo.com/video/${vimeoMatch[1]}` }
+
+  return { type: 'iframe', src: url }
+})
 
 const priceBuckets = computed(() => [
   { value: '', label: t('home.searchPriceLabel') },
@@ -614,23 +650,19 @@ useHead({
   height: 420px;
   border-radius: 30px;
   background: $color-dark;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.video-play-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 72px;
-  height: 72px;
-  border-radius: $radius-pill;
-  background: rgba(255, 255, 255, 0.15);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  color: $color-surface;
-  font-size: 22px;
-  backdrop-filter: blur(6px);
+.video-iframe,
+.video-native {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
 }
 
 // FAQ -------------------------------------------------------------------

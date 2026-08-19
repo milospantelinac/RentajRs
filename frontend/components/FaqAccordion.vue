@@ -18,22 +18,22 @@
 </template>
 
 <script setup>
-// The FAQ content is a fixed, hand-translated set (faq.q1..q6 / a1..a6 in
-// both locales) rather than a dynamic list — see locales/{sr,en}.json.
-const FAQ_COUNT = 6
-
+// FAQ content is admin-editable (see /admin/sadrzaj) and fetched per the
+// current locale via the x-lang header useApi() already sends.
 const props = defineProps({
   limit: { type: Number, default: null },
 })
 
-const { t } = useI18n()
+const api = useApi()
+const { data: faqs } = await useAsyncData('faq-list', () => api.get('/faqs'))
 
 const items = computed(() => {
-  const count = props.limit ? Math.min(props.limit, FAQ_COUNT) : FAQ_COUNT
-  return Array.from({ length: count }, (_, i) => {
-    const index = i + 1
-    return { index, question: t(`faq.q${index}`), answer: t(`faq.a${index}`) }
-  })
+  const list = faqs.value || []
+  return (props.limit ? list.slice(0, props.limit) : list).map((f, i) => ({
+    index: i + 1,
+    question: f.question,
+    answer: f.answer,
+  }))
 })
 
 const openIndex = ref(1)

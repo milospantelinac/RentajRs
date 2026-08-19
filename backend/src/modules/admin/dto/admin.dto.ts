@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDefined, IsIn, IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsBoolean, IsDefined, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
 
 const REPORT_REASONS = ['FRAUD', 'INACCURATE_INFO', 'INAPPROPRIATE_CONTENT', 'DUPLICATE', 'OTHER'] as const;
 const DISPUTE_OUTCOMES = ['WARNING', 'RESTRICTION', 'BLOCK', 'NO_ACTION'] as const;
@@ -64,4 +64,61 @@ export class UpdateEmailTemplateDto {
   @IsOptional()
   @IsString()
   buttonLabel?: string;
+}
+
+export class UpdateStaticPageDto {
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  title: string;
+
+  @ApiProperty({ description: 'HTML produced by the admin Rich Text Editor' })
+  @IsString()
+  @IsNotEmpty()
+  bodyHtml: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  published?: boolean;
+}
+
+export class CreateFaqDto {
+  @ApiProperty({ enum: ['SR', 'EN'] })
+  @IsIn(['SR', 'EN'])
+  language: 'SR' | 'EN';
+
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  question: string;
+
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  answer: string;
+}
+
+export class UpdateFaqDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  question?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  answer?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  displayOrder?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  published?: boolean;
 }
