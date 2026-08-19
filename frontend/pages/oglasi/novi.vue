@@ -171,6 +171,10 @@ useSeoMeta({ title: t('listing.chooseCategory') })
 }
 
 .category-tile-propose {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
   border: 1.5px dashed $color-primary;
   background: rgba($color-primary, 0.04);
 }
@@ -180,15 +184,16 @@ useSeoMeta({ title: t('listing.chooseCategory') })
 }
 
 .category-tile-propose-icon {
-  display: block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
   width: 24px;
   height: 24px;
-  margin: 0 auto 8px;
   border-radius: 50%;
   background: $color-primary;
   color: $color-surface;
   font-weight: 700;
   font-size: 15px;
-  line-height: 24px;
 }
 </style>
