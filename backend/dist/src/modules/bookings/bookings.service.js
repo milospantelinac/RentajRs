@@ -82,13 +82,18 @@ let BookingsService = class BookingsService {
         const { startsAt, endsAt, slotPrice } = await this.resolveRequestedTerm(listing, dto);
         this.assertTermRules(listing, startsAt, endsAt, dto.guestCount);
         const pricePerUnit = slotPrice ?? listing.price;
-        const unitCount = computeUnitCount(listing.priceUnit, startsAt, endsAt);
+        const unitCount = dto.monthCount ?? computeUnitCount(listing.priceUnit, startsAt, endsAt);
         const extraServicesTotal = await this.resolveExtraServicesTotal(listingId, dto.extraServices);
         const mandatoryFeesTotal = sumMandatoryFees(listing.mandatoryFees);
         const guestFee = listing.pricePerGuest && dto.guestCount ? listing.pricePerGuest * BigInt(dto.guestCount) : 0n;
         const unitPriceTotal = !slotPrice && (listing.priceUnit === 'NIGHT' || listing.priceUnit === 'DAY')
             ? (await this.availability.getNightlyPrices(listingId, startsAt, endsAt, listing.price, listing.weekendPrice)).reduce((sum, p) => sum + p, 0n)
-            : pricePerUnit * BigInt(unitCount);
+            : !slotPrice && listing.priceUnit === 'MONTH' && dto.monthCount
+                ? (await this.availability.getMonthlyPrices(listingId, startsAt, dto.monthCount, listing.price)).reduce((sum, p) => sum + p, 0n)
+                : !slotPrice && listing.bookingModel === 'PER_SLOT' && listing.slotSubmode === 'WORKING_HOURS' && listing.priceUnit === 'HOUR'
+                    ? (await this.availability.resolveHourlyPrice(listingId, startsAt, toHHMM(startsAt), listing.price)) *
+                        BigInt(unitCount)
+                    : pricePerUnit * BigInt(unitCount);
         const totalAmount = unitPriceTotal + guestFee + mandatoryFeesTotal + extraServicesTotal;
         const amountDue = listing.advancePercent
             ? (totalAmount * BigInt(listing.advancePercent)) / 100n
@@ -114,7 +119,7 @@ let BookingsService = class BookingsService {
                 totalAmount,
                 amountDue,
                 paymentMethod: listing.paymentMethod ?? 'CASH',
-                cancellationTermsSnapshot: listing.cancellationTerms,
+                cancellationTermsSnapshot: formatCancellationPolicy(listing.cancellationPolicyType, listing.cancellationThreshold, guest.language),
             },
         });
         try {
@@ -143,8 +148,14 @@ let BookingsService = class BookingsService {
                 throw new common_1.NotFoundException(this.i18n.t('errors.TERM_NOT_AVAILABLE'));
             return { startsAt: slot.startsAt, endsAt: slot.endsAt, slotPrice: slot.price ?? undefined };
         }
+        if (dto.monthStart && dto.monthCount) {
+            const [year, month] = dto.monthStart.split('-').map(Number);
+            const startsAt = new Date(Date.UTC(year, month - 1, 1));
+            const endsAt = new Date(Date.UTC(year, month - 1 + dto.monthCount, 1));
+            return { startsAt, endsAt };
+        }
         if (!dto.startsAt || !dto.endsAt) {
-            throw new common_1.BadRequestException('startsAt/endsAt are required unless booking a defined slot');
+            throw new common_1.BadRequestException('startsAt/endsAt are required unless booking a defined slot or a month range');
         }
         return { startsAt: new Date(dto.startsAt), endsAt: new Date(dto.endsAt) };
     }
@@ -155,6 +166,12 @@ let BookingsService = class BookingsService {
             const earliest = Date.now() + listing.earliestBookingHours * 3600_000;
             if (startsAt.getTime() < earliest) {
                 throw new common_1.BadRequestException(this.i18n.t('bookings.TOO_SOON'));
+            }
+        }
+        if (listing.maxAdvanceBookingDays) {
+            const latest = Date.now() + listing.maxAdvanceBookingDays * 86_400_000;
+            if (startsAt.getTime() > latest) {
+                throw new common_1.BadRequestException(this.i18n.t('bookings.TOO_FAR_AHEAD', { args: { max: listing.maxAdvanceBookingDays } }));
             }
         }
         const unitCount = computeUnitCount(listing.priceUnit, startsAt, endsAt);
@@ -495,6 +512,21 @@ function computeUnitCount(priceUnit, startsAt, endsAt) {
         default:
             return 1;
     }
+}
+function toHHMM(date) {
+    return `${String(date.getUTCHours()).padStart(2, '0')}:${String(date.getUTCMinutes()).padStart(2, '0')}`;
+}
+function formatCancellationPolicy(type, threshold, language) {
+    const isEn = language === 'EN';
+    if (type === 'NO_CANCELLATION')
+        return isEn ? 'No cancellation' : 'Bez otkazivanja';
+    if (type === 'FREE_UNTIL_DAYS' && threshold) {
+        return isEn ? `Free cancellation up to ${threshold} day(s) before` : `Besplatno otkazivanje do ${threshold} dana pre početka`;
+    }
+    if (type === 'FREE_UNTIL_HOURS' && threshold) {
+        return isEn ? `Free cancellation up to ${threshold} hour(s) before` : `Besplatno otkazivanje do ${threshold} časova pre početka`;
+    }
+    return null;
 }
 function sumMandatoryFees(fees) {
     if (!Array.isArray(fees))

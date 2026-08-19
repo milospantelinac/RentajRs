@@ -39,26 +39,8 @@
         <p>{{ t(steps[currentStep].descKey) }}</p>
       </div>
 
-      <!-- Step 0: booking model -->
-      <div v-if="currentStep === 0">
-        <div class="form-group mb-3">
-          <label class="form-label">{{ t('listing.stepBookingModel') }}</label>
-          <select v-model="form.bookingModel" class="form-control form-select">
-            <option value="PER_STAY">{{ t('listing.bookingModelPerStay') }}</option>
-            <option value="PER_SLOT">{{ t('listing.bookingModelPerSlot') }}</option>
-            <option value="NO_BOOKING">{{ t('listing.bookingModelNone') }}</option>
-          </select>
-        </div>
-        <div v-if="form.bookingModel === 'PER_SLOT'" class="form-group mb-3">
-          <select v-model="form.slotSubmode" class="form-control form-select">
-            <option value="DEFINED_SLOTS">{{ t('listing.slotSubmodeDefined') }}</option>
-            <option value="WORKING_HOURS">{{ t('listing.slotSubmodeWorkingHours') }}</option>
-          </select>
-        </div>
-      </div>
-
-      <!-- Step 1: basics -->
-      <div v-else-if="currentStep === 1">
+      <!-- Osnovni podaci -->
+      <div v-if="steps[currentStep].key === 'basics'">
         <div class="form-group mb-3">
           <label class="form-label">{{ t('listing.title') }}</label>
           <input v-model="form.title" type="text" class="form-control" maxlength="200" />
@@ -73,9 +55,215 @@
         </div>
       </div>
 
-      <!-- Step 2: category attributes -->
-      <div v-else-if="currentStep === 2">
-        <div v-for="attr in listing?.category?.attributes || []" :key="attr.id" class="form-group mb-3">
+      <!-- Cena i način rezervacije -->
+      <div v-else-if="steps[currentStep].key === 'pricing'">
+        <div class="form-group mb-3">
+          <label class="form-label">{{ t('listing.reservationMethod') }}</label>
+          <select v-model="bookingChoice" class="form-control form-select">
+            <option value="ONLINE">{{ onlineOptionLabel }}</option>
+            <option value="NONE">{{ t('listing.bookingModelNone') }}</option>
+          </select>
+        </div>
+
+        <div v-if="form.bookingModel === 'PER_SLOT'" class="form-group mb-3">
+          <label class="form-label">{{ t('listing.slotCreationMethod') }}</label>
+          <select v-model="form.slotSubmode" class="form-control form-select">
+            <option value="WORKING_HOURS">{{ t('listing.slotSubmodeWorkingHours') }}</option>
+            <option value="DEFINED_SLOTS">{{ t('listing.slotSubmodeDefined') }}</option>
+          </select>
+        </div>
+
+        <template v-if="showFlatPriceFields">
+          <div class="row">
+            <div class="col-6">
+              <div class="form-group mb-3">
+                <label class="form-label">{{ t('listing.price') }} (RSD)</label>
+                <input v-model.number="form.price" type="number" min="0" class="form-control" @blur="autoFillWeekendPrice" />
+              </div>
+            </div>
+            <div class="col-6">
+              <div class="form-group mb-3">
+                <label class="form-label">{{ t('listing.priceUnit') }}</label>
+                <select v-model="form.priceUnit" class="form-control form-select" :disabled="form.bookingModel === 'PER_SLOT'">
+                  <option v-for="unit in allowedPriceUnitsForChoice" :key="unit" :value="unit">
+                    {{ t(`listing.unit${unitLabel(unit)}`) }}
+                  </option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <p v-if="form.priceUnit === 'MONTH'" class="text-muted mb-3">{{ t('listing.monthlyPricingNotice') }}</p>
+
+          <div v-if="showWeekendPrice" class="form-group mb-3">
+            <label class="form-label">{{ t('listing.weekendPrice') }} (RSD)</label>
+            <input v-model.number="form.weekendPrice" type="number" min="0" class="form-control" :placeholder="String(form.price || 0)" />
+            <p class="text-muted mt-1">{{ t('listing.weekendPriceHint') }}</p>
+          </div>
+        </template>
+        <p v-else class="text-muted mb-3">{{ t('listing.definedSlotsPriceNotice') }}</p>
+      </div>
+
+      <!-- Dostupnost / termini -->
+      <div v-else-if="steps[currentStep].key === 'availability'">
+        <template v-if="form.bookingModel === 'PER_STAY'">
+          <label class="form-label">{{ t('listing.calendarTitle') }}</label>
+          <p class="text-muted mb-2">{{ t('listing.calendarHint') }}</p>
+          <AvailabilityCalendar
+            :listing-id="listingId"
+            :base-price="form.price"
+            :weekend-price="form.weekendPrice"
+            :show-pricing="true"
+            :mode="form.priceUnit === 'MONTH' ? 'month' : 'day'"
+          />
+
+          <div v-if="form.priceUnit !== 'MONTH'" class="form-group mt-4">
+            <label class="form-label">{{ t('listing.icalSectionTitle') }}</label>
+            <IcalSyncPanel v-if="listing?.status === 'ACTIVE'" :listing-id="listingId" :ical-export-token="listing?.icalExportToken" />
+            <div v-else class="ical-locked">
+              <span class="ical-locked-icon" aria-hidden="true">🔒</span>
+              <p class="text-muted mb-0">{{ t('listing.icalLockedHint') }}</p>
+            </div>
+          </div>
+        </template>
+
+        <template v-else-if="form.slotSubmode === 'WORKING_HOURS'">
+          <WorkingHoursEditor :listing-id="listingId" />
+        </template>
+        <template v-else>
+          <DefinedSlotsEditor :listing-id="listingId" />
+        </template>
+      </div>
+
+      <!-- Rezervaciona pravila -->
+      <div v-else-if="steps[currentStep].key === 'rules'">
+        <div class="row">
+          <div class="col-6">
+            <div class="form-group mb-3">
+              <label class="form-label">{{ t(form.priceUnit === 'MONTH' ? 'listing.minDurationMonths' : 'listing.minDuration') }}</label>
+              <input v-model.number="form.minDuration" type="number" min="1" class="form-control" />
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="form-group mb-3">
+              <label class="form-label">{{ t(form.priceUnit === 'MONTH' ? 'listing.maxDurationMonths' : 'listing.maxDuration') }}</label>
+              <input v-model.number="form.maxDuration" type="number" min="1" class="form-control" />
+            </div>
+          </div>
+        </div>
+        <div class="row">
+          <div class="col-6">
+            <div class="form-group mb-3">
+              <label class="form-label">{{ t('listing.earliestBookingHours') }}</label>
+              <input v-model.number="form.earliestBookingHours" type="number" min="0" class="form-control" />
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="form-group mb-3">
+              <label class="form-label">{{ t('listing.maxAdvanceBookingDays') }}</label>
+              <input v-model.number="form.maxAdvanceBookingDays" type="number" min="1" class="form-control" />
+            </div>
+          </div>
+        </div>
+        <div class="row">
+          <div class="col-6">
+            <div class="form-group mb-3">
+              <label class="form-label">{{ t('listing.minGuests') }}</label>
+              <input v-model.number="form.minGuests" type="number" min="1" class="form-control" />
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="form-group mb-3">
+              <label class="form-label">{{ t('listing.maxGuests') }}</label>
+              <input v-model.number="form.maxGuests" type="number" min="1" class="form-control" />
+            </div>
+          </div>
+        </div>
+        <div class="form-group mb-3">
+          <label class="form-label">{{ t('listing.gapAfterMinutes') }}</label>
+          <input v-model.number="form.gapAfterMinutes" type="number" min="0" class="form-control" />
+        </div>
+        <div v-if="listing?.category?.slug === 'vozila'" class="row">
+          <div class="col-6">
+            <div class="form-group mb-3">
+              <label class="form-label">{{ t('listing.pickupTime') }}</label>
+              <input v-model="form.pickupTime" type="time" class="form-control" />
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="form-group mb-3">
+              <label class="form-label">{{ t('listing.returnTime') }}</label>
+              <input v-model="form.returnTime" type="time" class="form-control" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Plaćanje, obrada rezervacije i otkazivanje -->
+      <div v-else-if="steps[currentStep].key === 'payment'">
+        <div class="form-group mb-3">
+          <label class="form-label">{{ t('listing.paymentMethod') }}</label>
+          <select v-model="form.paymentMethod" class="form-control form-select" @change="onPaymentMethodChange">
+            <option value="CASH">{{ t('listing.paymentCash') }}</option>
+            <option value="BANK_TRANSFER">{{ t('listing.paymentBankTransfer') }}</option>
+            <option value="BOTH">{{ t('listing.paymentBoth') }}</option>
+          </select>
+          <p class="text-muted mt-1">{{ t(`listing.paymentMethodDesc${form.paymentMethod}`) }}</p>
+        </div>
+
+        <div v-if="form.paymentMethod !== 'CASH'" class="row">
+          <div class="col-6">
+            <div class="form-group mb-3">
+              <label class="form-label">{{ t('listing.advancePercent') }}</label>
+              <input v-model.number="form.advancePercent" type="number" min="1" max="100" class="form-control" />
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="form-group mb-3">
+              <label class="form-label">{{ t('listing.paymentDeadlineHours') }}</label>
+              <input v-model.number="form.paymentDeadlineHours" type="number" min="12" max="168" class="form-control" />
+            </div>
+          </div>
+        </div>
+        <p v-if="form.paymentMethod !== 'CASH' && !hasBankAccount" class="form-error">
+          {{ t('listing.stepPayment') }}: <NuxtLink to="/kontrolna-tabla/podesavanja">{{ t('common.edit') }} →</NuxtLink>
+        </p>
+
+        <div class="form-group mt-3">
+          <label class="form-label">{{ t('listing.requestHandling') }}</label>
+          <select v-model="form.requiresApproval" class="form-control form-select">
+            <option :value="true">{{ t('listing.requestHandlingApproval') }}</option>
+            <option :value="false" :disabled="form.paymentMethod === 'CASH'">{{ t('listing.requestHandlingInstant') }}</option>
+          </select>
+          <p class="text-muted mt-1">
+            {{ t(form.requiresApproval ? 'listing.requestHandlingApprovalDesc' : 'listing.requestHandlingInstantDesc') }}
+          </p>
+          <p v-if="form.paymentMethod === 'CASH'" class="text-muted mt-1">{{ t('listing.requestHandlingCashNotice') }}</p>
+        </div>
+
+        <div class="form-group mt-3">
+          <label class="form-label">{{ t('listing.cancellationTerms') }}</label>
+          <select v-model="form.cancellationPolicyType" class="form-control form-select">
+            <option :value="null">—</option>
+            <option value="NO_CANCELLATION">{{ t('listing.cancellationNone') }}</option>
+            <option value="FREE_UNTIL_DAYS">{{ t('listing.cancellationFreeUntilDays') }}</option>
+            <option value="FREE_UNTIL_HOURS">{{ t('listing.cancellationFreeUntilHours') }}</option>
+          </select>
+          <div v-if="form.cancellationPolicyType === 'FREE_UNTIL_DAYS'" class="form-group mt-2">
+            <label class="form-label">{{ t('listing.cancellationThresholdDays') }}</label>
+            <input v-model.number="form.cancellationThreshold" type="number" min="1" class="form-control" />
+          </div>
+          <div v-if="form.cancellationPolicyType === 'FREE_UNTIL_HOURS'" class="form-group mt-2">
+            <label class="form-label">{{ t('listing.cancellationThresholdHours') }}</label>
+            <input v-model.number="form.cancellationThreshold" type="number" min="1" class="form-control" />
+          </div>
+        </div>
+        <p class="text-muted mt-3">{{ t('listing.noPaymentThroughPlatformNotice') }}</p>
+      </div>
+
+      <!-- Detalji (kategorijski atributi) -->
+      <div v-else-if="steps[currentStep].key === 'attributes'">
+        <div v-for="attr in visibleCategoryAttributes" :key="attr.id" class="form-group mb-3">
           <label class="form-label">{{ attr.name }}<span v-if="attr.required"> *</span></label>
 
           <input
@@ -84,11 +272,25 @@
             type="number"
             class="form-control"
           />
+          <select
+            v-else-if="attr.type === 'YEAR'"
+            v-model.number="attributeValues[attr.id].valueNumber"
+            class="form-control form-select"
+          >
+            <option :value="null">—</option>
+            <option v-for="y in yearOptions" :key="y" :value="y">{{ y }}</option>
+          </select>
           <input
             v-else-if="attr.type === 'TEXT'"
             v-model="attributeValues[attr.id].valueText"
             type="text"
             class="form-control"
+          />
+          <textarea
+            v-else-if="attr.type === 'TEXTAREA'"
+            v-model="attributeValues[attr.id].valueText"
+            class="form-control"
+            rows="3"
           />
           <div v-else-if="attr.type === 'BOOLEAN'" class="form-row-inline">
             <input v-model="attributeValues[attr.id].valueBoolean" type="checkbox" class="form-checkbox" />
@@ -97,17 +299,28 @@
             <option value="">—</option>
             <option v-for="opt in attr.options" :key="opt.id" :value="opt.id">{{ opt.name }}</option>
           </select>
-          <div v-else-if="attr.type === 'MULTISELECT'" class="wizard-multiselect">
+          <div v-else-if="attr.type === 'MULTISELECT'" class="form-group">
+            <select
+              multiple
+              class="form-control"
+              :value="attributeValues[attr.id].valueOptionIds"
+              @change="onMultiselectChange(attr.id, $event)"
+            >
+              <option v-for="opt in attr.options" :key="opt.id" :value="opt.id">{{ opt.name }}</option>
+            </select>
+          </div>
+          <div v-else-if="attr.type === 'CHECKBOX_GROUP'" class="wizard-multiselect">
             <label v-for="opt in attr.options" :key="opt.id" class="form-row-inline">
               <input type="checkbox" class="form-checkbox" :value="opt.id" v-model="attributeValues[attr.id].valueOptionIds" />
               {{ opt.name }}
             </label>
           </div>
         </div>
+        <p v-if="!visibleCategoryAttributes.length" class="text-muted">{{ t('listing.noAttributesForCategory') }}</p>
       </div>
 
-      <!-- Step 3: location -->
-      <div v-else-if="currentStep === 3">
+      <!-- Lokacija -->
+      <div v-else-if="steps[currentStep].key === 'location'">
         <div class="form-group mb-3">
           <label class="form-label">{{ t('listing.region') }}</label>
           <select v-model="location.regionId" class="form-control form-select" @change="onRegionChange">
@@ -151,8 +364,8 @@
         </div>
       </div>
 
-      <!-- Step 4: photos -->
-      <div v-else-if="currentStep === 4">
+      <!-- Fotografije -->
+      <div v-else-if="steps[currentStep].key === 'photos'">
         <p class="text-muted mb-3">{{ t('listing.photoCountRecommendation') }}</p>
         <div
           class="dropzone"
@@ -206,161 +419,8 @@
         </div>
       </div>
 
-      <!-- Step 5: pricing -->
-      <div v-else-if="currentStep === 5">
-        <div class="row">
-          <div class="col-6">
-            <div class="form-group mb-3">
-              <label class="form-label">{{ t('listing.price') }} (RSD)</label>
-              <input v-model.number="form.price" type="number" min="0" class="form-control" />
-            </div>
-          </div>
-          <div class="col-6">
-            <div class="form-group mb-3">
-              <label class="form-label">{{ t('listing.priceUnit') }}</label>
-              <select v-model="form.priceUnit" class="form-control form-select">
-                <option v-for="unit in listing?.category?.allowedPriceUnits || []" :key="unit" :value="unit">
-                  {{ t(`listing.unit${unitLabel(unit)}`) }}
-                </option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        <div v-if="form.priceUnit === 'NIGHT' || form.priceUnit === 'DAY'" class="form-group mb-3">
-          <label class="form-label">{{ t('listing.weekendPrice') }} (RSD)</label>
-          <input v-model.number="form.weekendPrice" type="number" min="0" class="form-control" :placeholder="String(form.price || 0)" />
-          <p class="text-muted mt-1">{{ t('listing.weekendPriceHint') }}</p>
-        </div>
-
-        <div class="form-group mb-3">
-          <label class="form-label">{{ t('listing.paymentMethod') }}</label>
-          <select v-model="form.paymentMethod" class="form-control form-select" @change="onPaymentMethodChange">
-            <option value="CASH">{{ t('listing.paymentCash') }}</option>
-            <option value="BANK_TRANSFER">{{ t('listing.paymentBankTransfer') }}</option>
-            <option value="BOTH">{{ t('listing.paymentBoth') }}</option>
-          </select>
-          <p class="text-muted mt-1">{{ t(`listing.paymentMethodDesc${form.paymentMethod}`) }}</p>
-        </div>
-
-        <div v-if="form.paymentMethod !== 'CASH'" class="row">
-          <div class="col-6">
-            <div class="form-group mb-3">
-              <label class="form-label">{{ t('listing.advancePercent') }}</label>
-              <input v-model.number="form.advancePercent" type="number" min="1" max="100" class="form-control" />
-            </div>
-          </div>
-          <div class="col-6">
-            <div class="form-group mb-3">
-              <label class="form-label">{{ t('listing.paymentDeadlineHours') }}</label>
-              <input v-model.number="form.paymentDeadlineHours" type="number" min="12" max="168" class="form-control" />
-            </div>
-          </div>
-        </div>
-        <p v-if="form.paymentMethod !== 'CASH' && !hasBankAccount" class="form-error">
-          {{ t('listing.stepPricing') }}: <NuxtLink to="/kontrolna-tabla/podesavanja">{{ t('common.edit') }} →</NuxtLink>
-        </p>
-
-        <div v-if="listing?.bookingModel !== 'NO_BOOKING'" class="form-group mt-3">
-          <label class="form-label">{{ t('listing.requestHandling') }}</label>
-          <select v-model="form.requiresApproval" class="form-control form-select">
-            <option :value="true">{{ t('listing.requestHandlingApproval') }}</option>
-            <option :value="false" :disabled="form.paymentMethod === 'CASH'">{{ t('listing.requestHandlingInstant') }}</option>
-          </select>
-          <p class="text-muted mt-1">
-            {{ t(form.requiresApproval ? 'listing.requestHandlingApprovalDesc' : 'listing.requestHandlingInstantDesc') }}
-          </p>
-          <p v-if="form.paymentMethod === 'CASH'" class="text-muted mt-1">{{ t('listing.requestHandlingCashNotice') }}</p>
-        </div>
-      </div>
-
-      <!-- Step 6: availability rules -->
-      <div v-else-if="currentStep === 6">
-        <div class="row">
-          <div class="col-6">
-            <div class="form-group mb-3">
-              <label class="form-label">{{ t('listing.minDuration') }}</label>
-              <input v-model.number="form.minDuration" type="number" min="1" class="form-control" />
-            </div>
-          </div>
-          <div class="col-6">
-            <div class="form-group mb-3">
-              <label class="form-label">{{ t('listing.maxDuration') }}</label>
-              <input v-model.number="form.maxDuration" type="number" min="1" class="form-control" />
-            </div>
-          </div>
-        </div>
-        <div class="row">
-          <div class="col-6">
-            <div class="form-group mb-3">
-              <label class="form-label">{{ t('listing.minGuests') }}</label>
-              <input v-model.number="form.minGuests" type="number" min="1" class="form-control" />
-            </div>
-          </div>
-          <div class="col-6">
-            <div class="form-group mb-3">
-              <label class="form-label">{{ t('listing.maxGuests') }}</label>
-              <input v-model.number="form.maxGuests" type="number" min="1" class="form-control" />
-            </div>
-          </div>
-        </div>
-        <div class="form-group mb-3">
-          <label class="form-label">{{ t('listing.gapAfterMinutes') }}</label>
-          <input v-model.number="form.gapAfterMinutes" type="number" min="0" class="form-control" />
-        </div>
-        <div class="row">
-          <div class="col-6">
-            <div class="form-group mb-3">
-              <label class="form-label">{{ t('listing.pickupTime') }}</label>
-              <input v-model="form.pickupTime" type="time" class="form-control" />
-            </div>
-          </div>
-          <div class="col-6">
-            <div class="form-group mb-3">
-              <label class="form-label">{{ t('listing.returnTime') }}</label>
-              <input v-model="form.returnTime" type="time" class="form-control" />
-            </div>
-          </div>
-        </div>
-
-        <!-- RNT-029 — manual date blocking for any bookable model, plus per-date
-             custom pricing for PER_STAY (night/day) listings. -->
-        <div v-if="form.bookingModel !== 'NO_BOOKING'" class="form-group mt-4">
-          <label class="form-label">{{ t('listing.calendarTitle') }}</label>
-          <p class="text-muted mb-2">{{ t('listing.calendarHint') }}</p>
-          <AvailabilityCalendar
-            :listing-id="listingId"
-            :base-price="form.price"
-            :weekend-price="form.weekendPrice"
-            :show-pricing="form.priceUnit === 'NIGHT' || form.priceUnit === 'DAY'"
-          />
-        </div>
-
-        <!-- RNT-092 — export/import only make sense once the listing is
-             actually live and bookable per-stay; the backend gates the same way. -->
-        <div v-if="listing?.status === 'ACTIVE' && form.bookingModel === 'PER_STAY'" class="form-group mt-4">
-          <label class="form-label">{{ t('listing.icalSectionTitle') }}</label>
-          <IcalSyncPanel :listing-id="listingId" :ical-export-token="listing?.icalExportToken" />
-        </div>
-      </div>
-
-      <!-- Step 7: cancellation -->
-      <div v-else-if="currentStep === 7">
-        <div class="form-group mb-3">
-          <label class="form-label">{{ t('listing.cancellationTerms') }}</label>
-          <select v-model="form.cancellationTerms" class="form-control form-select">
-            <option value="">—</option>
-            <option value="FLEXIBLE">{{ t('listing.cancellationFlexible') }}</option>
-            <option value="MODERATE">{{ t('listing.cancellationModerate') }}</option>
-            <option value="STRICT">{{ t('listing.cancellationStrict') }}</option>
-          </select>
-          <p v-if="form.cancellationTerms" class="text-muted mt-2">{{ t(`listing.cancellation${form.cancellationTerms.charAt(0)}${form.cancellationTerms.slice(1).toLowerCase()}Desc`) }}</p>
-        </div>
-        <p class="text-muted">{{ t('listing.noPaymentThroughPlatformNotice') }}</p>
-      </div>
-
-      <!-- Step 8: review -->
-      <div v-else-if="currentStep === 8">
+      <!-- Pregled -->
+      <div v-else-if="steps[currentStep].key === 'review'">
         <ul class="wizard-checklist mb-4">
           <li v-for="(ok, key) in readiness?.checklist" :key="key" :class="ok ? 'text-success' : 'text-error'">
             {{ ok ? '✓' : '✗' }} {{ t(`listing.checklist.${key}`) }}
@@ -420,28 +480,10 @@ const fileInput = ref(null)
 const dropzoneActive = ref(false)
 const draggedPhotoIndex = ref(null)
 
-// Refetch readiness any time the review step becomes active — via
-// save-and-advance, a tab click, or returning to an already-unlocked review
-// step after fixing something elsewhere (e.g. adding a phone number) — not
-// just the one path that used to call it inline in saveCurrentStep().
-watch(currentStep, async (step) => {
-  if (step === steps.length - 1) {
-    readiness.value = await api.get(`/listings/${listingId}/readiness`)
-  }
-})
-
-const steps = [
-  { key: 'bookingModel', labelKey: 'listing.stepBookingModel', descKey: 'listing.stepBookingModelDesc' },
-  { key: 'basics', labelKey: 'listing.stepBasics', descKey: 'listing.stepBasicsDesc' },
-  { key: 'attributes', labelKey: 'listing.stepAttributes', descKey: 'listing.stepAttributesDesc' },
-  { key: 'location', labelKey: 'listing.stepLocation', descKey: 'listing.stepLocationDesc' },
-  { key: 'photos', labelKey: 'listing.stepPhotos', descKey: 'listing.stepPhotosDesc' },
-  { key: 'pricing', labelKey: 'listing.stepPricing', descKey: 'listing.stepPricingDesc' },
-  { key: 'availability', labelKey: 'listing.stepAvailability', descKey: 'listing.stepAvailabilityDesc' },
-  { key: 'cancellation', labelKey: 'listing.stepCancellation', descKey: 'listing.stepCancellationDesc' },
-  { key: 'review', labelKey: 'listing.stepReview', descKey: 'listing.stepReviewDesc' },
-]
-
+// Declared before the steps/watchers below since watch()'s source getter
+// (unlike computed()) runs eagerly at setup time — referencing `form` in
+// one before this declaration is a temporal-dead-zone error, not just a
+// stale-closure bug.
 const form = reactive({
   bookingModel: 'PER_STAY',
   slotSubmode: null,
@@ -462,8 +504,116 @@ const form = reactive({
   gapAfterMinutes: null,
   pickupTime: '',
   returnTime: '',
-  cancellationTerms: '',
+  earliestBookingHours: null,
+  maxAdvanceBookingDays: null,
+  cancellationPolicyType: null,
+  cancellationThreshold: null,
 })
+
+// Dodavanje Oglasa spec's KONAČNI FLOW — a fixed 9-step order (basics
+// first, then price+booking-method combined, then availability/rules/
+// payment, which are the only steps "Bez rezervacije" ever skips), rather
+// than the old free-choice bookingModel step 0 + a separate pricing step 5.
+const ALL_STEPS = [
+  { key: 'basics', labelKey: 'listing.stepBasics', descKey: 'listing.stepBasicsDesc' },
+  { key: 'pricing', labelKey: 'listing.stepPricing', descKey: 'listing.stepPricingDesc' },
+  { key: 'availability', labelKey: 'listing.stepAvailability', descKey: 'listing.stepAvailabilityDesc', skipIfNoBooking: true },
+  { key: 'rules', labelKey: 'listing.stepRules', descKey: 'listing.stepRulesDesc', skipIfNoBooking: true },
+  { key: 'payment', labelKey: 'listing.stepPayment', descKey: 'listing.stepPaymentDesc', skipIfNoBooking: true },
+  { key: 'attributes', labelKey: 'listing.stepAttributes', descKey: 'listing.stepAttributesDesc' },
+  { key: 'location', labelKey: 'listing.stepLocation', descKey: 'listing.stepLocationDesc' },
+  { key: 'photos', labelKey: 'listing.stepPhotos', descKey: 'listing.stepPhotosDesc' },
+  { key: 'review', labelKey: 'listing.stepReview', descKey: 'listing.stepReviewDesc' },
+]
+const steps = computed(() => ALL_STEPS.filter((s) => !s.skipIfNoBooking || form.bookingModel !== 'NO_BOOKING'))
+
+// Toggling "bez rezervacije" removes 3 steps from the array — keep the user
+// on a valid index instead of landing on whatever step now shares that slot.
+watch(
+  () => form.bookingModel,
+  () => {
+    nextTick(() => {
+      if (currentStep.value >= steps.value.length) currentStep.value = steps.value.length - 1
+    })
+  },
+)
+
+// Refetch readiness any time the review step becomes active — via
+// save-and-advance, a tab click, or returning to an already-unlocked review
+// step after fixing something elsewhere (e.g. adding a phone number) — not
+// just the one path that used to call it inline in saveCurrentStep().
+watch(currentStep, async (step) => {
+  if (step === steps.value.length - 1) {
+    readiness.value = await api.get(`/listings/${listingId}/readiness`)
+  }
+})
+
+// "Način rezervacije" (Dodavanje Oglasa spec §0/§2) — the owner never picks
+// PER_STAY vs PER_SLOT directly; that always comes from the category. This
+// binary choice is all that's actually theirs: online (whichever model the
+// category has) or no booking system at all.
+const bookingChoice = ref('ONLINE')
+watch(bookingChoice, (val) => {
+  form.bookingModel = val === 'ONLINE' ? listing.value?.category?.defaultBookingModel || 'PER_STAY' : 'NO_BOOKING'
+  if (form.bookingModel === 'PER_SLOT' && !form.slotSubmode) form.slotSubmode = 'WORKING_HOURS'
+})
+const onlineOptionLabel = computed(() =>
+  listing.value?.category?.defaultBookingModel === 'PER_SLOT'
+    ? t('listing.bookingModelPerSlot')
+    : t('listing.bookingModelPerStay'),
+)
+
+// PER_SLOT never shows a free price-unit choice (always HOUR for working
+// hours, SLOT for defined slots — each slot carries its own price instead).
+watch(
+  () => [form.bookingModel, form.slotSubmode],
+  () => {
+    if (form.bookingModel === 'PER_SLOT') {
+      form.priceUnit = form.slotSubmode === 'DEFINED_SLOTS' ? 'SLOT' : 'HOUR'
+    }
+  },
+)
+
+const showFlatPriceFields = computed(() => !(form.bookingModel === 'PER_SLOT' && form.slotSubmode === 'DEFINED_SLOTS'))
+const allowedPriceUnitsForChoice = computed(() => {
+  if (form.bookingModel === 'PER_SLOT') return ['HOUR']
+  return listing.value?.category?.allowedPriceUnits || []
+})
+const showWeekendPrice = computed(() => showFlatPriceFields.value && ['NIGHT', 'DAY', 'HOUR'].includes(form.priceUnit))
+
+// "Vikend cena automatski se popunjava istom vrednošću kao obična cena"
+// (Dodavanje Oglasa spec §2) — only while weekendPrice has never been set,
+// so a deliberate later edit is never silently overwritten.
+function autoFillWeekendPrice() {
+  if (showWeekendPrice.value && (form.weekendPrice === null || form.weekendPrice === undefined)) {
+    form.weekendPrice = form.price
+  }
+}
+
+const currentYear = new Date().getFullYear()
+const yearOptions = Array.from({ length: 60 }, (_, i) => currentYear - i)
+
+// Kategorije spec §5 (Mašine) — an attribute conditioned on a sibling's
+// selected option (e.g. "Maksimalna dubina kopanja" only when tip_masine =
+// bager) only shows once that option is actually selected; new machine
+// types are then just data (a new option + a few dependent attributes), no
+// wizard code change needed.
+const visibleCategoryAttributes = computed(() => {
+  const attrs = listing.value?.category?.attributes || []
+  const byKey = new Map(attrs.map((a) => [a.key, a]))
+  return attrs.filter((attr) => {
+    if (!attr.dependsOnAttrKey) return true
+    const parent = byKey.get(attr.dependsOnAttrKey)
+    if (!parent) return true
+    const selected = attributeValues[parent.id]?.singleOption
+    const selectedOption = parent.options?.find((o) => o.id === selected)
+    return selectedOption?.key === attr.dependsOnOptionKey
+  })
+})
+
+function onMultiselectChange(attributeId, event) {
+  attributeValues[attributeId].valueOptionIds = Array.from(event.target.selectedOptions).map((o) => o.value)
+}
 
 const location = reactive({ regionId: '', cityId: '', cityAreaId: '', address: '', latitude: null, longitude: null, googlePlaceId: '' })
 
@@ -515,11 +665,11 @@ function compact(obj) {
 }
 
 function isAttributeValueFilled(attr, v) {
-  if (attr.type === 'NUMBER') return v.valueNumber !== null && v.valueNumber !== undefined && v.valueNumber !== ''
-  if (attr.type === 'TEXT') return !!v.valueText
+  if (attr.type === 'NUMBER' || attr.type === 'YEAR') return v.valueNumber !== null && v.valueNumber !== undefined && v.valueNumber !== ''
+  if (attr.type === 'TEXT' || attr.type === 'TEXTAREA') return !!v.valueText
   if (attr.type === 'BOOLEAN') return true // false is a real answer, not an empty one
   if (attr.type === 'LIST') return !!v.singleOption
-  return (v.valueOptionIds || []).length > 0 // MULTISELECT
+  return (v.valueOptionIds || []).length > 0 // MULTISELECT / CHECKBOX_GROUP
 }
 
 // RNT-022/023 — the wizard used to save-and-advance on every step no matter
@@ -527,11 +677,11 @@ function isAttributeValueFilled(attr, v) {
 // checklist on the very last step. Blocking here catches it right where the
 // owner can actually fix it.
 function validateCurrentStep() {
-  const step = steps[currentStep.value].key
+  const step = steps.value[currentStep.value].key
   if (step === 'basics') {
     if (!form.title?.trim() || !form.description?.trim()) return t('listing.validationBasicsRequired')
   } else if (step === 'attributes') {
-    const missingRequired = (listing.value?.category?.attributes || []).some(
+    const missingRequired = visibleCategoryAttributes.value.some(
       (attr) => attr.required && !isAttributeValueFilled(attr, attributeValues[attr.id]),
     )
     if (missingRequired) return t('listing.validationAttributesRequired')
@@ -540,7 +690,7 @@ function validateCurrentStep() {
   } else if (step === 'photos') {
     if (!photos.value.length) return t('listing.validationPhotosRequired')
   } else if (step === 'pricing') {
-    if (!(Number(form.price) > 0)) return t('listing.validationPriceRequired')
+    if (showFlatPriceFields.value && !(Number(form.price) > 0)) return t('listing.validationPriceRequired')
   }
   return ''
 }
@@ -581,8 +731,17 @@ async function loadListing() {
     gapAfterMinutes: listing.value.gapAfterMinutes,
     pickupTime: listing.value.pickupTime || '',
     returnTime: listing.value.returnTime || '',
-    cancellationTerms: listing.value.cancellationTerms || '',
+    earliestBookingHours: listing.value.earliestBookingHours,
+    maxAdvanceBookingDays: listing.value.maxAdvanceBookingDays,
+    cancellationPolicyType: listing.value.cancellationPolicyType || null,
+    cancellationThreshold: listing.value.cancellationThreshold,
   })
+  bookingChoice.value = listing.value.bookingModel === 'NO_BOOKING' ? 'NONE' : 'ONLINE'
+  // The bookingChoice watcher only fires on an actual toggle — a freshly
+  // created PER_SLOT draft loads with slotSubmode still null (never set at
+  // creation) and bookingChoice starting at its already-'ONLINE' default,
+  // so nothing would otherwise pick WORKING_HOURS as the default submode.
+  if (form.bookingModel === 'PER_SLOT' && !form.slotSubmode) form.slotSubmode = 'WORKING_HOURS'
   Object.assign(location, {
     regionId: listing.value.regionId || '',
     cityId: listing.value.cityId || '',
@@ -620,22 +779,24 @@ async function loadListing() {
  * same order saveCurrentStep() enforces going forward.
  */
 function computeMaxStepFromListing() {
-  const stepIsDone = [
-    () => true, // booking model always has a value (defaulted on creation)
-    () => !!listing.value.title && !!listing.value.description, // basics
-    () => true, // attributes — required ones are enforced by the review checklist, not gate-able from here
-    () => !!listing.value.cityId, // location
-    () => (listing.value.photos || []).length > 0, // photos
-    () => Number(listing.value.price) > 0, // pricing
-    () => true, // availability rules are all optional
-    () => true, // cancellation terms are optional
-  ]
+  const doneByKey = {
+    basics: () => !!listing.value.title && !!listing.value.description,
+    pricing: () =>
+      Number(listing.value.price) > 0 || (listing.value.bookingModel === 'PER_SLOT' && listing.value.slotSubmode === 'DEFINED_SLOTS'),
+    availability: () => true, // scheduling itself is optional to have touched before moving on
+    rules: () => true, // all optional
+    payment: () => true, // all optional except CASH default, already set
+    attributes: () => true, // required ones enforced by the review checklist, not gate-able from here
+    location: () => !!listing.value.cityId,
+    photos: () => (listing.value.photos || []).length > 0,
+    review: () => true,
+  }
   let reached = 0
-  for (let i = 0; i < stepIsDone.length; i++) {
-    if (!stepIsDone[i]()) break
+  for (let i = 0; i < steps.value.length; i++) {
+    if (!doneByKey[steps.value[i].key]()) break
     reached = i + 1
   }
-  return Math.min(reached, steps.length - 1)
+  return Math.min(reached, steps.value.length - 1)
 }
 
 async function onRegionChange() {
@@ -746,7 +907,7 @@ async function saveCurrentStep() {
   }
   saving.value = true
   try {
-    const step = steps[currentStep.value].key
+    const step = steps.value[currentStep.value].key
     if (step === 'attributes') {
       const values = Object.entries(attributeValues).map(([attributeId, v]) => ({
         attributeId,
@@ -763,10 +924,11 @@ async function saveCurrentStep() {
         latitude: location.latitude ?? undefined,
         longitude: location.longitude ?? undefined,
       })
-    } else if (step === 'photos') {
-      // photos already persisted per-upload/reorder
-    } else if (step === 'review') {
-      // nothing to save — navigation handled by the link itself
+    } else if (step === 'photos' || step === 'availability' || step === 'review') {
+      // photos: persisted per-upload/reorder already.
+      // availability: the calendar/working-hours/defined-slots components
+      // save directly to their own endpoints as the owner interacts with them.
+      // review: nothing to save — navigation handled by the link itself.
     } else {
       // Backend DTOs treat a field as "not provided" only when it's
       // undefined — an empty string still fails e.g. @IsUrl()/@Matches() on
@@ -776,7 +938,7 @@ async function saveCurrentStep() {
       await api.patch(`/listings/${listingId}`, compact(form))
     }
 
-    if (currentStep.value < steps.length - 1) {
+    if (currentStep.value < steps.value.length - 1) {
       currentStep.value++
       if (currentStep.value > maxStepReached.value) maxStepReached.value = currentStep.value
     }
@@ -1346,5 +1508,20 @@ useSeoMeta({ title: t('listing.wizardTitle') })
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.ical-locked {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1.5px dashed $color-border;
+  border-radius: $radius-input;
+  background: $color-background;
+}
+
+.ical-locked-icon {
+  font-size: 18px;
+  flex-shrink: 0;
 }
 </style>

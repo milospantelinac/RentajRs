@@ -9,7 +9,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.AddIcalSourceDto = exports.SetDatePriceDto = exports.CreateManualBlockDto = exports.CreateDefinedSlotDto = exports.SetWorkingHoursDto = void 0;
+exports.AddIcalSourceDto = exports.SetSlotPriceOverrideDto = exports.SetHourlyPriceRangesDto = exports.SetDatePriceDto = exports.CreateManualBlockDto = exports.CreateDefinedSlotDto = exports.SetWorkingHoursDto = void 0;
 const swagger_1 = require("@nestjs/swagger");
 const class_transformer_1 = require("class-transformer");
 const class_validator_1 = require("class-validator");
@@ -101,6 +101,59 @@ __decorate([
     (0, class_validator_1.IsPositive)(),
     __metadata("design:type", Number)
 ], SetDatePriceDto.prototype, "price", void 0);
+class HourlyPriceRangeRow {
+}
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '10:00' }),
+    (0, class_validator_1.Matches)(/^([01]\d|2[0-3]):[0-5]\d$/, { message: 'validation.TIME_INVALID' }),
+    __metadata("design:type", String)
+], HourlyPriceRangeRow.prototype, "startTime", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '18:00' }),
+    (0, class_validator_1.Matches)(/^([01]\d|2[0-3]):[0-5]\d$/, { message: 'validation.TIME_INVALID' }),
+    __metadata("design:type", String)
+], HourlyPriceRangeRow.prototype, "endTime", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'RSD per hour for this window' }),
+    (0, class_validator_1.IsInt)(),
+    (0, class_validator_1.IsPositive)(),
+    __metadata("design:type", Number)
+], HourlyPriceRangeRow.prototype, "price", void 0);
+class SetHourlyPriceRangesDto {
+}
+exports.SetHourlyPriceRangesDto = SetHourlyPriceRangesDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ type: [HourlyPriceRangeRow] }),
+    (0, class_validator_1.IsArray)(),
+    (0, class_validator_1.ArrayMaxSize)(20),
+    (0, class_validator_1.ValidateNested)({ each: true }),
+    (0, class_transformer_1.Type)(() => HourlyPriceRangeRow),
+    __metadata("design:type", Array)
+], SetHourlyPriceRangesDto.prototype, "ranges", void 0);
+class SetSlotPriceOverrideDto {
+}
+exports.SetSlotPriceOverrideDto = SetSlotPriceOverrideDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '2026-12-31' }),
+    (0, class_validator_1.Matches)(/^\d{4}-\d{2}-\d{2}$/, { message: 'validation.DATE_INVALID' }),
+    __metadata("design:type", String)
+], SetSlotPriceOverrideDto.prototype, "date", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '14:00' }),
+    (0, class_validator_1.Matches)(/^([01]\d|2[0-3]):[0-5]\d$/, { message: 'validation.TIME_INVALID' }),
+    __metadata("design:type", String)
+], SetSlotPriceOverrideDto.prototype, "startTime", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '16:00' }),
+    (0, class_validator_1.Matches)(/^([01]\d|2[0-3]):[0-5]\d$/, { message: 'validation.TIME_INVALID' }),
+    __metadata("design:type", String)
+], SetSlotPriceOverrideDto.prototype, "endTime", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'RSD per hour for this one date + time window' }),
+    (0, class_validator_1.IsInt)(),
+    (0, class_validator_1.IsPositive)(),
+    __metadata("design:type", Number)
+], SetSlotPriceOverrideDto.prototype, "price", void 0);
 class AddIcalSourceDto {
 }
 exports.AddIcalSourceDto = AddIcalSourceDto;

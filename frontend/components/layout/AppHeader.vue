@@ -38,15 +38,17 @@
         </NuxtLink>
 
         <template v-if="auth.isAuthenticated">
-          <button class="user-menu-trigger" @click="menuOpen = !menuOpen">
-            <img v-if="auth.user?.avatarUrl" :src="auth.user.avatarUrl" alt="" class="user-menu-avatar" />
-            <span v-else class="user-menu-avatar user-menu-avatar-placeholder">{{ initials }}</span>
-          </button>
-          <div v-if="menuOpen" class="user-menu-dropdown card">
-            <NuxtLink to="/kontrolna-tabla" class="user-menu-item" @click="menuOpen = false">{{ t('nav.dashboard') }}</NuxtLink>
-            <NuxtLink to="/kontrolna-tabla/poruke" class="user-menu-item" @click="menuOpen = false">{{ t('nav.messages') }}</NuxtLink>
-            <NuxtLink to="/kontrolna-tabla/sacuvano" class="user-menu-item" @click="menuOpen = false">{{ t('nav.favorites') }}</NuxtLink>
-            <button class="user-menu-item user-menu-item-danger" @click="handleLogout">{{ t('nav.logout') }}</button>
+          <div ref="userMenuRef" class="user-menu">
+            <button class="user-menu-trigger" @click="menuOpen = !menuOpen">
+              <img v-if="auth.user?.avatarUrl" :src="auth.user.avatarUrl" alt="" class="user-menu-avatar" />
+              <span v-else class="user-menu-avatar user-menu-avatar-placeholder">{{ initials }}</span>
+            </button>
+            <div v-if="menuOpen" class="user-menu-dropdown card">
+              <NuxtLink to="/kontrolna-tabla" class="user-menu-item" @click="menuOpen = false">{{ t('nav.dashboard') }}</NuxtLink>
+              <NuxtLink to="/kontrolna-tabla/poruke" class="user-menu-item" @click="menuOpen = false">{{ t('nav.messages') }}</NuxtLink>
+              <NuxtLink to="/kontrolna-tabla/sacuvano" class="user-menu-item" @click="menuOpen = false">{{ t('nav.favorites') }}</NuxtLink>
+              <button class="user-menu-item user-menu-item-danger" @click="handleLogout">{{ t('nav.logout') }}</button>
+            </div>
           </div>
         </template>
       </div>
@@ -58,6 +60,11 @@
 const { t } = useI18n()
 const auth = useAuthStore()
 const menuOpen = ref(false)
+const userMenuRef = ref(null)
+
+useClickOutside(userMenuRef, () => {
+  menuOpen.value = false
+})
 
 const initials = computed(() => {
   const u = auth.user
@@ -201,6 +208,10 @@ function handleLogout() {
   font-size: 16px;
   line-height: 1;
   flex-shrink: 0;
+}
+
+.user-menu {
+  position: relative;
 }
 
 .user-menu-trigger {

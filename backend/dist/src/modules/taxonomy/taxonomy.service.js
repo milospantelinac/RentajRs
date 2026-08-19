@@ -9,7 +9,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.TaxonomyService = void 0;
+exports.TaxonomyService = exports.FALLBACK_CATEGORY_SLUG = void 0;
 const common_1 = require("@nestjs/common");
 const event_emitter_1 = require("@nestjs/event-emitter");
 const nestjs_i18n_1 = require("nestjs-i18n");
@@ -18,7 +18,7 @@ const prisma_service_1 = require("../../prisma/prisma.service");
 const cache_service_1 = require("../../common/cache/cache.service");
 const CACHE_TTL = 60 * 30;
 const FUZZY_THRESHOLD = 0.35;
-const FALLBACK_CATEGORY_SLUG = 'ostalo';
+exports.FALLBACK_CATEGORY_SLUG = 'ostalo';
 let TaxonomyService = class TaxonomyService {
     constructor(prisma, cache, i18n, events) {
         this.prisma = prisma;
@@ -106,6 +106,9 @@ let TaxonomyService = class TaxonomyService {
                 unit: attr.unit,
                 isFilter: attr.isFilter,
                 filterType: attr.filterType,
+                showOnCard: attr.showOnCard,
+                dependsOnAttrKey: attr.dependsOnAttrKey,
+                dependsOnOptionKey: attr.dependsOnOptionKey,
                 minValue: attr.minValue,
                 maxValue: attr.maxValue,
                 options: attr.options.map((o) => ({ id: o.id, key: o.key, name: optionNames.get(o.id) ?? o.key })),
@@ -264,7 +267,7 @@ let TaxonomyService = class TaxonomyService {
         const category = await this.prisma.category.findUnique({ where: { id } });
         if (!category)
             throw new common_1.NotFoundException();
-        const fallback = await this.prisma.category.findUniqueOrThrow({ where: { slug: FALLBACK_CATEGORY_SLUG } });
+        const fallback = await this.prisma.category.findUniqueOrThrow({ where: { slug: exports.FALLBACK_CATEGORY_SLUG } });
         await this.prisma.$transaction([
             this.prisma.listing.updateMany({ where: { categoryId: id }, data: { categoryId: fallback.id } }),
             this.prisma.category.update({ where: { id }, data: { status: 'ARCHIVED' } }),

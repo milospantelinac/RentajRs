@@ -69,9 +69,23 @@ enum PriceUnit {
 enum AttributeType {
   NUMBER
   TEXT
+  TEXTAREA
+  YEAR
   LIST
   MULTISELECT
+  /// Same value shape as MULTISELECT (array of option ids) — differs only in
+  /// how the wizard renders it: always-visible checkboxes instead of a
+  /// dropdown ("Dodavanje Oglasa" spec, kategorije doc §2 legend).
+  CHECKBOX_GROUP
   BOOLEAN
+}
+
+/// Replaces the old opaque FLEXIBLE/MODERATE/STRICT cancellationTerms string —
+/// the wizard rework requires an actual numeric threshold, not just a label.
+enum CancellationPolicyType {
+  NO_CANCELLATION
+  FREE_UNTIL_DAYS
+  FREE_UNTIL_HOURS
 }
 
 enum FilterType {
@@ -436,9 +450,21 @@ model CategoryAttribute {
   unit         String?
   isFilter     Boolean       @default(false)
   filterType   FilterType?
+  /// Kategorije spec's CARD column — shown on the search-result card, not
+  /// just the full listing detail page (DETAIL, which every attribute gets
+  /// implicitly by having a value at all — no separate flag needed for that).
+  showOnCard   Boolean       @default(false)
   minValue     Decimal?      @db.Decimal(12, 2)
   maxValue     Decimal?      @db.Decimal(12, 2)
   displayOrder Int           @default(0)
+  /// Machine-type-specific fields (Mašine category): this attribute only
+  /// applies when the sibling attribute keyed `dependsOnAttrKey` has the
+  /// option `dependsOnOptionKey` selected — e.g. "Maksimalna dubina kopanja"
+  /// depends on tip_masine=bager. Lets new machine types be added as pure
+  /// data (a new option + a few dependent attributes) with no schema/code
+  /// change, per the spec's explicit "no rigid subcategory hierarchy" rule.
+  dependsOnAttrKey   String?
+  dependsOnOptionKey String?
 
   category      Category           @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   options       AttributeOption[]
@@ -544,7 +570,10 @@ model Listing {
   gapAfterMinutes         Int?
   pickupTime              String? // stored HH:MM, fixed pickup/return times (R71)
   returnTime              String?
-  earliestBookingHours    Int?
+  earliestBookingHours    Int? // "koliko unapred može da se rezerviše" — min lead time
+  /// "Koliko kasno može da se rezerviše" (Dodavanje Oglasa spec §4) — max lead
+  /// time; a booking may not start more than this many days in the future.
+  maxAdvanceBookingDays   Int?
   paymentMethod           PaymentMethod?
   advancePercent          Int? // null = full amount due (R60)
   paymentDeadlineHours    Int?           @default(48) // 12-168 range, R59
@@ -554,7 +583,14 @@ model Listing {
   /// here to actually implement the rule. Defaults to requiring approval,
   /// the more conservative choice for a new listing.
   requiresApproval        Boolean        @default(true)
-  cancellationTerms       String?
+  /// Replaces the old FLEXIBLE/MODERATE/STRICT label — the wizard rework
+  /// (Dodavanje Oglasa spec §5) wants an actual numeric refund window.
+  cancellationPolicyType  CancellationPolicyType?
+  cancellationThreshold   Int? // days if FREE_UNTIL_DAYS, hours if FREE_UNTIL_HOURS
+  /// "Otključaj svoju kategoriju" (Kategorije spec §8) — the owner described
+  /// their listing without picking a category; it publishes under Ostalo
+  /// until an admin assigns the real one from the moderation queue.
+  pendingCategoryAssignment Boolean      @default(false)
   regionId                String?        @db.Uuid
   cityId                  String?        @db.Uuid
   cityAreaId              String?        @db.Uuid
@@ -588,8 +624,10 @@ model Listing {
   extraServices      ListingExtraService[]
   blockedTerms       BlockedTerm[]
   workingHours       WorkingHours[]
+  hourlyPriceRanges  HourlyPriceRange[]
   definedSlots       DefinedSlot[]
   datePriceOverrides DatePriceOverride[]
+  slotPriceOverrides SlotPriceOverride[]
   icalSources        IcalSource[]
   bankedDays         BankedDay[]
   featuredPeriods    FeaturedListing[]
@@ -754,6 +792,24 @@ model WorkingHours {
   @@index([listingId])
 }
 
+/// For SlotSubmode.WORKING_HOURS — "different price per part of the working
+/// day" (Dodavanje Oglasa spec §2, e.g. 10-18 -> 2000 RSD/h, 18-22 -> 3000
+/// RSD/h). Global per listing (not per day-of-week — the spec's example
+/// doesn't vary by weekday); a booking's price resolves by matching its
+/// clock time against these ranges, falling back to the listing's base
+/// hourly price when no range covers it.
+model HourlyPriceRange {
+  id        String @id @default(uuid()) @db.Uuid
+  listingId String @db.Uuid
+  startTime String // HH:MM
+  endTime   String // HH:MM
+  price     BigInt // in para
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+}
+
 /// RNT-029 — per-calendar-date price override for PER_STAY listings (NIGHT/DAY
 /// price units), so an owner can set a higher price for a specific date (a
 /// holiday, an event weekend) without that becoming the new base `price`.
@@ -768,6 +824,25 @@ model DatePriceOverride {
 
   @@unique([listingId, date])
   @@index([listingId])
+}
+
+/// For SlotSubmode.WORKING_HOURS only — "posebna cena za određeni
+/// datum/vremenski interval" (Dodavanje Oglasa spec §3): an exception price
+/// for one specific date + clock-time window, overriding both the base
+/// hourly price and HourlyPriceRange for that window on that date only.
+/// DEFINED_SLOTS doesn't need this — each DefinedSlot row is already a
+/// single dated occurrence, so its price is just edited directly.
+model SlotPriceOverride {
+  id        String   @id @default(uuid()) @db.Uuid
+  listingId String   @db.Uuid
+  date      DateTime @db.Date
+  startTime String // HH:MM
+  endTime   String // HH:MM
+  price     BigInt
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId, date])
 }
 
 /// For SlotSubmode.DEFINED_SLOTS — the owner hand-creates bookable slots.

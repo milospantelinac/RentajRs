@@ -50,21 +50,38 @@ export class BookingsService {
     this.assertTermRules(listing, startsAt, endsAt, dto.guestCount);
 
     const pricePerUnit = slotPrice ?? listing.price;
-    const unitCount = computeUnitCount(listing.priceUnit, startsAt, endsAt);
+    // "Po mesecu" (Dodavanje Oglasa spec §3/§4) books in whole calendar
+    // months the guest picked directly (monthCount), not an approximation
+    // derived from the date span — Sep 1 to Dec 1 must be exactly 3, not
+    // round(91/30).
+    const unitCount = dto.monthCount ?? computeUnitCount(listing.priceUnit, startsAt, endsAt);
     const extraServicesTotal = await this.resolveExtraServicesTotal(listingId, dto.extraServices);
     const mandatoryFeesTotal = sumMandatoryFees(listing.mandatoryFees);
     const guestFee = listing.pricePerGuest && dto.guestCount ? listing.pricePerGuest * BigInt(dto.guestCount) : 0n;
 
     // RNT-029 — per-stay (night/day) bookings price each date individually
     // (weekend price, or an owner's per-date override) rather than a flat
-    // rate x nights; slot bookings and other units keep the flat calculation.
+    // rate x nights; "Po mesecu" prices each calendar month individually the
+    // same way; PER_SLOT + WORKING_HOURS resolves the owner's hourly rate
+    // windows/exceptions for the booking's start time (a booking that spans
+    // more than one rate window is billed at its start time's rate for the
+    // whole duration — splitting one booking across rates isn't supported).
+    // Every other combination keeps the flat unitPrice x unitCount calculation.
     const unitPriceTotal =
       !slotPrice && (listing.priceUnit === 'NIGHT' || listing.priceUnit === 'DAY')
         ? (await this.availability.getNightlyPrices(listingId, startsAt, endsAt, listing.price, listing.weekendPrice)).reduce(
             (sum, p) => sum + p,
             0n,
           )
-        : pricePerUnit * BigInt(unitCount);
+        : !slotPrice && listing.priceUnit === 'MONTH' && dto.monthCount
+          ? (await this.availability.getMonthlyPrices(listingId, startsAt, dto.monthCount, listing.price)).reduce(
+              (sum, p) => sum + p,
+              0n,
+            )
+          : !slotPrice && listing.bookingModel === 'PER_SLOT' && listing.slotSubmode === 'WORKING_HOURS' && listing.priceUnit === 'HOUR'
+            ? (await this.availability.resolveHourlyPrice(listingId, startsAt, toHHMM(startsAt), listing.price)) *
+              BigInt(unitCount)
+            : pricePerUnit * BigInt(unitCount);
 
     const totalAmount = unitPriceTotal + guestFee + mandatoryFeesTotal + extraServicesTotal;
     const amountDue = listing.advancePercent
@@ -92,7 +109,11 @@ export class BookingsService {
         totalAmount,
         amountDue,
         paymentMethod: listing.paymentMethod ?? 'CASH',
-        cancellationTermsSnapshot: listing.cancellationTerms,
+        cancellationTermsSnapshot: formatCancellationPolicy(
+          listing.cancellationPolicyType,
+          listing.cancellationThreshold,
+          guest.language,
+        ),
       },
     });
 
@@ -128,8 +149,16 @@ export class BookingsService {
       if (!slot) throw new NotFoundException(this.i18n.t('errors.TERM_NOT_AVAILABLE'));
       return { startsAt: slot.startsAt, endsAt: slot.endsAt, slotPrice: slot.price ?? undefined };
     }
+    // "Po mesecu" (Dodavanje Oglasa spec §3) — the guest picks a starting
+    // month + a count of whole calendar months, never a free date range.
+    if (dto.monthStart && dto.monthCount) {
+      const [year, month] = dto.monthStart.split('-').map(Number);
+      const startsAt = new Date(Date.UTC(year, month - 1, 1));
+      const endsAt = new Date(Date.UTC(year, month - 1 + dto.monthCount, 1));
+      return { startsAt, endsAt };
+    }
     if (!dto.startsAt || !dto.endsAt) {
-      throw new BadRequestException('startsAt/endsAt are required unless booking a defined slot');
+      throw new BadRequestException('startsAt/endsAt are required unless booking a defined slot or a month range');
     }
     return { startsAt: new Date(dto.startsAt), endsAt: new Date(dto.endsAt) };
   }
@@ -141,6 +170,7 @@ export class BookingsService {
       minGuests: number | null;
       maxGuests: number | null;
       earliestBookingHours: number | null;
+      maxAdvanceBookingDays: number | null;
       priceUnit: PriceUnit;
     },
     startsAt: Date,
@@ -153,6 +183,16 @@ export class BookingsService {
       const earliest = Date.now() + listing.earliestBookingHours * 3600_000;
       if (startsAt.getTime() < earliest) {
         throw new BadRequestException(this.i18n.t('bookings.TOO_SOON'));
+      }
+    }
+
+    // "Koliko kasno može da se rezerviše" (Dodavanje Oglasa spec §4).
+    if (listing.maxAdvanceBookingDays) {
+      const latest = Date.now() + listing.maxAdvanceBookingDays * 86_400_000;
+      if (startsAt.getTime() > latest) {
+        throw new BadRequestException(
+          this.i18n.t('bookings.TOO_FAR_AHEAD', { args: { max: listing.maxAdvanceBookingDays } }),
+        );
       }
     }
 
@@ -521,6 +561,28 @@ function computeUnitCount(priceUnit: PriceUnit, startsAt: Date, endsAt: Date): n
     default:
       return 1;
   }
+}
+
+/** HH:MM for the booking's start time — matches how WorkingHours/HourlyPriceRange store clock time (no timezone conversion, same convention as pickupTime/returnTime). */
+function toHHMM(date: Date): string {
+  return `${String(date.getUTCHours()).padStart(2, '0')}:${String(date.getUTCMinutes()).padStart(2, '0')}`;
+}
+
+/** Human-readable snapshot for Booking.cancellationTermsSnapshot (RNT-030 email display) — frozen at booking time so a later policy edit never rewrites past bookings' terms. */
+function formatCancellationPolicy(
+  type: 'NO_CANCELLATION' | 'FREE_UNTIL_DAYS' | 'FREE_UNTIL_HOURS' | null,
+  threshold: number | null,
+  language: 'SR' | 'EN',
+): string | null {
+  const isEn = language === 'EN';
+  if (type === 'NO_CANCELLATION') return isEn ? 'No cancellation' : 'Bez otkazivanja';
+  if (type === 'FREE_UNTIL_DAYS' && threshold) {
+    return isEn ? `Free cancellation up to ${threshold} day(s) before` : `Besplatno otkazivanje do ${threshold} dana pre početka`;
+  }
+  if (type === 'FREE_UNTIL_HOURS' && threshold) {
+    return isEn ? `Free cancellation up to ${threshold} hour(s) before` : `Besplatno otkazivanje do ${threshold} časova pre početka`;
+  }
+  return null;
 }
 
 function sumMandatoryFees(fees: unknown): bigint {

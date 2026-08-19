@@ -23,6 +23,8 @@ import { UpsertAttributesDto } from './dto/upsert-attributes.dto';
 import { UpsertFaqsDto } from './dto/upsert-faqs.dto';
 import { UpsertExtraServicesDto } from './dto/upsert-extra-services.dto';
 import { RejectListingDto, RejectVersionDto } from './dto/reject-listing.dto';
+import { CreateUncategorizedListingDto } from './dto/create-uncategorized-listing.dto';
+import { FALLBACK_CATEGORY_SLUG } from '../taxonomy/taxonomy.service';
 
 // Once a listing is ACTIVE, title/location/photos must go through the
 // moderation queue instead of writing straight to the live row (R31) — each
@@ -74,6 +76,39 @@ export class ListingsService {
     return this.serialize(listing);
   }
 
+  /**
+   * "Otključaj svoju kategoriju" (Kategorije spec §8) — no categoryId from
+   * the owner at all; parks the draft under the hidden Ostalo fallback with
+   * pendingCategoryAssignment=true so an admin assigns the real category
+   * from the moderation queue. Everything else (attributes, location,
+   * photos, pricing detail) is filled in through the normal wizard
+   * afterward — Ostalo just has no category-specific attributes yet.
+   */
+  async createUncategorizedListing(userId: string, dto: CreateUncategorizedListingDto) {
+    const owner = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    if (owner.restrictedUntil && owner.restrictedUntil.getTime() > Date.now()) {
+      throw new ForbiddenException(this.i18n.t('errors.ACCOUNT_RESTRICTED'));
+    }
+
+    const fallback = await this.prisma.category.findUniqueOrThrow({ where: { slug: FALLBACK_CATEGORY_SLUG } });
+    const slug = await this.uniqueSlug(dto.title || 'novi-oglas');
+    const listing = await this.prisma.listing.create({
+      data: {
+        userId,
+        categoryId: fallback.id,
+        status: ListingStatus.DRAFT,
+        title: dto.title,
+        description: dto.description ?? '',
+        slug,
+        bookingModel: dto.bookingModel,
+        priceUnit: dto.priceUnit ?? fallback.defaultPriceUnit,
+        price: 0n,
+        pendingCategoryAssignment: true,
+      },
+    });
+    return this.serialize(listing);
+  }
+
   async getMine(userId: string) {
     const listings = await this.prisma.listing.findMany({
       where: { userId, status: { not: ListingStatus.DELETED } },
@@ -98,6 +133,20 @@ export class ListingsService {
 
   async updateListing(userId: string, listingId: string, dto: UpdateListingDto) {
     const listing = await this.assertOwnership(userId, listingId);
+
+    // Dodavanje Oglasa spec §0/§2 — the owner only ever chooses "online
+    // rezervacije" vs "bez rezervacije"; PER_STAY vs PER_SLOT always comes
+    // from the category. Guard against a client sending a mismatched value.
+    // Exempt "Otključaj svoju kategoriju" listings (Kategorije spec §8) —
+    // they're parked under the Ostalo fallback with their OWN owner-chosen
+    // bookingModel until an admin assigns the real category, so Ostalo's
+    // own defaultBookingModel isn't the constraint yet.
+    if (dto.bookingModel !== undefined && dto.bookingModel !== 'NO_BOOKING' && !listing.pendingCategoryAssignment) {
+      const category = await this.prisma.category.findUniqueOrThrow({ where: { id: listing.categoryId } });
+      if (dto.bookingModel !== category.defaultBookingModel) {
+        throw new BadRequestException('bookingModel must match the category\'s booking model, or be NO_BOOKING');
+      }
+    }
 
     const priceFields: Record<string, bigint> = {};
     if (dto.price !== undefined) priceFields.price = rsdToPara(dto.price);
@@ -597,6 +646,31 @@ export class ListingsService {
       },
     });
     this.events.emit('listing.rejected', { listingId, userId: listing.userId, reason: dto.reason });
+    return this.serialize(updated);
+  }
+
+  /**
+   * "Otključaj svoju kategoriju" resolution — admin reviews an owner's
+   * self-described listing (parked under Ostalo, pendingCategoryAssignment)
+   * and assigns the real category. bookingModel/priceUnit are left as the
+   * owner already set them; the category only changes which attributes the
+   * wizard now resolves for this listing going forward.
+   */
+  async adminListPendingCategoryAssignment() {
+    const listings = await this.prisma.listing.findMany({
+      where: { pendingCategoryAssignment: true, status: { not: ListingStatus.DELETED } },
+      orderBy: { createdAt: 'asc' },
+      include: { user: { select: { id: true, firstName: true, lastName: true, email: true } }, category: true },
+    });
+    return listings.map((l) => this.serialize(l));
+  }
+
+  async adminAssignCategory(listingId: string, categoryId: string) {
+    const category = await this.prisma.category.findUniqueOrThrow({ where: { id: categoryId } });
+    const updated = await this.prisma.listing.update({
+      where: { id: listingId },
+      data: { categoryId: category.id, pendingCategoryAssignment: false },
+    });
     return this.serialize(updated);
   }
 

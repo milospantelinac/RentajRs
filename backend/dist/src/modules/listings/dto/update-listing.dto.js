@@ -188,11 +188,25 @@ __decorate([
     __metadata("design:type", Number)
 ], UpdateListingDto.prototype, "earliestBookingHours", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ enum: ['FLEXIBLE', 'MODERATE', 'STRICT'] }),
+    (0, swagger_1.ApiPropertyOptional)({ description: '"Koliko kasno može da se rezerviše" — max days into the future a booking may start' }),
     (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsIn)(['FLEXIBLE', 'MODERATE', 'STRICT']),
+    (0, class_validator_1.IsInt)(),
+    (0, class_validator_1.Min)(1),
+    __metadata("design:type", Number)
+], UpdateListingDto.prototype, "maxAdvanceBookingDays", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ enum: client_1.CancellationPolicyType }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsEnum)(client_1.CancellationPolicyType),
     __metadata("design:type", String)
-], UpdateListingDto.prototype, "cancellationTerms", void 0);
+], UpdateListingDto.prototype, "cancellationPolicyType", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Days if FREE_UNTIL_DAYS, hours if FREE_UNTIL_HOURS — required together with cancellationPolicyType for those two values' }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsInt)(),
+    (0, class_validator_1.Min)(1),
+    __metadata("design:type", Number)
+], UpdateListingDto.prototype, "cancellationThreshold", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)(),
     (0, class_validator_1.IsOptional)(),

@@ -1,6 +1,7 @@
 {
   "END_BEFORE_START": "Kraj termina mora biti posle početka",
   "TOO_SOON": "Ovaj termin je prerano — potrebna je ranija najava",
+  "TOO_FAR_AHEAD": "Ovaj termin se ne može rezervisati više od {max} dana unapred",
   "MIN_DURATION": "Minimalno trajanje je {min}",
   "MAX_DURATION": "Maksimalno trajanje je {max}",
   "OWNER_NO_BANK_ACCOUNT": "Vlasnik nije podesio tekući račun za online plaćanja",

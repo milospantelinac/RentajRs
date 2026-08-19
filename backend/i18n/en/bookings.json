@@ -1,6 +1,7 @@
 {
   "END_BEFORE_START": "End must be after the start",
   "TOO_SOON": "This time is too soon to book — earlier notice is required",
+  "TOO_FAR_AHEAD": "This time cannot be booked more than {max} days in advance",
   "MIN_DURATION": "Minimum duration is {min}",
   "MAX_DURATION": "Maximum duration is {max}",
   "OWNER_NO_BANK_ACCOUNT": "The owner has not configured a bank account for online payments",

@@ -1,29 +1,42 @@
 <template>
   <div class="availability-calendar">
     <div class="calendar-nav">
-      <button type="button" class="btn btn-tertiary btn-sm" @click="shiftMonth(-1)">←</button>
-      <span class="calendar-month-label">{{ monthLabel }}</span>
-      <button type="button" class="btn btn-tertiary btn-sm" @click="shiftMonth(1)">→</button>
+      <button type="button" class="btn btn-tertiary btn-sm" @click="shiftPeriod(-1)">←</button>
+      <span class="calendar-month-label">{{ periodLabel }}</span>
+      <button type="button" class="btn btn-tertiary btn-sm" @click="shiftPeriod(1)">→</button>
     </div>
 
-    <div class="calendar-grid">
+    <div v-if="mode === 'day'" class="calendar-grid">
       <span v-for="d in weekdayLabels" :key="d" class="calendar-weekday">{{ d }}</span>
       <span v-for="n in leadingBlanks" :key="`b${n}`" class="calendar-cell calendar-cell-empty"></span>
       <button
-        v-for="cell in days"
+        v-for="cell in cells"
         :key="cell.key"
         type="button"
         class="calendar-cell"
-        :class="{
-          'calendar-cell-blocked': cell.status === 'MANUAL',
-          'calendar-cell-taken': cell.status && cell.status !== 'MANUAL',
-          'calendar-cell-selected': selectedDate === cell.key,
-          'calendar-cell-past': cell.past,
-        }"
+        :class="cellClasses(cell)"
         :disabled="cell.past || (cell.status && cell.status !== 'MANUAL')"
-        @click="selectDay(cell)"
+        @click="selectCell(cell)"
       >
-        <span class="calendar-cell-day">{{ cell.day }}</span>
+        <span class="calendar-cell-day">{{ cell.label }}</span>
+        <span v-if="cell.status === 'MANUAL'" class="calendar-cell-tag">{{ t('listing.calendarBlocked') }}</span>
+        <span v-else-if="cell.status" class="calendar-cell-tag">{{ t('listing.calendarTaken') }}</span>
+        <span v-else-if="showPricing && cell.price" class="calendar-cell-price">{{ formatPrice(cell.price) }}</span>
+      </button>
+    </div>
+
+    <!-- "Po mesecu" — same interaction, one cell per calendar month instead of per day. -->
+    <div v-else class="calendar-grid calendar-grid-months">
+      <button
+        v-for="cell in cells"
+        :key="cell.key"
+        type="button"
+        class="calendar-cell calendar-cell-month"
+        :class="cellClasses(cell)"
+        :disabled="cell.past || (cell.status && cell.status !== 'MANUAL')"
+        @click="selectCell(cell)"
+      >
+        <span class="calendar-cell-day">{{ cell.label }}</span>
         <span v-if="cell.status === 'MANUAL'" class="calendar-cell-tag">{{ t('listing.calendarBlocked') }}</span>
         <span v-else-if="cell.status" class="calendar-cell-tag">{{ t('listing.calendarTaken') }}</span>
         <span v-else-if="showPricing && cell.price" class="calendar-cell-price">{{ formatPrice(cell.price) }}</span>
@@ -35,11 +48,11 @@
       <span><i class="legend-dot legend-dot-taken"></i>{{ t('listing.calendarTaken') }}</span>
     </div>
 
-    <div v-if="selectedCell" class="calendar-editor">
+    <div v-if="selectedCellData" class="calendar-editor">
       <p class="calendar-editor-date">{{ formatSelectedDate }}</p>
 
       <button type="button" class="btn btn-tertiary btn-sm" :disabled="busy" @click="toggleBlock">
-        {{ selectedCell.status === 'MANUAL' ? t('listing.calendarUnblock') : t('listing.calendarBlock') }}
+        {{ selectedCellData.status === 'MANUAL' ? t('listing.calendarUnblock') : t('listing.calendarBlock') }}
       </button>
 
       <div v-if="showPricing" class="calendar-price-editor">
@@ -50,7 +63,7 @@
             {{ t('common.save') }}
           </button>
           <button
-            v-if="selectedCell.hasOverride"
+            v-if="selectedCellData.hasOverride"
             type="button"
             class="btn btn-tertiary btn-sm"
             :disabled="busy"
@@ -73,11 +86,17 @@
 // blocking reuses the pre-existing BlockedTerm/MANUAL endpoints; per-date
 // pricing is new (DatePriceOverride) and only makes sense for PER_STAY
 // (night/day) listings — PER_SLOT pricing lives on the slot itself.
+//
+// mode="month" (Dodavanje Oglasa spec §3, "Po mesecu") reuses the exact same
+// endpoints and mechanics one grain coarser: each cell is a calendar month
+// (keyed by its first-of-month date) instead of a day, blocking spans the
+// whole month, and the price override is the month's DatePriceOverride row.
 const props = defineProps({
   listingId: { type: String, required: true },
   basePrice: { type: Number, default: 0 },
   weekendPrice: { type: Number, default: null },
   showPricing: { type: Boolean, default: true },
+  mode: { type: String, default: 'day' }, // 'day' | 'month'
 })
 
 const { t } = useI18n()
@@ -86,9 +105,10 @@ const api = useApi()
 const today = new Date()
 today.setHours(0, 0, 0, 0)
 const viewMonth = ref(new Date(today.getFullYear(), today.getMonth(), 1))
+const viewYear = ref(new Date(today.getFullYear(), 0, 1))
 const blocks = ref([]) // [{id, startsAt, endsAt, source}]
 const overrides = ref(new Map()) // 'YYYY-MM-DD' -> price
-const selectedDate = ref(null)
+const selectedKey = ref(null)
 const priceInput = ref(null)
 const busy = ref(false)
 const editorError = ref('')
@@ -99,40 +119,71 @@ function toKey(d) {
 
 const weekdayLabels = computed(() => t('listing.calendarWeekdays').split(','))
 
-const monthLabel = computed(() =>
-  viewMonth.value.toLocaleDateString(t('listing.calendarLocale'), { month: 'long', year: 'numeric' }),
+const periodLabel = computed(() =>
+  props.mode === 'month'
+    ? String(viewYear.value.getFullYear())
+    : viewMonth.value.toLocaleDateString(t('listing.calendarLocale'), { month: 'long', year: 'numeric' }),
 )
 
 const leadingBlanks = computed(() => {
+  if (props.mode === 'month') return 0
   const jsDay = viewMonth.value.getDay() // 0=Sun
   return (jsDay + 6) % 7 // Monday-first
 })
 
-function statusForDay(date) {
-  const dayStart = date.getTime()
-  const dayEnd = dayStart + 86400000
+function statusForRange(startDate, endDate) {
+  const s0 = startDate.getTime()
+  const e0 = endDate.getTime()
   for (const b of blocks.value) {
     const s = new Date(b.startsAt).getTime()
     const e = new Date(b.endsAt).getTime()
-    if (s < dayEnd && e > dayStart) return { status: b.source, id: b.id }
+    if (s < e0 && e > s0) return { status: b.source, id: b.id }
   }
   return { status: null, id: null }
 }
 
-const days = computed(() => {
+const monthNames = computed(() =>
+  Array.from({ length: 12 }, (_, i) =>
+    new Date(2000, i, 1).toLocaleDateString(t('listing.calendarLocale'), { month: 'long' }),
+  ),
+)
+
+const cells = computed(() => {
+  if (props.mode === 'month') {
+    const year = viewYear.value.getFullYear()
+    return Array.from({ length: 12 }, (_, i) => {
+      const date = new Date(year, i, 1)
+      const nextMonth = new Date(year, i + 1, 1)
+      const key = toKey(date)
+      const { status, id } = statusForRange(date, nextMonth)
+      const override = overrides.value.get(key)
+      return {
+        key,
+        label: monthNames.value[i],
+        date,
+        status,
+        blockId: id,
+        hasOverride: override !== undefined,
+        price: override ?? props.basePrice,
+        past: nextMonth <= today,
+      }
+    })
+  }
+
   const year = viewMonth.value.getFullYear()
   const month = viewMonth.value.getMonth()
   const count = new Date(year, month + 1, 0).getDate()
   const list = []
   for (let day = 1; day <= count; day++) {
     const date = new Date(year, month, day)
+    const nextDay = new Date(date.getTime() + 86400000)
     const key = toKey(date)
-    const { status, id } = statusForDay(date)
+    const { status, id } = statusForRange(date, nextDay)
     const override = overrides.value.get(key)
     const isWeekend = date.getDay() === 5 || date.getDay() === 6
     list.push({
       key,
-      day,
+      label: String(day),
       date,
       status,
       blockId: id,
@@ -144,33 +195,47 @@ const days = computed(() => {
   return list
 })
 
-const selectedCell = computed(() => days.value.find((d) => d.key === selectedDate.value) || null)
+function cellClasses(cell) {
+  return {
+    'calendar-cell-blocked': cell.status === 'MANUAL',
+    'calendar-cell-taken': cell.status && cell.status !== 'MANUAL',
+    'calendar-cell-selected': selectedKey.value === cell.key,
+    'calendar-cell-past': cell.past,
+  }
+}
+
+const selectedCellData = computed(() => cells.value.find((c) => c.key === selectedKey.value) || null)
 const defaultPriceForSelected = computed(() => {
-  if (!selectedCell.value) return props.basePrice
-  const isWeekend = selectedCell.value.date.getDay() === 5 || selectedCell.value.date.getDay() === 6
+  if (!selectedCellData.value) return props.basePrice
+  if (props.mode === 'month') return props.basePrice
+  const isWeekend = selectedCellData.value.date.getDay() === 5 || selectedCellData.value.date.getDay() === 6
   return isWeekend && props.weekendPrice ? props.weekendPrice : props.basePrice
 })
 
-const formatSelectedDate = computed(() =>
-  selectedCell.value ? selectedCell.value.date.toLocaleDateString(t('listing.calendarLocale'), { weekday: 'long', day: 'numeric', month: 'long' }) : '',
-)
+const formatSelectedDate = computed(() => {
+  if (!selectedCellData.value) return ''
+  return props.mode === 'month'
+    ? selectedCellData.value.date.toLocaleDateString(t('listing.calendarLocale'), { month: 'long', year: 'numeric' })
+    : selectedCellData.value.date.toLocaleDateString(t('listing.calendarLocale'), { weekday: 'long', day: 'numeric', month: 'long' })
+})
 
 function formatPrice(v) {
-  return `${new Intl.NumberFormat('sr-RS').format(v)}`
+  return `${new Intl.NumberFormat('sr-Latn-RS').format(v)} RSD`
 }
 
-function selectDay(cell) {
+function selectCell(cell) {
   if (cell.past || (cell.status && cell.status !== 'MANUAL')) return
   editorError.value = ''
-  selectedDate.value = selectedDate.value === cell.key ? null : cell.key
+  selectedKey.value = selectedKey.value === cell.key ? null : cell.key
   priceInput.value = null
 }
 
 async function loadAvailability() {
-  const year = viewMonth.value.getFullYear()
-  const month = viewMonth.value.getMonth()
-  const from = new Date(year, month, 1)
-  const to = new Date(year, month + 1, 1)
+  const from = props.mode === 'month' ? new Date(viewYear.value.getFullYear(), 0, 1) : new Date(viewMonth.value)
+  const to =
+    props.mode === 'month'
+      ? new Date(viewYear.value.getFullYear() + 1, 0, 1)
+      : new Date(viewMonth.value.getFullYear(), viewMonth.value.getMonth() + 1, 1)
   const data = await api.get(`/listings/${props.listingId}/availability`, {
     query: { from: from.toISOString(), to: to.toISOString() },
   })
@@ -178,23 +243,30 @@ async function loadAvailability() {
   overrides.value = new Map((data.datePriceOverrides || []).map((o) => [toKey(new Date(o.date)), o.price]))
 }
 
-function shiftMonth(delta) {
-  const d = new Date(viewMonth.value)
-  d.setMonth(d.getMonth() + delta)
-  viewMonth.value = d
-  selectedDate.value = null
+function shiftPeriod(delta) {
+  if (props.mode === 'month') {
+    viewYear.value = new Date(viewYear.value.getFullYear() + delta, 0, 1)
+  } else {
+    const d = new Date(viewMonth.value)
+    d.setMonth(d.getMonth() + delta)
+    viewMonth.value = d
+  }
+  selectedKey.value = null
 }
 
 async function toggleBlock() {
-  if (!selectedCell.value) return
+  if (!selectedCellData.value) return
   busy.value = true
   editorError.value = ''
   try {
-    if (selectedCell.value.status === 'MANUAL') {
-      await api.delete(`/listings/${props.listingId}/availability/blocks/${selectedCell.value.blockId}`)
+    if (selectedCellData.value.status === 'MANUAL') {
+      await api.delete(`/listings/${props.listingId}/availability/blocks/${selectedCellData.value.blockId}`)
     } else {
-      const start = selectedCell.value.date
-      const end = new Date(start.getTime() + 86400000)
+      const start = selectedCellData.value.date
+      const end =
+        props.mode === 'month'
+          ? new Date(start.getFullYear(), start.getMonth() + 1, 1)
+          : new Date(start.getTime() + 86400000)
       await api.post(`/listings/${props.listingId}/availability/blocks`, {
         startsAt: start.toISOString(),
         endsAt: end.toISOString(),
@@ -209,12 +281,12 @@ async function toggleBlock() {
 }
 
 async function savePrice() {
-  if (!selectedCell.value || !priceInput.value) return
+  if (!selectedCellData.value || !priceInput.value) return
   busy.value = true
   editorError.value = ''
   try {
     await api.post(`/listings/${props.listingId}/availability/date-price`, {
-      date: selectedCell.value.key,
+      date: selectedCellData.value.key,
       price: priceInput.value,
     })
     await loadAvailability()
@@ -226,11 +298,11 @@ async function savePrice() {
 }
 
 async function clearPrice() {
-  if (!selectedCell.value) return
+  if (!selectedCellData.value) return
   busy.value = true
   editorError.value = ''
   try {
-    await api.delete(`/listings/${props.listingId}/availability/date-price/${selectedCell.value.key}`)
+    await api.delete(`/listings/${props.listingId}/availability/date-price/${selectedCellData.value.key}`)
     await loadAvailability()
   } catch (e) {
     editorError.value = extractErrorMessage(e, t('auth.genericError'))
@@ -239,7 +311,7 @@ async function clearPrice() {
   }
 }
 
-watch(viewMonth, loadAvailability, { immediate: true })
+watch([viewMonth, viewYear], loadAvailability, { immediate: true })
 </script>
 
 <style lang="scss" scoped>
@@ -267,6 +339,17 @@ watch(viewMonth, loadAvailability, { immediate: true })
   gap: 4px;
 }
 
+.calendar-grid-months {
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+@include respond-above(sm) {
+  .calendar-grid-months {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
 .calendar-weekday {
   text-align: center;
   font-size: 12px;
@@ -286,6 +369,12 @@ watch(viewMonth, loadAvailability, { immediate: true })
   cursor: pointer;
   padding: 2px;
   min-height: 46px;
+}
+
+.calendar-cell-month {
+  aspect-ratio: auto;
+  min-height: 64px;
+  text-transform: capitalize;
 }
 
 .calendar-cell-empty {

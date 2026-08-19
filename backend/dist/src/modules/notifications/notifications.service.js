@@ -35,6 +35,14 @@ let NotificationsService = class NotificationsService {
         await this.prisma.notification.updateMany({ where: { userId, readAt: null }, data: { readAt: new Date() } });
         return { message: 'ok' };
     }
+    async deleteOne(userId, id) {
+        await this.prisma.notification.deleteMany({ where: { id, userId } });
+        return { message: 'ok' };
+    }
+    async deleteAll(userId) {
+        await this.prisma.notification.deleteMany({ where: { userId } });
+        return { message: 'ok' };
+    }
     async createFromEmail(opts) {
         const setting = await this.prisma.notificationSetting.findUnique({
             where: { userId_event: { userId: opts.userId, event: opts.event } },

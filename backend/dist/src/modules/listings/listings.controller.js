@@ -24,6 +24,7 @@ const upsert_attributes_dto_1 = require("./dto/upsert-attributes.dto");
 const upsert_faqs_dto_1 = require("./dto/upsert-faqs.dto");
 const upsert_extra_services_dto_1 = require("./dto/upsert-extra-services.dto");
 const reject_listing_dto_1 = require("./dto/reject-listing.dto");
+const create_uncategorized_listing_dto_1 = require("./dto/create-uncategorized-listing.dto");
 const current_user_decorator_1 = require("../../common/decorators/current-user.decorator");
 const public_decorator_1 = require("../../common/decorators/public.decorator");
 const require_permissions_decorator_1 = require("../../common/decorators/require-permissions.decorator");
@@ -33,6 +34,9 @@ let ListingsController = class ListingsController {
     }
     create(userId, dto) {
         return this.listingsService.createDraft(userId, dto);
+    }
+    createUncategorized(userId, dto) {
+        return this.listingsService.createUncategorizedListing(userId, dto);
     }
     getMine(userId) {
         return this.listingsService.getMine(userId);
@@ -79,6 +83,12 @@ let ListingsController = class ListingsController {
     adminQueue() {
         return this.listingsService.adminGetQueue();
     }
+    adminPendingCategory() {
+        return this.listingsService.adminListPendingCategoryAssignment();
+    }
+    adminAssignCategory(id, categoryId) {
+        return this.listingsService.adminAssignCategory(id, categoryId);
+    }
     adminApprove(adminId, id) {
         return this.listingsService.adminApprove(adminId, id);
     }
@@ -101,6 +111,14 @@ __decorate([
     __metadata("design:paramtypes", [String, create_listing_dto_1.CreateListingDto]),
     __metadata("design:returntype", void 0)
 ], ListingsController.prototype, "create", null);
+__decorate([
+    (0, common_1.Post)('listings/uncategorized'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)('id')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, create_uncategorized_listing_dto_1.CreateUncategorizedListingDto]),
+    __metadata("design:returntype", void 0)
+], ListingsController.prototype, "createUncategorized", null);
 __decorate([
     (0, common_1.Get)('listings/mine'),
     __param(0, (0, current_user_decorator_1.CurrentUser)('id')),
@@ -228,6 +246,22 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", void 0)
 ], ListingsController.prototype, "adminQueue", null);
+__decorate([
+    (0, require_permissions_decorator_1.RequirePermissions)('approve_listing'),
+    (0, common_1.Get)('admin/listings/pending-category'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", void 0)
+], ListingsController.prototype, "adminPendingCategory", null);
+__decorate([
+    (0, require_permissions_decorator_1.RequirePermissions)('approve_listing'),
+    (0, common_1.Patch)('admin/listings/:id/category'),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Body)('categoryId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", void 0)
+], ListingsController.prototype, "adminAssignCategory", null);
 __decorate([
     (0, require_permissions_decorator_1.RequirePermissions)('approve_listing'),
     (0, common_1.Post)('admin/listings/:id/approve'),

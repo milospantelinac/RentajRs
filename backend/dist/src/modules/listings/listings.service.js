@@ -23,6 +23,7 @@ const taxonomy_service_1 = require("../taxonomy/taxonomy.service");
 const users_service_1 = require("../users/users.service");
 const contact_detector_1 = require("../../common/utils/contact-detector");
 const money_1 = require("../../common/utils/money");
+const taxonomy_service_2 = require("../taxonomy/taxonomy.service");
 const MAX_PHOTOS = 20;
 const MODERATION_SLA_HOURS = 24;
 let ListingsService = class ListingsService {
@@ -61,6 +62,29 @@ let ListingsService = class ListingsService {
         });
         return this.serialize(listing);
     }
+    async createUncategorizedListing(userId, dto) {
+        const owner = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+        if (owner.restrictedUntil && owner.restrictedUntil.getTime() > Date.now()) {
+            throw new common_1.ForbiddenException(this.i18n.t('errors.ACCOUNT_RESTRICTED'));
+        }
+        const fallback = await this.prisma.category.findUniqueOrThrow({ where: { slug: taxonomy_service_2.FALLBACK_CATEGORY_SLUG } });
+        const slug = await this.uniqueSlug(dto.title || 'novi-oglas');
+        const listing = await this.prisma.listing.create({
+            data: {
+                userId,
+                categoryId: fallback.id,
+                status: client_1.ListingStatus.DRAFT,
+                title: dto.title,
+                description: dto.description ?? '',
+                slug,
+                bookingModel: dto.bookingModel,
+                priceUnit: dto.priceUnit ?? fallback.defaultPriceUnit,
+                price: 0n,
+                pendingCategoryAssignment: true,
+            },
+        });
+        return this.serialize(listing);
+    }
     async getMine(userId) {
         const listings = await this.prisma.listing.findMany({
             where: { userId, status: { not: client_1.ListingStatus.DELETED } },
@@ -83,6 +107,12 @@ let ListingsService = class ListingsService {
     }
     async updateListing(userId, listingId, dto) {
         const listing = await this.assertOwnership(userId, listingId);
+        if (dto.bookingModel !== undefined && dto.bookingModel !== 'NO_BOOKING' && !listing.pendingCategoryAssignment) {
+            const category = await this.prisma.category.findUniqueOrThrow({ where: { id: listing.categoryId } });
+            if (dto.bookingModel !== category.defaultBookingModel) {
+                throw new common_1.BadRequestException('bookingModel must match the category\'s booking model, or be NO_BOOKING');
+            }
+        }
         const priceFields = {};
         if (dto.price !== undefined)
             priceFields.price = (0, money_1.rsdToPara)(dto.price);
@@ -477,6 +507,22 @@ let ListingsService = class ListingsService {
             },
         });
         this.events.emit('listing.rejected', { listingId, userId: listing.userId, reason: dto.reason });
+        return this.serialize(updated);
+    }
+    async adminListPendingCategoryAssignment() {
+        const listings = await this.prisma.listing.findMany({
+            where: { pendingCategoryAssignment: true, status: { not: client_1.ListingStatus.DELETED } },
+            orderBy: { createdAt: 'asc' },
+            include: { user: { select: { id: true, firstName: true, lastName: true, email: true } }, category: true },
+        });
+        return listings.map((l) => this.serialize(l));
+    }
+    async adminAssignCategory(listingId, categoryId) {
+        const category = await this.prisma.category.findUniqueOrThrow({ where: { id: categoryId } });
+        const updated = await this.prisma.listing.update({
+            where: { id: listingId },
+            data: { categoryId: category.id, pendingCategoryAssignment: false },
+        });
         return this.serialize(updated);
     }
     async adminApproveVersion(adminUserId, versionId) {
