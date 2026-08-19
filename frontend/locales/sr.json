@@ -254,6 +254,7 @@
     "calendarCustomPrice": "Cena za ovaj datum (RSD)",
     "calendarRemoveCustomPrice": "Ukloni prilagođenu cenu",
     "icalSectionTitle": "iCal sinhronizacija",
+    "icalLockedHint": "Izvoz i uvoz iCal kalendara postaju dostupni nakon objavljivanja oglasa (Standard ili Pro paket).",
     "icalExportLabel": "Izvoz kalendara",
     "icalExportHint": "Nalepite ovaj link u Airbnb, Booking.com ili drugu platformu da bi videli kada je ovaj oglas zauzet.",
     "icalImportLabel": "Uvoz kalendara",

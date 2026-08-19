@@ -254,6 +254,7 @@
     "calendarCustomPrice": "Price for this date (RSD)",
     "calendarRemoveCustomPrice": "Remove custom price",
     "icalSectionTitle": "iCal sync",
+    "icalLockedHint": "iCal export and import unlock once the listing is published (Standard or Pro package).",
     "icalExportLabel": "Calendar export",
     "icalExportHint": "Paste this link into Airbnb, Booking.com or another platform so they know when this listing is taken.",
     "icalImportLabel": "Calendar import",

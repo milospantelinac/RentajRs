@@ -117,9 +117,13 @@
             :mode="form.priceUnit === 'MONTH' ? 'month' : 'day'"
           />
 
-          <div v-if="listing?.status === 'ACTIVE' && form.priceUnit !== 'MONTH'" class="form-group mt-4">
+          <div v-if="form.priceUnit !== 'MONTH'" class="form-group mt-4">
             <label class="form-label">{{ t('listing.icalSectionTitle') }}</label>
-            <IcalSyncPanel :listing-id="listingId" :ical-export-token="listing?.icalExportToken" />
+            <IcalSyncPanel v-if="listing?.status === 'ACTIVE'" :listing-id="listingId" :ical-export-token="listing?.icalExportToken" />
+            <div v-else class="ical-locked">
+              <span class="ical-locked-icon" aria-hidden="true">🔒</span>
+              <p class="text-muted mb-0">{{ t('listing.icalLockedHint') }}</p>
+            </div>
           </div>
         </template>
 
@@ -1504,5 +1508,20 @@ useSeoMeta({ title: t('listing.wizardTitle') })
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.ical-locked {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1.5px dashed $color-border;
+  border-radius: $radius-input;
+  background: $color-background;
+}
+
+.ical-locked-icon {
+  font-size: 18px;
+  flex-shrink: 0;
 }
 </style>

@@ -5,8 +5,13 @@
       <p v-if="error" class="form-error mb-3">{{ error }}</p>
 
       <div class="row">
-        <div v-for="cat in categories" :key="cat.id" class="col-6 col-md-3 mb-3">
-          <button class="category-tile card card-interactive" @click="selectTopCategory(cat)">
+        <div v-for="cat in sortedCategories" :key="cat.id" class="col-6 col-md-3 mb-3">
+          <button
+            class="category-tile card card-interactive"
+            :class="{ 'category-tile-propose': cat.slug === 'ostalo' }"
+            @click="selectTopCategory(cat)"
+          >
+            <span v-if="cat.slug === 'ostalo'" class="category-tile-propose-icon" aria-hidden="true">+</span>
             <span class="text-body">{{ cat.slug === 'ostalo' ? t('listing.unlockYourCategory') : cat.name }}</span>
           </button>
         </div>
@@ -88,6 +93,12 @@ const step = ref('top')
 const activeTopCategory = ref(null)
 
 const { data: categories } = await useAsyncData('wizard-categories', () => api.get('/categories'))
+// "Otključaj svoju kategoriju" (ostalo) je predlog, ne standardna kategorija —
+// uvek se prikazuje poslednja, sa drugačijim dizajnom (vidi .category-tile-propose).
+const sortedCategories = computed(() => {
+  const list = categories.value || []
+  return [...list.filter((c) => c.slug !== 'ostalo'), ...list.filter((c) => c.slug === 'ostalo')]
+})
 
 const uncategorized = reactive({ title: '', bookingModel: 'PER_STAY', priceUnit: 'NIGHT', description: '' })
 watch(
@@ -157,5 +168,27 @@ useSeoMeta({ title: t('listing.chooseCategory') })
 
 .category-tile:hover {
   border-color: $color-primary;
+}
+
+.category-tile-propose {
+  border: 1.5px dashed $color-primary;
+  background: rgba($color-primary, 0.04);
+}
+
+.category-tile-propose:hover {
+  background: rgba($color-primary, 0.08);
+}
+
+.category-tile-propose-icon {
+  display: block;
+  width: 24px;
+  height: 24px;
+  margin: 0 auto 8px;
+  border-radius: 50%;
+  background: $color-primary;
+  color: $color-surface;
+  font-weight: 700;
+  font-size: 15px;
+  line-height: 24px;
 }
 </style>
