@@ -28,6 +28,16 @@ export class NotificationsService {
     return { message: 'ok' };
   }
 
+  async deleteOne(userId: string, id: string) {
+    await this.prisma.notification.deleteMany({ where: { id, userId } });
+    return { message: 'ok' };
+  }
+
+  async deleteAll(userId: string) {
+    await this.prisma.notification.deleteMany({ where: { userId } });
+    return { message: 'ok' };
+  }
+
   /** Called by EmailService for every send — the single place notification rows get created (Ch.10). */
   async createFromEmail(opts: { userId: string; event: string; title: string; content: string; linkUrl?: string }) {
     const setting = await this.prisma.notificationSetting.findUnique({

@@ -39,7 +39,9 @@
     "logout": "Odjava",
     "notifications": "Obaveštenja",
     "markAllRead": "Označi sve kao pročitano",
-    "noNotifications": "Nemate obaveštenja"
+    "noNotifications": "Nemate obaveštenja",
+    "deleteNotification": "Obriši obaveštenje",
+    "deleteAllNotifications": "Obriši sve"
   },
   "footer": {
     "about": "O nama",

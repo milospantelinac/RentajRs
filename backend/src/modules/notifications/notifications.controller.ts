@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { NotificationsService } from './notifications.service';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -27,6 +27,16 @@ export class NotificationsController {
   @Post('read-all')
   markAllRead(@CurrentUser('id') userId: string) {
     return this.notificationsService.markAllRead(userId);
+  }
+
+  @Delete()
+  deleteAll(@CurrentUser('id') userId: string) {
+    return this.notificationsService.deleteAll(userId);
+  }
+
+  @Delete(':id')
+  deleteOne(@CurrentUser('id') userId: string, @Param('id') id: string) {
+    return this.notificationsService.deleteOne(userId, id);
   }
 
   // -- Preferences (R87) -------------------------------------------------

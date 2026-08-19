@@ -39,7 +39,9 @@
     "logout": "Log out",
     "notifications": "Notifications",
     "markAllRead": "Mark all as read",
-    "noNotifications": "No notifications"
+    "noNotifications": "No notifications",
+    "deleteNotification": "Delete notification",
+    "deleteAllNotifications": "Delete all"
   },
   "footer": {
     "about": "About",
