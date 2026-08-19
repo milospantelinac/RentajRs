@@ -137,7 +137,7 @@ function formatDate(d) {
   return d.toLocaleDateString(t('listing.calendarLocale'), { day: 'numeric', month: 'short' })
 }
 function formatPrice(v) {
-  return new Intl.NumberFormat('sr-RS').format(v)
+  return `${new Intl.NumberFormat('sr-Latn-RS').format(v)} RSD`
 }
 
 const nightCount = computed(() => {

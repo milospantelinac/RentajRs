@@ -220,7 +220,7 @@ const formatSelectedDate = computed(() => {
 })
 
 function formatPrice(v) {
-  return `${new Intl.NumberFormat('sr-RS').format(v)}`
+  return `${new Intl.NumberFormat('sr-Latn-RS').format(v)} RSD`
 }
 
 function selectCell(cell) {

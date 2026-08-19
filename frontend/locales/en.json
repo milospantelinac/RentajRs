@@ -423,6 +423,7 @@
     "yearlySavings": "Save {amount} per year",
     "notVatRegistered": "Rentaj.rs is not VAT-registered — prices are final, no additional tax.",
     "selectPackage": "Select package",
+    "osnovniDisabledForOnlineBooking": "The Basic package is not available for listings with online booking.",
     "submittedTitle": "Listing sent for approval",
     "submittedMessage": "An administrator will review your listing within 24 hours. You'll get an email notification.",
     "mySubscriptions": "My subscriptions",

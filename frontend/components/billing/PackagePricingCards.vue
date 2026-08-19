@@ -11,24 +11,30 @@
 
     <div class="row">
       <div v-for="pkg in packages" :key="pkg.id" class="col-12 col-md-4 mb-4">
-        <div class="card package-card" :class="{ 'package-card-highlight': pkg.key === highlightKey }">
+        <div
+          class="card package-card"
+          :class="{ 'package-card-highlight': pkg.key === highlightKey }"
+        >
           <div class="card-body">
-            <h2 class="text-section-title mb-2">{{ pkg.key }}</h2>
-            <p class="text-page-title mb-1">
-              {{ formatPrice(cycle === 'YEARLY' ? pkg.priceYearly : pkg.priceMonthly) }}
-              <span class="text-muted text-body">/ {{ cycle === 'YEARLY' ? t('billing.year') : t('billing.month') }}</span>
-            </p>
-            <p v-if="cycle === 'YEARLY' && yearlySavings(pkg) > 0" class="package-savings">
-              {{ t('billing.yearlySavings', { amount: formatPrice(yearlySavings(pkg)) }) }}
-            </p>
-            <ul class="package-features">
-              <li>{{ t('billing.featureListings', { count: pkg.listingLimit }) }}</li>
-              <li :class="pkg.hasBookings ? '' : 'package-feature-off'">{{ t('billing.featureBookings') }}</li>
-              <li :class="pkg.hasMessaging ? '' : 'package-feature-off'">{{ t('billing.featureMessaging') }}</li>
-              <li :class="pkg.hasReviews ? '' : 'package-feature-off'">{{ t('billing.featureReviews') }}</li>
-              <li :class="pkg.hasIcal ? '' : 'package-feature-off'">{{ t('billing.featureIcal') }}</li>
-            </ul>
-            <slot name="cta" :pkg="pkg" />
+            <div :class="{ 'package-card-blur-content': disabledKeys.includes(pkg.key) }">
+              <h2 class="text-section-title mb-2">{{ pkg.key }}</h2>
+              <p class="text-page-title mb-1">
+                {{ formatPrice(cycle === 'YEARLY' ? pkg.priceYearly : pkg.priceMonthly) }}
+                <span class="text-muted text-body">/ {{ cycle === 'YEARLY' ? t('billing.year') : t('billing.month') }}</span>
+              </p>
+              <p v-if="cycle === 'YEARLY' && yearlySavings(pkg) > 0" class="package-savings">
+                {{ t('billing.yearlySavings', { amount: formatPrice(yearlySavings(pkg)) }) }}
+              </p>
+              <ul class="package-features">
+                <li>{{ t('billing.featureListings', { count: pkg.listingLimit }) }}</li>
+                <li :class="pkg.hasBookings ? '' : 'package-feature-off'">{{ t('billing.featureBookings') }}</li>
+                <li :class="pkg.hasMessaging ? '' : 'package-feature-off'">{{ t('billing.featureMessaging') }}</li>
+                <li :class="pkg.hasReviews ? '' : 'package-feature-off'">{{ t('billing.featureReviews') }}</li>
+                <li :class="pkg.hasIcal ? '' : 'package-feature-off'">{{ t('billing.featureIcal') }}</li>
+              </ul>
+            </div>
+            <p v-if="disabledKeys.includes(pkg.key)" class="package-disabled-note">{{ disabledReason }}</p>
+            <slot v-else name="cta" :pkg="pkg" />
           </div>
         </div>
       </div>
@@ -46,6 +52,12 @@ defineProps({
   packages: { type: Array, required: true },
   cycle: { type: String, required: true },
   highlightKey: { type: String, default: null },
+  // DODATNA LOGIKA za pakete — package keys to show disabled/blurred with
+  // disabledReason explaining why (e.g. Osnovni once the listing already
+  // uses online booking). Empty on /cenovnik, where there's no listing
+  // context to gate against.
+  disabledKeys: { type: Array, default: () => [] },
+  disabledReason: { type: String, default: '' },
 })
 defineEmits(['update:cycle'])
 
@@ -74,6 +86,20 @@ function yearlySavings(pkg) {
 .package-card-highlight {
   border-color: $color-primary;
   box-shadow: $shadow-card;
+}
+
+.package-card-blur-content {
+  filter: blur(1.5px) grayscale(0.6);
+  opacity: 0.65;
+  pointer-events: none;
+  user-select: none;
+}
+
+.package-disabled-note {
+  color: $color-text-muted;
+  font-size: $font-size-muted;
+  font-style: italic;
+  margin: 0;
 }
 
 .package-savings {
