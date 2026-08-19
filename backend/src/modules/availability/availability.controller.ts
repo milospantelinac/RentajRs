@@ -6,6 +6,8 @@ import {
   CreateDefinedSlotDto,
   CreateManualBlockDto,
   SetDatePriceDto,
+  SetHourlyPriceRangesDto,
+  SetSlotPriceOverrideDto,
   AddIcalSourceDto,
 } from './dto/availability.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -58,6 +60,33 @@ export class AvailabilityController {
   @Delete('date-price/:date')
   deleteDatePrice(@CurrentUser('id') userId: string, @Param('id') id: string, @Param('date') date: string) {
     return this.availabilityService.deleteDatePrice(userId, id, date);
+  }
+
+  @Post('hourly-price-ranges')
+  setHourlyPriceRanges(
+    @CurrentUser('id') userId: string,
+    @Param('id') id: string,
+    @Body() dto: SetHourlyPriceRangesDto,
+  ) {
+    return this.availabilityService.setHourlyPriceRanges(userId, id, dto);
+  }
+
+  @Post('slot-price-overrides')
+  setSlotPriceOverride(
+    @CurrentUser('id') userId: string,
+    @Param('id') id: string,
+    @Body() dto: SetSlotPriceOverrideDto,
+  ) {
+    return this.availabilityService.setSlotPriceOverride(userId, id, dto);
+  }
+
+  @Delete('slot-price-overrides/:overrideId')
+  deleteSlotPriceOverride(
+    @CurrentUser('id') userId: string,
+    @Param('id') id: string,
+    @Param('overrideId') overrideId: string,
+  ) {
+    return this.availabilityService.deleteSlotPriceOverride(userId, id, overrideId);
   }
 
   @Get('ical-sources')

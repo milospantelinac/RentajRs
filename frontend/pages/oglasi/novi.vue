@@ -28,37 +28,44 @@
       <button class="btn btn-tertiary mt-2" @click="step = 'top'">← {{ t('listing.back') }}</button>
     </template>
 
+    <!-- Kategorije spec §8 — the owner doesn't pick a category or even name
+         one; they describe the listing and Rentaj assigns the real category
+         afterward from the moderation queue. -->
     <template v-else-if="step === 'propose'">
       <h1 class="text-page-title mb-2">{{ t('listing.unlockYourCategory') }}</h1>
       <p class="text-muted mb-4">{{ t('listing.proposeCategoryExplain') }}</p>
 
-      <form class="card" @submit.prevent="submitProposal">
+      <form class="card" @submit.prevent="submitUncategorized">
         <div class="card-body">
           <div class="form-group mb-3">
-            <label class="form-label">{{ t('listing.proposeCategoryName') }}</label>
-            <input v-model="proposal.name" type="text" class="form-control" required maxlength="100" />
+            <label class="form-label">{{ t('listing.title') }}</label>
+            <input v-model="uncategorized.title" type="text" class="form-control" required maxlength="200" />
           </div>
           <div class="form-group mb-3">
-            <label class="form-label">{{ t('listing.stepBookingModel') }}</label>
-            <select v-model="proposal.bookingModel" class="form-control form-select">
-              <option value="PER_STAY">{{ t('listing.bookingModelPerStay') }}</option>
-              <option value="PER_SLOT">{{ t('listing.bookingModelPerSlot') }}</option>
+            <label class="form-label">{{ t('listing.reservationMethod') }}</label>
+            <select v-model="uncategorized.bookingModel" class="form-control form-select">
+              <option value="PER_STAY">{{ t('booking.byStay') }}</option>
+              <option value="PER_SLOT">{{ t('booking.bySlot') }}</option>
               <option value="NO_BOOKING">{{ t('listing.bookingModelNone') }}</option>
             </select>
           </div>
-          <div class="form-group mb-3">
+          <div v-if="uncategorized.bookingModel !== 'NO_BOOKING'" class="form-group mb-3">
             <label class="form-label">{{ t('listing.priceUnit') }}</label>
-            <select v-model="proposal.priceUnit" class="form-control form-select">
-              <option value="DAY">{{ t('listing.unitDay') }}</option>
-              <option value="NIGHT">{{ t('listing.unitNight') }}</option>
-              <option value="HOUR">{{ t('listing.unitHour') }}</option>
-              <option value="MONTH">{{ t('listing.unitMonth') }}</option>
-              <option value="SLOT">{{ t('listing.unitSlot') }}</option>
+            <select v-model="uncategorized.priceUnit" class="form-control form-select">
+              <template v-if="uncategorized.bookingModel === 'PER_STAY'">
+                <option value="DAY">{{ t('listing.unitDay') }}</option>
+                <option value="NIGHT">{{ t('listing.unitNight') }}</option>
+                <option value="MONTH">{{ t('listing.unitMonth') }}</option>
+              </template>
+              <template v-else>
+                <option value="HOUR">{{ t('listing.unitHour') }}</option>
+                <option value="SLOT">{{ t('listing.unitSlot') }}</option>
+              </template>
             </select>
           </div>
           <div class="form-group mb-3">
             <label class="form-label">{{ t('listing.proposeCategoryComment') }}</label>
-            <textarea v-model="proposal.comment" class="form-control" rows="3" maxlength="500" />
+            <textarea v-model="uncategorized.description" class="form-control" rows="3" maxlength="2000" />
           </div>
           <p v-if="error" class="form-error mb-3">{{ error }}</p>
           <button type="submit" class="btn btn-primary-flat" :disabled="submitting">
@@ -82,7 +89,13 @@ const activeTopCategory = ref(null)
 
 const { data: categories } = await useAsyncData('wizard-categories', () => api.get('/categories'))
 
-const proposal = reactive({ name: '', bookingModel: 'PER_STAY', priceUnit: 'DAY', comment: '' })
+const uncategorized = reactive({ title: '', bookingModel: 'PER_STAY', priceUnit: 'NIGHT', description: '' })
+watch(
+  () => uncategorized.bookingModel,
+  (val) => {
+    uncategorized.priceUnit = val === 'PER_STAY' ? 'NIGHT' : val === 'PER_SLOT' ? 'HOUR' : ''
+  },
+)
 
 function selectTopCategory(cat) {
   error.value = ''
@@ -108,19 +121,17 @@ async function selectLeafCategory(categoryId) {
   }
 }
 
-async function submitProposal() {
+async function submitUncategorized() {
   error.value = ''
   submitting.value = true
   try {
-    const other = categories.value.find((c) => c.slug === 'ostalo')
-    const category = await api.post('/categories/propose', {
-      parentId: other.id,
-      name: proposal.name,
-      bookingModel: proposal.bookingModel,
-      priceUnit: proposal.priceUnit,
-      comment: proposal.comment || undefined,
+    const listing = await api.post('/listings/uncategorized', {
+      title: uncategorized.title,
+      bookingModel: uncategorized.bookingModel,
+      priceUnit: uncategorized.bookingModel !== 'NO_BOOKING' ? uncategorized.priceUnit : undefined,
+      description: uncategorized.description || undefined,
     })
-    await selectLeafCategory(category.id)
+    await navigateTo(`/oglasi/${listing.id}/uredi`)
   } catch (e) {
     error.value = extractErrorMessage(e, t('auth.genericError'))
   } finally {

@@ -12,6 +12,8 @@ import {
   CreateDefinedSlotDto,
   CreateManualBlockDto,
   SetDatePriceDto,
+  SetHourlyPriceRangesDto,
+  SetSlotPriceOverrideDto,
   AddIcalSourceDto,
 } from './dto/availability.dto';
 
@@ -87,26 +89,34 @@ export class AvailabilityService {
   // -- Public / owner reads ---------------------------------------------
 
   async getAvailability(listingId: string, from: Date, to: Date) {
-    const [blocked, workingHours, definedSlots, datePriceOverrides] = await Promise.all([
-      this.prisma.blockedTerm.findMany({
-        where: { listingId, startsAt: { lt: to }, endsAt: { gt: from } },
-        select: { id: true, startsAt: true, endsAt: true, source: true },
-      }),
-      this.prisma.workingHours.findMany({ where: { listingId } }),
-      this.prisma.definedSlot.findMany({
-        where: { listingId, startsAt: { gte: from, lt: to } },
-        orderBy: { startsAt: 'asc' },
-      }),
-      this.prisma.datePriceOverride.findMany({
-        where: { listingId, date: { gte: from, lt: to } },
-        orderBy: { date: 'asc' },
-      }),
-    ]);
+    const [blocked, workingHours, hourlyPriceRanges, definedSlots, datePriceOverrides, slotPriceOverrides] =
+      await Promise.all([
+        this.prisma.blockedTerm.findMany({
+          where: { listingId, startsAt: { lt: to }, endsAt: { gt: from } },
+          select: { id: true, startsAt: true, endsAt: true, source: true },
+        }),
+        this.prisma.workingHours.findMany({ where: { listingId } }),
+        this.prisma.hourlyPriceRange.findMany({ where: { listingId }, orderBy: { startTime: 'asc' } }),
+        this.prisma.definedSlot.findMany({
+          where: { listingId, startsAt: { gte: from, lt: to } },
+          orderBy: { startsAt: 'asc' },
+        }),
+        this.prisma.datePriceOverride.findMany({
+          where: { listingId, date: { gte: from, lt: to } },
+          orderBy: { date: 'asc' },
+        }),
+        this.prisma.slotPriceOverride.findMany({
+          where: { listingId, date: { gte: from, lt: to } },
+          orderBy: [{ date: 'asc' }, { startTime: 'asc' }],
+        }),
+      ]);
     return {
       blocked,
       workingHours,
+      hourlyPriceRanges: hourlyPriceRanges.map((r) => ({ ...r, price: paraToRsd(r.price) })),
       definedSlots: definedSlots.map((s) => ({ ...s, price: paraToRsd(s.price) })),
       datePriceOverrides: datePriceOverrides.map((o) => ({ date: o.date, price: paraToRsd(o.price) })),
+      slotPriceOverrides: slotPriceOverrides.map((o) => ({ ...o, price: paraToRsd(o.price) })),
     };
   }
 
@@ -200,6 +210,85 @@ export class AvailabilityService {
     return { message: 'ok' };
   }
 
+  /**
+   * "Po mesecu" pricing (Dodavanje Oglasa spec §3) reuses DatePriceOverride
+   * exactly like day-level pricing does — the "date" is just the first of
+   * the month, and setDatePrice/deleteDatePrice already work unmodified
+   * (the frontend's month calendar just always passes a first-of-month
+   * date). getNightlyPrices doesn't apply here since a monthly rate isn't
+   * per-night; this is its month-count equivalent for booking creation.
+   */
+  async getMonthlyPrices(listingId: string, startMonth: Date, monthCount: number, basePrice: bigint) {
+    const monthStarts: Date[] = [];
+    for (let i = 0; i < monthCount; i++) {
+      monthStarts.push(new Date(Date.UTC(startMonth.getUTCFullYear(), startMonth.getUTCMonth() + i, 1)));
+    }
+    const overrides = await this.prisma.datePriceOverride.findMany({
+      where: { listingId, date: { in: monthStarts } },
+    });
+    const overrideByMonth = new Map(overrides.map((o) => [o.date.toISOString().slice(0, 10), o.price]));
+    return monthStarts.map((m) => overrideByMonth.get(m.toISOString().slice(0, 10)) ?? basePrice);
+  }
+
+  // -- PER_SLOT + WORKING_HOURS pricing ------------------------------------
+
+  /** "Različita cena po delu radnog vremena" — full replace, same pattern as setWorkingHours. */
+  async setHourlyPriceRanges(userId: string, listingId: string, dto: SetHourlyPriceRangesDto) {
+    await this.assertOwnership(userId, listingId);
+    await this.prisma.$transaction([
+      this.prisma.hourlyPriceRange.deleteMany({ where: { listingId } }),
+      this.prisma.hourlyPriceRange.createMany({
+        data: dto.ranges.map((r) => ({
+          listingId,
+          startTime: r.startTime,
+          endTime: r.endTime,
+          price: rsdToPara(r.price),
+        })),
+      }),
+    ]);
+    return { message: 'ok' };
+  }
+
+  /** "Posebna cena za određeni datum/vremenski interval" exception. */
+  async setSlotPriceOverride(userId: string, listingId: string, dto: SetSlotPriceOverrideDto) {
+    await this.assertOwnership(userId, listingId);
+    const override = await this.prisma.slotPriceOverride.create({
+      data: {
+        listingId,
+        date: new Date(`${dto.date}T00:00:00.000Z`),
+        startTime: dto.startTime,
+        endTime: dto.endTime,
+        price: rsdToPara(dto.price),
+      },
+    });
+    return { ...override, price: paraToRsd(override.price) };
+  }
+
+  async deleteSlotPriceOverride(userId: string, listingId: string, overrideId: string) {
+    await this.assertOwnership(userId, listingId);
+    await this.prisma.slotPriceOverride.deleteMany({ where: { id: overrideId, listingId } });
+    return { message: 'ok' };
+  }
+
+  /**
+   * Resolves the actual price for one hourly booking: a date+time-specific
+   * SlotPriceOverride wins, then whichever HourlyPriceRange's window
+   * contains the booking's start time, else the listing's flat base price.
+   * Compares HH:MM strings lexically, which is safe since they're always
+   * zero-padded 24h (matches the /^([01]\d|2[0-3]):[0-5]\d$/ DTO pattern).
+   */
+  async resolveHourlyPrice(listingId: string, date: Date, startTime: string, basePrice: bigint): Promise<bigint> {
+    const dateOnly = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+    const override = await this.prisma.slotPriceOverride.findFirst({
+      where: { listingId, date: dateOnly, startTime: { lte: startTime }, endTime: { gt: startTime } },
+    });
+    if (override) return override.price;
+
+    const ranges = await this.prisma.hourlyPriceRange.findMany({ where: { listingId } });
+    const match = ranges.find((r) => r.startTime <= startTime && r.endTime > startTime);
+    return match?.price ?? basePrice;
+  }
+
   /** Per-night price for a PER_STAY booking spanning [startsAt, endsAt) — override where set, weekend/base price otherwise. */
   async getNightlyPrices(listingId: string, startsAt: Date, endsAt: Date, basePrice: bigint, weekendPrice: bigint | null) {
     const overrides = await this.prisma.datePriceOverride.findMany({
@@ -218,8 +307,10 @@ export class AvailabilityService {
 
   async addIcalSource(userId: string, listingId: string, dto: AddIcalSourceDto) {
     const listing = await this.assertOwnership(userId, listingId);
-    if (listing.bookingModel !== 'PER_STAY') {
-      // R67 — iCal only applies to per-stay listings
+    // R67 + Dodavanje Oglasa spec §3 — iCal only applies to PER_STAY listings
+    // billed by DAY/NIGHT; "Po mesecu" books in whole calendar months, which
+    // an external calendar sync can't meaningfully express.
+    if (listing.bookingModel !== 'PER_STAY' || listing.priceUnit === 'MONTH') {
       throw new BadRequestException(this.i18n.t('errors.LISTING_NOT_BOOKABLE'));
     }
     // Ch.11.2 — iCal sync isn't included on the Osnovni/BASIC package.

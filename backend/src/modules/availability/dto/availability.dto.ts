@@ -87,6 +87,53 @@ export class SetDatePriceDto {
   price: number;
 }
 
+class HourlyPriceRangeRow {
+  @ApiProperty({ example: '10:00' })
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, { message: 'validation.TIME_INVALID' })
+  startTime: string;
+
+  @ApiProperty({ example: '18:00' })
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, { message: 'validation.TIME_INVALID' })
+  endTime: string;
+
+  @ApiProperty({ description: 'RSD per hour for this window' })
+  @IsInt()
+  @IsPositive()
+  price: number;
+}
+
+/**
+ * "Različita cena po delu radnog vremena" (Dodavanje Oglasa spec §2/§3) —
+ * full replace, same pattern as SetWorkingHoursDto.
+ */
+export class SetHourlyPriceRangesDto {
+  @ApiProperty({ type: [HourlyPriceRangeRow] })
+  @IsArray()
+  @ArrayMaxSize(20)
+  @ValidateNested({ each: true })
+  @Type(() => HourlyPriceRangeRow)
+  ranges: HourlyPriceRangeRow[];
+}
+
+export class SetSlotPriceOverrideDto {
+  @ApiProperty({ example: '2026-12-31' })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'validation.DATE_INVALID' })
+  date: string;
+
+  @ApiProperty({ example: '14:00' })
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, { message: 'validation.TIME_INVALID' })
+  startTime: string;
+
+  @ApiProperty({ example: '16:00' })
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, { message: 'validation.TIME_INVALID' })
+  endTime: string;
+
+  @ApiProperty({ description: 'RSD per hour for this one date + time window' })
+  @IsInt()
+  @IsPositive()
+  price: number;
+}
+
 export class AddIcalSourceDto {
   @ApiProperty()
   @IsString()

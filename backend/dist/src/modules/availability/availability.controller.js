@@ -50,6 +50,15 @@ let AvailabilityController = class AvailabilityController {
     deleteDatePrice(userId, id, date) {
         return this.availabilityService.deleteDatePrice(userId, id, date);
     }
+    setHourlyPriceRanges(userId, id, dto) {
+        return this.availabilityService.setHourlyPriceRanges(userId, id, dto);
+    }
+    setSlotPriceOverride(userId, id, dto) {
+        return this.availabilityService.setSlotPriceOverride(userId, id, dto);
+    }
+    deleteSlotPriceOverride(userId, id, overrideId) {
+        return this.availabilityService.deleteSlotPriceOverride(userId, id, overrideId);
+    }
     listIcalSources(userId, id) {
         return this.availabilityService.listIcalSources(userId, id);
     }
@@ -134,6 +143,33 @@ __decorate([
     __metadata("design:paramtypes", [String, String, String]),
     __metadata("design:returntype", void 0)
 ], AvailabilityController.prototype, "deleteDatePrice", null);
+__decorate([
+    (0, common_1.Post)('hourly-price-ranges'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)('id')),
+    __param(1, (0, common_1.Param)('id')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, availability_dto_1.SetHourlyPriceRangesDto]),
+    __metadata("design:returntype", void 0)
+], AvailabilityController.prototype, "setHourlyPriceRanges", null);
+__decorate([
+    (0, common_1.Post)('slot-price-overrides'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)('id')),
+    __param(1, (0, common_1.Param)('id')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, availability_dto_1.SetSlotPriceOverrideDto]),
+    __metadata("design:returntype", void 0)
+], AvailabilityController.prototype, "setSlotPriceOverride", null);
+__decorate([
+    (0, common_1.Delete)('slot-price-overrides/:overrideId'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)('id')),
+    __param(1, (0, common_1.Param)('id')),
+    __param(2, (0, common_1.Param)('overrideId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, String]),
+    __metadata("design:returntype", void 0)
+], AvailabilityController.prototype, "deleteSlotPriceOverride", null);
 __decorate([
     (0, common_1.Get)('ical-sources'),
     __param(0, (0, current_user_decorator_1.CurrentUser)('id')),

@@ -1,6 +1,17 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { ArrayMaxSize, IsArray, IsDateString, IsInt, IsOptional, IsString, IsUUID, Min, ValidateNested } from 'class-validator';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsDateString,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Matches,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 
 class ExtraServiceSelection {
   @ApiProperty()
@@ -28,6 +39,17 @@ export class CreateBookingRequestDto {
   @IsOptional()
   @IsUUID('4')
   definedSlotId?: string;
+
+  @ApiPropertyOptional({ example: '2026-09', description: '"Po mesecu" (PER_STAY + priceUnit=MONTH) — first day of this month is the booking start; used instead of startsAt/endsAt' })
+  @IsOptional()
+  @Matches(/^\d{4}-(0[1-9]|1[0-2])$/, { message: 'validation.DATE_INVALID' })
+  monthStart?: string;
+
+  @ApiPropertyOptional({ description: '"Po mesecu" — number of whole calendar months, required together with monthStart' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  monthCount?: number;
 
   @ApiPropertyOptional()
   @IsOptional()

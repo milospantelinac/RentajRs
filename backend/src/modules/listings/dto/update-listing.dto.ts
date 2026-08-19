@@ -5,7 +5,6 @@ import {
   IsArray,
   IsBoolean,
   IsEnum,
-  IsIn,
   IsInt,
   IsNotEmpty,
   IsNumber,
@@ -18,7 +17,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
-import { BookingModel, PaymentMethod, PriceUnit, SlotSubmode } from '@prisma/client';
+import { BookingModel, CancellationPolicyType, PaymentMethod, PriceUnit, SlotSubmode } from '@prisma/client';
 
 class MandatoryFeeDto {
   @IsString()
@@ -30,15 +29,21 @@ class MandatoryFeeDto {
 }
 
 /**
- * Single partial-update DTO covering wizard steps 2 (booking model), 3
- * (basics), 7 (pricing/payment), 8 (availability rules), 10 (cancellation),
- * plus the R34 availability toggle — one endpoint instead of five nearly-
- * identical PATCH routes. ListingsService splits fields into "applies
- * immediately" vs "goes through moderation" per R31 (title/category/
- * location do; price/description/attributes/availability don't).
+ * Single partial-update DTO covering wizard steps 2 (cena i način
+ * rezervacije), 1 (osnovni podaci), 4 (rezervaciona pravila), 5 (plaćanje/
+ * obrada/otkazivanje), plus the R34 availability toggle — one endpoint
+ * instead of five nearly-identical PATCH routes. ListingsService splits
+ * fields into "applies immediately" vs "goes through moderation" per R31
+ * (title/category/location do; price/description/attributes/availability
+ * don't). Step numbering here matches the "Dodavanje Oglasa" spec, not the
+ * old Product Bible numbering this comment used to cite.
  */
 export class UpdateListingDto {
-  // Korak 2
+  // Korak 2 — bookingModel is still stored as PER_STAY/PER_SLOT/NO_BOOKING,
+  // but the wizard no longer lets the owner freely choose PER_STAY vs
+  // PER_SLOT — that's derived from the category. The owner only chooses
+  // online vs. no-booking; ListingsService.updateListing() rejects a
+  // bookingModel that doesn't match the category's model (unless NO_BOOKING).
   @ApiPropertyOptional({ enum: BookingModel })
   @IsOptional()
   @IsEnum(BookingModel)
@@ -178,13 +183,25 @@ export class UpdateListingDto {
   @Min(0)
   earliestBookingHours?: number;
 
-  // Korak 10 — RNT-030: fixed options instead of free text, so a guest can
-  // compare listings instead of reading everyone's own wording for the same
-  // three policies.
-  @ApiPropertyOptional({ enum: ['FLEXIBLE', 'MODERATE', 'STRICT'] })
+  @ApiPropertyOptional({ description: '"Koliko kasno može da se rezerviše" — max days into the future a booking may start' })
   @IsOptional()
-  @IsIn(['FLEXIBLE', 'MODERATE', 'STRICT'])
-  cancellationTerms?: string;
+  @IsInt()
+  @Min(1)
+  maxAdvanceBookingDays?: number;
+
+  // Korak 5 — numeric refund window instead of the old opaque FLEXIBLE/
+  // MODERATE/STRICT label (RNT-030 asked for fixed options; this wizard
+  // rework replaces those with an actual threshold a guest can compare).
+  @ApiPropertyOptional({ enum: CancellationPolicyType })
+  @IsOptional()
+  @IsEnum(CancellationPolicyType)
+  cancellationPolicyType?: CancellationPolicyType;
+
+  @ApiPropertyOptional({ description: 'Days if FREE_UNTIL_DAYS, hours if FREE_UNTIL_HOURS — required together with cancellationPolicyType for those two values' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  cancellationThreshold?: number;
 
   // R34 toggle, available on any status/package
   @ApiPropertyOptional()

@@ -68,12 +68,13 @@ let AvailabilityService = AvailabilityService_1 = class AvailabilityService {
         }
     }
     async getAvailability(listingId, from, to) {
-        const [blocked, workingHours, definedSlots, datePriceOverrides] = await Promise.all([
+        const [blocked, workingHours, hourlyPriceRanges, definedSlots, datePriceOverrides, slotPriceOverrides] = await Promise.all([
             this.prisma.blockedTerm.findMany({
                 where: { listingId, startsAt: { lt: to }, endsAt: { gt: from } },
                 select: { id: true, startsAt: true, endsAt: true, source: true },
             }),
             this.prisma.workingHours.findMany({ where: { listingId } }),
+            this.prisma.hourlyPriceRange.findMany({ where: { listingId }, orderBy: { startTime: 'asc' } }),
             this.prisma.definedSlot.findMany({
                 where: { listingId, startsAt: { gte: from, lt: to } },
                 orderBy: { startsAt: 'asc' },
@@ -82,12 +83,18 @@ let AvailabilityService = AvailabilityService_1 = class AvailabilityService {
                 where: { listingId, date: { gte: from, lt: to } },
                 orderBy: { date: 'asc' },
             }),
+            this.prisma.slotPriceOverride.findMany({
+                where: { listingId, date: { gte: from, lt: to } },
+                orderBy: [{ date: 'asc' }, { startTime: 'asc' }],
+            }),
         ]);
         return {
             blocked,
             workingHours,
+            hourlyPriceRanges: hourlyPriceRanges.map((r) => ({ ...r, price: (0, money_1.paraToRsd)(r.price) })),
             definedSlots: definedSlots.map((s) => ({ ...s, price: (0, money_1.paraToRsd)(s.price) })),
             datePriceOverrides: datePriceOverrides.map((o) => ({ date: o.date, price: (0, money_1.paraToRsd)(o.price) })),
+            slotPriceOverrides: slotPriceOverrides.map((o) => ({ ...o, price: (0, money_1.paraToRsd)(o.price) })),
         };
     }
     async setWorkingHours(userId, listingId, dto) {
@@ -158,6 +165,61 @@ let AvailabilityService = AvailabilityService_1 = class AvailabilityService {
         await this.prisma.datePriceOverride.deleteMany({ where: { listingId, date: new Date(`${date}T00:00:00.000Z`) } });
         return { message: 'ok' };
     }
+    async getMonthlyPrices(listingId, startMonth, monthCount, basePrice) {
+        const monthStarts = [];
+        for (let i = 0; i < monthCount; i++) {
+            monthStarts.push(new Date(Date.UTC(startMonth.getUTCFullYear(), startMonth.getUTCMonth() + i, 1)));
+        }
+        const overrides = await this.prisma.datePriceOverride.findMany({
+            where: { listingId, date: { in: monthStarts } },
+        });
+        const overrideByMonth = new Map(overrides.map((o) => [o.date.toISOString().slice(0, 10), o.price]));
+        return monthStarts.map((m) => overrideByMonth.get(m.toISOString().slice(0, 10)) ?? basePrice);
+    }
+    async setHourlyPriceRanges(userId, listingId, dto) {
+        await this.assertOwnership(userId, listingId);
+        await this.prisma.$transaction([
+            this.prisma.hourlyPriceRange.deleteMany({ where: { listingId } }),
+            this.prisma.hourlyPriceRange.createMany({
+                data: dto.ranges.map((r) => ({
+                    listingId,
+                    startTime: r.startTime,
+                    endTime: r.endTime,
+                    price: (0, money_1.rsdToPara)(r.price),
+                })),
+            }),
+        ]);
+        return { message: 'ok' };
+    }
+    async setSlotPriceOverride(userId, listingId, dto) {
+        await this.assertOwnership(userId, listingId);
+        const override = await this.prisma.slotPriceOverride.create({
+            data: {
+                listingId,
+                date: new Date(`${dto.date}T00:00:00.000Z`),
+                startTime: dto.startTime,
+                endTime: dto.endTime,
+                price: (0, money_1.rsdToPara)(dto.price),
+            },
+        });
+        return { ...override, price: (0, money_1.paraToRsd)(override.price) };
+    }
+    async deleteSlotPriceOverride(userId, listingId, overrideId) {
+        await this.assertOwnership(userId, listingId);
+        await this.prisma.slotPriceOverride.deleteMany({ where: { id: overrideId, listingId } });
+        return { message: 'ok' };
+    }
+    async resolveHourlyPrice(listingId, date, startTime, basePrice) {
+        const dateOnly = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+        const override = await this.prisma.slotPriceOverride.findFirst({
+            where: { listingId, date: dateOnly, startTime: { lte: startTime }, endTime: { gt: startTime } },
+        });
+        if (override)
+            return override.price;
+        const ranges = await this.prisma.hourlyPriceRange.findMany({ where: { listingId } });
+        const match = ranges.find((r) => r.startTime <= startTime && r.endTime > startTime);
+        return match?.price ?? basePrice;
+    }
     async getNightlyPrices(listingId, startsAt, endsAt, basePrice, weekendPrice) {
         const overrides = await this.prisma.datePriceOverride.findMany({
             where: { listingId, date: { gte: startsAt, lt: endsAt } },
@@ -173,7 +235,7 @@ let AvailabilityService = AvailabilityService_1 = class AvailabilityService {
     }
     async addIcalSource(userId, listingId, dto) {
         const listing = await this.assertOwnership(userId, listingId);
-        if (listing.bookingModel !== 'PER_STAY') {
+        if (listing.bookingModel !== 'PER_STAY' || listing.priceUnit === 'MONTH') {
             throw new common_1.BadRequestException(this.i18n.t('errors.LISTING_NOT_BOOKABLE'));
         }
         const subscription = listing.subscriptionId

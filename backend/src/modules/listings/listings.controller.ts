@@ -19,6 +19,7 @@ import { UpsertAttributesDto } from './dto/upsert-attributes.dto';
 import { UpsertFaqsDto } from './dto/upsert-faqs.dto';
 import { UpsertExtraServicesDto } from './dto/upsert-extra-services.dto';
 import { RejectListingDto, RejectVersionDto } from './dto/reject-listing.dto';
+import { CreateUncategorizedListingDto } from './dto/create-uncategorized-listing.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
@@ -31,6 +32,11 @@ export class ListingsController {
   @Post('listings')
   create(@CurrentUser('id') userId: string, @Body() dto: CreateListingDto) {
     return this.listingsService.createDraft(userId, dto);
+  }
+
+  @Post('listings/uncategorized')
+  createUncategorized(@CurrentUser('id') userId: string, @Body() dto: CreateUncategorizedListingDto) {
+    return this.listingsService.createUncategorizedListing(userId, dto);
   }
 
   @Get('listings/mine')
@@ -119,6 +125,18 @@ export class ListingsController {
   @Get('admin/listings/queue')
   adminQueue() {
     return this.listingsService.adminGetQueue();
+  }
+
+  @RequirePermissions('approve_listing')
+  @Get('admin/listings/pending-category')
+  adminPendingCategory() {
+    return this.listingsService.adminListPendingCategoryAssignment();
+  }
+
+  @RequirePermissions('approve_listing')
+  @Patch('admin/listings/:id/category')
+  adminAssignCategory(@Param('id') id: string, @Body('categoryId') categoryId: string) {
+    return this.listingsService.adminAssignCategory(id, categoryId);
   }
 
   @RequirePermissions('approve_listing')

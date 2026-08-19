@@ -48,6 +48,19 @@ __decorate([
     __metadata("design:type", String)
 ], CreateBookingRequestDto.prototype, "definedSlotId", void 0);
 __decorate([
+    (0, swagger_1.ApiPropertyOptional)({ example: '2026-09', description: '"Po mesecu" (PER_STAY + priceUnit=MONTH) — first day of this month is the booking start; used instead of startsAt/endsAt' }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.Matches)(/^\d{4}-(0[1-9]|1[0-2])$/, { message: 'validation.DATE_INVALID' }),
+    __metadata("design:type", String)
+], CreateBookingRequestDto.prototype, "monthStart", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: '"Po mesecu" — number of whole calendar months, required together with monthStart' }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsInt)(),
+    (0, class_validator_1.Min)(1),
+    __metadata("design:type", Number)
+], CreateBookingRequestDto.prototype, "monthCount", void 0);
+__decorate([
     (0, swagger_1.ApiPropertyOptional)(),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsInt)(),

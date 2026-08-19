@@ -247,6 +247,28 @@ function slugify(input) {
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/(^-|-$)/g, '');
 }
+function opts(names) {
+    return names.map((name) => ({ key: slugify(name), name }));
+}
+const AMENITIES_APARTMANI = opts([
+    'Bazen — spoljašnji', 'Bazen — unutrašnji', 'Đakuzi', 'Sauna', 'Bademantil', 'Fen za kosu', 'Kafe aparat',
+    'Kamin', 'Klima', 'Kuhinja', 'Ledomat', 'Ležaljke', 'Lift', 'Mašina za veš', 'Parking', 'Pegla', 'Peškiri',
+    'Posteljina', 'Privatni ulaz', 'Pušenje dozvoljeno', 'Roštilj', 'Terasa', 'TV', 'WiFi', 'Kućni ljubimci dozvoljeni',
+]);
+const AMENITIES_KUCE = opts([
+    'Bazen — spoljašnji', 'Bazen — unutrašnji', 'Bio sauna', 'Đakuzi', 'Fen za kosu', 'Finska sauna',
+    'Igralište za decu', 'Kafe aparat', 'Kamin', 'Klima', 'Kuhinja', 'Ledomat', 'Ležaljke', 'Mašina za veš',
+    'Ozvučenje', 'Parking', 'Pegla', 'Peškiri', 'Posteljina', 'Privatni ulaz', 'Pušenje dozvoljeno', 'Roštilj',
+    'Sauna', 'Slana soba', 'Terasa', 'Tuš kabina', 'TV', 'WiFi', 'Kućni ljubimci dozvoljeni',
+]);
+const AMENITIES_SOBE = opts([
+    'Bademantil', 'Fen za kosu', 'Kafe aparat', 'Kamin', 'Klima', 'Lift', 'Mašina za veš', 'Parking', 'Pegla',
+    'Peškiri', 'Posteljina', 'Privatni ulaz', 'Pušenje dozvoljeno', 'Terasa', 'TV', 'WiFi',
+]);
+const VEHICLE_BRANDS = opts([
+    'Volkswagen', 'Opel', 'Renault', 'Peugeot', 'Fiat', 'Škoda', 'Ford', 'BMW', 'Mercedes-Benz', 'Audi',
+    'Toyota', 'Hyundai', 'Kia', 'Dacia', 'Citroën', 'Ostalo',
+]);
 const CATEGORY_TREE = [
     {
         name: 'Nekretnine',
@@ -254,19 +276,52 @@ const CATEGORY_TREE = [
         defaultBookingModel: client_1.BookingModel.PER_STAY,
         allowedPriceUnits: [client_1.PriceUnit.NIGHT, client_1.PriceUnit.MONTH],
         defaultPriceUnit: client_1.PriceUnit.NIGHT,
-        attributes: [
-            { key: 'kvadratura', name: 'Kvadratura', type: client_1.AttributeType.NUMBER, unit: 'm²', isFilter: true, filterType: client_1.FilterType.RANGE, required: true },
-            { key: 'broj_soba', name: 'Broj soba', type: client_1.AttributeType.NUMBER, isFilter: true, filterType: client_1.FilterType.RANGE },
-            { key: 'sprat', name: 'Sprat', type: client_1.AttributeType.NUMBER, isFilter: true, filterType: client_1.FilterType.RANGE },
-            { key: 'lift', name: 'Lift', type: client_1.AttributeType.BOOLEAN, isFilter: true, filterType: client_1.FilterType.TOGGLE },
-            { key: 'parking', name: 'Parking', type: client_1.AttributeType.BOOLEAN, isFilter: true, filterType: client_1.FilterType.TOGGLE },
-            { key: 'klima', name: 'Klima uređaj', type: client_1.AttributeType.BOOLEAN, isFilter: true, filterType: client_1.FilterType.TOGGLE },
-            { key: 'kucni_ljubimci', name: 'Kućni ljubimci dozvoljeni', type: client_1.AttributeType.BOOLEAN, isFilter: true, filterType: client_1.FilterType.TOGGLE },
-        ],
+        attributes: [],
         children: [
-            { name: 'Stanovi', icon: 'building', defaultBookingModel: client_1.BookingModel.PER_STAY, allowedPriceUnits: [client_1.PriceUnit.NIGHT, client_1.PriceUnit.MONTH], defaultPriceUnit: client_1.PriceUnit.NIGHT, attributes: [] },
-            { name: 'Kuće i vikendice', icon: 'house', defaultBookingModel: client_1.BookingModel.PER_STAY, allowedPriceUnits: [client_1.PriceUnit.NIGHT, client_1.PriceUnit.MONTH], defaultPriceUnit: client_1.PriceUnit.NIGHT, attributes: [] },
-            { name: 'Sobe', icon: 'bed', defaultBookingModel: client_1.BookingModel.PER_STAY, allowedPriceUnits: [client_1.PriceUnit.NIGHT], defaultPriceUnit: client_1.PriceUnit.NIGHT, attributes: [] },
+            {
+                name: 'Stanovi',
+                icon: 'building',
+                defaultBookingModel: client_1.BookingModel.PER_STAY,
+                allowedPriceUnits: [client_1.PriceUnit.NIGHT, client_1.PriceUnit.MONTH],
+                defaultPriceUnit: client_1.PriceUnit.NIGHT,
+                attributes: [
+                    { key: 'kvadratura', name: 'Površina', type: client_1.AttributeType.NUMBER, unit: 'm²', required: true, isFilter: true, filterType: client_1.FilterType.RANGE, showOnCard: true },
+                    { key: 'kapacitet_ljudi', name: 'Kapacitet ljudi', type: client_1.AttributeType.NUMBER, required: true, isFilter: true, filterType: client_1.FilterType.RANGE, showOnCard: true },
+                    { key: 'broj_soba', name: 'Broj soba', type: client_1.AttributeType.LIST, required: true, isFilter: true, filterType: client_1.FilterType.SELECT, showOnCard: true, options: opts(['Garsonjera', '1', '1.5', '2', '2.5', '3', '3.5', '4', '4.5', '5+']) },
+                    { key: 'broj_kreveta', name: 'Broj kreveta', type: client_1.AttributeType.NUMBER, required: true, isFilter: true, filterType: client_1.FilterType.RANGE, showOnCard: true },
+                    { key: 'sprat', name: 'Sprat', type: client_1.AttributeType.LIST, isFilter: true, filterType: client_1.FilterType.SELECT, showOnCard: true, options: opts(['Suteren', 'Prizemlje', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10+', 'Potkrovlje']) },
+                    { key: 'sadrzaji', name: 'Sadržaji', type: client_1.AttributeType.CHECKBOX_GROUP, isFilter: true, filterType: client_1.FilterType.SELECT, options: AMENITIES_APARTMANI },
+                ],
+            },
+            {
+                name: 'Kuće i vikendice',
+                icon: 'house',
+                defaultBookingModel: client_1.BookingModel.PER_STAY,
+                allowedPriceUnits: [client_1.PriceUnit.NIGHT, client_1.PriceUnit.MONTH],
+                defaultPriceUnit: client_1.PriceUnit.NIGHT,
+                attributes: [
+                    { key: 'kvadratura', name: 'Površina', type: client_1.AttributeType.NUMBER, unit: 'm²', required: true, isFilter: true, filterType: client_1.FilterType.RANGE, showOnCard: true },
+                    { key: 'kapacitet_ljudi', name: 'Kapacitet ljudi', type: client_1.AttributeType.NUMBER, required: true, isFilter: true, filterType: client_1.FilterType.RANGE, showOnCard: true },
+                    { key: 'broj_soba', name: 'Broj soba', type: client_1.AttributeType.NUMBER, required: true, isFilter: true, filterType: client_1.FilterType.RANGE, showOnCard: true },
+                    { key: 'broj_kreveta', name: 'Broj kreveta', type: client_1.AttributeType.NUMBER, required: true, isFilter: true, filterType: client_1.FilterType.RANGE, showOnCard: true },
+                    { key: 'broj_kupatila', name: 'Broj kupatila', type: client_1.AttributeType.NUMBER, required: true, isFilter: true, filterType: client_1.FilterType.RANGE, showOnCard: true },
+                    { key: 'sadrzaji', name: 'Sadržaji', type: client_1.AttributeType.CHECKBOX_GROUP, isFilter: true, filterType: client_1.FilterType.SELECT, options: AMENITIES_KUCE },
+                ],
+            },
+            {
+                name: 'Sobe',
+                icon: 'bed',
+                defaultBookingModel: client_1.BookingModel.PER_STAY,
+                allowedPriceUnits: [client_1.PriceUnit.NIGHT],
+                defaultPriceUnit: client_1.PriceUnit.NIGHT,
+                attributes: [
+                    { key: 'kvadratura', name: 'Površina', type: client_1.AttributeType.NUMBER, unit: 'm²', required: true, isFilter: true, filterType: client_1.FilterType.RANGE, showOnCard: true },
+                    { key: 'kapacitet_ljudi', name: 'Kapacitet ljudi', type: client_1.AttributeType.NUMBER, required: true, isFilter: true, filterType: client_1.FilterType.RANGE, showOnCard: true },
+                    { key: 'broj_kreveta', name: 'Broj kreveta', type: client_1.AttributeType.NUMBER, required: true, isFilter: true, filterType: client_1.FilterType.RANGE, showOnCard: true },
+                    { key: 'kupatilo', name: 'Kupatilo', type: client_1.AttributeType.LIST, required: true, isFilter: true, filterType: client_1.FilterType.SELECT, showOnCard: true, options: opts(['Privatno', 'Zajedničko']) },
+                    { key: 'sadrzaji', name: 'Sadržaji', type: client_1.AttributeType.CHECKBOX_GROUP, isFilter: true, filterType: client_1.FilterType.SELECT, options: AMENITIES_SOBE },
+                ],
+            },
         ],
     },
     {
@@ -276,10 +331,13 @@ const CATEGORY_TREE = [
         allowedPriceUnits: [client_1.PriceUnit.HOUR, client_1.PriceUnit.SLOT],
         defaultPriceUnit: client_1.PriceUnit.SLOT,
         attributes: [
-            { key: 'kapacitet', name: 'Kapacitet (broj gostiju)', type: client_1.AttributeType.NUMBER, isFilter: true, filterType: client_1.FilterType.RANGE, required: true },
-            { key: 'ozvucenje', name: 'Ozvučenje', type: client_1.AttributeType.BOOLEAN, isFilter: true, filterType: client_1.FilterType.TOGGLE },
-            { key: 'catering_dozvoljen', name: 'Sopstveni ketering dozvoljen', type: client_1.AttributeType.BOOLEAN, isFilter: true, filterType: client_1.FilterType.TOGGLE },
-            { key: 'parking', name: 'Parking', type: client_1.AttributeType.BOOLEAN, isFilter: true, filterType: client_1.FilterType.TOGGLE },
+            { key: 'kapacitet_ljudi', name: 'Kapacitet ljudi', type: client_1.AttributeType.NUMBER, required: true, isFilter: true, filterType: client_1.FilterType.RANGE, showOnCard: true },
+            { key: 'tip_prostora', name: 'Tip prostora', type: client_1.AttributeType.LIST, required: true, isFilter: true, filterType: client_1.FilterType.SELECT, showOnCard: true, options: opts(['Sala za proslave', 'Open Air prostor', 'Salaš', 'Restoran', 'Klub / Bar', 'Splav']) },
+            { key: 'ketering', name: 'Ketering', type: client_1.AttributeType.LIST, isFilter: true, filterType: client_1.FilterType.SELECT, options: opts(['Uključen', 'Sopstveni ketering dozvoljen', 'Po dogovoru', 'Nije dostupan']) },
+            {
+                key: 'sadrzaji', name: 'Sadržaji', type: client_1.AttributeType.CHECKBOX_GROUP, isFilter: true, filterType: client_1.FilterType.SELECT,
+                options: opts(['Bazen — spoljašnji', 'Bazen — unutrašnji', 'Đakuzi', 'Igralište za decu', 'Kafe aparat', 'Klima', 'Kuhinja', 'Kupatilo', 'Ledomat', 'Mikrofon', 'Ozvučenje', 'Parking', 'Privatni ulaz', 'Projektor', 'Pušenje dozvoljeno', 'Roštilj', 'Terasa', 'TV', 'WiFi']),
+            },
         ],
         children: [
             { name: 'Sale za proslave', icon: 'hall', defaultBookingModel: client_1.BookingModel.PER_SLOT, allowedPriceUnits: [client_1.PriceUnit.HOUR, client_1.PriceUnit.SLOT], defaultPriceUnit: client_1.PriceUnit.SLOT, attributes: [] },
@@ -293,9 +351,12 @@ const CATEGORY_TREE = [
         allowedPriceUnits: [client_1.PriceUnit.HOUR, client_1.PriceUnit.SLOT],
         defaultPriceUnit: client_1.PriceUnit.SLOT,
         attributes: [
-            { key: 'uzrast', name: 'Preporučeni uzrast', type: client_1.AttributeType.TEXT, isFilter: false },
-            { key: 'kapacitet', name: 'Kapacitet (broj dece)', type: client_1.AttributeType.NUMBER, isFilter: true, filterType: client_1.FilterType.RANGE },
-            { key: 'animator_dostupan', name: 'Animator dostupan', type: client_1.AttributeType.BOOLEAN, isFilter: true, filterType: client_1.FilterType.TOGGLE },
+            { key: 'kapacitet_dece', name: 'Kapacitet dece', type: client_1.AttributeType.NUMBER, required: true, isFilter: true, filterType: client_1.FilterType.RANGE, showOnCard: true },
+            { key: 'uzrast_dece', name: 'Uzrast dece', type: client_1.AttributeType.CHECKBOX_GROUP, required: true, isFilter: true, filterType: client_1.FilterType.SELECT, showOnCard: true, options: opts(['1–3 godine', '4–6 godine', '7–10 godine', '10+ godina']) },
+            {
+                key: 'sadrzaji', name: 'Sadržaji', type: client_1.AttributeType.CHECKBOX_GROUP, isFilter: true, filterType: client_1.FilterType.SELECT,
+                options: opts(['Kafić / zona za roditelje', 'Klima', 'Parking', 'Privatni ulaz', 'Pušenje dozvoljeno', 'WiFi', 'Animator dostupan', 'Trambolina', 'Tobogan', 'Lavirint / poligon', 'Bazen sa lopticama', 'Video igre / konzole', 'Kreativni sadržaji']),
+            },
         ],
     },
     {
@@ -304,38 +365,25 @@ const CATEGORY_TREE = [
         defaultBookingModel: client_1.BookingModel.PER_STAY,
         allowedPriceUnits: [client_1.PriceUnit.DAY, client_1.PriceUnit.HOUR],
         defaultPriceUnit: client_1.PriceUnit.DAY,
-        attributes: [
-            { key: 'marka', name: 'Marka', type: client_1.AttributeType.TEXT, isFilter: true, filterType: client_1.FilterType.SELECT, required: true },
-            { key: 'godiste', name: 'Godište', type: client_1.AttributeType.NUMBER, isFilter: true, filterType: client_1.FilterType.RANGE },
-            {
-                key: 'gorivo',
-                name: 'Gorivo',
-                type: client_1.AttributeType.LIST,
-                isFilter: true,
-                filterType: client_1.FilterType.SELECT,
-                options: [
-                    { key: 'dizel', name: 'Dizel' },
-                    { key: 'benzin', name: 'Benzin' },
-                    { key: 'elektricni', name: 'Električni' },
-                    { key: 'hibrid', name: 'Hibrid' },
-                ],
-            },
-            {
-                key: 'menjac',
-                name: 'Menjač',
-                type: client_1.AttributeType.LIST,
-                isFilter: true,
-                filterType: client_1.FilterType.SELECT,
-                options: [
-                    { key: 'manuelni', name: 'Manuelni' },
-                    { key: 'automatski', name: 'Automatski' },
-                ],
-            },
-            { key: 'klima', name: 'Klima uređaj', type: client_1.AttributeType.BOOLEAN, isFilter: true, filterType: client_1.FilterType.TOGGLE },
-            { key: 'gps', name: 'GPS navigacija', type: client_1.AttributeType.BOOLEAN, isFilter: true, filterType: client_1.FilterType.TOGGLE },
-        ],
+        attributes: [],
         children: [
-            { name: 'Automobili', icon: 'sedan', defaultBookingModel: client_1.BookingModel.PER_STAY, allowedPriceUnits: [client_1.PriceUnit.DAY, client_1.PriceUnit.HOUR], defaultPriceUnit: client_1.PriceUnit.DAY, attributes: [] },
+            {
+                name: 'Putnička vozila',
+                icon: 'sedan',
+                defaultBookingModel: client_1.BookingModel.PER_STAY,
+                allowedPriceUnits: [client_1.PriceUnit.DAY, client_1.PriceUnit.HOUR],
+                defaultPriceUnit: client_1.PriceUnit.DAY,
+                attributes: [
+                    { key: 'godina_proizvodnje', name: 'Godina proizvodnje', type: client_1.AttributeType.YEAR, required: true, isFilter: true, filterType: client_1.FilterType.RANGE, showOnCard: true },
+                    { key: 'tip_vozila', name: 'Tip vozila', type: client_1.AttributeType.LIST, required: true, isFilter: true, filterType: client_1.FilterType.SELECT, showOnCard: true, options: opts(['Hatchback', 'SUV', 'Limuzina', 'Coupe', 'Kabriolet', 'Minivan']) },
+                    { key: 'marka_vozila', name: 'Marka vozila', type: client_1.AttributeType.LIST, isFilter: true, filterType: client_1.FilterType.SELECT, showOnCard: true, options: VEHICLE_BRANDS },
+                    { key: 'broj_sedista', name: 'Broj sedišta', type: client_1.AttributeType.LIST, required: true, isFilter: true, filterType: client_1.FilterType.SELECT, showOnCard: true, options: opts(['2', '4', '5', '6', '7', '8+']) },
+                    { key: 'menjac', name: 'Menjač', type: client_1.AttributeType.LIST, required: true, isFilter: true, filterType: client_1.FilterType.SELECT, showOnCard: true, options: opts(['Manuelni', 'Automatski']) },
+                    { key: 'gorivo', name: 'Gorivo', type: client_1.AttributeType.LIST, required: true, isFilter: true, filterType: client_1.FilterType.SELECT, showOnCard: true, options: opts(['Benzin', 'Dizel', 'Hibrid', 'Plug-in hibrid', 'Električno']) },
+                    { key: 'pogon', name: 'Pogon', type: client_1.AttributeType.LIST, isFilter: true, filterType: client_1.FilterType.SELECT, options: opts(['Prednji', 'Zadnji', '4x4']) },
+                    { key: 'oprema', name: 'Oprema', type: client_1.AttributeType.CHECKBOX_GROUP, isFilter: true, filterType: client_1.FilterType.SELECT, options: opts(['GPS / navigacija', 'Klima', 'Krovni nosač', 'Parking senzori', 'Tempomat', 'TV', 'WiFi']) },
+                ],
+            },
             {
                 name: 'Dostavna vozila',
                 icon: 'van',
@@ -343,24 +391,67 @@ const CATEGORY_TREE = [
                 allowedPriceUnits: [client_1.PriceUnit.DAY, client_1.PriceUnit.HOUR],
                 defaultPriceUnit: client_1.PriceUnit.DAY,
                 attributes: [
-                    { key: 'nosivost', name: 'Nosivost', type: client_1.AttributeType.NUMBER, unit: 'kg', isFilter: true, filterType: client_1.FilterType.RANGE },
-                    { key: 'zapremina_tovarnog_prostora', name: 'Zapremina tovarnog prostora', type: client_1.AttributeType.NUMBER, unit: 'm³', isFilter: true, filterType: client_1.FilterType.RANGE },
-                    { key: 'vozac_ukljucen', name: 'Vozač uključen', type: client_1.AttributeType.BOOLEAN, isFilter: true, filterType: client_1.FilterType.TOGGLE },
+                    { key: 'tip_vozila', name: 'Tip vozila', type: client_1.AttributeType.LIST, required: true, isFilter: true, filterType: client_1.FilterType.SELECT, showOnCard: true, options: opts(['Pickup', 'Kombi', 'Kamion']) },
+                    { key: 'marka_vozila', name: 'Marka vozila', type: client_1.AttributeType.LIST, isFilter: true, filterType: client_1.FilterType.SELECT, showOnCard: true, options: VEHICLE_BRANDS },
+                    { key: 'godina_proizvodnje', name: 'Godina proizvodnje', type: client_1.AttributeType.YEAR, required: true, isFilter: true, filterType: client_1.FilterType.RANGE, showOnCard: true },
+                    { key: 'nosivost', name: 'Nosivost', type: client_1.AttributeType.NUMBER, unit: 'kg', required: true, isFilter: true, filterType: client_1.FilterType.RANGE, showOnCard: true },
+                    { key: 'zapremina_tovarnog_prostora', name: 'Zapremina tovarnog prostora', type: client_1.AttributeType.NUMBER, unit: 'm³', isFilter: true, filterType: client_1.FilterType.RANGE, showOnCard: true },
+                    { key: 'duzina_tovarnog_prostora', name: 'Dužina tovarnog prostora', type: client_1.AttributeType.NUMBER, unit: 'm', isFilter: true, filterType: client_1.FilterType.RANGE },
+                    { key: 'sirina_tovarnog_prostora', name: 'Širina tovarnog prostora', type: client_1.AttributeType.NUMBER, unit: 'm', isFilter: true, filterType: client_1.FilterType.RANGE },
+                    { key: 'visina_tovarnog_prostora', name: 'Visina tovarnog prostora', type: client_1.AttributeType.NUMBER, unit: 'm', isFilter: true, filterType: client_1.FilterType.RANGE },
+                    { key: 'menjac', name: 'Menjač', type: client_1.AttributeType.LIST, isFilter: true, filterType: client_1.FilterType.SELECT, options: opts(['Manuelni', 'Automatski']) },
+                    { key: 'gorivo', name: 'Gorivo', type: client_1.AttributeType.LIST, isFilter: true, filterType: client_1.FilterType.SELECT, options: opts(['Benzin', 'Dizel', 'Hibrid', 'Plug-in hibrid', 'Električno']) },
+                    { key: 'pogon', name: 'Pogon', type: client_1.AttributeType.LIST, isFilter: true, filterType: client_1.FilterType.SELECT, options: opts(['Prednji', 'Zadnji', '4x4']) },
+                    { key: 'oprema', name: 'Oprema', type: client_1.AttributeType.CHECKBOX_GROUP, isFilter: true, filterType: client_1.FilterType.SELECT, options: opts(['GPS / navigacija', 'Klima', 'Parking senzori', 'Tempomat']) },
                 ],
             },
         ],
     },
     {
-        name: 'Mašine',
+        name: 'Građevinske mašine',
         icon: 'excavator',
         defaultBookingModel: client_1.BookingModel.PER_STAY,
         allowedPriceUnits: [client_1.PriceUnit.DAY],
         defaultPriceUnit: client_1.PriceUnit.DAY,
         attributes: [
-            { key: 'tip_masine', name: 'Tip mašine', type: client_1.AttributeType.TEXT, isFilter: true, filterType: client_1.FilterType.SELECT, required: true },
-            { key: 'snaga', name: 'Snaga', type: client_1.AttributeType.NUMBER, unit: 'kW', isFilter: true, filterType: client_1.FilterType.RANGE },
-            { key: 'operater_ukljucen', name: 'Operater uključen', type: client_1.AttributeType.BOOLEAN, isFilter: true, filterType: client_1.FilterType.TOGGLE },
-            { key: 'dostava_na_adresu', name: 'Dostava na adresu', type: client_1.AttributeType.BOOLEAN, isFilter: true, filterType: client_1.FilterType.TOGGLE },
+            { key: 'tip_masine', name: 'Tip mašine', type: client_1.AttributeType.LIST, required: true, isFilter: true, filterType: client_1.FilterType.SELECT, showOnCard: true, options: opts(['Bager', 'Dizalica / Kran', 'Mini mašina', 'Platforma za rad na visini', 'Transporter / Mini damper', 'Viljuškar']) },
+            { key: 'godina_proizvodnje', name: 'Godina proizvodnje', type: client_1.AttributeType.YEAR, isFilter: true, filterType: client_1.FilterType.RANGE, showOnCard: true },
+            { key: 'vrsta_pogona', name: 'Vrsta pogona', type: client_1.AttributeType.LIST, required: true, isFilter: true, filterType: client_1.FilterType.SELECT, showOnCard: true, options: opts(['Dizel', 'Benzin', 'Električni', 'Hibridni']) },
+            { key: 'stanje_masine', name: 'Stanje mašine', type: client_1.AttributeType.LIST, isFilter: true, filterType: client_1.FilterType.SELECT, options: opts(['Novo', 'Polovno', 'Za delove']) },
+            { key: 'tezina_masine', name: 'Težina mašine', type: client_1.AttributeType.NUMBER, unit: 'kg', isFilter: true, filterType: client_1.FilterType.RANGE },
+            { key: 'snaga_motora', name: 'Snaga motora', type: client_1.AttributeType.NUMBER, unit: 'kW', isFilter: true, filterType: client_1.FilterType.RANGE },
+            { key: 'sa_rukovaocem', name: 'Sa rukovaocem', type: client_1.AttributeType.BOOLEAN, required: true, isFilter: true, filterType: client_1.FilterType.TOGGLE, showOnCard: true },
+            { key: 'dostava_na_lokaciju', name: 'Dostava na lokaciju', type: client_1.AttributeType.BOOLEAN, isFilter: true, filterType: client_1.FilterType.TOGGLE, showOnCard: true },
+            { key: 'tip_bagera', name: 'Tip bagera', type: client_1.AttributeType.LIST, required: true, isFilter: true, filterType: client_1.FilterType.SELECT, showOnCard: true, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'bager', options: opts(['Guseničar', 'Točkaš', 'Mini bager', 'Bager-utovarivač']) },
+            { key: 'max_dubina_kopanja', name: 'Maksimalna dubina kopanja', type: client_1.AttributeType.NUMBER, unit: 'm', isFilter: true, filterType: client_1.FilterType.RANGE, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'bager' },
+            { key: 'max_radna_visina_bager', name: 'Maksimalna radna visina', type: client_1.AttributeType.NUMBER, unit: 'm', isFilter: true, filterType: client_1.FilterType.RANGE, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'bager' },
+            { key: 'zapremina_kasike', name: 'Zapremina kašike', type: client_1.AttributeType.NUMBER, unit: 'm³', isFilter: true, filterType: client_1.FilterType.RANGE, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'bager' },
+            { key: 'tip_kabine_bager', name: 'Tip kabine', type: client_1.AttributeType.LIST, isFilter: true, filterType: client_1.FilterType.SELECT, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'bager', options: opts(['Otvorena', 'Zatvorena', 'Klimatizovana']) },
+            { key: 'prikljucci_bager', name: 'Priključci', type: client_1.AttributeType.CHECKBOX_GROUP, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'bager', options: opts(['Standardna kašika', 'Hidraulični čekić', 'Grajfer', 'Bušilica / svrdlo', 'Rotirajuća kašika', 'Hidraulični adapteri', 'Tanjirasti priključak', 'Specijalni alati']) },
+            { key: 'oprema_bager', name: 'Oprema', type: client_1.AttributeType.CHECKBOX_GROUP, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'bager', options: opts(['Daljinsko upravljanje', 'Digitalni displej / kontrolni panel', 'GPS / navigacija', 'Grejanje kabine', 'Klima u kabini', 'LED / radna svetla', 'Parking senzori', 'Sigurnosni pojasevi', 'Telematika / praćenje radnih sati']) },
+            { key: 'tip_dizalice', name: 'Tip dizalice / krana', type: client_1.AttributeType.LIST, required: true, isFilter: true, filterType: client_1.FilterType.SELECT, showOnCard: true, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'dizalica-kran', options: opts(['Toranjski', 'Mobilni', 'Gusenični', 'Auto-dizalica']) },
+            { key: 'nosivost_dizalica', name: 'Nosivost', type: client_1.AttributeType.NUMBER, unit: 'kg', required: true, isFilter: true, filterType: client_1.FilterType.RANGE, showOnCard: true, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'dizalica-kran' },
+            { key: 'max_visina_dizanja_dizalica', name: 'Maksimalna visina dizanja', type: client_1.AttributeType.NUMBER, unit: 'm', required: true, isFilter: true, filterType: client_1.FilterType.RANGE, showOnCard: true, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'dizalica-kran' },
+            { key: 'horizontalni_domet', name: 'Horizontalni domet', type: client_1.AttributeType.NUMBER, unit: 'm', isFilter: true, filterType: client_1.FilterType.RANGE, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'dizalica-kran' },
+            { key: 'tip_kabine_dizalica', name: 'Tip kabine', type: client_1.AttributeType.LIST, isFilter: true, filterType: client_1.FilterType.SELECT, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'dizalica-kran', options: opts(['Otvorena', 'Zatvorena', 'Klimatizovana']) },
+            { key: 'stabilizatori', name: 'Stabilizatori', type: client_1.AttributeType.BOOLEAN, isFilter: true, filterType: client_1.FilterType.TOGGLE, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'dizalica-kran' },
+            { key: 'nacin_montaze', name: 'Način montaže', type: client_1.AttributeType.LIST, isFilter: true, filterType: client_1.FilterType.SELECT, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'dizalica-kran', options: opts(['Fiksna', 'Mobilna', 'Vučna']) },
+            { key: 'tip_mini_masine', name: 'Tip mini mašine', type: client_1.AttributeType.LIST, required: true, isFilter: true, filterType: client_1.FilterType.SELECT, showOnCard: true, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'mini-masina', options: opts(['Mini utovarivač', 'Mini bager', 'Mini damper']) },
+            { key: 'tip_platforme', name: 'Tip platforme', type: client_1.AttributeType.LIST, required: true, isFilter: true, filterType: client_1.FilterType.SELECT, showOnCard: true, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'platforma-za-rad-na-visini', options: opts(['Škarasta', 'Zglobna', 'Teleskopska', 'Guseničarska']) },
+            { key: 'max_radna_visina_platforma', name: 'Maksimalna radna visina', type: client_1.AttributeType.NUMBER, unit: 'm', required: true, isFilter: true, filterType: client_1.FilterType.RANGE, showOnCard: true, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'platforma-za-rad-na-visini' },
+            { key: 'nosivost_platforma', name: 'Nosivost', type: client_1.AttributeType.NUMBER, unit: 'kg', required: true, isFilter: true, filterType: client_1.FilterType.RANGE, showOnCard: true, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'platforma-za-rad-na-visini' },
+            { key: 'radni_prostor_platforma', name: 'Radni prostor', type: client_1.AttributeType.LIST, isFilter: true, filterType: client_1.FilterType.SELECT, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'platforma-za-rad-na-visini', options: opts(['Unutrašnji', 'Spoljašnji', 'Oba']) },
+            { key: 'radni_domet_platforma', name: 'Radni domet', type: client_1.AttributeType.NUMBER, unit: 'm', isFilter: true, filterType: client_1.FilterType.RANGE, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'platforma-za-rad-na-visini' },
+            { key: 'tip_transportera', name: 'Tip transportera', type: client_1.AttributeType.LIST, required: true, isFilter: true, filterType: client_1.FilterType.SELECT, showOnCard: true, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'transporter-mini-damper', options: opts(['Gusenični', 'Točkaš']) },
+            { key: 'nosivost_transporter', name: 'Nosivost', type: client_1.AttributeType.NUMBER, unit: 'kg', required: true, isFilter: true, filterType: client_1.FilterType.RANGE, showOnCard: true, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'transporter-mini-damper' },
+            { key: 'zapremina_korpe', name: 'Zapremina korpe', type: client_1.AttributeType.NUMBER, unit: 'm³', isFilter: true, filterType: client_1.FilterType.RANGE, showOnCard: true, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'transporter-mini-damper' },
+            { key: 'visina_istovara', name: 'Visina istovara', type: client_1.AttributeType.NUMBER, unit: 'm', isFilter: true, filterType: client_1.FilterType.RANGE, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'transporter-mini-damper' },
+            { key: 'nacin_kipovanja', name: 'Način kipovanja', type: client_1.AttributeType.LIST, isFilter: true, filterType: client_1.FilterType.SELECT, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'transporter-mini-damper', options: opts(['Zadnje', 'Bočno', 'Trostrano']) },
+            { key: 'tip_viljuskara', name: 'Tip viljuškara', type: client_1.AttributeType.LIST, required: true, isFilter: true, filterType: client_1.FilterType.SELECT, showOnCard: true, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'viljuskar', options: opts(['Dizel', 'Elektro', 'Gas', 'Teleskopski']) },
+            { key: 'nosivost_viljuskar', name: 'Nosivost', type: client_1.AttributeType.NUMBER, unit: 'kg', required: true, isFilter: true, filterType: client_1.FilterType.RANGE, showOnCard: true, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'viljuskar' },
+            { key: 'max_visina_dizanja_viljuskar', name: 'Maksimalna visina dizanja', type: client_1.AttributeType.NUMBER, unit: 'm', required: true, isFilter: true, filterType: client_1.FilterType.RANGE, showOnCard: true, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'viljuskar' },
+            { key: 'radni_prostor_viljuskar', name: 'Radni prostor', type: client_1.AttributeType.LIST, isFilter: true, filterType: client_1.FilterType.SELECT, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'viljuskar', options: opts(['Unutrašnji', 'Spoljašnji']) },
+            { key: 'radni_domet_viljuskar', name: 'Radni domet', type: client_1.AttributeType.NUMBER, unit: 'm', isFilter: true, filterType: client_1.FilterType.RANGE, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'viljuskar' },
         ],
     },
     {
@@ -370,11 +461,13 @@ const CATEGORY_TREE = [
         allowedPriceUnits: [client_1.PriceUnit.MONTH],
         defaultPriceUnit: client_1.PriceUnit.MONTH,
         attributes: [
-            { key: 'povrsina', name: 'Površina', type: client_1.AttributeType.NUMBER, unit: 'm²', isFilter: true, filterType: client_1.FilterType.RANGE, required: true },
-            { key: 'visina', name: 'Visina', type: client_1.AttributeType.NUMBER, unit: 'm', isFilter: true, filterType: client_1.FilterType.RANGE },
-            { key: 'rampa_za_utovar', name: 'Rampa za utovar', type: client_1.AttributeType.BOOLEAN, isFilter: true, filterType: client_1.FilterType.TOGGLE },
-            { key: 'obezbedjenje', name: 'Obezbeđenje / video nadzor', type: client_1.AttributeType.BOOLEAN, isFilter: true, filterType: client_1.FilterType.TOGGLE },
-            { key: 'grejanje', name: 'Grejanje', type: client_1.AttributeType.BOOLEAN, isFilter: true, filterType: client_1.FilterType.TOGGLE },
+            { key: 'povrsina', name: 'Površina', type: client_1.AttributeType.NUMBER, unit: 'm²', required: true, isFilter: true, filterType: client_1.FilterType.RANGE, showOnCard: true },
+            { key: 'visina_prostora', name: 'Visina prostora', type: client_1.AttributeType.NUMBER, unit: 'm', required: true, isFilter: true, filterType: client_1.FilterType.RANGE, showOnCard: true },
+            { key: 'tip_prostora', name: 'Tip prostora', type: client_1.AttributeType.LIST, required: true, isFilter: true, filterType: client_1.FilterType.SELECT, showOnCard: true, options: opts(['Privatni magacin', 'Poslovni magacin', 'Industrijski magacin', 'Skladišni prostor', 'Hladnjača']) },
+            {
+                key: 'sadrzaji', name: 'Sadržaji', type: client_1.AttributeType.CHECKBOX_GROUP, isFilter: true, filterType: client_1.FilterType.SELECT,
+                options: opts(['Alarm / sigurnosni sistem', 'Video nadzor / kamere', 'Protivpožarni sistem', 'Grejanje', 'Klima', 'Paletni regali / police', 'Parking', 'Pristup kamionima', 'Rampa za utovar']),
+            },
         ],
     },
     {
@@ -389,10 +482,18 @@ const CATEGORY_TREE = [
         ],
     },
     {
+        name: 'Usluge',
+        icon: 'services',
+        defaultBookingModel: client_1.BookingModel.PER_SLOT,
+        allowedPriceUnits: [client_1.PriceUnit.HOUR, client_1.PriceUnit.SLOT],
+        defaultPriceUnit: client_1.PriceUnit.HOUR,
+        attributes: [],
+    },
+    {
         name: 'Ostalo',
         icon: 'other',
         defaultBookingModel: client_1.BookingModel.PER_STAY,
-        allowedPriceUnits: [client_1.PriceUnit.DAY],
+        allowedPriceUnits: [client_1.PriceUnit.DAY, client_1.PriceUnit.NIGHT, client_1.PriceUnit.MONTH, client_1.PriceUnit.HOUR, client_1.PriceUnit.SLOT],
         defaultPriceUnit: client_1.PriceUnit.DAY,
         attributes: [],
     },
@@ -421,29 +522,46 @@ async function seedCategoryNode(node, parentId, order) {
     });
     await setTranslation('CATEGORY', category.id, 'name', node.name);
     for (const [i, attr] of node.attributes.entries()) {
+        const attrFields = {
+            type: attr.type,
+            required: attr.required ?? false,
+            unit: attr.unit,
+            isFilter: attr.isFilter ?? false,
+            filterType: attr.filterType,
+            showOnCard: attr.showOnCard ?? false,
+            dependsOnAttrKey: attr.dependsOnAttrKey,
+            dependsOnOptionKey: attr.dependsOnOptionKey,
+            displayOrder: i,
+        };
         const attribute = await prisma.categoryAttribute.upsert({
             where: { categoryId_key: { categoryId: category.id, key: attr.key } },
-            update: {},
-            create: {
-                categoryId: category.id,
-                key: attr.key,
-                type: attr.type,
-                required: attr.required ?? false,
-                unit: attr.unit,
-                isFilter: attr.isFilter ?? false,
-                filterType: attr.filterType,
-                displayOrder: i,
-            },
+            update: attrFields,
+            create: { categoryId: category.id, key: attr.key, ...attrFields },
         });
         await setTranslation('ATTRIBUTE', attribute.id, 'name', attr.name);
+        const optionKeys = (attr.options ?? []).map((o) => o.key);
+        const staleOptions = await prisma.attributeOption.findMany({
+            where: { attributeId: attribute.id, key: { notIn: optionKeys.length ? optionKeys : ['__none__'] } },
+        });
+        for (const stale of staleOptions) {
+            await prisma.attributeOption.delete({ where: { id: stale.id } });
+        }
         for (const [j, opt] of (attr.options ?? []).entries()) {
             const option = await prisma.attributeOption.upsert({
                 where: { attributeId_key: { attributeId: attribute.id, key: opt.key } },
-                update: {},
+                update: { displayOrder: j },
                 create: { attributeId: attribute.id, key: opt.key, displayOrder: j },
             });
             await setTranslation('OPTION', option.id, 'name', opt.name);
         }
+    }
+    const currentKeys = node.attributes.map((a) => a.key);
+    const staleAttributes = await prisma.categoryAttribute.findMany({
+        where: { categoryId: category.id, key: { notIn: currentKeys.length ? currentKeys : ['__none__'] } },
+    });
+    for (const stale of staleAttributes) {
+        await prisma.listingAttribute.deleteMany({ where: { attributeId: stale.id } });
+        await prisma.categoryAttribute.delete({ where: { id: stale.id } });
     }
     for (const [i, child] of (node.children ?? []).entries()) {
         await seedCategoryNode(child, category.id, i);

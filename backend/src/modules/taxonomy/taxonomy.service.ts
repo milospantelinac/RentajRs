@@ -15,7 +15,7 @@ import {
 
 const CACHE_TTL = 60 * 30; // 30 min — categories/attributes change rarely and are admin-invalidated below
 const FUZZY_THRESHOLD = 0.35;
-const FALLBACK_CATEGORY_SLUG = 'ostalo';
+export const FALLBACK_CATEGORY_SLUG = 'ostalo';
 
 @Injectable()
 export class TaxonomyService {
@@ -131,6 +131,12 @@ export class TaxonomyService {
         unit: attr.unit,
         isFilter: attr.isFilter,
         filterType: attr.filterType,
+        showOnCard: attr.showOnCard,
+        // Kategorije spec §5 (Mašine) — lets the wizard/detail page only show
+        // this attribute once the sibling `dependsOnAttrKey` attribute has
+        // `dependsOnOptionKey` selected.
+        dependsOnAttrKey: attr.dependsOnAttrKey,
+        dependsOnOptionKey: attr.dependsOnOptionKey,
         minValue: attr.minValue,
         maxValue: attr.maxValue,
         options: attr.options.map((o) => ({ id: o.id, key: o.key, name: optionNames.get(o.id) ?? o.key })),

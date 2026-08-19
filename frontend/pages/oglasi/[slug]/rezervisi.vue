@@ -25,21 +25,60 @@
               </div>
             </template>
 
+            <template v-else-if="listing.priceUnit === 'MONTH'">
+              <div class="form-group mb-3">
+                <label class="form-label">{{ t('booking.monthPicker') }}</label>
+                <BookingMonthPicker
+                  :listing-id="listing.id"
+                  :base-price="listing.price"
+                  @update:range="onMonthRangeUpdate"
+                />
+              </div>
+            </template>
+
+            <template v-else-if="listing.bookingModel === 'PER_STAY'">
+              <div class="form-group mb-3">
+                <label class="form-label">{{ t('booking.rangePickerLabel') }}</label>
+                <BookingDateRangePicker
+                  :listing-id="listing.id"
+                  :base-price="listing.price"
+                  :weekend-price="listing.weekendPrice"
+                  :show-pricing="true"
+                  @update:range="onRangeUpdate"
+                />
+              </div>
+            </template>
+
+            <!-- PER_SLOT + WORKING_HOURS — pick a free date, then a start
+                 time constrained to that day's configured working hours,
+                 same "see real availability, don't guess" goal as the
+                 range picker above. -->
             <template v-else>
-              <div class="row">
+              <div class="form-group mb-3">
+                <label class="form-label">{{ t('booking.pickDate') }}</label>
+                <BookingDateRangePicker
+                  :listing-id="listing.id"
+                  :show-pricing="false"
+                  @update:range="onSingleDateUpdate"
+                />
+              </div>
+              <div v-if="form.startsAt" class="row">
                 <div class="col-6">
                   <div class="form-group mb-3">
-                    <label class="form-label">{{ startLabel }}</label>
-                    <input v-model="form.startsAt" :type="dateInputType" class="form-control" />
+                    <label class="form-label">{{ t('booking.startTime') }}</label>
+                    <select v-model="slotStartTime" class="form-control form-select">
+                      <option v-for="time in dayTimeOptions" :key="time" :value="time">{{ time }}</option>
+                    </select>
                   </div>
                 </div>
                 <div class="col-6">
                   <div class="form-group mb-3">
-                    <label class="form-label">{{ endLabel }}</label>
-                    <input v-model="form.endsAt" :type="dateInputType" class="form-control" />
+                    <label class="form-label">{{ t('booking.durationHours') }}</label>
+                    <input v-model.number="slotDurationHours" type="number" min="1" max="12" class="form-control" />
                   </div>
                 </div>
               </div>
+              <p v-if="form.startsAt && !dayTimeOptions.length" class="text-muted">{{ t('booking.noWorkingHoursForDay') }}</p>
             </template>
 
             <div class="form-group mb-3">
@@ -90,6 +129,8 @@ const slots = ref([])
 const form = reactive({
   startsAt: '',
   endsAt: '',
+  monthStart: '',
+  monthCount: 1,
   definedSlotId: null,
   guestCount: 1,
   guestMessage: '',
@@ -98,19 +139,41 @@ const form = reactive({
 const error = ref('')
 const submitting = ref(false)
 
-const dateInputType = computed(() =>
-  listing.value?.bookingModel === 'PER_STAY' ? 'date' : 'datetime-local',
-)
+// PER_SLOT + WORKING_HOURS — a picked date's day-of-week gates which start
+// times are actually offered, straight from the owner's configured hours,
+// so a guest can't submit a time that was never open to begin with.
+const workingHours = ref([])
+const slotStartTime = ref('')
+const slotDurationHours = ref(1)
 
-const startLabel = computed(() => {
-  if (listing.value?.category?.slug === 'nekretnine') return t('booking.checkIn')
-  if (['vozila', 'masine', 'oprema'].includes(listing.value?.category?.slug)) return t('booking.pickup')
-  return t('booking.dateTime')
-})
-const endLabel = computed(() => {
-  if (listing.value?.category?.slug === 'nekretnine') return t('booking.checkOut')
-  if (['vozila', 'masine', 'oprema'].includes(listing.value?.category?.slug)) return t('booking.dropoff')
-  return t('booking.dateTimeEnd')
+function onRangeUpdate({ startsAt, endsAt }) {
+  form.startsAt = startsAt || ''
+  form.endsAt = endsAt || ''
+}
+function onMonthRangeUpdate({ monthStart, monthCount }) {
+  form.monthStart = monthStart || ''
+  form.monthCount = monthCount || 1
+}
+function onSingleDateUpdate({ startsAt }) {
+  form.startsAt = startsAt || ''
+  slotStartTime.value = ''
+}
+
+const dayTimeOptions = computed(() => {
+  if (!form.startsAt) return []
+  const dayOfWeek = ((new Date(`${form.startsAt}T00:00:00`).getDay() + 6) % 7) + 1 // ISO Monday=1
+  const ranges = workingHours.value.filter((h) => h.dayOfWeek === dayOfWeek)
+  const times = []
+  for (const range of ranges) {
+    let [h, m] = range.startsAt.split(':').map(Number)
+    const [endH, endM] = range.endsAt.split(':').map(Number)
+    while (h < endH || (h === endH && m < endM)) {
+      times.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`)
+      m += 60
+      if (m >= 60) { m -= 60; h += 1 }
+    }
+  }
+  return times
 })
 
 function toggleService(service, checked) {
@@ -140,9 +203,19 @@ async function submit() {
     }
     if (form.definedSlotId) {
       payload.definedSlotId = form.definedSlotId
+    } else if (listing.value.priceUnit === 'MONTH') {
+      payload.monthStart = form.monthStart
+      payload.monthCount = form.monthCount
+    } else if (listing.value.bookingModel === 'PER_SLOT' && listing.value.slotSubmode === 'WORKING_HOURS') {
+      const startsAt = new Date(`${form.startsAt}T${slotStartTime.value}:00`)
+      const endsAt = new Date(startsAt.getTime() + slotDurationHours.value * 3600_000)
+      payload.startsAt = startsAt.toISOString()
+      payload.endsAt = endsAt.toISOString()
     } else {
-      payload.startsAt = new Date(form.startsAt).toISOString()
-      payload.endsAt = new Date(form.endsAt).toISOString()
+      // PER_STAY range picker gives plain YYYY-MM-DD; a bare date parses as
+      // UTC midnight, matching how the calendar/backend already key nights.
+      payload.startsAt = new Date(`${form.startsAt}T00:00:00.000Z`).toISOString()
+      payload.endsAt = new Date(`${form.endsAt}T00:00:00.000Z`).toISOString()
     }
     const booking = await api.post(`/listings/${listing.value.id}/bookings`, payload)
     await navigateTo(`/rezervacije/${booking.id}`)
@@ -157,6 +230,9 @@ onMounted(async () => {
   if (listing.value?.bookingModel === 'PER_SLOT' && listing.value?.slotSubmode === 'DEFINED_SLOTS') {
     const availability = await api.get(`/listings/${listing.value.id}/availability`)
     slots.value = availability.definedSlots || []
+  } else if (listing.value?.bookingModel === 'PER_SLOT' && listing.value?.slotSubmode === 'WORKING_HOURS') {
+    const availability = await api.get(`/listings/${listing.value.id}/availability`)
+    workingHours.value = availability.workingHours || []
   }
 })
 
