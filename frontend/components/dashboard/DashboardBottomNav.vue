@@ -1,39 +1,55 @@
 <template>
   <nav class="bottom-nav">
-    <NuxtLink v-for="item in leftItems" :key="item.to" :to="item.to" class="bottom-nav-item" active-class="bottom-nav-item-active">
-      <span class="bottom-nav-icon-wrap">
-        <DashboardNavIcon :name="item.icon" class="bottom-nav-icon" />
-      </span>
-      <span class="bottom-nav-label">{{ t(item.labelKey) }}</span>
-    </NuxtLink>
+    <div class="bottom-nav-bar">
+      <div class="bottom-nav-side">
+        <NuxtLink v-for="item in leftItems" :key="item.to" :to="item.to" class="bottom-nav-item" active-class="bottom-nav-item-active">
+          <span class="bottom-nav-icon-wrap">
+            <DashboardNavIcon :name="item.icon" class="bottom-nav-icon" />
+          </span>
+          <span class="bottom-nav-label">{{ t(item.labelKey) }}</span>
+        </NuxtLink>
+      </div>
 
-    <NuxtLink to="/kontrolna-tabla" class="bottom-nav-item" exact-active-class="bottom-nav-item-active">
-      <span class="bottom-nav-icon-wrap">
-        <DashboardNavIcon name="home" class="bottom-nav-icon" />
-      </span>
-      <span class="bottom-nav-label">{{ t('dashboard.overview') }}</span>
-    </NuxtLink>
+      <span class="bottom-nav-fab-space" aria-hidden="true" />
 
-    <NuxtLink to="/kontrolna-tabla/poruke" class="bottom-nav-item" active-class="bottom-nav-item-active">
-      <span class="bottom-nav-icon-wrap">
-        <DashboardNavIcon name="message" class="bottom-nav-icon" />
-      </span>
-      <span class="bottom-nav-label">{{ t('nav.messages') }}</span>
-    </NuxtLink>
+      <div class="bottom-nav-side">
+        <NuxtLink to="/kontrolna-tabla/poruke" class="bottom-nav-item" active-class="bottom-nav-item-active">
+          <span class="bottom-nav-icon-wrap">
+            <DashboardNavIcon name="message" class="bottom-nav-icon" />
+          </span>
+          <span class="bottom-nav-label">{{ t('nav.messages') }}</span>
+        </NuxtLink>
 
-    <button type="button" class="bottom-nav-item" :class="{ 'bottom-nav-item-active': moreOpen }" @click="moreOpen = !moreOpen">
-      <span class="bottom-nav-icon-wrap">
-        <DashboardNavIcon name="more" class="bottom-nav-icon" />
+        <button type="button" class="bottom-nav-item" :class="{ 'bottom-nav-item-active': moreOpen }" @click="moreOpen = !moreOpen">
+          <span class="bottom-nav-icon-wrap">
+            <DashboardNavIcon name="more" class="bottom-nav-icon" />
+          </span>
+          <span class="bottom-nav-label">{{ t('dashboard.more') }}</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Sits outside .bottom-nav-bar so the bar's own notch mask doesn't clip it too -->
+    <NuxtLink to="/kontrolna-tabla" class="bottom-nav-fab" exact-active-class="bottom-nav-fab-active">
+      <span class="bottom-nav-fab-circle">
+        <DashboardNavIcon name="home" class="bottom-nav-fab-icon" />
       </span>
-      <span class="bottom-nav-label">{{ t('dashboard.more') }}</span>
-    </button>
+      <span class="bottom-nav-label bottom-nav-fab-label">{{ t('dashboard.overview') }}</span>
+    </NuxtLink>
 
     <Teleport to="body">
       <Transition name="sheet">
         <div v-if="moreOpen" class="more-sheet-backdrop" @click="moreOpen = false">
           <div class="more-sheet" @click.stop>
             <span class="more-sheet-handle" aria-hidden="true" />
-            <NuxtLink v-for="item in moreItems" :key="item.to" :to="item.to" class="more-sheet-item" @click="moreOpen = false">
+            <NuxtLink
+              v-for="item in moreItems"
+              :key="item.to"
+              :to="item.to"
+              class="more-sheet-item"
+              active-class="more-sheet-item-active"
+              @click="moreOpen = false"
+            >
               <DashboardNavIcon :name="item.icon" class="more-sheet-icon" />
               {{ t(item.labelKey) }}
             </NuxtLink>
@@ -94,20 +110,45 @@ const moreItems = computed(() => {
 
 @include mobile-only {
   .bottom-nav {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    align-items: center;
+    display: block;
     position: fixed;
     bottom: 0;
     left: 0;
     right: 0;
     height: 60px;
-    padding-bottom: env(safe-area-inset-bottom);
-    background: $color-surface;
-    border-top: 1px solid $color-border;
-    box-shadow: 0 -2px 10px rgba(15, 27, 51, 0.05);
     z-index: $z-mobile-bottom-nav;
   }
+}
+
+.bottom-nav-bar {
+  display: flex;
+  align-items: center;
+  position: absolute;
+  inset: 0;
+  padding-bottom: env(safe-area-inset-bottom);
+  background: $color-surface;
+  border-top: 1px solid $color-border;
+  box-shadow: 0 -2px 10px rgba(15, 27, 51, 0.05);
+
+  // The hole Home's circle sits in — punched through the bar's own
+  // background at top-center, a few px wider than the circle so a ring of
+  // the page background shows all around it (the "cut into the bar" look).
+  $notch-radius: 30px;
+  -webkit-mask-image: radial-gradient(circle $notch-radius at 50% 0%, transparent 0 $notch-radius, black #{$notch-radius + 1px} 100%);
+  mask-image: radial-gradient(circle $notch-radius at 50% 0%, transparent 0 $notch-radius, black #{$notch-radius + 1px} 100%);
+}
+
+.bottom-nav-side {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  height: 100%;
+}
+
+.bottom-nav-fab-space {
+  width: 76px;
+  flex-shrink: 0;
 }
 
 .bottom-nav-item {
@@ -162,6 +203,43 @@ const moreItems = computed(() => {
   font-weight: 700;
 }
 
+// Raised, solid-color circle centered over the notch cut into the bar —
+// half above the bar's top edge, half below it. No gradient; a plain
+// $color-primary fill reads as the one deliberately emphasized tab.
+.bottom-nav-fab {
+  position: absolute;
+  top: -24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-decoration: none;
+}
+
+.bottom-nav-fab-circle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: $radius-pill;
+  background: $color-primary;
+  box-shadow: 0 4px 10px rgba(9, 87, 223, 0.35);
+}
+
+.bottom-nav-fab-icon {
+  width: 20px;
+  height: 20px;
+  color: $color-surface;
+}
+
+.bottom-nav-fab-label {
+  color: $color-primary;
+  font-weight: 700;
+}
+
 .more-sheet-backdrop {
   position: fixed;
   inset: 0;
@@ -204,6 +282,16 @@ const moreItems = computed(() => {
 .more-sheet-item:active {
   background: $color-background;
   text-decoration: none;
+}
+
+.more-sheet-item-active {
+  background: rgba($color-primary, 0.08);
+  color: $color-primary;
+  font-weight: 600;
+}
+
+.more-sheet-item-active .more-sheet-icon {
+  color: $color-primary;
 }
 
 .more-sheet-icon {
