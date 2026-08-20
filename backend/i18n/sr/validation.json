@@ -18,5 +18,6 @@
   "TIME_INVALID": "Vreme mora biti u formatu ČČ:MM",
   "DATE_INVALID": "Datum mora biti u formatu GGGG-MM-DD",
   "REGION_REQUIRED": "Izaberite region",
-  "CITY_REQUIRED": "Izaberite grad"
+  "CITY_REQUIRED": "Izaberite grad",
+  "TERMS_NOT_ACCEPTED": "Morate prihvatiti uslove korišćenja i politiku privatnosti"
 }

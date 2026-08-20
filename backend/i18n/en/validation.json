@@ -18,5 +18,6 @@
   "TIME_INVALID": "Time must be in HH:MM format",
   "DATE_INVALID": "Date must be in YYYY-MM-DD format",
   "REGION_REQUIRED": "Please select a region",
-  "CITY_REQUIRED": "Please select a city"
+  "CITY_REQUIRED": "Please select a city",
+  "TERMS_NOT_ACCEPTED": "You must accept the terms of use and privacy policy"
 }

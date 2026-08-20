@@ -130,6 +130,11 @@ __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], InitCheckoutDto.prototype, "companyAddress", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Must be true — checkbox confirming the terms of use and privacy policy were read and accepted.' }),
+    (0, class_validator_1.IsIn)([true], { message: 'validation.TERMS_NOT_ACCEPTED' }),
+    __metadata("design:type", Boolean)
+], InitCheckoutDto.prototype, "termsAccepted", void 0);
 class AdjustPriceDto {
 }
 exports.AdjustPriceDto = AdjustPriceDto;

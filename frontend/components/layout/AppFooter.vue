@@ -43,6 +43,23 @@
 
       <div class="footer-bottom">
         <span class="text-muted">© {{ year }} {{ t('footer.rights') }}</span>
+
+        <div class="footer-payment-badges">
+          <a href="https://www.bancaintesa.rs" target="_blank" rel="noopener" class="footer-payment-link">
+            <img src="/images/payment/banca-intesa.png" alt="Banca Intesa" class="footer-payment-logo" />
+          </a>
+          <a
+            href="https://rs.visa.com/pay-with-visa/security-and-assistance/protected-everywhere.html"
+            target="_blank"
+            rel="noopener"
+            class="footer-payment-link"
+          >
+            <img src="/images/payment/visa-secure.png" alt="Visa Secure" class="footer-payment-logo footer-payment-logo-square" />
+          </a>
+          <a href="https://www.mastercard.rs/sr-rs/korisnici/pronadite-karticu.html" target="_blank" rel="noopener" class="footer-payment-link">
+            <img src="/images/payment/mastercard-id-check.png" alt="Mastercard ID Check" class="footer-payment-logo" />
+          </a>
+        </div>
       </div>
     </div>
   </footer>
@@ -115,5 +132,40 @@ const { data: categories } = await useAsyncData('footer-categories', async () =>
   margin-top: 32px;
   padding-top: 20px;
   border-top: 1px solid $color-border;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+// Required by Banca Intesa's NestPay merchant onboarding (EPM compliance) —
+// see linkovi za logotipe sigurnosnih kodova.txt in the pilot docs handoff.
+.footer-payment-badges {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.footer-payment-link {
+  display: flex;
+  align-items: center;
+}
+
+.footer-payment-logo {
+  height: 22px;
+  width: auto;
+  display: block;
+  opacity: 0.85;
+  transition: opacity 0.15s ease;
+}
+
+.footer-payment-logo-square {
+  height: 38px;
+}
+
+.footer-payment-link:hover .footer-payment-logo {
+  opacity: 1;
 }
 </style>

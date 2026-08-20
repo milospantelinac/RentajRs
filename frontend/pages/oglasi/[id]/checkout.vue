@@ -80,13 +80,19 @@
             <p class="text-muted checkout-info-note mb-2">{{ t('billing.autoRenewalNotice') }}</p>
             <p class="text-muted checkout-info-note mb-3">{{ t('billing.afterPaymentNotice') }}</p>
 
-            <p class="text-muted checkout-terms mb-4">
-              {{ t('billing.termsPrefix') }}
-              <NuxtLink to="/uslovi-koriscenja" target="_blank">{{ t('footer.terms') }}</NuxtLink>.
-            </p>
+            <label class="form-row-inline checkout-terms-checkbox mb-4">
+              <input v-model="termsAccepted" type="checkbox" class="form-checkbox" />
+              <span class="text-muted checkout-terms">
+                {{ t('billing.termsAcceptPrefix') }}
+                <NuxtLink to="/uslovi-koriscenja" target="_blank">{{ t('footer.terms') }}</NuxtLink>
+                {{ t('billing.termsAcceptMiddle') }}
+                <NuxtLink to="/politika-privatnosti" target="_blank">{{ t('footer.privacy') }}</NuxtLink>
+                {{ t('billing.termsAcceptSuffix') }}
+              </span>
+            </label>
 
             <p v-if="error" class="form-error mb-3">{{ error }}</p>
-            <button class="btn btn-primary-flat btn-block" :disabled="submitting" @click="submitCheckout">
+            <button class="btn btn-primary-flat btn-block" :disabled="submitting || !termsAccepted" @click="submitCheckout">
               {{ submitting ? t('common.loading') : t('billing.payAndPublish') }}
             </button>
             <NuxtLink :to="`/oglasi/${route.params.id}/paket`" class="btn btn-tertiary btn-block mt-2">
@@ -133,6 +139,7 @@ const submitting = ref(false)
 const error = ref('')
 const nestpayForm = ref(null)
 const nestpayFormEl = ref(null)
+const termsAccepted = ref(false)
 
 function formatPrice(value) {
   return `${new Intl.NumberFormat('sr-RS').format(value || 0)} RSD`
@@ -143,6 +150,7 @@ function validate() {
   if (form.isCompany && (!form.taxId || !form.registrationNumber || !form.companyName || !form.companyAddress)) {
     return t('billing.checkoutValidationCompanyRequired')
   }
+  if (!termsAccepted.value) return t('billing.termsRequired')
   return ''
 }
 
@@ -165,6 +173,7 @@ async function submitCheckout() {
       registrationNumber: form.isCompany ? form.registrationNumber : undefined,
       companyName: form.isCompany ? form.companyName : undefined,
       companyAddress: form.isCompany ? form.companyAddress : undefined,
+      termsAccepted: termsAccepted.value,
     })
     nestpayForm.value = result
     await nextTick()
@@ -217,6 +226,10 @@ useSeoMeta({ title: t('billing.checkoutTitle') })
 .checkout-vat-note,
 .checkout-info-note {
   font-size: $font-size-muted;
+}
+
+.checkout-terms-checkbox {
+  align-items: flex-start;
 }
 
 .checkout-hidden-form {
