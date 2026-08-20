@@ -3,6 +3,8 @@
     <section class="hero">
       <div class="container">
         <div class="hero-card">
+          <img src="/images/hero-logo-mark.svg" alt="" aria-hidden="true" class="hero-logo-mark" />
+          <div class="hero-card-content">
           <h1 class="hero-title">
             <span>{{ t('home.heroTitleLine1') }}</span>
             <span>{{ t('home.heroTitleLine2') }}</span>
@@ -105,7 +107,7 @@
               </div>
             </Transition>
           </Teleport>
-
+          </div>
         </div>
 
         <div class="hero-categories-frame">
@@ -126,7 +128,10 @@
         <h2 class="section-title">
           <span class="section-title-strong">{{ t('home.featuredTitleStrong') }}</span>&nbsp;<span class="section-title-light">{{ t('home.featuredTitleLight') }}</span>
         </h2>
-        <NuxtLink to="/pretraga" class="featured-see-all">{{ t('home.seeAllListings') }} →</NuxtLink>
+        <NuxtLink to="/pretraga" class="featured-see-all">
+          {{ t('home.seeAllListings') }}
+          <img src="/images/icons/arrow.svg" alt="" class="featured-see-all-arrow" />
+        </NuxtLink>
       </div>
 
       <p v-if="!featuredListings.length" class="text-muted">{{ t('home.noListingsYet') }}</p>
@@ -347,11 +352,35 @@ useHead({
 }
 
 .hero-card {
-  background: $gradient-marketing;
+  position: relative;
+  background-image: url('/images/hero-gradient.png');
+  background-size: cover;
+  background-position: center;
   border-radius: 30px;
   padding: 64px 32px 100px;
   text-align: center;
   color: $color-surface;
+  overflow: hidden;
+}
+
+// Large faint brand mark bleeding off the right edge, vertically centered —
+// the SVG already bakes in its own 10% opacity, so this just sizes and
+// positions it.
+.hero-logo-mark {
+    position: absolute;
+    top: 50%;
+    right: 32%;
+    transform: translateY(-50%);
+    width: 930px;
+    max-width: 55%;
+    height: auto;
+    pointer-events: none;
+}
+
+// Stacked after the logo mark in DOM order with its own stacking context,
+// so it paints above it without needing an explicit z-index.
+.hero-card-content {
+  position: relative;
 }
 
 .hero-title {
@@ -775,10 +804,18 @@ useHead({
 }
 
 .featured-see-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   color: $color-text;
   font-weight: 500;
   font-size: $font-size-body;
   white-space: nowrap;
+}
+
+.featured-see-all-arrow {
+  width: 12px;
+  height: 12px;
 }
 
 .featured-grid {
