@@ -229,7 +229,7 @@ useSeoMeta({ title: t('billing.checkoutTitle') })
 }
 
 .checkout-terms-checkbox {
-  align-items: flex-start;
+  align-items: center;
 }
 
 .checkout-hidden-form {

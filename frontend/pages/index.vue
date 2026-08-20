@@ -349,7 +349,7 @@ useHead({
 .hero-card {
   background: $gradient-marketing;
   border-radius: 30px;
-  padding: 64px 32px 48px;
+  padding: 64px 32px 100px;
   text-align: center;
   color: $color-surface;
 }
@@ -675,7 +675,7 @@ useHead({
 
 @include respond-above(lg) {
   .hero-categories-frame {
-    margin-top: -56px;
+    margin-top: -79px;
   }
 }
 
