@@ -45,20 +45,31 @@
         <span class="text-muted">© {{ year }} {{ t('footer.rights') }}</span>
 
         <div class="footer-payment-badges">
+          <div class="footer-payment-group">
+            <img src="/images/payment/maestro.png" alt="Maestro" class="footer-payment-logo" />
+            <img src="/images/payment/mastercard.png" alt="Mastercard" class="footer-payment-logo" />
+            <img src="/images/payment/dinacard.png" alt="DinaCard" class="footer-payment-logo" />
+            <img src="/images/payment/visa.png" alt="Visa" class="footer-payment-logo" />
+            <img src="/images/payment/amex.png" alt="American Express" class="footer-payment-logo footer-payment-logo-square" />
+          </div>
+
           <a href="https://www.bancaintesa.rs" target="_blank" rel="noopener" class="footer-payment-link">
             <img src="/images/payment/banca-intesa.png" alt="Banca Intesa" class="footer-payment-logo" />
           </a>
-          <a
-            href="https://rs.visa.com/pay-with-visa/security-and-assistance/protected-everywhere.html"
-            target="_blank"
-            rel="noopener"
-            class="footer-payment-link"
-          >
-            <img src="/images/payment/visa-secure.png" alt="Visa Secure" class="footer-payment-logo footer-payment-logo-square" />
-          </a>
-          <a href="https://www.mastercard.rs/sr-rs/korisnici/pronadite-karticu.html" target="_blank" rel="noopener" class="footer-payment-link">
-            <img src="/images/payment/mastercard-id-check.png" alt="Mastercard ID Check" class="footer-payment-logo" />
-          </a>
+
+          <div class="footer-payment-group">
+            <a href="https://www.mastercard.rs/sr-rs/korisnici/pronadite-karticu.html" target="_blank" rel="noopener" class="footer-payment-link">
+              <img src="/images/payment/mastercard-id-check.png" alt="Mastercard ID Check" class="footer-payment-logo" />
+            </a>
+            <a
+              href="https://rs.visa.com/pay-with-visa/security-and-assistance/protected-everywhere.html"
+              target="_blank"
+              rel="noopener"
+              class="footer-payment-link"
+            >
+              <img src="/images/payment/visa-secure.png" alt="Visa Secure" class="footer-payment-logo footer-payment-logo-square" />
+            </a>
+          </div>
         </div>
       </div>
     </div>
@@ -140,11 +151,20 @@ const { data: categories } = await useAsyncData('footer-categories', async () =>
 }
 
 // Required by Banca Intesa's NestPay merchant onboarding (EPM compliance) —
-// see linkovi za logotipe sigurnosnih kodova.txt in the pilot docs handoff.
+// order and spacing follow "primer korektnog brendiranja" in the pilot docs
+// handoff: card schemes, then the bank mark, then the security badges, with
+// a wider gap between those three groups than between logos inside a group.
 .footer-payment-badges {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 28px;
+  flex-wrap: wrap;
+}
+
+.footer-payment-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
