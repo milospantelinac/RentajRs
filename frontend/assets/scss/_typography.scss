@@ -39,6 +39,10 @@
   letter-spacing: 0.02em;
 }
 
+.text-center {
+  text-align: center;
+}
+
 @include respond-above(md) {
   .text-page-title {
     font-size: $font-size-page-title;
