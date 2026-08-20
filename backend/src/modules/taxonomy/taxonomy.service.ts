@@ -237,6 +237,11 @@ export class TaxonomyService {
 
   // -- Admin ---------------------------------------------------------------
 
+  /** Batch name lookup for arbitrary category ids — e.g. decorating search results with display names. */
+  async getCategoryNames(categoryIds: string[], language: Language = Language.SR): Promise<Map<string, string>> {
+    return this.getTranslationMap('CATEGORY', categoryIds, 'name', language);
+  }
+
   async adminGetCategoryTree() {
     const categories = await this.prisma.category.findMany({ orderBy: [{ level: 'asc' }, { displayOrder: 'asc' }] });
     const names = await this.getTranslationMap('CATEGORY', categories.map((c) => c.id));
