@@ -4,6 +4,40 @@
 
     <div class="card mb-4">
       <div class="card-body">
+        <h2 class="text-section-title mb-3">{{ t('dashboard.avatarSettings') }}</h2>
+
+        <div class="avatar-settings-row">
+          <button type="button" class="avatar-picker" :aria-label="t('dashboard.avatarChangeAction')" @click="avatarFileInput?.click()">
+            <img v-if="avatarPreviewUrl" :src="avatarPreviewUrl" alt="" class="avatar-picker-image" />
+            <span v-else class="avatar-picker-placeholder">
+              <FontAwesomeIcon icon="plus" />
+            </span>
+            <span v-if="avatarPreviewUrl" class="avatar-picker-edit">
+              <FontAwesomeIcon icon="pen" />
+            </span>
+          </button>
+          <div class="avatar-settings-info">
+            <p class="text-muted avatar-settings-hint">{{ t('dashboard.avatarHint') }}</p>
+            <button v-if="avatarPreviewUrl" type="button" class="avatar-remove-link" @click="removeAvatar">
+              {{ t('dashboard.avatarRemoveAction') }}
+            </button>
+          </div>
+        </div>
+
+        <input ref="avatarFileInput" type="file" accept="image/*" class="d-none" @change="onAvatarFileSelected" />
+
+        <p v-if="avatarError" class="form-error mb-2 mt-3">{{ avatarError }}</p>
+        <p v-if="avatarSaved" class="text-success mb-2 mt-3">{{ t('dashboard.changesSaved') }}</p>
+        <button class="btn btn-primary-flat mt-3" :disabled="avatarSaving || (!pendingAvatarBlob && !avatarRemoveRequested)" @click="saveAvatar">
+          {{ avatarSaving ? t('common.loading') : t('dashboard.saveChanges') }}
+        </button>
+      </div>
+    </div>
+
+    <AvatarCropModal v-if="pendingAvatarFile" :file="pendingAvatarFile" @confirm="onCropConfirm" @cancel="pendingAvatarFile = null" />
+
+    <div class="card mb-4">
+      <div class="card-body">
         <h2 class="text-section-title mb-3">{{ t('dashboard.profileSettings') }}</h2>
         <div class="row">
           <div class="col-6">
@@ -172,6 +206,62 @@ definePageMeta({ middleware: 'auth', layout: 'dashboard' })
 const { t } = useI18n()
 const api = useApi()
 const auth = useAuthStore()
+
+const avatarFileInput = ref(null)
+const pendingAvatarFile = ref(null) // File driving the open crop modal, if any
+const pendingAvatarBlob = ref(null) // cropped result, held locally until "Sačuvaj izmene"
+const avatarRemoveRequested = ref(false) // user cleared the photo, pending "Sačuvaj izmene"
+const avatarPreviewUrl = ref(auth.user?.avatarUrl || '')
+const avatarSaving = ref(false)
+const avatarSaved = ref(false)
+const avatarError = ref('')
+
+function onAvatarFileSelected(e) {
+  const file = e.target.files?.[0]
+  e.target.value = '' // so picking the same file again still fires change
+  if (file) pendingAvatarFile.value = file
+}
+
+function onCropConfirm(blob) {
+  if (avatarPreviewUrl.value?.startsWith('blob:')) URL.revokeObjectURL(avatarPreviewUrl.value)
+  pendingAvatarBlob.value = blob
+  avatarRemoveRequested.value = false
+  avatarPreviewUrl.value = URL.createObjectURL(blob)
+  pendingAvatarFile.value = null
+  avatarSaved.value = false
+}
+
+function removeAvatar() {
+  if (avatarPreviewUrl.value?.startsWith('blob:')) URL.revokeObjectURL(avatarPreviewUrl.value)
+  avatarPreviewUrl.value = ''
+  pendingAvatarBlob.value = null
+  avatarRemoveRequested.value = true
+  avatarSaved.value = false
+}
+
+async function saveAvatar() {
+  if (!pendingAvatarBlob.value && !avatarRemoveRequested.value) return
+  avatarSaving.value = true
+  avatarSaved.value = false
+  avatarError.value = ''
+  try {
+    if (avatarRemoveRequested.value) {
+      await api.delete('/users/me/avatar')
+    } else {
+      const formData = new FormData()
+      formData.append('file', pendingAvatarBlob.value, 'avatar.jpg')
+      await api.post('/users/me/avatar', formData)
+    }
+    await auth.fetchMe()
+    pendingAvatarBlob.value = null
+    avatarRemoveRequested.value = false
+    avatarSaved.value = true
+  } catch (e) {
+    avatarError.value = extractErrorMessage(e, t('auth.genericError'))
+  } finally {
+    avatarSaving.value = false
+  }
+}
 
 const profileForm = reactive({
   firstName: auth.user?.firstName || '',
@@ -342,6 +432,92 @@ useSeoMeta({ title: t('dashboard.settings') })
 </script>
 
 <style lang="scss" scoped>
+.avatar-settings-row {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.avatar-picker {
+  position: relative;
+  flex-shrink: 0;
+  width: 88px;
+  height: 88px;
+  padding: 0;
+  border: none;
+  border-radius: $radius-pill;
+  background: none;
+  cursor: pointer;
+}
+
+.avatar-picker-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: $radius-pill;
+  object-fit: cover;
+}
+
+.avatar-picker-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  border-radius: $radius-pill;
+  border: 2px dashed $color-border;
+  background: $color-background;
+  color: $color-text-muted;
+  font-size: 22px;
+}
+
+.avatar-picker:hover .avatar-picker-placeholder {
+  border-color: $color-primary;
+  color: $color-primary;
+}
+
+.avatar-picker-edit {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: $radius-pill;
+  border: 2px solid $color-surface;
+  background: $color-primary;
+  color: $color-surface;
+  font-size: 12px;
+}
+
+.avatar-settings-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.avatar-settings-hint {
+  font-size: $font-size-muted;
+  margin: 0;
+}
+
+.avatar-remove-link {
+  align-self: flex-start;
+  border: none;
+  background: none;
+  padding: 0;
+  color: $color-error;
+  font-size: $font-size-muted;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.avatar-remove-link:hover {
+  text-decoration: underline;
+}
+
 .setup-qr {
   display: block;
   width: 180px;

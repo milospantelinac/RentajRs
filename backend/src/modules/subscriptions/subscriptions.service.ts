@@ -271,6 +271,7 @@ export class SubscriptionsService {
         priceAtPurchase: price,
         pendingListingId: dto.listingId,
         autoRenew: !dto.isCompany, // R109 — legal entities renew manually
+        termsAcceptedAt: new Date(), // dto.termsAccepted is already validated true (@IsIn([true]))
       },
     });
 

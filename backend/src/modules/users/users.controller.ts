@@ -37,6 +37,11 @@ export class UsersController {
     return this.usersService.setAvatar(userId, file);
   }
 
+  @Delete('users/me/avatar')
+  removeAvatar(@CurrentUser('id') userId: string) {
+    return this.usersService.removeAvatar(userId);
+  }
+
   @Get('users/me/favorites')
   listFavorites(@CurrentUser('id') userId: string) {
     return this.usersService.listFavorites(userId);

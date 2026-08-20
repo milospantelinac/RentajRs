@@ -8,6 +8,7 @@
         <slot />
       </main>
     </div>
+    <DashboardBottomNav />
   </div>
 </template>
 
@@ -18,5 +19,13 @@ const { t } = useI18n()
 <style lang="scss" scoped>
 .admin-page-body {
   padding: 24px 0 64px;
+}
+
+@include mobile-only {
+  .admin-page-body {
+    padding-bottom: 72px;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
 }
 </style>

@@ -5,7 +5,7 @@
     <div class="form-row-inline mb-4">
       <select v-model="statusFilter" class="form-control form-select" @change="load">
         <option value="">—</option>
-        <option v-for="s in statuses" :key="s" :value="s">{{ s }}</option>
+        <option v-for="s in statuses" :key="s" :value="s">{{ statusLabel(s) }}</option>
       </select>
     </div>
 
@@ -22,7 +22,7 @@
         <tr v-for="s in subscriptions" :key="s.id">
           <td :data-label="t('auth.email')">{{ s.user?.firstName }} {{ s.user?.lastName }} — {{ s.user?.email }} ({{ s.package?.key }})</td>
           <td :data-label="t('admin.statusLabel')">
-            <span class="badge" :class="statusBadge(s.status)">{{ s.status }}</span>
+            <span class="badge" :class="statusBadge(s.status)">{{ statusLabel(s.status) }}</span>
           </td>
           <td :data-label="t('billing.expiresOn')">{{ s.expiresAt ? new Date(s.expiresAt).toLocaleDateString('sr-RS') : '—' }}</td>
           <td :data-label="''">
@@ -109,6 +109,18 @@ async function load() {
 function statusBadge(status) {
   const map = { AWAITING_PAYMENT: 'badge-neutral', PENDING_ACTIVATION: 'badge-warning', ACTIVE: 'badge-success', GRACE: 'badge-warning', EXPIRED: 'badge-critical', CANCELLED: 'badge-neutral' }
   return map[status] || 'badge-neutral'
+}
+
+function statusLabel(status) {
+  const map = {
+    AWAITING_PAYMENT: 'AwaitingPayment',
+    PENDING_ACTIVATION: 'PendingActivation',
+    ACTIVE: 'Active',
+    GRACE: 'Grace',
+    EXPIRED: 'Expired',
+    CANCELLED: 'Cancelled',
+  }
+  return t(`billing.status${map[status] || 'AwaitingPayment'}`)
 }
 
 async function activate(id) {

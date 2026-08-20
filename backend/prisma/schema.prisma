@@ -933,6 +933,9 @@ model Subscription {
   graceUntil          DateTime?          @db.Timestamptz
   paymentAttemptCount Int                @default(0)
   cardToken           String? // opaque token from the payment provider, never card data (R118)
+  // Checkout-page consent checkbox — recorded, not just displayed, since the
+  // button click alone isn't proof the buyer actually agreed to anything.
+  termsAcceptedAt     DateTime?          @db.Timestamptz
   // Set only while status=AWAITING_PAYMENT — the listing this checkout is for,
   // before the NestPay callback confirms payment and ListingsService.markPendingApproval()
   // takes over as the authoritative link (Listing.subscriptionId). Not used afterwards.

@@ -95,6 +95,10 @@ export class InitCheckoutDto {
   @IsOptional()
   @IsString()
   companyAddress?: string;
+
+  @ApiProperty({ description: 'Must be true — checkbox confirming the terms of use and privacy policy were read and accepted.' })
+  @IsIn([true], { message: 'validation.TERMS_NOT_ACCEPTED' })
+  termsAccepted: boolean;
 }
 
 export class AdjustPriceDto {

@@ -11,12 +11,6 @@
     <section class="container legal-body">
       <div class="row justify-content-center">
         <div class="col-12 col-md-8">
-          <div class="card legal-notice mb-4">
-            <div class="card-body">
-              <p class="text-muted mb-0">{{ t('legalPages.reviewNotice') }}</p>
-            </div>
-          </div>
-
           <article class="legal-content" v-html="page.bodyHtml" />
         </div>
       </div>
@@ -56,10 +50,6 @@ useSeoMeta({ title: () => page.value?.title || t('legalPages.privacyTitle'), des
 
 .legal-body {
   padding: 32px 0 64px;
-}
-
-.legal-notice .card-body {
-  background: rgba($color-warning, 0.08);
 }
 
 .legal-content :deep(h2) {

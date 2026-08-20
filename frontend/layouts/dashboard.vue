@@ -37,6 +37,8 @@
   .dashboard-body {
     flex-direction: column;
     padding-bottom: 72px; // room for the bottom nav
+    padding-left: 16px;
+    padding-right: 16px;
   }
 }
 </style>

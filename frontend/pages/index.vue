@@ -9,7 +9,8 @@
           </h1>
           <p class="hero-subtitle">{{ t('home.heroSubtitle') }}</p>
 
-          <div class="hero-search">
+          <!-- Full 4-field row search — tablet and up, where it fits on one line -->
+          <div class="hero-search hero-search-full">
             <div class="hero-search-field">
               <label class="hero-search-label">{{ t('home.searchWhatLabel') }}</label>
               <input v-model="searchQuery" type="text" :placeholder="t('home.searchWhatPlaceholder')" class="hero-search-input" />
@@ -42,10 +43,78 @@
             </NuxtLink>
           </div>
 
-          <div class="hero-categories">
-            <NuxtLink v-for="cat in categories" :key="cat.id" :to="`/${cat.slug}`" class="hero-category-tile">
-              <span class="hero-category-icon">{{ useCategoryIcon(cat.icon) }}</span>
-              <span class="hero-category-name">{{ cat.name }}</span>
+          <!-- Compact search + "Filteri" sheet trigger — mobile only -->
+          <div class="hero-search-compact">
+            <div class="hero-search-compact-bar">
+              <input
+                v-model="searchQuery"
+                type="text"
+                :placeholder="t('home.searchBarPlaceholder')"
+                class="hero-search-compact-input"
+                @keyup.enter="filtersOpen = false"
+              />
+              <NuxtLink :to="searchLink" class="hero-search-compact-submit" :aria-label="t('common.search')">
+                <FontAwesomeIcon icon="magnifying-glass" />
+              </NuxtLink>
+            </div>
+            <button type="button" class="hero-filters-btn" @click="filtersOpen = true">
+              <FontAwesomeIcon icon="sliders" />
+              {{ t('home.filtersButton') }}
+            </button>
+          </div>
+
+          <Teleport to="body">
+            <Transition name="sheet">
+              <div v-if="filtersOpen" class="filters-sheet-backdrop" @click="filtersOpen = false">
+                <div class="filters-sheet" @click.stop>
+                  <span class="filters-sheet-handle" aria-hidden="true" />
+                  <div class="filters-sheet-header">
+                    <p class="filters-sheet-title">{{ t('home.filtersSheetTitle') }}</p>
+                    <button type="button" class="filters-sheet-reset" @click="resetFilters">{{ t('home.filtersReset') }}</button>
+                  </div>
+
+                  <div class="filters-sheet-field">
+                    <label class="filters-sheet-label">{{ t('home.searchWhatLabel') }}</label>
+                    <input v-model="searchQuery" type="text" :placeholder="t('home.searchWhatPlaceholder')" class="filters-sheet-input" />
+                  </div>
+                  <div class="filters-sheet-field">
+                    <label class="filters-sheet-label">{{ t('home.searchLocationLabel') }}</label>
+                    <select v-model="searchCityId" class="filters-sheet-input filters-sheet-select">
+                      <option value="">{{ t('home.searchCityAny') }}</option>
+                      <option v-for="c in cities" :key="c.id" :value="c.id">{{ c.name }}</option>
+                    </select>
+                  </div>
+                  <div class="filters-sheet-field">
+                    <label class="filters-sheet-label">{{ t('home.searchCategoryLabel') }}</label>
+                    <select v-model="searchCategorySlug" class="filters-sheet-input filters-sheet-select">
+                      <option value="">{{ t('home.searchCategoryAny') }}</option>
+                      <option v-for="cat in categories" :key="cat.id" :value="cat.slug">{{ cat.name }}</option>
+                    </select>
+                  </div>
+                  <div class="filters-sheet-field">
+                    <label class="filters-sheet-label">{{ t('home.searchPriceLabel') }}</label>
+                    <select v-model="searchPriceBucket" class="filters-sheet-input filters-sheet-select">
+                      <option v-for="bucket in priceBuckets" :key="bucket.value" :value="bucket.value">{{ bucket.label }}</option>
+                    </select>
+                  </div>
+
+                  <NuxtLink :to="searchLink" class="btn btn-primary-flat btn-block filters-sheet-submit" @click="filtersOpen = false">
+                    {{ t('home.filtersSubmit') }}
+                  </NuxtLink>
+                </div>
+              </div>
+            </Transition>
+          </Teleport>
+
+        </div>
+
+        <div class="hero-categories-frame">
+          <div class="hero-categories-panel">
+            <NuxtLink v-for="cat in homeCategories" :key="cat.slug" :to="`/${cat.slug}`" class="hero-category-tile">
+              <span class="hero-category-icon-wrap">
+                <img :src="cat.icon" alt="" class="hero-category-icon" />
+              </span>
+              <span class="hero-category-name">{{ t(cat.labelKey) }}</span>
             </NuxtLink>
           </div>
         </div>
@@ -161,6 +230,26 @@ const searchCategorySlug = ref('')
 const searchCityId = ref('')
 const searchPriceBucket = ref('')
 const activeFeature = ref(0)
+const filtersOpen = ref(false)
+
+function resetFilters() {
+  searchQuery.value = ''
+  searchCategorySlug.value = ''
+  searchCityId.value = ''
+  searchPriceBucket.value = ''
+}
+
+// Fixed 6-tile quick-links strip from the Figma homepage design — a curated
+// marketing shortcut, not the full (growing, admin-managed) category list
+// used in the search filter dropdown above.
+const homeCategories = [
+  { slug: 'prostori-za-proslave', icon: '/images/categories/prostori.svg', labelKey: 'home.categoryProstori' },
+  { slug: 'nekretnine', icon: '/images/categories/nekretnine.svg', labelKey: 'home.categoryNekretnine' },
+  { slug: 'igraonice', icon: '/images/categories/igraonice.svg', labelKey: 'home.categoryIgraonice' },
+  { slug: 'vozila', icon: '/images/categories/vozila.svg', labelKey: 'home.categoryVozila' },
+  { slug: 'magacini-i-skladista', icon: '/images/categories/magacini.svg', labelKey: 'home.categoryMagacini' },
+  { slug: 'gradjevinske-masine', icon: '/images/categories/masine.svg', labelKey: 'home.categoryMasine' },
+]
 
 // Admin-set via /admin/sadrzaj (Setting key homepage_video_url) — the
 // section only renders once a URL is actually set (RNT-052: an empty
@@ -260,7 +349,7 @@ useHead({
 .hero-card {
   background: $gradient-marketing;
   border-radius: 30px;
-  padding: 64px 32px 48px;
+  padding: 64px 32px 100px;
   text-align: center;
   color: $color-surface;
 }
@@ -288,22 +377,24 @@ useHead({
 }
 
 .hero-search {
-  background: $color-background;
   border-radius: 14px;
-  padding: 8px;
   max-width: 900px;
   margin: 0 auto 40px;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 8px;
+}
+
+// The 4-field row only has room to breathe from lg up — below that it's
+// replaced by the compact bar + "Filteri" sheet (.hero-search-compact).
+.hero-search-full {
+  display: none;
 }
 
 @include respond-above(lg) {
-  .hero-search {
-    flex-direction: row;
+  .hero-search-full {
+    display: flex;
     align-items: center;
+    background: $color-background;
     padding: 10px 10px 10px 24px;
+    gap: 8px;
   }
 }
 
@@ -379,40 +470,265 @@ useHead({
   text-decoration: none;
 }
 
-.hero-categories {
+// Compact search bar + "Filteri" button — mobile only. Below lg the full
+// 4-field row doesn't fit, so search collapses to one input here and the
+// rest of the fields move into the .filters-sheet bottom sheet.
+.hero-search-compact {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 900px;
+  margin: 0 auto 40px;
+}
+
+@include respond-above(lg) {
+  .hero-search-compact {
+    display: none;
+  }
+}
+
+.hero-search-compact-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: $color-surface;
+  border-radius: $radius-input;
+  padding: 4px 4px 4px 16px;
+}
+
+.hero-search-compact-input {
+  flex: 1;
+  border: none;
+  background: none;
+  padding: 12px 0;
+  font-size: $font-size-body;
+  color: $color-text;
+  min-width: 0;
+}
+
+.hero-search-compact-input:focus {
+  outline: none;
+}
+
+.hero-search-compact-input::placeholder {
+  color: $color-text-muted;
+}
+
+.hero-search-compact-submit {
+  display: flex;
+  align-items: center;
   justify-content: center;
-  gap: 24px 32px;
+  width: 40px;
+  height: 40px;
+  border-radius: $radius-button;
+  background: $color-primary;
+  color: $color-surface;
+  flex-shrink: 0;
+}
+
+.hero-search-compact-submit:hover {
+  text-decoration: none;
+  background: $color-dark;
+}
+
+.hero-filters-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px;
+  border: none;
+  border-radius: $radius-input;
+  background: $color-surface;
+  color: $color-text;
+  font-weight: 600;
+  font-size: $font-size-body;
+  cursor: pointer;
+}
+
+// Filters bottom sheet -------------------------------------------------
+.filters-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  background: rgba(6, 27, 49, 0.45);
+  z-index: $z-modal;
+}
+
+.filters-sheet {
+  width: 100%;
+  max-height: 85vh;
+  overflow-y: auto;
+  padding: 10px 20px calc(20px + env(safe-area-inset-bottom));
+  background: $color-surface;
+  border-radius: 20px 20px 0 0;
+  box-shadow: 0 -8px 24px rgba(15, 27, 51, 0.12);
+}
+
+.filters-sheet-handle {
+  display: block;
+  width: 36px;
+  height: 4px;
+  margin: 4px auto 16px;
+  border-radius: $radius-pill;
+  background: $color-border;
+}
+
+.filters-sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.filters-sheet-title {
+  font-size: $font-size-page-title;
+  font-weight: 600;
+  color: $color-text;
+  margin: 0;
+}
+
+.filters-sheet-reset {
+  border: none;
+  background: none;
+  color: $color-primary;
+  font-weight: 500;
+  font-size: $font-size-muted;
+  cursor: pointer;
+}
+
+.filters-sheet-field {
+  padding: 14px 0;
+  border-top: 1px solid $color-border;
+}
+
+.filters-sheet-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: -0.02em;
+  color: $color-text-muted;
+  margin-bottom: 6px;
+}
+
+.filters-sheet-input {
+  border: none;
+  background: none;
+  padding: 0;
+  width: 100%;
+  font-size: $font-size-body;
+  color: $color-text;
+}
+
+.filters-sheet-input:focus {
+  outline: none;
+}
+
+.filters-sheet-input::placeholder {
+  color: $color-text-muted;
+}
+
+.filters-sheet-select {
+  appearance: none;
+}
+
+.filters-sheet-submit {
+  margin-top: 20px;
+}
+
+.sheet-enter-active,
+.sheet-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.sheet-enter-active .filters-sheet,
+.sheet-leave-active .filters-sheet {
+  transition: transform 0.22s ease;
+}
+
+.sheet-enter-from,
+.sheet-leave-to {
+  opacity: 0;
+}
+
+.sheet-enter-from .filters-sheet,
+.sheet-leave-to .filters-sheet {
+  transform: translateY(100%);
+}
+
+// Quick-categories strip — a card that floats over the hero's bottom edge
+// (negative margin pulls it up), white "border" wrapping a lighter F9FAFD
+// panel per the Figma spec. Row on desktop, 2-column grid on mobile.
+.hero-categories-frame {
+  position: relative;
+  z-index: 1;
+  max-width: 900px;
+  margin: -36px auto 0;
+  padding: 8px;
+  background: $color-surface;
+  border-radius: 20px;
+  box-shadow: 0 16px 32px rgba(15, 27, 51, 0.1);
+}
+
+@include respond-above(lg) {
+  .hero-categories-frame {
+    margin-top: -79px;
+  }
+}
+
+.hero-categories-panel {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px 12px;
+  background: $color-background;
+  border-radius: 12px;
+  padding: 24px 16px;
+}
+
+@include respond-above(lg) {
+  .hero-categories-panel {
+    grid-template-columns: repeat(6, 1fr);
+    gap: 8px;
+    padding: 28px 32px;
+  }
 }
 
 .hero-category-tile {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
-  color: $color-surface;
+  gap: 10px;
+  color: $color-text;
+  text-align: center;
 }
 
 .hero-category-tile:hover {
   text-decoration: none;
 }
 
-.hero-category-icon {
+.hero-category-icon-wrap {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 64px;
-  height: 64px;
-  border-radius: $radius-input;
+  width: 60px;
+  height: 60px;
+  border-radius: 14px;
   background: $color-surface;
-  font-size: 28px;
-  box-shadow: $shadow-card;
+  box-shadow: 0 2px 6px rgba(15, 27, 51, 0.06);
+}
+
+.hero-category-icon {
+  width: 26px;
+  height: 26px;
 }
 
 .hero-category-name {
-  font-weight: 500;
+  font-weight: 600;
   font-size: $font-size-muted;
+  color: $color-text;
 }
 
 // Section titles reused across the page ----------------------------------
@@ -446,7 +762,8 @@ useHead({
 
 // Featured listings --------------------------------------------------------
 .featured-section {
-  padding: 56px 0;
+  padding-top: 56px;
+  padding-bottom: 56px;
 }
 
 .featured-header {
@@ -470,6 +787,13 @@ useHead({
   gap: 16px;
 }
 
+// Grid items default to min-width: auto, so a nowrap-truncated title inside
+// still reports its full unwrapped text as the item's minimum content size —
+// the column (and the page) grows to fit it instead of the ellipsis kicking in.
+.featured-grid-item {
+  min-width: 0;
+}
+
 @include respond-above(md) {
   .featured-grid {
     grid-template-columns: repeat(4, 1fr);
@@ -478,7 +802,8 @@ useHead({
 
 // Possibilities / feature list ---------------------------------------------
 .possibilities-section {
-  padding: 56px 0;
+  padding-top: 56px;
+  padding-bottom: 56px;
 }
 
 .possibilities-grid {
@@ -667,7 +992,8 @@ useHead({
 
 // FAQ -------------------------------------------------------------------
 .faq-section {
-  padding: 56px 0;
+  padding-top: 56px;
+  padding-bottom: 56px;
 }
 
 .faq-section-grid {

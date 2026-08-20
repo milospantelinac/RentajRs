@@ -222,6 +222,7 @@ let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
                 priceAtPurchase: price,
                 pendingListingId: dto.listingId,
                 autoRenew: !dto.isCompany,
+                termsAcceptedAt: new Date(),
             },
         });
         const { actionUrl, fields } = await this.nestpay.buildCheckoutForm({
