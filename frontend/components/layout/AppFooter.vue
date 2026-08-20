@@ -4,8 +4,7 @@
       <div class="row">
         <div class="col-12 col-md-4 mb-4 mb-md-0">
           <div class="site-logo mb-2">
-            <span class="site-logo-mark">R</span>
-            <span class="site-logo-text">{{ t('common.appName') }}</span>
+            <img src="/images/rentaj-logo.svg" :alt="t('common.appName')" class="site-logo-img" />
           </div>
           <p class="footer-tagline">{{ t('footer.description') }}</p>
         </div>
@@ -101,23 +100,12 @@ const { data: categories } = await useAsyncData('footer-categories', async () =>
 .site-logo {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-weight: 700;
-  font-size: $font-size-section-title;
-  color: $color-text;
 }
 
-.site-logo-mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: $radius-pill;
-  background: $gradient-marketing;
-  color: $color-surface;
-  font-weight: 700;
-  font-size: 13px;
+.site-logo-img {
+  width: 130px;
+  height: auto;
+  display: block;
 }
 
 .footer-tagline {

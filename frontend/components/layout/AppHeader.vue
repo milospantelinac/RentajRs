@@ -2,8 +2,7 @@
   <header class="site-header">
     <div class="container site-header-inner">
       <NuxtLink to="/" class="site-logo">
-        <span class="site-logo-mark">R</span>
-        <span class="site-logo-text">{{ t('common.appName') }}</span>
+        <img src="/images/rentaj-logo.svg" :alt="t('common.appName')" class="site-logo-img" />
       </NuxtLink>
 
       <div class="d-none-mobile site-nav-pill-wrap">
@@ -99,10 +98,6 @@ function handleLogout() {
 .site-logo {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-weight: 700;
-  font-size: $font-size-section-title;
-  color: $color-text;
   flex-shrink: 0;
 }
 
@@ -110,16 +105,10 @@ function handleLogout() {
   text-decoration: none;
 }
 
-.site-logo-mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: $radius-pill;
-  background: $gradient-marketing;
-  color: $color-surface;
-  font-weight: 700;
+.site-logo-img {
+  width: 130px;
+  height: auto;
+  display: block;
 }
 
 .site-nav-pill-wrap {

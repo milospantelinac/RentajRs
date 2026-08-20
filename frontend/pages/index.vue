@@ -470,6 +470,13 @@ useHead({
   gap: 16px;
 }
 
+// Grid items default to min-width: auto, so a nowrap-truncated title inside
+// still reports its full unwrapped text as the item's minimum content size —
+// the column (and the page) grows to fit it instead of the ellipsis kicking in.
+.featured-grid-item {
+  min-width: 0;
+}
+
 @include respond-above(md) {
   .featured-grid {
     grid-template-columns: repeat(4, 1fr);
