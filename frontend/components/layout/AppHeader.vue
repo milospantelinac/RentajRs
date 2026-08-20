@@ -5,7 +5,7 @@
         <img src="/images/rentaj-logo.svg" :alt="t('common.appName')" class="site-logo-img" />
       </NuxtLink>
 
-      <div class="d-none-mobile site-nav-pill-wrap">
+      <div class="site-nav-pill-wrap">
         <nav class="site-nav-pill">
           <NuxtLink to="/" class="site-nav-pill-link" exact-active-class="site-nav-pill-link-active">
             {{ t('nav.home') }}
@@ -23,6 +23,51 @@
       </div>
 
       <div class="site-header-actions">
+        <div ref="mobileNavRef" class="mobile-nav-toggle-wrap">
+          <button
+            class="mobile-nav-toggle"
+            :aria-expanded="mobileNavOpen"
+            :aria-label="t('nav.menu')"
+            @click="mobileNavOpen = !mobileNavOpen"
+          >
+            <FontAwesomeIcon :icon="mobileNavOpen ? 'xmark' : 'bars'" />
+          </button>
+          <div v-if="mobileNavOpen" class="mobile-nav-dropdown card">
+            <NuxtLink
+              to="/"
+              class="mobile-nav-dropdown-item"
+              exact-active-class="mobile-nav-dropdown-item-active"
+              @click="mobileNavOpen = false"
+            >
+              {{ t('nav.home') }}
+            </NuxtLink>
+            <NuxtLink
+              to="/cenovnik"
+              class="mobile-nav-dropdown-item"
+              active-class="mobile-nav-dropdown-item-active"
+              @click="mobileNavOpen = false"
+            >
+              {{ t('nav.pricing') }}
+            </NuxtLink>
+            <NuxtLink
+              to="/faq"
+              class="mobile-nav-dropdown-item"
+              active-class="mobile-nav-dropdown-item-active"
+              @click="mobileNavOpen = false"
+            >
+              {{ t('nav.faq') }}
+            </NuxtLink>
+            <NuxtLink
+              to="/kontakt"
+              class="mobile-nav-dropdown-item"
+              active-class="mobile-nav-dropdown-item-active"
+              @click="mobileNavOpen = false"
+            >
+              {{ t('nav.contact') }}
+            </NuxtLink>
+          </div>
+        </div>
+
         <template v-if="!auth.isAuthenticated">
           <NuxtLink to="/prijava" class="site-header-pill-btn d-none-mobile">{{ t('nav.login') }}</NuxtLink>
         </template>
@@ -60,9 +105,15 @@ const { t } = useI18n()
 const auth = useAuthStore()
 const menuOpen = ref(false)
 const userMenuRef = ref(null)
+const mobileNavOpen = ref(false)
+const mobileNavRef = ref(null)
 
 useClickOutside(userMenuRef, () => {
   menuOpen.value = false
+})
+
+useClickOutside(mobileNavRef, () => {
+  mobileNavOpen.value = false
 })
 
 const initials = computed(() => {
@@ -111,10 +162,20 @@ function handleLogout() {
   display: block;
 }
 
+// Pills only fit between logo and actions once the header has real breathing
+// room (RNT-061: at md–xxl the absolutely-centered pill nav overlapped the
+// actions on the right). Below xxl it's replaced by the hamburger below.
 .site-nav-pill-wrap {
+  display: none;
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
+}
+
+@include respond-above(xxl) {
+  .site-nav-pill-wrap {
+    display: block;
+  }
 }
 
 .site-nav-pill {
@@ -150,6 +211,67 @@ function handleLogout() {
   gap: 12px;
   position: relative;
   margin-left: auto;
+}
+
+.mobile-nav-toggle-wrap {
+  display: none;
+  position: relative;
+}
+
+@include respond-between(md, xxl) {
+  .mobile-nav-toggle-wrap {
+    display: block;
+  }
+}
+
+.mobile-nav-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: $radius-input;
+  background: $color-background;
+  color: $color-text;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.mobile-nav-toggle:hover {
+  background: $color-border;
+}
+
+.mobile-nav-dropdown {
+  position: absolute;
+  top: 48px;
+  left: 0;
+  min-width: 180px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: $z-dropdown;
+}
+
+.mobile-nav-dropdown-item {
+  display: block;
+  padding: 10px 12px;
+  border-radius: $radius-button;
+  font-weight: 500;
+  font-size: $font-size-muted;
+  color: $color-text;
+}
+
+.mobile-nav-dropdown-item:hover {
+  background: $color-background;
+  text-decoration: none;
+}
+
+.mobile-nav-dropdown-item-active {
+  background: $color-background;
+  color: $color-primary;
+  font-weight: 600;
 }
 
 .site-header-pill-btn {

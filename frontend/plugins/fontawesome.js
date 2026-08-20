@@ -11,6 +11,10 @@ import {
   faGear,
   faShieldHalved,
   faEllipsis,
+  faBars,
+  faXmark,
+  faMagnifyingGlass,
+  faSliders,
 } from '@fortawesome/free-solid-svg-icons'
 import '@fortawesome/fontawesome-svg-core/styles.css'
 
@@ -18,7 +22,22 @@ import '@fortawesome/fontawesome-svg-core/styles.css'
 // DashboardNavIcon.vue) — auto-injecting FA's own CSS would fight that.
 config.autoAddCss = false
 
-library.add(faHouse, faList, faInbox, faCreditCard, faCalendarDays, faHeart, faCommentDots, faGear, faShieldHalved, faEllipsis)
+library.add(
+  faHouse,
+  faList,
+  faInbox,
+  faCreditCard,
+  faCalendarDays,
+  faHeart,
+  faCommentDots,
+  faGear,
+  faShieldHalved,
+  faEllipsis,
+  faBars,
+  faXmark,
+  faMagnifyingGlass,
+  faSliders,
+)
 
 export default defineNuxtPlugin((nuxtApp) => {
   nuxtApp.vueApp.component('FontAwesomeIcon', FontAwesomeIcon)
