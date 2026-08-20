@@ -486,6 +486,7 @@
     "subscriptions": "Packages & billing",
     "settings": "Profile",
     "adminPanel": "Admin panel",
+    "more": "More",
     "greeting": "Hello, {name}",
     "thingsWaiting": "{count} things waiting for you",
     "allCaughtUp": "Everything is under control",
