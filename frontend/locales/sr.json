@@ -353,10 +353,14 @@
     "aboutQuickLinks": "Korisni linkovi"
   },
   "errorPage": {
+    "errorLabel": "Greška {code}",
     "title": "Stranica ne postoji.",
     "subtitle": "Možda je uklonjena ili ste pogrešili adresu.",
+    "serverErrorTitle": "Nešto je pošlo po zlu.",
+    "serverErrorSubtitle": "Greška je na našoj strani, ne kod vas. Pokušajte ponovo za par minuta.",
     "backHome": "Nazad na početnu",
-    "searchListings": "Pretraži oglase"
+    "searchListings": "Pretraži oglase",
+    "tryAgain": "Pokušaj ponovo"
   },
   "category": {
     "emptyTitle": "Još uvek nema oglasa u kategoriji {name}",

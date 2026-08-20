@@ -353,10 +353,14 @@
     "aboutQuickLinks": "Useful links"
   },
   "errorPage": {
+    "errorLabel": "Error {code}",
     "title": "This page doesn't exist.",
     "subtitle": "It may have been removed, or you mistyped the address.",
+    "serverErrorTitle": "Something went wrong.",
+    "serverErrorSubtitle": "The error is on our end, not yours. Please try again in a few minutes.",
     "backHome": "Back to home",
-    "searchListings": "Search listings"
+    "searchListings": "Search listings",
+    "tryAgain": "Try again"
   },
   "category": {
     "emptyTitle": "No listings in {name} yet",
