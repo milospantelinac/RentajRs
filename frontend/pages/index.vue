@@ -106,10 +106,15 @@
             </Transition>
           </Teleport>
 
-          <div class="hero-categories">
-            <NuxtLink v-for="cat in categories" :key="cat.id" :to="`/${cat.slug}`" class="hero-category-tile">
-              <span class="hero-category-icon">{{ useCategoryIcon(cat.icon) }}</span>
-              <span class="hero-category-name">{{ cat.name }}</span>
+        </div>
+
+        <div class="hero-categories-frame">
+          <div class="hero-categories-panel">
+            <NuxtLink v-for="cat in homeCategories" :key="cat.slug" :to="`/${cat.slug}`" class="hero-category-tile">
+              <span class="hero-category-icon-wrap">
+                <img :src="cat.icon" alt="" class="hero-category-icon" />
+              </span>
+              <span class="hero-category-name">{{ t(cat.labelKey) }}</span>
             </NuxtLink>
           </div>
         </div>
@@ -233,6 +238,18 @@ function resetFilters() {
   searchCityId.value = ''
   searchPriceBucket.value = ''
 }
+
+// Fixed 6-tile quick-links strip from the Figma homepage design — a curated
+// marketing shortcut, not the full (growing, admin-managed) category list
+// used in the search filter dropdown above.
+const homeCategories = [
+  { slug: 'prostori-za-proslave', icon: '/images/categories/prostori.svg', labelKey: 'home.categoryProstori' },
+  { slug: 'nekretnine', icon: '/images/categories/nekretnine.svg', labelKey: 'home.categoryNekretnine' },
+  { slug: 'igraonice', icon: '/images/categories/igraonice.svg', labelKey: 'home.categoryIgraonice' },
+  { slug: 'vozila', icon: '/images/categories/vozila.svg', labelKey: 'home.categoryVozila' },
+  { slug: 'magacini-i-skladista', icon: '/images/categories/magacini.svg', labelKey: 'home.categoryMagacini' },
+  { slug: 'gradjevinske-masine', icon: '/images/categories/masine.svg', labelKey: 'home.categoryMasine' },
+]
 
 // Admin-set via /admin/sadrzaj (Setting key homepage_video_url) — the
 // section only renders once a URL is actually set (RNT-052: an empty
@@ -642,40 +659,76 @@ useHead({
   transform: translateY(100%);
 }
 
-.hero-categories {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 24px 32px;
+// Quick-categories strip — a card that floats over the hero's bottom edge
+// (negative margin pulls it up), white "border" wrapping a lighter F9FAFD
+// panel per the Figma spec. Row on desktop, 2-column grid on mobile.
+.hero-categories-frame {
+  position: relative;
+  z-index: 1;
+  max-width: 900px;
+  margin: -36px auto 0;
+  padding: 8px;
+  background: $color-surface;
+  border-radius: 20px;
+  box-shadow: 0 16px 32px rgba(15, 27, 51, 0.1);
+}
+
+@include respond-above(lg) {
+  .hero-categories-frame {
+    margin-top: -56px;
+  }
+}
+
+.hero-categories-panel {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px 12px;
+  background: $color-background;
+  border-radius: 12px;
+  padding: 24px 16px;
+}
+
+@include respond-above(lg) {
+  .hero-categories-panel {
+    grid-template-columns: repeat(6, 1fr);
+    gap: 8px;
+    padding: 28px 32px;
+  }
 }
 
 .hero-category-tile {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
-  color: $color-surface;
+  gap: 10px;
+  color: $color-text;
+  text-align: center;
 }
 
 .hero-category-tile:hover {
   text-decoration: none;
 }
 
-.hero-category-icon {
+.hero-category-icon-wrap {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 64px;
-  height: 64px;
-  border-radius: $radius-input;
+  width: 60px;
+  height: 60px;
+  border-radius: 14px;
   background: $color-surface;
-  font-size: 28px;
-  box-shadow: $shadow-card;
+  box-shadow: 0 2px 6px rgba(15, 27, 51, 0.06);
+}
+
+.hero-category-icon {
+  width: 26px;
+  height: 26px;
 }
 
 .hero-category-name {
-  font-weight: 500;
+  font-weight: 600;
   font-size: $font-size-muted;
+  color: $color-text;
 }
 
 // Section titles reused across the page ----------------------------------
