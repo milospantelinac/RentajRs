@@ -2,7 +2,13 @@
   <nav class="bottom-nav">
     <div class="bottom-nav-bar">
       <div class="bottom-nav-side">
-        <NuxtLink v-for="item in leftItems" :key="item.to" :to="item.to" class="bottom-nav-item" active-class="bottom-nav-item-active">
+        <NuxtLink
+          v-for="item in leftItems"
+          :key="item.to"
+          :to="item.to"
+          class="bottom-nav-item"
+          :class="{ 'bottom-nav-item-active': isActive(item.to) }"
+        >
           <span class="bottom-nav-icon-wrap">
             <DashboardNavIcon :name="item.icon" class="bottom-nav-icon" />
           </span>
@@ -13,7 +19,11 @@
       <span class="bottom-nav-fab-space" aria-hidden="true" />
 
       <div class="bottom-nav-side">
-        <NuxtLink to="/kontrolna-tabla/poruke" class="bottom-nav-item" active-class="bottom-nav-item-active">
+        <NuxtLink
+          to="/kontrolna-tabla/poruke"
+          class="bottom-nav-item"
+          :class="{ 'bottom-nav-item-active': isActive('/kontrolna-tabla/poruke') }"
+        >
           <span class="bottom-nav-icon-wrap">
             <DashboardNavIcon name="message" class="bottom-nav-icon" />
           </span>
@@ -35,7 +45,7 @@
     </div>
 
     <!-- Sits outside .bottom-nav-bar so the bar's own notch mask doesn't clip it too -->
-    <NuxtLink to="/kontrolna-tabla" class="bottom-nav-fab" exact-active-class="bottom-nav-fab-active">
+    <NuxtLink to="/kontrolna-tabla" class="bottom-nav-fab">
       <span class="bottom-nav-fab-circle">
         <DashboardNavIcon name="home" class="bottom-nav-fab-icon" />
       </span>
@@ -52,7 +62,7 @@
               :key="item.to"
               :to="item.to"
               class="more-sheet-item"
-              active-class="more-sheet-item-active"
+              :class="{ 'more-sheet-item-active': isActive(item.to) }"
               @click="moreOpen = false"
             >
               <DashboardNavIcon :name="item.icon" class="more-sheet-icon" />
@@ -107,11 +117,22 @@ const moreItems = computed(() => {
   return items
 })
 
-// The "Više" tab itself has no route of its own, so NuxtLink's active-class
-// can't mark it — mark it by hand whenever the current page is one of the
-// sheet's own destinations (comparing paths only; the items' query strings
-// don't affect which page we're actually on).
-const isMoreActive = computed(() => moreItems.value.some((item) => route.path === item.to.split('?')[0]))
+// "Zahtevi" (?role=owner) and "Moje rezervacije" in the sheet (?role=guest)
+// are the same path with a different query — Vue Router's own active-class
+// ignores query entirely, so both used to light up together. Comparing the
+// query values a link actually specifies (not just the path) tells them
+// apart; a link with no query in `to` still matches on path alone.
+function isActive(to) {
+  const [path, queryString] = to.split('?')
+  if (route.path !== path) return false
+  if (!queryString) return true
+  const expected = new URLSearchParams(queryString)
+  return [...expected.entries()].every(([key, value]) => route.query[key] === value)
+}
+
+// The "Više" tab itself has no route of its own — mark it by hand whenever
+// the current page is one of the sheet's own destinations.
+const isMoreActive = computed(() => moreItems.value.some((item) => isActive(item.to)))
 </script>
 
 <style lang="scss" scoped>
