@@ -1,24 +1,30 @@
 <template>
   <nav class="bottom-nav">
     <NuxtLink v-for="item in leftItems" :key="item.to" :to="item.to" class="bottom-nav-item" active-class="bottom-nav-item-active">
-      <DashboardNavIcon :name="item.icon" class="bottom-nav-icon" />
+      <span class="bottom-nav-icon-wrap">
+        <DashboardNavIcon :name="item.icon" class="bottom-nav-icon" />
+      </span>
       <span class="bottom-nav-label">{{ t(item.labelKey) }}</span>
     </NuxtLink>
 
-    <NuxtLink to="/kontrolna-tabla" class="bottom-nav-home" exact-active-class="bottom-nav-home-active">
-      <span class="bottom-nav-home-circle">
-        <DashboardNavIcon name="home" class="bottom-nav-home-icon" />
+    <NuxtLink to="/kontrolna-tabla" class="bottom-nav-item" exact-active-class="bottom-nav-item-active">
+      <span class="bottom-nav-icon-wrap">
+        <DashboardNavIcon name="home" class="bottom-nav-icon" />
       </span>
       <span class="bottom-nav-label">{{ t('dashboard.overview') }}</span>
     </NuxtLink>
 
     <NuxtLink to="/kontrolna-tabla/poruke" class="bottom-nav-item" active-class="bottom-nav-item-active">
-      <DashboardNavIcon name="message" class="bottom-nav-icon" />
+      <span class="bottom-nav-icon-wrap">
+        <DashboardNavIcon name="message" class="bottom-nav-icon" />
+      </span>
       <span class="bottom-nav-label">{{ t('nav.messages') }}</span>
     </NuxtLink>
 
     <button type="button" class="bottom-nav-item" :class="{ 'bottom-nav-item-active': moreOpen }" @click="moreOpen = !moreOpen">
-      <DashboardNavIcon name="more" class="bottom-nav-icon" />
+      <span class="bottom-nav-icon-wrap">
+        <DashboardNavIcon name="more" class="bottom-nav-icon" />
+      </span>
       <span class="bottom-nav-label">{{ t('dashboard.more') }}</span>
     </button>
 
@@ -58,11 +64,11 @@ watch(
 const leftItems = computed(() =>
   auth.user?.isOwner
     ? [
-        { to: '/kontrolna-tabla/oglasi', labelKey: 'listing.myListings', icon: 'list' },
-        { to: '/kontrolna-tabla/rezervacije?role=owner', labelKey: 'dashboard.requests', icon: 'inbox' },
+        { to: '/kontrolna-tabla/oglasi', labelKey: 'dashboard.tabListings', icon: 'list' },
+        { to: '/kontrolna-tabla/rezervacije?role=owner', labelKey: 'dashboard.tabRequests', icon: 'inbox' },
       ]
     : [
-        { to: '/kontrolna-tabla/rezervacije?role=guest', labelKey: 'dashboard.myBookings', icon: 'calendar' },
+        { to: '/kontrolna-tabla/rezervacije?role=guest', labelKey: 'dashboard.tabBookings', icon: 'calendar' },
         { to: '/kontrolna-tabla/sacuvano', labelKey: 'nav.favorites', icon: 'heart' },
       ],
 )
@@ -109,64 +115,50 @@ const moreItems = computed(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3px;
+  gap: 4px;
   height: 100%;
   border: none;
   background: none;
   color: $color-text-muted;
   min-height: $touch-target-min;
   cursor: pointer;
+  text-decoration: none;
+}
+
+// Inactive tabs show a plain icon; the active one gets a soft rounded-square
+// highlight behind the icon instead — no gradients, just a tinted pill, and
+// every tab (including Home) uses the exact same treatment when current.
+.bottom-nav-icon-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 30px;
+  border-radius: $radius-card;
+  transition: background-color 0.15s ease;
 }
 
 .bottom-nav-icon {
-  width: 21px;
-  height: 21px;
+  width: 20px;
+  height: 20px;
 }
 
 .bottom-nav-label {
   font-size: 10.5px;
   font-weight: 500;
   line-height: 1;
+  white-space: nowrap;
 }
 
 .bottom-nav-item-active {
   color: $color-primary;
 }
 
-// The home tab is lifted out of the bar as a raised, filled circle — the
-// one deliberately "branded" element here, everything else stays neutral.
-.bottom-nav-home {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 2px;
-  height: 100%;
-  padding-top: 2px;
-  color: $color-text-muted;
+.bottom-nav-item-active .bottom-nav-icon-wrap {
+  background: rgba($color-primary, 0.12);
 }
 
-.bottom-nav-home-circle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 46px;
-  height: 46px;
-  margin-top: -22px;
-  border-radius: $radius-pill;
-  background: $gradient-marketing;
-  box-shadow: 0 6px 16px -4px rgba(9, 87, 223, 0.55);
-  border: 3px solid $color-surface;
-}
-
-.bottom-nav-home-icon {
-  width: 20px;
-  height: 20px;
-  color: $color-surface;
-}
-
-.bottom-nav-home-active .bottom-nav-label {
-  color: $color-primary;
+.bottom-nav-item-active .bottom-nav-label {
   font-weight: 700;
 }
 
