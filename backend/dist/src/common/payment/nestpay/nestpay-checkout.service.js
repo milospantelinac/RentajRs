@@ -67,7 +67,7 @@ let NestPayCheckoutService = NestPayCheckoutService_1 = class NestPayCheckoutSer
             if (input.billing.companyAddress)
                 fields.BillToStreet1 = (0, ascii_transliterate_1.toNestPaySafeAscii)(input.billing.companyAddress);
         }
-        return { actionUrl: `${creds.apiEndpoint}/fim/est3dgate`, fields };
+        return { actionUrl: `${creds.apiEndpoint}/fim/est3Dgate`, fields };
     }
     async verifyCallback(body) {
         const creds = await this.settings.getCredentials();

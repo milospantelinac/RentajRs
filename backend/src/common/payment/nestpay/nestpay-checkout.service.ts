@@ -88,7 +88,12 @@ export class NestPayCheckoutService {
       if (input.billing.companyAddress) fields.BillToStreet1 = toNestPaySafeAscii(input.billing.companyAddress);
     }
 
-    return { actionUrl: `${creds.apiEndpoint}/fim/est3dgate`, fields };
+    // Casing matters — NestPay's gateway host treats the path as
+    // case-sensitive; the old WooCommerce plugin (wc-nestpay-bib) that
+    // works in production hits "/fim/est3Dgate" (capital D), confirmed
+    // against a real browser redirect. Lowercase silently fails to reach
+    // the card-entry screen.
+    return { actionUrl: `${creds.apiEndpoint}/fim/est3Dgate`, fields };
   }
 
   /**
