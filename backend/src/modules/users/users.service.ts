@@ -68,6 +68,11 @@ export class UsersService {
     return { avatarUrl: url };
   }
 
+  async removeAvatar(userId: string) {
+    await this.prisma.user.update({ where: { id: userId }, data: { avatarUrl: null } });
+    return { avatarUrl: null };
+  }
+
   /**
    * Called by ListingsService right before a listing's first-ever publish
    * (the Gost -> Vlasnik transition, R14) — see Ch.14.2 profile URL pattern.

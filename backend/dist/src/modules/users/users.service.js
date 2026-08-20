@@ -100,6 +100,10 @@ let UsersService = class UsersService {
         await this.prisma.user.update({ where: { id: userId }, data: { avatarUrl: url } });
         return { avatarUrl: url };
     }
+    async removeAvatar(userId) {
+        await this.prisma.user.update({ where: { id: userId }, data: { avatarUrl: null } });
+        return { avatarUrl: null };
+    }
     async ensureProfileSlug(userId) {
         const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
         if (user.profileSlug)

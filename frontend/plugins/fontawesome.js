@@ -15,6 +15,8 @@ import {
   faXmark,
   faMagnifyingGlass,
   faSliders,
+  faPlus,
+  faPen,
 } from '@fortawesome/free-solid-svg-icons'
 import '@fortawesome/fontawesome-svg-core/styles.css'
 
@@ -37,6 +39,8 @@ library.add(
   faXmark,
   faMagnifyingGlass,
   faSliders,
+  faPlus,
+  faPen,
 )
 
 export default defineNuxtPlugin((nuxtApp) => {

@@ -33,6 +33,9 @@ let UsersController = class UsersController {
     setAvatar(userId, file) {
         return this.usersService.setAvatar(userId, file);
     }
+    removeAvatar(userId) {
+        return this.usersService.removeAvatar(userId);
+    }
     listFavorites(userId) {
         return this.usersService.listFavorites(userId);
     }
@@ -80,6 +83,13 @@ __decorate([
     __metadata("design:paramtypes", [String, Object]),
     __metadata("design:returntype", void 0)
 ], UsersController.prototype, "setAvatar", null);
+__decorate([
+    (0, common_1.Delete)('users/me/avatar'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], UsersController.prototype, "removeAvatar", null);
 __decorate([
     (0, common_1.Get)('users/me/favorites'),
     __param(0, (0, current_user_decorator_1.CurrentUser)('id')),
