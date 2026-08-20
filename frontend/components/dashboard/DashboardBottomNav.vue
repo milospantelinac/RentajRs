@@ -20,7 +20,12 @@
           <span class="bottom-nav-label">{{ t('nav.messages') }}</span>
         </NuxtLink>
 
-        <button type="button" class="bottom-nav-item" :class="{ 'bottom-nav-item-active': moreOpen }" @click="moreOpen = !moreOpen">
+        <button
+          type="button"
+          class="bottom-nav-item"
+          :class="{ 'bottom-nav-item-active': moreOpen || isMoreActive }"
+          @click="moreOpen = !moreOpen"
+        >
           <span class="bottom-nav-icon-wrap">
             <DashboardNavIcon name="more" class="bottom-nav-icon" />
           </span>
@@ -101,6 +106,12 @@ const moreItems = computed(() => {
   if (auth.user?.isAdmin) items.push({ to: '/admin', labelKey: 'dashboard.adminPanel', icon: 'shield' })
   return items
 })
+
+// The "Više" tab itself has no route of its own, so NuxtLink's active-class
+// can't mark it — mark it by hand whenever the current page is one of the
+// sheet's own destinations (comparing paths only; the items' query strings
+// don't affect which page we're actually on).
+const isMoreActive = computed(() => moreItems.value.some((item) => route.path === item.to.split('?')[0]))
 </script>
 
 <style lang="scss" scoped>

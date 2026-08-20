@@ -147,6 +147,20 @@ onUnmounted(() => {
   z-index: $z-dropdown;
 }
 
+// Anchoring to the bell's own position overflows off the left edge on
+// narrow screens — the bell sits close to the header's right side, so a
+// fixed 320px panel has nowhere to go. Pin to the viewport instead.
+@include mobile-only {
+  .notif-dropdown {
+    position: fixed;
+    top: 72px;
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-height: calc(100vh - 88px);
+  }
+}
+
 .notif-dropdown-header {
   display: flex;
   align-items: center;

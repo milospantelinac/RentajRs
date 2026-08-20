@@ -24,6 +24,8 @@ const { t } = useI18n()
 @include mobile-only {
   .admin-page-body {
     padding-bottom: 72px;
+    padding-left: 16px;
+    padding-right: 16px;
   }
 }
 </style>
