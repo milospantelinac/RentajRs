@@ -195,6 +195,12 @@ let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
         if (!['DRAFT', 'REJECTED', 'ACTIVE'].includes(listing.status)) {
             throw new common_1.BadRequestException('Listing is not eligible for a package purchase');
         }
+        if (listing.status !== 'ACTIVE') {
+            const owner = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+            if (!owner.emailVerified) {
+                throw new common_1.ForbiddenException(this.i18n.t('errors.EMAIL_NOT_VERIFIED'));
+            }
+        }
         const pkg = await this.prisma.package.findUniqueOrThrow({ where: { id: dto.packageId } });
         await this.assertPackageCompatibleWithListing(listing.id, dto.packageId);
         const price = dto.billingCycle === 'YEARLY' ? pkg.priceYearly : pkg.priceMonthly;
@@ -305,8 +311,13 @@ let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
                 where: { id: subscription.id },
                 data: { status: 'PENDING_ACTIVATION', pendingListingId: null },
             });
-            await this.listings.markPendingApproval(listingId, subscription.id);
-            redirectPath = `/oglasi/${listingId}/poslato`;
+            try {
+                await this.listings.markPendingApproval(listingId, subscription.id);
+                redirectPath = `/oglasi/${listingId}/poslato`;
+            }
+            catch {
+                redirectPath = `/kontrolna-tabla/pretplate?payment=verify-email`;
+            }
         }
         const user = await this.prisma.user.findUniqueOrThrow({ where: { id: subscription.userId } });
         const pkg = await this.prisma.package.findUniqueOrThrow({ where: { id: subscription.packageId } });

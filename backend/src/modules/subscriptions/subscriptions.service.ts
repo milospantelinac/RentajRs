@@ -240,6 +240,18 @@ export class SubscriptionsService {
     if (!['DRAFT', 'REJECTED', 'ACTIVE'].includes(listing.status)) {
       throw new BadRequestException('Listing is not eligible for a package purchase');
     }
+    // R126's email-verified gate ultimately lives in ListingsService.markPendingApproval
+    // (the actual DRAFT/REJECTED -> PENDING_APPROVAL transition, also reached from admin
+    // activation), but checking only there means an unverified owner discovers this after
+    // NestPay has already charged their card. Re-check it here too, before checkout even
+    // starts, for the fresh-publish path — ACTIVE-listing upgrades skip it, since a listing
+    // can't have gone ACTIVE in the first place without already clearing this gate once.
+    if (listing.status !== 'ACTIVE') {
+      const owner = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+      if (!owner.emailVerified) {
+        throw new ForbiddenException(this.i18n.t('errors.EMAIL_NOT_VERIFIED'));
+      }
+    }
     const pkg = await this.prisma.package.findUniqueOrThrow({ where: { id: dto.packageId } });
     await this.assertPackageCompatibleWithListing(listing.id, dto.packageId);
     const price = dto.billingCycle === 'YEARLY' ? pkg.priceYearly : pkg.priceMonthly;
@@ -366,8 +378,18 @@ export class SubscriptionsService {
         where: { id: subscription.id },
         data: { status: 'PENDING_ACTIVATION', pendingListingId: null },
       });
-      await this.listings.markPendingApproval(listingId, subscription.id);
-      redirectPath = `/oglasi/${listingId}/poslato`;
+      // The payment already succeeded and is recorded above regardless of what
+      // happens next — initCheckout() is meant to catch an unverified owner
+      // before they ever get charged, but if this still throws (e.g. email got
+      // unverified mid-flow), bounce to a normal frontend page instead of
+      // letting the exception fall through to a raw JSON error response, same
+      // as the invalid/unknown cases above.
+      try {
+        await this.listings.markPendingApproval(listingId, subscription.id);
+        redirectPath = `/oglasi/${listingId}/poslato`;
+      } catch {
+        redirectPath = `/kontrolna-tabla/pretplate?payment=verify-email`;
+      }
     }
 
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: subscription.userId } });
