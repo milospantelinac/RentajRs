@@ -31,6 +31,9 @@ let SubscriptionsController = class SubscriptionsController {
     mine(userId) {
         return this.subscriptionsService.getMySubscriptions(userId);
     }
+    getReceipt(userId, id) {
+        return this.subscriptionsService.getSubscriptionReceipt(userId, id);
+    }
     purchase(userId, dto) {
         return this.subscriptionsService.purchaseForListing(userId, dto);
     }
@@ -86,6 +89,14 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", void 0)
 ], SubscriptionsController.prototype, "mine", null);
+__decorate([
+    (0, common_1.Get)('subscriptions/:id/receipt'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)('id')),
+    __param(1, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", void 0)
+], SubscriptionsController.prototype, "getReceipt", null);
 __decorate([
     (0, common_1.Post)('subscriptions/purchase'),
     __param(0, (0, current_user_decorator_1.CurrentUser)('id')),

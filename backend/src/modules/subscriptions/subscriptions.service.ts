@@ -386,7 +386,7 @@ export class SubscriptionsService {
       // as the invalid/unknown cases above.
       try {
         await this.listings.markPendingApproval(listingId, subscription.id);
-        redirectPath = `/oglasi/${listingId}/poslato`;
+        redirectPath = `/oglasi/${listingId}/poslato?subscriptionId=${subscription.id}`;
       } catch {
         redirectPath = `/kontrolna-tabla/pretplate?payment=verify-email`;
       }
@@ -659,6 +659,31 @@ export class SubscriptionsService {
       package: { ...s.package, priceMonthly: paraToRsd(s.package.priceMonthly), priceYearly: paraToRsd(s.package.priceYearly) },
       bankedDays: bankedDays.filter((b) => s.listings.some((l) => l.id === b.listingId)),
     }));
+  }
+
+  /** Payment confirmation details for the post-checkout page — package, amount, when, and the bank/invoice references. */
+  async getSubscriptionReceipt(userId: string, subscriptionId: string) {
+    const subscription = await this.prisma.subscription.findUniqueOrThrow({
+      where: { id: subscriptionId },
+      include: { package: true },
+    });
+    if (subscription.userId !== userId) throw new ForbiddenException();
+
+    const transaction = await this.prisma.transaction.findFirst({
+      where: { subscriptionId, status: 'SUCCESSFUL' },
+      orderBy: { occurredAt: 'desc' },
+      include: { invoices: true },
+    });
+
+    return {
+      package: subscription.package.key,
+      billingCycle: subscription.billingCycle,
+      amount: paraToRsd(subscription.priceAtPurchase),
+      currency: 'RSD',
+      purchasedAt: transaction?.occurredAt ?? subscription.createdAt,
+      bankReference: transaction?.bankExternalId ?? null,
+      documentNumber: transaction?.invoices[0]?.documentNumber ?? null,
+    };
   }
 
   async cancelSubscription(userId: string, subscriptionId: string, dto: CancelSubscriptionDto) {

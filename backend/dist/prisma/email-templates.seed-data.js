@@ -457,13 +457,13 @@ exports.emailTemplates = [
         sr: {
             subject: 'Paket je aktiviran',
             heading: 'Paket {paket} je aktiviran',
-            bodyText: 'Vaša pretplata je aktivna. Upravljajte oglasima i paketima iz kontrolne table.',
+            bodyText: 'Vaša pretplata je aktivna. Naplaćeno: {iznos}, dana {datum}. Upravljajte oglasima i paketima iz kontrolne table.',
             buttonLabel: 'Otvori kontrolnu tablu',
         },
         en: {
             subject: 'Your package is active',
             heading: '{paket} is now active',
-            bodyText: 'Your subscription is active. Manage your listings and packages from the dashboard.',
+            bodyText: 'Your subscription is active. Charged: {iznos} on {datum}. Manage your listings and packages from the dashboard.',
             buttonLabel: 'Open dashboard',
         },
     },
@@ -472,14 +472,14 @@ exports.emailTemplates = [
         sr: {
             subject: 'Račun za {paket}',
             heading: 'Vaš račun je spreman',
-            bodyText: 'U prilogu je račun za paket {paket}. Sačuvajte ga za svoju evidenciju.',
-            buttonLabel: 'Preuzmi račun',
+            bodyText: 'Paket: {paket}. Iznos: {iznos}. Datum: {datum}. Broj računa: {broj}. Sačuvajte ovaj mejl za svoju evidenciju.',
+            buttonLabel: 'Pogledaj pretplatu',
         },
         en: {
             subject: 'Invoice for {paket}',
             heading: 'Your invoice is ready',
-            bodyText: 'Attached is the invoice for the {paket} package. Keep it for your records.',
-            buttonLabel: 'Download invoice',
+            bodyText: 'Package: {paket}. Amount: {iznos}. Date: {datum}. Invoice number: {broj}. Keep this email for your records.',
+            buttonLabel: 'View subscription',
         },
     },
     {
