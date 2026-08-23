@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { OnEvent } from '@nestjs/event-emitter';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { EmailService } from '../../../common/email/email.service';
-import { formatDate, localeFor } from '../format';
+import { formatDate, formatDateTime, formatRsd, localeFor } from '../format';
 
 @Injectable()
 export class SubscriptionEmailListener {
@@ -25,31 +25,51 @@ export class SubscriptionEmailListener {
     return sub;
   }
 
-  /** Fires both "package activated" and, if an invoice exists, "your invoice" (Ch.22.4 groups these under the same trigger). */
+  /**
+   * Fires both "package activated" and, if an invoice exists, "your invoice"
+   * (Ch.22.4 groups these under the same trigger). Both carry the actual
+   * amount/date/document number rather than just the package name — Banca
+   * Intesa's pilot checklist item 2.7 wants the payment confirmation email
+   * to show real details, not just point at an (unattached) receipt.
+   */
   @OnEvent('subscription.purchased')
   async onPurchased({ userId, subscriptionId }: { userId: string; subscriptionId: string }) {
     const sub = await this.loadSub(subscriptionId);
     if (!sub) return;
+
+    const transaction = await this.prisma.transaction.findFirst({
+      where: { subscriptionId, status: 'SUCCESSFUL' },
+      orderBy: { occurredAt: 'desc' },
+      include: { invoices: true },
+    });
+    const locale = localeFor(sub.user.language);
+    const invoice = transaction?.invoices[0];
+
     await this.email.send({
       key: 'subscription_activated',
       to: sub.user.email,
       language: sub.user.language,
       userId,
-      context: { paket: sub.package.key },
+      context: {
+        paket: sub.package.key,
+        iznos: formatRsd(sub.priceAtPurchase),
+        datum: formatDateTime(transaction?.occurredAt ?? sub.createdAt, locale),
+      },
       buttonUrl: `${this.frontendUrl}/kontrolna-tabla/pretplate`,
     });
 
-    const invoice = await this.prisma.invoice.findFirst({
-      where: { userId, transaction: { subscriptionId } },
-      orderBy: { createdAt: 'desc' },
-    });
     if (invoice) {
       await this.email.send({
         key: 'subscription_invoice',
         to: sub.user.email,
         language: sub.user.language,
         userId,
-        context: { paket: sub.package.key },
+        context: {
+          paket: sub.package.key,
+          iznos: formatRsd(sub.priceAtPurchase),
+          datum: formatDateTime(transaction?.occurredAt ?? sub.createdAt, locale),
+          broj: invoice.documentNumber,
+        },
         buttonUrl: `${this.frontendUrl}/kontrolna-tabla/pretplate`,
       });
     }

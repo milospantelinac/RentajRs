@@ -33,17 +33,24 @@ let SubscriptionEmailListener = class SubscriptionEmailListener {
         const sub = await this.loadSub(subscriptionId);
         if (!sub)
             return;
+        const transaction = await this.prisma.transaction.findFirst({
+            where: { subscriptionId, status: 'SUCCESSFUL' },
+            orderBy: { occurredAt: 'desc' },
+            include: { invoices: true },
+        });
+        const locale = (0, format_1.localeFor)(sub.user.language);
+        const invoice = transaction?.invoices[0];
         await this.email.send({
             key: 'subscription_activated',
             to: sub.user.email,
             language: sub.user.language,
             userId,
-            context: { paket: sub.package.key },
+            context: {
+                paket: sub.package.key,
+                iznos: (0, format_1.formatRsd)(sub.priceAtPurchase),
+                datum: (0, format_1.formatDateTime)(transaction?.occurredAt ?? sub.createdAt, locale),
+            },
             buttonUrl: `${this.frontendUrl}/kontrolna-tabla/pretplate`,
-        });
-        const invoice = await this.prisma.invoice.findFirst({
-            where: { userId, transaction: { subscriptionId } },
-            orderBy: { createdAt: 'desc' },
         });
         if (invoice) {
             await this.email.send({
@@ -51,7 +58,12 @@ let SubscriptionEmailListener = class SubscriptionEmailListener {
                 to: sub.user.email,
                 language: sub.user.language,
                 userId,
-                context: { paket: sub.package.key },
+                context: {
+                    paket: sub.package.key,
+                    iznos: (0, format_1.formatRsd)(sub.priceAtPurchase),
+                    datum: (0, format_1.formatDateTime)(transaction?.occurredAt ?? sub.createdAt, locale),
+                    broj: invoice.documentNumber,
+                },
                 buttonUrl: `${this.frontendUrl}/kontrolna-tabla/pretplate`,
             });
         }

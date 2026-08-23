@@ -313,7 +313,7 @@ let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
             });
             try {
                 await this.listings.markPendingApproval(listingId, subscription.id);
-                redirectPath = `/oglasi/${listingId}/poslato`;
+                redirectPath = `/oglasi/${listingId}/poslato?subscriptionId=${subscription.id}`;
             }
             catch {
                 redirectPath = `/kontrolna-tabla/pretplate?payment=verify-email`;
@@ -545,6 +545,28 @@ let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
             package: { ...s.package, priceMonthly: (0, money_1.paraToRsd)(s.package.priceMonthly), priceYearly: (0, money_1.paraToRsd)(s.package.priceYearly) },
             bankedDays: bankedDays.filter((b) => s.listings.some((l) => l.id === b.listingId)),
         }));
+    }
+    async getSubscriptionReceipt(userId, subscriptionId) {
+        const subscription = await this.prisma.subscription.findUniqueOrThrow({
+            where: { id: subscriptionId },
+            include: { package: true },
+        });
+        if (subscription.userId !== userId)
+            throw new common_1.ForbiddenException();
+        const transaction = await this.prisma.transaction.findFirst({
+            where: { subscriptionId, status: 'SUCCESSFUL' },
+            orderBy: { occurredAt: 'desc' },
+            include: { invoices: true },
+        });
+        return {
+            package: subscription.package.key,
+            billingCycle: subscription.billingCycle,
+            amount: (0, money_1.paraToRsd)(subscription.priceAtPurchase),
+            currency: 'RSD',
+            purchasedAt: transaction?.occurredAt ?? subscription.createdAt,
+            bankReference: transaction?.bankExternalId ?? null,
+            documentNumber: transaction?.invoices[0]?.documentNumber ?? null,
+        };
     }
     async cancelSubscription(userId, subscriptionId, dto) {
         const subscription = await this.prisma.subscription.findUniqueOrThrow({ where: { id: subscriptionId } });

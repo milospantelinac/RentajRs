@@ -30,6 +30,14 @@ export class SubscriptionsController {
     return this.subscriptionsService.getMySubscriptions(userId);
   }
 
+  // Banca Intesa pilot checklist item 2.7 — the confirmation shown on
+  // /oglasi/:id/poslato right after checkout reads this to show what was
+  // actually charged, rather than just a generic "submitted" message.
+  @Get('subscriptions/:id/receipt')
+  getReceipt(@CurrentUser('id') userId: string, @Param('id') id: string) {
+    return this.subscriptionsService.getSubscriptionReceipt(userId, id);
+  }
+
   @Post('subscriptions/purchase')
   purchase(@CurrentUser('id') userId: string, @Body() dto: PurchaseSubscriptionDto) {
     return this.subscriptionsService.purchaseForListing(userId, dto);
