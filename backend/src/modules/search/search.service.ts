@@ -68,7 +68,8 @@ export class SearchService {
       }),
     ]);
 
-    const results = rows.map((r) => this.serializeResult(r));
+    const categoryNames = await this.taxonomy.getCategoryNames(rows.map((r) => r.category.id));
+    const results = rows.map((r) => this.serializeResult(r, categoryNames));
     return { results, total, page, pageSize };
   }
 
@@ -118,7 +119,8 @@ export class SearchService {
     scored.sort((a, b) => b.score - a.score);
     const pageItems = scored.slice((page - 1) * pageSize, (page - 1) * pageSize + pageSize);
 
-    return { results: pageItems.map((s) => this.serializeResult(s.listing)), total, page, pageSize };
+    const categoryNames = await this.taxonomy.getCategoryNames(pageItems.map((s) => s.listing.category.id));
+    return { results: pageItems.map((s) => this.serializeResult(s.listing, categoryNames)), total, page, pageSize };
   }
 
   private async getRankingWeights(): Promise<{
@@ -356,7 +358,7 @@ export class SearchService {
     return typeof setting?.value === 'number' ? setting.value : 3;
   }
 
-  private serializeResult(listing: any) {
+  private serializeResult(listing: any, categoryNames: Map<string, string>) {
     return {
       id: listing.id,
       slug: listing.slug,
@@ -368,7 +370,12 @@ export class SearchService {
       bookingModel: listing.bookingModel,
       city: listing.city,
       cityArea: listing.cityArea,
-      category: { id: listing.category.id, slug: listing.category.slug, icon: listing.category.icon },
+      category: {
+        id: listing.category.id,
+        slug: listing.category.slug,
+        icon: listing.category.icon,
+        name: categoryNames.get(listing.category.id) ?? listing.category.slug,
+      },
       coverPhoto: listing.photos[0] ?? null,
       latitude: listing.latitude,
       longitude: listing.longitude,

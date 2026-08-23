@@ -186,6 +186,9 @@ let TaxonomyService = class TaxonomyService {
         this.events.emit('taxonomy.category_proposed', { categoryId: category.id, userId });
         return { ...category, name: dto.name, joinedExisting: false };
     }
+    async getCategoryNames(categoryIds, language = client_1.Language.SR) {
+        return this.getTranslationMap('CATEGORY', categoryIds, 'name', language);
+    }
     async adminGetCategoryTree() {
         const categories = await this.prisma.category.findMany({ orderBy: [{ level: 'asc' }, { displayOrder: 'asc' }] });
         const names = await this.getTranslationMap('CATEGORY', categories.map((c) => c.id));

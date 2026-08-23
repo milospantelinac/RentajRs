@@ -235,12 +235,12 @@ export class TaxonomyService {
     return { ...category, name: dto.name, joinedExisting: false };
   }
 
-  // -- Admin ---------------------------------------------------------------
-
   /** Batch name lookup for arbitrary category ids — e.g. decorating search results with display names. */
   async getCategoryNames(categoryIds: string[], language: Language = Language.SR): Promise<Map<string, string>> {
     return this.getTranslationMap('CATEGORY', categoryIds, 'name', language);
   }
+
+  // -- Admin ---------------------------------------------------------------
 
   async adminGetCategoryTree() {
     const categories = await this.prisma.category.findMany({ orderBy: [{ level: 'asc' }, { displayOrder: 'asc' }] });
