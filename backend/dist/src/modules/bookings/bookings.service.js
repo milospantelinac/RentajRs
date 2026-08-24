@@ -80,7 +80,12 @@ let BookingsService = class BookingsService {
             throw new common_1.ForbiddenException(this.i18n.t('errors.PACKAGE_FEATURE_NOT_INCLUDED'));
         }
         const { startsAt, endsAt, slotPrice } = await this.resolveRequestedTerm(listing, dto);
-        this.assertTermRules(listing, startsAt, endsAt, dto.guestCount);
+        const capacityAttr = await this.prisma.listingAttribute.findFirst({
+            where: { listingId, attribute: { key: 'kapacitet_ljudi' } },
+            select: { valueNumber: true },
+        });
+        const effectiveMaxGuests = capacityAttr?.valueNumber != null ? Number(capacityAttr.valueNumber) : listing.maxGuests;
+        this.assertTermRules({ ...listing, maxGuests: effectiveMaxGuests }, startsAt, endsAt, dto.guestCount);
         const pricePerUnit = slotPrice ?? listing.price;
         const unitCount = dto.monthCount ?? computeUnitCount(listing.priceUnit, startsAt, endsAt);
         const extraServicesTotal = await this.resolveExtraServicesTotal(listingId, dto.extraServices);

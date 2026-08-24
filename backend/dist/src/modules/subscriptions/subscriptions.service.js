@@ -464,8 +464,7 @@ let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
         if (transaction) {
             await this.prisma.transaction.update({ where: { id: transaction.id }, data: { status: 'SUCCESSFUL' } });
         }
-        const listing = await this.prisma.listing.findFirst({ where: { subscriptionId } });
-        if (listing?.status === 'ACTIVE' && subscription.status === 'PENDING_ACTIVATION') {
+        if (subscription.status === 'PENDING_ACTIVATION') {
             const cycleDays = subscription.billingCycle === 'YEARLY' ? 365 : 30;
             await this.prisma.subscription.update({
                 where: { id: subscriptionId },

@@ -557,10 +557,14 @@ export class SubscriptionsService {
     if (transaction) {
       await this.prisma.transaction.update({ where: { id: transaction.id }, data: { status: 'SUCCESSFUL' } });
     }
-    // If the listing is already ACTIVE (approved before the transfer cleared), activate now; otherwise
-    // activateForListingApproval() will pick it up when moderation completes.
-    const listing = await this.prisma.listing.findFirst({ where: { subscriptionId } });
-    if (listing?.status === 'ACTIVE' && subscription.status === 'PENDING_ACTIVATION') {
+    // Normally the clock only starts once the listing itself is approved
+    // (R28, see activateForListingApproval below) — but this button only
+    // ever appears next to a PENDING_ACTIVATION row specifically so an admin
+    // can force it through by hand (e.g. the automated approval event never
+    // fired). It used to silently no-op whenever the listing wasn't ACTIVE
+    // yet, so the click looked like it worked (200) but the row never
+    // changed — a manual override that only worked when it wasn't needed.
+    if (subscription.status === 'PENDING_ACTIVATION') {
       const cycleDays = subscription.billingCycle === 'YEARLY' ? 365 : 30;
       await this.prisma.subscription.update({
         where: { id: subscriptionId },

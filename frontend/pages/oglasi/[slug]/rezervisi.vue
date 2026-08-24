@@ -83,7 +83,10 @@
 
             <div class="form-group mb-3">
               <label class="form-label">{{ t('booking.guestCount') }}</label>
-              <input v-model.number="form.guestCount" type="number" min="1" class="form-control" />
+              <input v-model.number="form.guestCount" type="number" min="1" :max="effectiveMaxGuests || undefined" class="form-control" />
+              <p v-if="effectiveMaxGuests && form.guestCount > effectiveMaxGuests" class="form-error mb-0 mt-1">
+                {{ t('booking.guestCountExceeds', { max: effectiveMaxGuests }) }}
+              </p>
             </div>
 
             <div v-if="listing.extraServices?.length" class="mb-3">
@@ -101,7 +104,11 @@
 
             <p v-if="error" class="form-error mb-3">{{ error }}</p>
 
-            <button class="btn btn-primary-flat btn-block" :disabled="submitting" @click="submit">
+            <button
+              class="btn btn-primary-flat btn-block"
+              :disabled="submitting || (effectiveMaxGuests && form.guestCount > effectiveMaxGuests)"
+              @click="submit"
+            >
               {{ submitting ? t('common.loading') : t('listing.sendRequest') }}
             </button>
           </div>
@@ -124,6 +131,17 @@ const { data: listing } = await useAsyncData(`booking-listing-${route.params.slu
 if (listing.value && (listing.value.bookingModel === 'NO_BOOKING' || !listing.value.canBook)) {
   await navigateTo(`/oglasi/${listing.value.slug}`)
 }
+
+// Mirrors the backend's dual-source cap (bookings.service.ts createRequest):
+// "Kapacitet ljudi" is a per-category attribute set in the wizard, separate
+// from the generic minGuests/maxGuests pair — prefer it when present since
+// it's the number actually shown to guests as the listing's capacity.
+const effectiveMaxGuests = computed(() => {
+  const attr = listing.value?.attributes?.find((a) => a.key === 'kapacitet_ljudi')
+  const attrValue = attr?.value?.valueNumber
+  if (attrValue != null) return Number(attrValue)
+  return listing.value?.maxGuests ?? null
+})
 
 const slots = ref([])
 const form = reactive({

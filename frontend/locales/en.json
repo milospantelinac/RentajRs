@@ -374,6 +374,7 @@
     "chooseSlot": "Choose a time slot",
     "noSlots": "No slots currently available",
     "guestCount": "Number of guests",
+    "guestCountExceeds": "Maximum number of guests for this listing is {max}",
     "message": "Message to the owner",
     "checkIn": "Check-in",
     "checkOut": "Check-out",

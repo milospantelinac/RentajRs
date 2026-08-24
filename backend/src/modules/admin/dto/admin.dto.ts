@@ -88,15 +88,18 @@ export class CreateFaqDto {
   @IsIn(['SR', 'EN'])
   language: 'SR' | 'EN';
 
-  @ApiProperty()
+  // "+ Dodaj pitanje" (admin/sadrzaj.vue) creates a blank placeholder row for
+  // the admin to fill in inline via PATCH — not a fully-formed FAQ up front —
+  // so these can't require non-empty content the way UpdateFaqDto's do.
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  question: string;
+  question?: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  answer: string;
+  answer?: string;
 }
 
 export class UpdateFaqDto {

@@ -374,6 +374,7 @@
     "chooseSlot": "Izaberite termin",
     "noSlots": "Trenutno nema dostupnih termina",
     "guestCount": "Broj gostiju",
+    "guestCountExceeds": "Maksimalan broj gostiju za ovaj oglas je {max}",
     "message": "Poruka vlasniku",
     "checkIn": "Prijava",
     "checkOut": "Odjava",

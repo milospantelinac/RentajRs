@@ -47,7 +47,16 @@ export class BookingsService {
     }
 
     const { startsAt, endsAt, slotPrice } = await this.resolveRequestedTerm(listing, dto);
-    this.assertTermRules(listing, startsAt, endsAt, dto.guestCount);
+    // "Kapacitet ljudi" (Nekretnine/Sale za proslave/Igraonice wizard step 6)
+    // is a separate CategoryAttribute from the generic minGuests/maxGuests
+    // pair set in step 4 — an owner can fill in one without the other, so
+    // guest-count validation has to honor whichever cap is actually set.
+    const capacityAttr = await this.prisma.listingAttribute.findFirst({
+      where: { listingId, attribute: { key: 'kapacitet_ljudi' } },
+      select: { valueNumber: true },
+    });
+    const effectiveMaxGuests = capacityAttr?.valueNumber != null ? Number(capacityAttr.valueNumber) : listing.maxGuests;
+    this.assertTermRules({ ...listing, maxGuests: effectiveMaxGuests }, startsAt, endsAt, dto.guestCount);
 
     const pricePerUnit = slotPrice ?? listing.price;
     // "Po mesecu" (Dodavanje Oglasa spec §3/§4) books in whole calendar
