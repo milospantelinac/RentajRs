@@ -419,6 +419,8 @@
     "disputeNoShow": "Osporite oznaku",
     "reportUnpaidConfirmed": "Prijavi da uplata nije potvrđena",
     "totalAmount": "Ukupan iznos",
+    "listingTitle": "Naziv oglasa",
+    "term": "Termin",
     "notMediating": "Rentaj ne posreduje u plaćanju — uplata ide direktno vlasniku"
   },
   "billing": {

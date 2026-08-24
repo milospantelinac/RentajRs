@@ -419,6 +419,8 @@
     "disputeNoShow": "Dispute this",
     "reportUnpaidConfirmed": "Report unconfirmed payment",
     "totalAmount": "Total amount",
+    "listingTitle": "Listing name",
+    "term": "Date/time",
     "notMediating": "Rentaj does not mediate payment — it goes directly to the owner"
   },
   "billing": {
