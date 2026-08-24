@@ -247,9 +247,11 @@ function resetFilters() {
 // Fixed 6-tile quick-links strip from the Figma homepage design — a curated
 // marketing shortcut, not the full (growing, admin-managed) category list
 // used in the search filter dropdown above.
+// T01 — Nekretnine 1st, Prostori za proslave 2nd; the rest is unspecified,
+// left in its prior relative order.
 const homeCategories = [
-  { slug: 'prostori-za-proslave', icon: '/images/categories/prostori.svg', labelKey: 'home.categoryProstori' },
   { slug: 'nekretnine', icon: '/images/categories/nekretnine.svg', labelKey: 'home.categoryNekretnine' },
+  { slug: 'prostori-za-proslave', icon: '/images/categories/prostori.svg', labelKey: 'home.categoryProstori' },
   { slug: 'igraonice', icon: '/images/categories/igraonice.svg', labelKey: 'home.categoryIgraonice' },
   { slug: 'vozila', icon: '/images/categories/vozila.svg', labelKey: 'home.categoryVozila' },
   { slug: 'magacini-i-skladista', icon: '/images/categories/magacini.svg', labelKey: 'home.categoryMagacini' },
