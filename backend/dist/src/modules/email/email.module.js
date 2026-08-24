@@ -17,6 +17,7 @@ const review_email_listener_1 = require("./listeners/review-email.listener");
 const subscription_email_listener_1 = require("./listeners/subscription-email.listener");
 const admin_email_listener_1 = require("./listeners/admin-email.listener");
 const data_protection_email_listener_1 = require("./listeners/data-protection-email.listener");
+const contact_email_listener_1 = require("./listeners/contact-email.listener");
 let EmailModule = class EmailModule {
 };
 exports.EmailModule = EmailModule;
@@ -31,6 +32,7 @@ exports.EmailModule = EmailModule = __decorate([
             subscription_email_listener_1.SubscriptionEmailListener,
             admin_email_listener_1.AdminEmailListener,
             data_protection_email_listener_1.DataProtectionEmailListener,
+            contact_email_listener_1.ContactEmailListener,
         ],
     })
 ], EmailModule);

@@ -848,10 +848,14 @@
   "contactPage": {
     "title": "Contact us",
     "subtitle": "Have a question or a suggestion? Reach out — we reply as quickly as we can.",
-    "emailLabel": "Email",
+    "emailLabel": "Email address",
     "nameLabel": "Name",
+    "subjectLabel": "Subject",
     "messageLabel": "Message",
-    "send": "Send message",
+    "consentPrefix": "I agree that Rentaj.rs may process my data to respond to my inquiry, in accordance with the",
+    "consentLinkText": "Privacy Policy",
+    "consentSuffix": ".",
+    "send": "Send",
     "sent": "Thanks! Your message has been sent."
   }
 }

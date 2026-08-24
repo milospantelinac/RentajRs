@@ -848,10 +848,14 @@
   "contactPage": {
     "title": "Kontaktirajte nas",
     "subtitle": "Imate pitanje ili predlog? Javite nam se — odgovaramo u najkraćem mogućem roku.",
-    "emailLabel": "E-mail",
+    "emailLabel": "E-mail adresa",
     "nameLabel": "Ime",
-    "messageLabel": "Poruka",
-    "send": "Pošalji poruku",
+    "subjectLabel": "Naslov poruke",
+    "messageLabel": "Tekst poruke",
+    "consentPrefix": "Saglasan/a sam da Rentaj.rs obradi moje podatke radi odgovora na upit, u skladu sa",
+    "consentLinkText": "Politikom privatnosti",
+    "consentSuffix": ".",
+    "send": "Pošalji",
     "sent": "Hvala! Vaša poruka je poslata."
   }
 }

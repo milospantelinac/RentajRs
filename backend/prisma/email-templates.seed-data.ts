@@ -726,6 +726,22 @@ export const emailTemplates: EmailTemplateSeed[] = [
     },
   },
 
+  // -- Kontakt / Contact form (T15) -----------------------------------------
+  {
+    key: 'contact_message_received',
+    sr: {
+      subject: 'Nova poruka sa kontakt forme: {naslov}',
+      heading: 'Nova poruka sa /kontakt',
+      bodyText: 'Od: {ime} ({email})<br/><br/>Naslov: {naslov}<br/><br/>{poruka}',
+      buttonLabel: null,
+    },
+    en: {
+      subject: 'New contact form message: {naslov}',
+      heading: 'New message from /kontakt',
+      bodyText: 'From: {ime} ({email})<br/><br/>Subject: {naslov}<br/><br/>{poruka}',
+      buttonLabel: null,
+    },
+  },
   // -- Ostalo / Other -----------------------------------------------------
   {
     key: 'listing_price_dropped',

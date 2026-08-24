@@ -32,6 +32,7 @@ import { AdminModule } from './modules/admin/admin.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { EmailModule } from './modules/email/email.module';
+import { ContactModule } from './modules/contact/contact.module';
 
 @Module({
   imports: [
@@ -82,6 +83,7 @@ import { EmailModule } from './modules/email/email.module';
     DashboardModule,
     NotificationsModule,
     EmailModule,
+    ContactModule,
     // No JobsModule — @Cron() jobs are discovered wherever they're declared
     // (ScheduleModule.forRoot() above is what makes that global), so every
     // scheduled job simply lives inside the feature service it belongs to
