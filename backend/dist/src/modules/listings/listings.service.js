@@ -184,7 +184,7 @@ let ListingsService = class ListingsService {
                 valueNumber: type === 'NUMBER' ? v.valueNumber : null,
                 valueText: type === 'TEXT' ? v.valueText : null,
                 valueBoolean: type === 'BOOLEAN' ? v.valueBoolean : null,
-                valueOptionIds: type === 'LIST' || type === 'MULTISELECT' ? (v.valueOptionIds ?? []) : [],
+                valueOptionIds: type === 'LIST' || type === 'MULTISELECT' || type === 'CHECKBOX_GROUP' ? (v.valueOptionIds ?? []) : [],
             };
         };
         await this.prisma.$transaction([
