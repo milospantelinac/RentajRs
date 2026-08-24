@@ -557,10 +557,14 @@ export class SubscriptionsService {
     if (transaction) {
       await this.prisma.transaction.update({ where: { id: transaction.id }, data: { status: 'SUCCESSFUL' } });
     }
-    // If the listing is already ACTIVE (approved before the transfer cleared), activate now; otherwise
-    // activateForListingApproval() will pick it up when moderation completes.
-    const listing = await this.prisma.listing.findFirst({ where: { subscriptionId } });
-    if (listing?.status === 'ACTIVE' && subscription.status === 'PENDING_ACTIVATION') {
+    // Normally the clock only starts once the listing itself is approved
+    // (R28, see activateForListingApproval below) — but this button only
+    // ever appears next to a PENDING_ACTIVATION row specifically so an admin
+    // can force it through by hand (e.g. the automated approval event never
+    // fired). It used to silently no-op whenever the listing wasn't ACTIVE
+    // yet, so the click looked like it worked (200) but the row never
+    // changed — a manual override that only worked when it wasn't needed.
+    if (subscription.status === 'PENDING_ACTIVATION') {
       const cycleDays = subscription.billingCycle === 'YEARLY' ? 365 : 30;
       await this.prisma.subscription.update({
         where: { id: subscriptionId },
@@ -878,8 +882,27 @@ export class SubscriptionsService {
     return typeof setting?.value === 'number' ? setting.value : DEFAULT_GRACE_PERIOD_DAYS;
   }
 
-  private serialize(subscription: Subscription) {
-    return { ...subscription, priceAtPurchase: paraToRsd(subscription.priceAtPurchase) };
+  private serialize(subscription: Subscription & { package?: any; listings?: any[] }) {
+    return {
+      ...subscription,
+      priceAtPurchase: paraToRsd(subscription.priceAtPurchase),
+      // attachToExistingSubscription()'s lookup includes these relations to
+      // check free-slot capacity — both packages and listings carry their
+      // own BigInt para fields that JSON.stringify can't serialize as-is.
+      ...(subscription.package
+        ? { package: { ...subscription.package, priceMonthly: paraToRsd(subscription.package.priceMonthly), priceYearly: paraToRsd(subscription.package.priceYearly) } }
+        : {}),
+      ...(subscription.listings
+        ? {
+            listings: subscription.listings.map((l: any) => ({
+              ...l,
+              price: paraToRsd(l.price),
+              weekendPrice: paraToRsd(l.weekendPrice),
+              pricePerGuest: paraToRsd(l.pricePerGuest),
+            })),
+          }
+        : {}),
+    };
   }
 }
 

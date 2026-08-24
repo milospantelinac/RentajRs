@@ -43,6 +43,7 @@ const admin_module_1 = require("./modules/admin/admin.module");
 const dashboard_module_1 = require("./modules/dashboard/dashboard.module");
 const notifications_module_1 = require("./modules/notifications/notifications.module");
 const email_module_1 = require("./modules/email/email.module");
+const contact_module_1 = require("./modules/contact/contact.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -94,6 +95,7 @@ exports.AppModule = AppModule = __decorate([
             dashboard_module_1.DashboardModule,
             notifications_module_1.NotificationsModule,
             email_module_1.EmailModule,
+            contact_module_1.ContactModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [

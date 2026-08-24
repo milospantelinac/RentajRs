@@ -100,7 +100,10 @@ export class SearchService {
 
     const scored = candidates.map((listing) => {
       const ratingScore = listing.avgRating ? Number(listing.avgRating) / 5 : 0.5;
-      const ageMs = now - listing.publishedAt!.getTime();
+      // publishedAt is nullable in the schema even though every real ACTIVE
+      // listing sets it on approval — treat a missing value as maximally
+      // old rather than letting one bad row 500 the whole search endpoint.
+      const ageMs = listing.publishedAt ? now - listing.publishedAt.getTime() : maxAgeMs;
       const freshnessScore = Math.max(0, 1 - ageMs / maxAgeMs);
       const responseScore = listing.user.avgResponseTimeMinutes
         ? Math.max(0, 1 - listing.user.avgResponseTimeMinutes / (24 * 60))

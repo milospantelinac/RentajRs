@@ -5,6 +5,8 @@
       <NuxtLink to="/oglasi/novi" class="btn btn-primary-flat">{{ t('nav.addListing') }}</NuxtLink>
     </div>
 
+    <div v-if="showUpdatedBanner" class="updated-banner mb-4">{{ t('listing.changesSavedMessage') }}</div>
+
     <div v-if="!listings?.length" class="empty-state card">
       <div class="card-body text-center">
         <p class="text-body mb-3">{{ t('listing.noListingsYet') }}</p>
@@ -68,8 +70,14 @@
 definePageMeta({ middleware: 'auth', layout: 'dashboard' })
 const { t } = useI18n()
 const api = useApi()
+const route = useRoute()
 
 const { data: listings, refresh } = await useAsyncData('my-listings', () => api.get('/listings/mine'))
+
+// T41 — editing a listing that already has a package attached skips the
+// package-selection detour entirely (see uredi.vue's finishEditing); this is
+// where that confirmation actually surfaces, same banner pattern as pretplate.vue.
+const showUpdatedBanner = computed(() => route.query.updated === '1')
 
 function statusLabel(status) {
   const map = { DRAFT: 'Draft', PENDING_APPROVAL: 'PendingApproval', REJECTED: 'Rejected', ACTIVE: 'Active', EXPIRED: 'Expired' }
@@ -106,6 +114,15 @@ useSeoMeta({ title: t('listing.myListings') })
 </script>
 
 <style lang="scss" scoped>
+.updated-banner {
+  padding: 12px 16px;
+  border-radius: $radius-card;
+  background: rgba($color-success, 0.1);
+  border: 1px solid rgba($color-success, 0.35);
+  color: $color-success;
+  font-size: $font-size-body;
+}
+
 .empty-state {
   padding: 32px;
 }

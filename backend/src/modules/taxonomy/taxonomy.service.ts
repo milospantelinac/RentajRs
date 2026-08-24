@@ -32,7 +32,10 @@ export class TaxonomyService {
   async getCategoryTree() {
     return this.cache.getOrSet('taxonomy:tree', CACHE_TTL, async () => {
       const categories = await this.prisma.category.findMany({
-        where: { status: 'ACTIVE' },
+        // T60 — "Ostalo" is an internal fallback for uncategorized listings
+        // (createUncategorizedListing), never a real browsable/selectable
+        // category; it must never appear in the wizard or /pretraga's chips.
+        where: { status: 'ACTIVE', slug: { not: FALLBACK_CATEGORY_SLUG } },
         orderBy: { displayOrder: 'asc' },
       });
       const names = await this.getTranslationMap('CATEGORY', categories.map((c) => c.id));

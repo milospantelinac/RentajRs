@@ -178,8 +178,8 @@ let AdminService = class AdminService {
         const faq = await this.prisma.faq.create({
             data: {
                 language: dto.language,
-                question: dto.question,
-                answer: dto.answer,
+                question: dto.question ?? '',
+                answer: dto.answer ?? '',
                 displayOrder: (maxOrder._max.displayOrder ?? -1) + 1,
             },
         });

@@ -464,8 +464,7 @@ let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
         if (transaction) {
             await this.prisma.transaction.update({ where: { id: transaction.id }, data: { status: 'SUCCESSFUL' } });
         }
-        const listing = await this.prisma.listing.findFirst({ where: { subscriptionId } });
-        if (listing?.status === 'ACTIVE' && subscription.status === 'PENDING_ACTIVATION') {
+        if (subscription.status === 'PENDING_ACTIVATION') {
             const cycleDays = subscription.billingCycle === 'YEARLY' ? 365 : 30;
             await this.prisma.subscription.update({
                 where: { id: subscriptionId },
@@ -734,7 +733,23 @@ let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
         return typeof setting?.value === 'number' ? setting.value : DEFAULT_GRACE_PERIOD_DAYS;
     }
     serialize(subscription) {
-        return { ...subscription, priceAtPurchase: (0, money_1.paraToRsd)(subscription.priceAtPurchase) };
+        return {
+            ...subscription,
+            priceAtPurchase: (0, money_1.paraToRsd)(subscription.priceAtPurchase),
+            ...(subscription.package
+                ? { package: { ...subscription.package, priceMonthly: (0, money_1.paraToRsd)(subscription.package.priceMonthly), priceYearly: (0, money_1.paraToRsd)(subscription.package.priceYearly) } }
+                : {}),
+            ...(subscription.listings
+                ? {
+                    listings: subscription.listings.map((l) => ({
+                        ...l,
+                        price: (0, money_1.paraToRsd)(l.price),
+                        weekendPrice: (0, money_1.paraToRsd)(l.weekendPrice),
+                        pricePerGuest: (0, money_1.paraToRsd)(l.pricePerGuest),
+                    })),
+                }
+                : {}),
+        };
     }
 };
 exports.SubscriptionsService = SubscriptionsService;

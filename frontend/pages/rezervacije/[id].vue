@@ -8,7 +8,11 @@
         <div class="card mb-4">
           <div class="card-body">
             <div class="row mb-2">
-              <div class="col-6 text-muted">{{ t('listing.title') }}</div>
+              <div class="col-6 text-muted">{{ t('booking.listingTitle') }}</div>
+              <div class="col-6">{{ booking.listing?.title }}</div>
+            </div>
+            <div class="row mb-2">
+              <div class="col-6 text-muted">{{ t('booking.term') }}</div>
               <div class="col-6">{{ new Date(booking.startsAt).toLocaleString('sr-RS') }}</div>
             </div>
             <div class="row mb-2">

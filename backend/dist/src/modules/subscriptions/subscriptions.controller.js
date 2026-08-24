@@ -175,6 +175,7 @@ __decorate([
 __decorate([
     (0, require_permissions_decorator_1.RequirePermissions)('manual_activate_subscription'),
     (0, common_1.Post)('admin/subscriptions/:id/activate'),
+    (0, common_1.HttpCode)(200),
     __param(0, (0, current_user_decorator_1.CurrentUser)('id')),
     __param(1, (0, common_1.Param)('id')),
     __metadata("design:type", Function),

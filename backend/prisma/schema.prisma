@@ -1467,3 +1467,18 @@ model Redirect {
   type      Int      @default(301)
   createdAt DateTime @default(now()) @db.Timestamptz
 }
+
+/// /kontakt form submissions (T15) — a real timestamped row so consent
+/// ("Saglasan/a sam da Rentaj.rs obradi moje podatke...") is provably
+/// recorded, not just implied by an email having gone out.
+model ContactMessage {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  email     String
+  subject   String
+  message   String   @db.Text
+  consentAt DateTime @db.Timestamptz
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@index([createdAt])
+}

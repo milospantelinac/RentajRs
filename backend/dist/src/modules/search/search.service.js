@@ -77,7 +77,7 @@ let SearchService = class SearchService {
         const maxAgeMs = 1000 * 60 * 60 * 24 * 90;
         const scored = candidates.map((listing) => {
             const ratingScore = listing.avgRating ? Number(listing.avgRating) / 5 : 0.5;
-            const ageMs = now - listing.publishedAt.getTime();
+            const ageMs = listing.publishedAt ? now - listing.publishedAt.getTime() : maxAgeMs;
             const freshnessScore = Math.max(0, 1 - ageMs / maxAgeMs);
             const responseScore = listing.user.avgResponseTimeMinutes
                 ? Math.max(0, 1 - listing.user.avgResponseTimeMinutes / (24 * 60))

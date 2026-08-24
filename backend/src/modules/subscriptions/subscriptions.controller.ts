@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, Redirect } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Post, Query, Redirect } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { SubscriptionsService } from './subscriptions.service';
 import {
@@ -100,6 +100,7 @@ export class SubscriptionsController {
 
   @RequirePermissions('manual_activate_subscription')
   @Post('admin/subscriptions/:id/activate')
+  @HttpCode(200)
   adminActivate(@CurrentUser('id') adminId: string, @Param('id') id: string) {
     return this.subscriptionsService.adminActivateSubscription(adminId, id);
   }

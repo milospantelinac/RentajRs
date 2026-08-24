@@ -5,14 +5,19 @@
       <p v-if="error" class="form-error mb-3">{{ error }}</p>
 
       <div class="row">
-        <div v-for="cat in sortedCategories" :key="cat.id" class="col-6 col-md-3 mb-3">
-          <button
-            class="category-tile card card-interactive"
-            :class="{ 'category-tile-propose': cat.slug === 'ostalo' }"
-            @click="selectTopCategory(cat)"
-          >
-            <span v-if="cat.slug === 'ostalo'" class="category-tile-propose-icon" aria-hidden="true">+</span>
-            <span class="text-body">{{ cat.slug === 'ostalo' ? t('listing.unlockYourCategory') : cat.name }}</span>
+        <div v-for="cat in categories" :key="cat.id" class="col-6 col-md-3 mb-3">
+          <button class="category-tile card card-interactive" @click="selectTopCategory(cat)">
+            <span class="text-body">{{ cat.name }}</span>
+          </button>
+        </div>
+        <!-- T60 — "Ostalo" isn't a real category to pick (it's the internal
+             fallback createUncategorizedListing uses), so this tile is fixed
+             UI, not driven by the categories list — it never leaks as a
+             selectable category, here or in /pretraga's chips. -->
+        <div class="col-6 col-md-3 mb-3">
+          <button class="category-tile card card-interactive category-tile-propose" @click="step = 'propose'">
+            <span class="category-tile-propose-icon" aria-hidden="true">+</span>
+            <span class="text-body">{{ t('listing.unlockYourCategory') }}</span>
           </button>
         </div>
       </div>
@@ -80,6 +85,12 @@
         </div>
       </form>
     </template>
+
+    <template v-else-if="step === 'submitted'">
+      <h1 class="text-page-title mb-2">{{ t('listing.proposeCategorySubmittedTitle') }}</h1>
+      <p class="text-body mb-4">{{ t('listing.proposeCategorySubmittedMessage') }}</p>
+      <NuxtLink to="/kontrolna-tabla" class="btn btn-primary-flat">{{ t('nav.dashboard') }}</NuxtLink>
+    </template>
   </div>
 </template>
 
@@ -93,12 +104,6 @@ const step = ref('top')
 const activeTopCategory = ref(null)
 
 const { data: categories } = await useAsyncData('wizard-categories', () => api.get('/categories'))
-// "Otključaj svoju kategoriju" (ostalo) je predlog, ne standardna kategorija —
-// uvek se prikazuje poslednja, sa drugačijim dizajnom (vidi .category-tile-propose).
-const sortedCategories = computed(() => {
-  const list = categories.value || []
-  return [...list.filter((c) => c.slug !== 'ostalo'), ...list.filter((c) => c.slug === 'ostalo')]
-})
 
 const uncategorized = reactive({ title: '', bookingModel: 'PER_STAY', priceUnit: 'NIGHT', description: '' })
 watch(
@@ -110,10 +115,6 @@ watch(
 
 function selectTopCategory(cat) {
   error.value = ''
-  if (cat.slug === 'ostalo') {
-    step.value = 'propose'
-    return
-  }
   if (cat.children?.length) {
     activeTopCategory.value = cat
     step.value = 'sub'
@@ -136,13 +137,18 @@ async function submitUncategorized() {
   error.value = ''
   submitting.value = true
   try {
-    const listing = await api.post('/listings/uncategorized', {
+    await api.post('/listings/uncategorized', {
       title: uncategorized.title,
       bookingModel: uncategorized.bookingModel,
       priceUnit: uncategorized.bookingModel !== 'NO_BOOKING' ? uncategorized.priceUnit : undefined,
       description: uncategorized.description || undefined,
     })
-    await navigateTo(`/oglasi/${listing.id}/uredi`)
+    // T60 — this used to drop the owner straight into the wizard under
+    // "Ostalo", which isn't a real selectable category and let a listing
+    // publish/get paid for under it. The listing this creates is parked
+    // (pendingCategoryAssignment) for an admin to assign a real category —
+    // the owner's part ends here with a confirmation, not the wizard.
+    step.value = 'submitted'
   } catch (e) {
     error.value = extractErrorMessage(e, t('auth.genericError'))
   } finally {

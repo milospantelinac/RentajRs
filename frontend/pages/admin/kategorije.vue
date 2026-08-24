@@ -86,6 +86,31 @@
       </tbody>
     </table>
 
+    <!-- T60 — "Otključaj svoju kategoriju" (Kategorije spec §8) parks these
+         as DRAFT listings with pendingCategoryAssignment, but nothing ever
+         surfaced them to an admin to actually resolve until now. -->
+    <h2 class="text-section-title mb-3">{{ t('admin.pendingCategoryListings') }}</h2>
+    <p v-if="!pendingCategoryListings?.length" class="text-muted mb-4">{{ t('admin.noItems') }}</p>
+    <div v-for="l in pendingCategoryListings" :key="l.id" class="card mb-3">
+      <div class="card-body">
+        <p class="text-body mb-1"><strong>{{ l.title }}</strong></p>
+        <p class="text-muted mb-1">{{ t('admin.proposedBy') }}: {{ l.user?.firstName }} {{ l.user?.lastName }} ({{ l.user?.email }})</p>
+        <p class="text-muted mb-1">{{ t('admin.bookingModel') }}: {{ l.bookingModel }} · {{ t('listing.priceUnit') }}: {{ l.priceUnit }}</p>
+        <p v-if="l.description" class="text-muted mb-2">{{ l.description }}</p>
+        <div class="d-flex reply-actions">
+          <select v-model="assignCategoryTarget[l.id]" class="form-control form-select">
+            <option value="">{{ t('admin.parentCategory') }}</option>
+            <option v-for="c in tree" :key="c.id" :value="c.id">{{ '—'.repeat(c.level - 1) }} {{ c.name }}</option>
+          </select>
+          <button
+            class="btn btn-primary-flat btn-sm"
+            :disabled="!assignCategoryTarget[l.id]"
+            @click="assignCategory(l.id)"
+          >{{ t('admin.assignCategory') }}</button>
+        </div>
+      </div>
+    </div>
+
     <h2 class="text-section-title mb-3">{{ t('admin.proposedCategories') }}</h2>
     <p v-if="!proposed?.length" class="text-muted mb-4">{{ t('admin.noItems') }}</p>
     <div v-for="p in proposed" :key="p.id" class="card mb-3">
@@ -203,6 +228,19 @@ const priceUnits = ['NIGHT', 'DAY', 'HOUR', 'SLOT', 'MONTH', 'YEAR']
 
 const { data: tree, refresh: refreshTree } = await useAsyncData('admin-categories', () => api.get('/admin/categories'))
 const { data: proposed, refresh: refreshProposed } = await useAsyncData('admin-categories-proposed', () => api.get('/admin/categories/proposed'))
+const { data: pendingCategoryListings, refresh: refreshPendingCategoryListings } = await useAsyncData(
+  'admin-listings-pending-category',
+  () => api.get('/admin/listings/pending-category'),
+)
+
+const assignCategoryTarget = reactive({})
+async function assignCategory(listingId) {
+  const categoryId = assignCategoryTarget[listingId]
+  if (!categoryId) return
+  await api.patch(`/admin/listings/${listingId}/category`, { categoryId })
+  delete assignCategoryTarget[listingId]
+  await refreshPendingCategoryListings()
+}
 
 const showCreate = ref(false)
 const createForm = reactive({
