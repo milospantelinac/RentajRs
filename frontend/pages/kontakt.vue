@@ -62,7 +62,7 @@
           <div class="card mt-4">
             <div class="card-body text-center">
               <p class="text-label mb-2">{{ t('contactPage.emailLabel') }}</p>
-              <a href="mailto:podrska@rentaj.rs" class="contact-email">podrska@rentaj.rs</a>
+              <a href="mailto:office@rentaj.rs" class="contact-email">office@rentaj.rs</a>
             </div>
           </div>
         </div>

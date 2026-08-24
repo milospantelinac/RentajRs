@@ -3,7 +3,7 @@ import { OnEvent } from '@nestjs/event-emitter';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { EmailService } from '../../../common/email/email.service';
 
-const SUPPORT_INBOX = 'podrska@rentaj.rs';
+const SUPPORT_INBOX = 'office@rentaj.rs';
 
 // interpolate()/renderEmailHtml() insert context values into the MJML
 // template with no escaping of their own — every other listener only ever

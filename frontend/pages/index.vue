@@ -207,7 +207,7 @@
         <h2 class="section-title">
           <span class="section-title-strong">{{ t('home.faqSectionTitleStrong') }}</span>&nbsp;<span class="section-title-light">{{ t('home.faqSectionTitleLight') }}</span>
         </h2>
-        <FaqAccordion :limit="6" />
+        <FaqAccordion />
       </div>
     </section>
 

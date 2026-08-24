@@ -14,7 +14,7 @@ const common_1 = require("@nestjs/common");
 const event_emitter_1 = require("@nestjs/event-emitter");
 const prisma_service_1 = require("../../../prisma/prisma.service");
 const email_service_1 = require("../../../common/email/email.service");
-const SUPPORT_INBOX = 'podrska@rentaj.rs';
+const SUPPORT_INBOX = 'office@rentaj.rs';
 function escapeHtml(value) {
     return value
         .replace(/&/g, '&amp;')
