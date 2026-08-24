@@ -226,12 +226,19 @@ export class ListingsService {
     // checklist (which only checks "does a row exist") would call it done.
     // A BOOLEAN has no empty state (false is a real answer), so it always
     // counts as filled; every other type needs its value present.
+    // AttributeType has 7 members (NUMBER/TEXT/TEXTAREA/YEAR/LIST/
+    // MULTISELECT/CHECKBOX_GROUP) but this used to only recognize 5 of
+    // them — YEAR and TEXTAREA fell through to the LIST/MULTISELECT branch,
+    // which checks valueOptionIds (a field neither of them ever populates),
+    // so they always evaluated as empty and got silently discarded below
+    // (T33: a required YEAR field like "Godina proizvodnje" could never be
+    // saved, so Step 9's "required fields" check never passed).
     const toWrite = submitted.filter((v) => {
       const type = attributesById.get(v.attributeId)!.type;
-      if (type === 'NUMBER') return v.valueNumber !== null && v.valueNumber !== undefined;
-      if (type === 'TEXT') return !!v.valueText;
+      if (type === 'NUMBER' || type === 'YEAR') return v.valueNumber !== null && v.valueNumber !== undefined;
+      if (type === 'TEXT' || type === 'TEXTAREA') return !!v.valueText;
       if (type === 'BOOLEAN') return true;
-      return (v.valueOptionIds ?? []).length > 0; // LIST / MULTISELECT
+      return (v.valueOptionIds ?? []).length > 0; // LIST / MULTISELECT / CHECKBOX_GROUP
     });
     const toClear = submitted.filter((v) => !toWrite.includes(v)).map((v) => v.attributeId);
 
@@ -244,8 +251,8 @@ export class ListingsService {
     const typedValue = (v: (typeof toWrite)[number]) => {
       const type = attributesById.get(v.attributeId)!.type;
       return {
-        valueNumber: type === 'NUMBER' ? v.valueNumber : null,
-        valueText: type === 'TEXT' ? v.valueText : null,
+        valueNumber: type === 'NUMBER' || type === 'YEAR' ? v.valueNumber : null,
+        valueText: type === 'TEXT' || type === 'TEXTAREA' ? v.valueText : null,
         valueBoolean: type === 'BOOLEAN' ? v.valueBoolean : null,
         valueOptionIds: type === 'LIST' || type === 'MULTISELECT' || type === 'CHECKBOX_GROUP' ? (v.valueOptionIds ?? []) : [],
       };
@@ -377,24 +384,54 @@ export class ListingsService {
   /** Drives the wizard's "ready to choose a package" gate. */
   async getReadiness(userId: string, listingId: string) {
     const listing = await this.assertOwnership(userId, listingId);
-    const requiredAttributes = (await this.taxonomy.resolveAttributesForCategory(listing.categoryId)).filter(
-      (a) => a.required,
-    );
+    const allAttributes = await this.taxonomy.resolveAttributesForCategory(listing.categoryId);
+    const requiredAttributes = allAttributes.filter((a) => a.required);
     const setValues = await this.prisma.listingAttribute.findMany({ where: { listingId: listing.id } });
     const setIds = new Set(setValues.map((v) => v.attributeId));
     const photoCount = await this.prisma.listingPhoto.count({ where: { listingId: listing.id, pendingRemoval: false } });
     const owner = await this.prisma.user.findUniqueOrThrow({ where: { id: listing.userId } });
+
+    // T32 — "Definisani termini" (PER_SLOT + DEFINED_SLOTS) prices live per
+    // DefinedSlot, entered in Korak 3; the wizard hides the flat "Cena"
+    // field entirely for this submode (showFlatPriceFields), so
+    // listing.price intentionally stays 0 and the generic check below
+    // always read it as missing.
+    const hasDefinedSlotPrice =
+      listing.bookingModel === 'PER_SLOT' && listing.slotSubmode === 'DEFINED_SLOTS'
+        ? (await this.prisma.definedSlot.count({ where: { listingId: listing.id, price: { not: null } } })) > 0
+        : listing.price > 0n;
+
+    // T33 — a conditional attribute (Kategorije spec §5 Mašine, e.g.
+    // "Nosivost viljuškara" only applies when tip_masine=viljuškar) still
+    // has required:true in the DB even when its condition isn't met for
+    // THIS listing; treating it as always-required meant a listing could
+    // never satisfy every machine-type's fields at once. Only count it when
+    // the sibling attribute it depends on actually has that option selected.
+    const attributesByKey = new Map(allAttributes.map((a) => [a.key, a]));
+    const selectedOptionKeysByAttrKey = new Map<string, Set<string>>();
+    for (const v of setValues) {
+      const attr = allAttributes.find((a) => a.id === v.attributeId);
+      if (!attr || !v.valueOptionIds.length) continue;
+      const optionKeys = attr.options.filter((o) => v.valueOptionIds.includes(o.id)).map((o) => o.key);
+      selectedOptionKeysByAttrKey.set(attr.key, new Set(optionKeys));
+    }
+    const isConditionMet = (a: (typeof requiredAttributes)[number]) => {
+      if (!a.dependsOnAttrKey) return true;
+      const parent = attributesByKey.get(a.dependsOnAttrKey);
+      if (!parent) return true;
+      return selectedOptionKeysByAttrKey.get(parent.key)?.has(a.dependsOnOptionKey!) ?? false;
+    };
 
     const checklist = {
       hasTitle: !!listing.title,
       hasDescription: !!listing.description,
       hasPhotos: photoCount > 0,
       hasLocation: !!listing.cityId,
-      hasPrice: listing.price > 0n,
+      hasPrice: hasDefinedSlotPrice,
       hasPaymentMethod: !!listing.paymentMethod,
       hasBankAccountIfNeeded: listing.paymentMethod === 'CASH' || !!owner.bankAccount,
       hasPhone: !!owner.phone,
-      requiredAttributesFilled: requiredAttributes.every((a) => setIds.has(a.id)),
+      requiredAttributesFilled: requiredAttributes.filter(isConditionMet).every((a) => setIds.has(a.id)),
     };
     const ready = Object.values(checklist).every(Boolean);
     return { ready, checklist };

@@ -169,9 +169,9 @@ let ListingsService = class ListingsService {
         const submitted = dto.values.filter((v) => attributesById.has(v.attributeId));
         const toWrite = submitted.filter((v) => {
             const type = attributesById.get(v.attributeId).type;
-            if (type === 'NUMBER')
+            if (type === 'NUMBER' || type === 'YEAR')
                 return v.valueNumber !== null && v.valueNumber !== undefined;
-            if (type === 'TEXT')
+            if (type === 'TEXT' || type === 'TEXTAREA')
                 return !!v.valueText;
             if (type === 'BOOLEAN')
                 return true;
@@ -181,8 +181,8 @@ let ListingsService = class ListingsService {
         const typedValue = (v) => {
             const type = attributesById.get(v.attributeId).type;
             return {
-                valueNumber: type === 'NUMBER' ? v.valueNumber : null,
-                valueText: type === 'TEXT' ? v.valueText : null,
+                valueNumber: type === 'NUMBER' || type === 'YEAR' ? v.valueNumber : null,
+                valueText: type === 'TEXT' || type === 'TEXTAREA' ? v.valueText : null,
                 valueBoolean: type === 'BOOLEAN' ? v.valueBoolean : null,
                 valueOptionIds: type === 'LIST' || type === 'MULTISELECT' || type === 'CHECKBOX_GROUP' ? (v.valueOptionIds ?? []) : [],
             };
@@ -290,21 +290,42 @@ let ListingsService = class ListingsService {
     }
     async getReadiness(userId, listingId) {
         const listing = await this.assertOwnership(userId, listingId);
-        const requiredAttributes = (await this.taxonomy.resolveAttributesForCategory(listing.categoryId)).filter((a) => a.required);
+        const allAttributes = await this.taxonomy.resolveAttributesForCategory(listing.categoryId);
+        const requiredAttributes = allAttributes.filter((a) => a.required);
         const setValues = await this.prisma.listingAttribute.findMany({ where: { listingId: listing.id } });
         const setIds = new Set(setValues.map((v) => v.attributeId));
         const photoCount = await this.prisma.listingPhoto.count({ where: { listingId: listing.id, pendingRemoval: false } });
         const owner = await this.prisma.user.findUniqueOrThrow({ where: { id: listing.userId } });
+        const hasDefinedSlotPrice = listing.bookingModel === 'PER_SLOT' && listing.slotSubmode === 'DEFINED_SLOTS'
+            ? (await this.prisma.definedSlot.count({ where: { listingId: listing.id, price: { not: null } } })) > 0
+            : listing.price > 0n;
+        const attributesByKey = new Map(allAttributes.map((a) => [a.key, a]));
+        const selectedOptionKeysByAttrKey = new Map();
+        for (const v of setValues) {
+            const attr = allAttributes.find((a) => a.id === v.attributeId);
+            if (!attr || !v.valueOptionIds.length)
+                continue;
+            const optionKeys = attr.options.filter((o) => v.valueOptionIds.includes(o.id)).map((o) => o.key);
+            selectedOptionKeysByAttrKey.set(attr.key, new Set(optionKeys));
+        }
+        const isConditionMet = (a) => {
+            if (!a.dependsOnAttrKey)
+                return true;
+            const parent = attributesByKey.get(a.dependsOnAttrKey);
+            if (!parent)
+                return true;
+            return selectedOptionKeysByAttrKey.get(parent.key)?.has(a.dependsOnOptionKey) ?? false;
+        };
         const checklist = {
             hasTitle: !!listing.title,
             hasDescription: !!listing.description,
             hasPhotos: photoCount > 0,
             hasLocation: !!listing.cityId,
-            hasPrice: listing.price > 0n,
+            hasPrice: hasDefinedSlotPrice,
             hasPaymentMethod: !!listing.paymentMethod,
             hasBankAccountIfNeeded: listing.paymentMethod === 'CASH' || !!owner.bankAccount,
             hasPhone: !!owner.phone,
-            requiredAttributesFilled: requiredAttributes.every((a) => setIds.has(a.id)),
+            requiredAttributesFilled: requiredAttributes.filter(isConditionMet).every((a) => setIds.has(a.id)),
         };
         const ready = Object.values(checklist).every(Boolean);
         return { ready, checklist };
