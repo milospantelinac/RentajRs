@@ -1557,10 +1557,13 @@ useSeoMeta({ title: t('listing.wizardTitle') })
   cursor: not-allowed;
 }
 
+/* T29 — a 20-30+ item checkbox list (Sadržaji/Oprema/Priključci) in one
+   vertical column made the step needlessly tall; auto-fill columns instead,
+   collapsing to a single column on narrow viewports on their own. */
 .wizard-multiselect {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 6px 16px;
 }
 
 .wizard-checklist {
