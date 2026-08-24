@@ -29,7 +29,7 @@ let TaxonomyService = class TaxonomyService {
     async getCategoryTree() {
         return this.cache.getOrSet('taxonomy:tree', CACHE_TTL, async () => {
             const categories = await this.prisma.category.findMany({
-                where: { status: 'ACTIVE' },
+                where: { status: 'ACTIVE', slug: { not: exports.FALLBACK_CATEGORY_SLUG } },
                 orderBy: { displayOrder: 'asc' },
             });
             const names = await this.getTranslationMap('CATEGORY', categories.map((c) => c.id));
