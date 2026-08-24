@@ -183,7 +183,12 @@ let UsersService = class UsersService {
             ...f,
             priceAtAdd: (0, money_1.paraToRsd)(f.priceAtAdd),
             priceDropped: f.listing.price < f.priceAtAdd,
-            listing: { ...f.listing, price: (0, money_1.paraToRsd)(f.listing.price) },
+            listing: {
+                ...f.listing,
+                price: (0, money_1.paraToRsd)(f.listing.price),
+                weekendPrice: (0, money_1.paraToRsd)(f.listing.weekendPrice),
+                pricePerGuest: (0, money_1.paraToRsd)(f.listing.pricePerGuest),
+            },
         }));
     }
     async addFavorite(userId, listingId) {

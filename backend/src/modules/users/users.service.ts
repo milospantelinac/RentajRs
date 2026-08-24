@@ -163,11 +163,18 @@ export class UsersService {
     });
     // Price-drop signal (Ch.10 "Ako stigne" item) — compare today's price to the price when saved.
     // Prisma's BigInt (para) fields must be converted before this crosses into JSON — see money.ts.
+    // weekendPrice/pricePerGuest are BigInt too (like price) — left unconverted in the ...f.listing
+    // spread below, they crashed JSON.stringify on any listing that had either set.
     return favorites.map((f) => ({
       ...f,
       priceAtAdd: paraToRsd(f.priceAtAdd),
       priceDropped: f.listing.price < f.priceAtAdd,
-      listing: { ...f.listing, price: paraToRsd(f.listing.price) },
+      listing: {
+        ...f.listing,
+        price: paraToRsd(f.listing.price),
+        weekendPrice: paraToRsd(f.listing.weekendPrice),
+        pricePerGuest: paraToRsd(f.listing.pricePerGuest),
+      },
     }));
   }
 
