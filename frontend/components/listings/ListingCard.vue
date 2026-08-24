@@ -14,6 +14,16 @@
         <img src="/images/icons/star.svg" alt="" class="listing-card-star" />
         {{ Number(listing.avgRating).toFixed(1) }}
       </span>
+      <button
+        type="button"
+        class="listing-card-favorite-btn"
+        :class="{ 'listing-card-favorite-btn-active': isFavorited }"
+        :disabled="togglingFavorite"
+        :aria-label="t(isFavorited ? 'listing.unsaveListing' : 'listing.saveListing')"
+        @click.stop.prevent="toggleFavorite"
+      >
+        <FontAwesomeIcon icon="heart" />
+      </button>
     </div>
     <div class="card-body-sm">
       <p class="text-body listing-card-title">{{ listing.title }}</p>
@@ -36,10 +46,31 @@
 
 <script setup>
 const { t } = useI18n()
+const auth = useAuthStore()
+const favoritesStore = useFavoritesStore()
+const route = useRoute()
 
-defineProps({
+const props = defineProps({
   listing: { type: Object, required: true },
 })
+
+const togglingFavorite = ref(false)
+const isFavorited = computed(() => favoritesStore.isFavorited(props.listing.id))
+
+favoritesStore.ensureLoaded()
+
+async function toggleFavorite() {
+  if (!auth.isAuthenticated) {
+    await navigateTo(`/prijava?redirect=${route.fullPath}`)
+    return
+  }
+  togglingFavorite.value = true
+  try {
+    await favoritesStore.toggle(props.listing.id)
+  } finally {
+    togglingFavorite.value = false
+  }
+}
 </script>
 
 <style lang="scss" scoped>
@@ -95,6 +126,35 @@ defineProps({
 .listing-card-star {
   width: 10px;
   height: 10px;
+}
+
+/* Bottom-right of the image — top-left/right are reserved for the category
+   badge and rating badge above. */
+.listing-card-favorite-btn {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.85);
+  color: $color-text-muted;
+  font-size: 14px;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.listing-card-favorite-btn:hover {
+  color: $color-primary;
+}
+
+.listing-card-favorite-btn-active {
+  color: $color-primary;
 }
 
 .listing-card-title {

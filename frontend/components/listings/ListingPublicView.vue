@@ -18,9 +18,7 @@
           :aria-label="t(isFavorited ? 'listing.unsaveListing' : 'listing.saveListing')"
           @click="toggleFavorite"
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" :fill="isFavorited ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
-            <path d="M12 21s-7.5-4.7-10-9.3C.5 8 2 4 6 4c2.2 0 3.7 1.3 6 4.2C14.3 5.3 15.8 4 18 4c4 0 5.5 4 4 7.7-2.5 4.6-10 9.3-10 9.3z" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
+          <FontAwesomeIcon icon="heart" />
           {{ t(isFavorited ? 'listing.savedListing' : 'listing.saveListing') }}
         </button>
       </div>
@@ -168,8 +166,8 @@ const props = defineProps({
 })
 
 const { t } = useI18n()
-const api = useApi()
 const auth = useAuthStore()
+const favoritesStore = useFavoritesStore()
 const activePhoto = ref(0)
 
 // T53 — no page anywhere could actually add to "Sačuvano" (Kontrolna tabla
@@ -177,16 +175,11 @@ const activePhoto = ref(0)
 // the favorite endpoints already existed backend-side, but nothing in the
 // UI ever called them). Only checked for logged-in, non-preview viewing —
 // the preview step already disables every other CTA the same way.
-const isFavorited = ref(false)
 const togglingFavorite = ref(false)
+const isFavorited = computed(() => favoritesStore.isFavorited(props.listing.id))
 
-if (!props.preview && auth.isAuthenticated) {
-  api
-    .get('/users/me/favorites')
-    .then((favorites) => {
-      isFavorited.value = (favorites || []).some((f) => f.listingId === props.listing.id)
-    })
-    .catch(() => {})
+if (!props.preview) {
+  favoritesStore.ensureLoaded()
 }
 
 async function toggleFavorite() {
@@ -196,13 +189,7 @@ async function toggleFavorite() {
   }
   togglingFavorite.value = true
   try {
-    if (isFavorited.value) {
-      await api.delete(`/listings/${props.listing.id}/favorite`)
-      isFavorited.value = false
-    } else {
-      await api.post(`/listings/${props.listing.id}/favorite`, {})
-      isFavorited.value = true
-    }
+    await favoritesStore.toggle(props.listing.id)
   } finally {
     togglingFavorite.value = false
   }

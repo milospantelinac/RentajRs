@@ -12,9 +12,9 @@
     </div>
 
     <template v-if="tab === 'favorites'">
-      <p v-if="!favorites?.length" class="text-muted">{{ t('dashboard.noFavorites') }}</p>
+      <p v-if="!visibleFavorites.length" class="text-muted">{{ t('dashboard.noFavorites') }}</p>
       <div class="row">
-        <div v-for="f in favorites" :key="f.listingId" class="col-6 col-md-3 mb-4">
+        <div v-for="f in visibleFavorites" :key="f.listingId" class="col-6 col-md-3 mb-4">
           <ListingCard :listing="{ ...f.listing, price: f.listing.price, coverPhoto: f.listing.photos?.[0] }" />
           <p v-if="f.priceDropped" class="text-success text-muted mt-1">{{ t('dashboard.priceDropped') }}</p>
         </div>
@@ -45,9 +45,18 @@
 definePageMeta({ middleware: 'auth', layout: 'dashboard' })
 const { t } = useI18n()
 const api = useApi()
+const favoritesStore = useFavoritesStore()
 const tab = ref('favorites')
 
 const { data: favorites } = await useAsyncData('favorites', () => api.get('/users/me/favorites'))
+// Already have the full list right here — seed the shared store from it
+// instead of letting each ListingCard trigger its own GET .../favorites.
+favoritesStore.seed((favorites.value || []).map((f) => f.listingId))
+// The card's own heart toggle is how a listing gets removed from this page
+// (RNT-060 never had a distinct "remove" control) — filtering against the
+// store here means unfavoriting on the card drops it from view immediately.
+const visibleFavorites = computed(() => (favorites.value || []).filter((f) => favoritesStore.isFavorited(f.listingId)))
+
 const { data: listings } = await useAsyncData('saved-drafts', () => api.get('/listings/mine'))
 const drafts = computed(() => (listings.value || []).filter((l) => ['DRAFT', 'REJECTED'].includes(l.status)))
 
