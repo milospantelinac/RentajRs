@@ -61,6 +61,22 @@
             <p class="text-body listing-description">{{ listing.description }}</p>
           </section>
 
+          <!-- T55 — the wizard's "Video (YouTube link)" field saved fine but
+               nothing on the public page ever read it back. -->
+          <section v-if="youtubeEmbedUrl" class="mb-4">
+            <h2 class="text-section-title mb-3">{{ t('listing.videoSection') }}</h2>
+            <div class="listing-video-wrap">
+              <iframe
+                :src="youtubeEmbedUrl"
+                class="listing-video-frame"
+                title="YouTube video"
+                frameborder="0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowfullscreen
+              ></iframe>
+            </div>
+          </section>
+
           <section v-if="listing.attributes?.length" class="mb-4">
             <h2 class="text-section-title mb-3">{{ t('listing.stepAttributes') }}</h2>
             <div class="row">
@@ -204,6 +220,15 @@ const ctaLabel = computed(() => {
   return t('listing.contactUnavailable')
 })
 
+// Handles youtube.com/watch?v=, youtu.be/, and youtube.com/embed/ links —
+// whatever an owner is likely to paste from the address bar or share button.
+const youtubeEmbedUrl = computed(() => {
+  const url = props.listing.videoUrl
+  if (!url) return null
+  const match = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([\w-]{11})/)
+  return match ? `https://www.youtube.com/embed/${match[1]}` : null
+})
+
 function formatPrice(value) {
   return new Intl.NumberFormat('sr-RS').format(value || 0) + ' RSD'
 }
@@ -259,6 +284,22 @@ function formatAttrValue(attr) {
 .favorite-btn-active {
   border-color: $color-primary;
   color: $color-primary;
+}
+
+.listing-video-wrap {
+  position: relative;
+  width: 100%;
+  padding-top: 56.25%;
+  border-radius: $radius-card;
+  overflow: hidden;
+}
+
+.listing-video-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
 }
 
 .listing-gallery-main {

@@ -200,6 +200,7 @@
     "description": "Opis",
     "keywords": "Ključne reči",
     "videoUrl": "Video (YouTube link)",
+    "videoSection": "Video",
     "address": "Adresa",
     "mapPinLabel": "Lokacija na mapi",
     "mapPinHint": "Pin se automatski postavlja na osnovu adrese. Kliknite na mapu ili prevucite pin da tačnije označite lokaciju.",

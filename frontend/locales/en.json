@@ -200,6 +200,7 @@
     "description": "Description",
     "keywords": "Keywords",
     "videoUrl": "Video (YouTube link)",
+    "videoSection": "Video",
     "address": "Address",
     "mapPinLabel": "Map location",
     "mapPinHint": "The pin is placed automatically from the address. Click the map or drag the pin to mark the exact spot.",
