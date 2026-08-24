@@ -733,7 +733,23 @@ let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
         return typeof setting?.value === 'number' ? setting.value : DEFAULT_GRACE_PERIOD_DAYS;
     }
     serialize(subscription) {
-        return { ...subscription, priceAtPurchase: (0, money_1.paraToRsd)(subscription.priceAtPurchase) };
+        return {
+            ...subscription,
+            priceAtPurchase: (0, money_1.paraToRsd)(subscription.priceAtPurchase),
+            ...(subscription.package
+                ? { package: { ...subscription.package, priceMonthly: (0, money_1.paraToRsd)(subscription.package.priceMonthly), priceYearly: (0, money_1.paraToRsd)(subscription.package.priceYearly) } }
+                : {}),
+            ...(subscription.listings
+                ? {
+                    listings: subscription.listings.map((l) => ({
+                        ...l,
+                        price: (0, money_1.paraToRsd)(l.price),
+                        weekendPrice: (0, money_1.paraToRsd)(l.weekendPrice),
+                        pricePerGuest: (0, money_1.paraToRsd)(l.pricePerGuest),
+                    })),
+                }
+                : {}),
+        };
     }
 };
 exports.SubscriptionsService = SubscriptionsService;

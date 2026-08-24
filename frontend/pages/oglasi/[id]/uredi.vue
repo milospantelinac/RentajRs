@@ -431,8 +431,31 @@
 
         <div class="review-actions">
           <NuxtLink :to="`/oglasi/${listingId}/pregled`" class="btn btn-tertiary">{{ t('listing.previewListing') }}</NuxtLink>
-          <NuxtLink to="/kontrolna-tabla/oglasi" class="btn btn-tertiary">{{ t('listing.saveAsDraft') }}</NuxtLink>
-          <NuxtLink v-if="readiness?.ready" :to="`/oglasi/${listingId}/paket`" class="btn btn-primary-flat">
+          <NuxtLink v-if="!listing?.subscriptionId" to="/kontrolna-tabla/oglasi" class="btn btn-tertiary">{{ t('listing.saveAsDraft') }}</NuxtLink>
+          <!-- T41 — a listing that already has a package attached (editing an
+               existing/published listing) never needs to go through package
+               selection again; every step already saved as the owner went,
+               so "finishing" here is just a confirmation, no purchase. -->
+          <button
+            v-if="readiness?.ready && listing?.subscriptionId"
+            class="btn btn-primary-flat"
+            :disabled="finishing"
+            @click="finishEditing"
+          >
+            {{ finishing ? t('common.loading') : t('listing.saveChanges') }}
+          </button>
+          <!-- T42 — a brand-new listing whose owner already has an active PRO
+               subscription with a free slot attaches to it directly instead
+               of detouring through a package purchase they don't need. -->
+          <button
+            v-else-if="readiness?.ready && freeSlotSubscription"
+            class="btn btn-primary-flat"
+            :disabled="finishing"
+            @click="publishWithFreeSlot"
+          >
+            {{ finishing ? t('common.loading') : t('listing.publishWithExistingPackage') }}
+          </button>
+          <NuxtLink v-else-if="readiness?.ready" :to="`/oglasi/${listingId}/paket`" class="btn btn-primary-flat">
             {{ t('listing.goToPackages') }}
           </NuxtLink>
         </div>
@@ -479,6 +502,8 @@ const cityAreas = ref([])
 const fileInput = ref(null)
 const dropzoneActive = ref(false)
 const draggedPhotoIndex = ref(null)
+const mySubscriptions = ref([])
+const finishing = ref(false)
 
 // Declared before the steps/watchers below since watch()'s source getter
 // (unlike computed()) runs eagerly at setup time — referencing `form` in
@@ -536,6 +561,16 @@ watch(
       if (currentStep.value >= steps.value.length) currentStep.value = steps.value.length - 1
     })
   },
+)
+
+// T42 — an active PRO subscription with fewer published listings than its
+// listingLimit has a free slot; a brand-new listing can attach to it instead
+// of buying a new package. Same condition pretplate.vue already uses for its
+// "attach free" action, just reached from the create wizard this time.
+const freeSlotSubscription = computed(() =>
+  (mySubscriptions.value || []).find(
+    (s) => s.status === 'ACTIVE' && s.package?.key === 'PRO' && (s.listings?.length || 0) < (s.package?.listingLimit || 0),
+  ),
 )
 
 // Refetch readiness any time the review step becomes active — via
@@ -949,8 +984,35 @@ async function saveCurrentStep() {
   }
 }
 
+// T41 — this listing already has a package attached (subscriptionId set), so
+// there's nothing left to buy. Every step already persisted via
+// saveCurrentStep as the owner went, so finishing is pure confirmation.
+async function finishEditing() {
+  await navigateTo('/kontrolna-tabla/oglasi?updated=1')
+}
+
+// T42 — attach this brand-new listing to the owner's existing PRO
+// subscription's free slot instead of sending them through package
+// purchase; mirrors kontrolna-tabla/pretplate.vue's attachFree().
+async function publishWithFreeSlot() {
+  error.value = ''
+  finishing.value = true
+  try {
+    await api.post('/subscriptions/purchase', {
+      listingId,
+      existingSubscriptionId: freeSlotSubscription.value.id,
+    })
+    await navigateTo(`/oglasi/${listingId}/poslato`)
+  } catch (e) {
+    error.value = extractErrorMessage(e, t('auth.genericError'))
+  } finally {
+    finishing.value = false
+  }
+}
+
 onMounted(async () => {
   ;[regions.value, cities.value] = await Promise.all([api.get('/locations/regions'), api.get('/locations/cities')])
+  api.get('/subscriptions/mine').then((subs) => { mySubscriptions.value = subs }).catch(() => {})
   await loadListing()
   if (location.cityId) {
     const city = cities.value.find((c) => c.id === location.cityId)
