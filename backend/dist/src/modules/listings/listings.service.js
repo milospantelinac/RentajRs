@@ -401,6 +401,7 @@ let ListingsService = class ListingsService {
         const attributes = await this.taxonomy.resolveAttributesForCategory(listing.categoryId);
         const values = await this.prisma.listingAttribute.findMany({ where: { listingId: listing.id } });
         const valueMap = new Map(values.map((v) => [v.attributeId, v]));
+        const categoryNames = await this.taxonomy.getCategoryNames([listing.categoryId]);
         const canBook = listing.subscription?.package?.hasBookings ?? false;
         const canMessage = listing.subscription?.package?.hasMessaging ?? false;
         const { phone, ...ownerRest } = listing.user;
@@ -409,7 +410,7 @@ let ListingsService = class ListingsService {
             photos: listing.photos,
             faqs: listing.faqs,
             extraServices: listing.extraServices.map((s) => ({ ...s, price: (0, money_1.paraToRsd)(s.price) })),
-            category: listing.category,
+            category: { ...listing.category, name: categoryNames.get(listing.categoryId) ?? listing.category.slug },
             region: listing.region,
             city: listing.city,
             cityArea: listing.cityArea,

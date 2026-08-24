@@ -3,11 +3,27 @@
     <div class="container py-4">
       <p v-if="preview" class="preview-banner mb-3">{{ t('listing.previewBanner') }}</p>
 
-      <nav class="breadcrumbs text-muted mb-3">
-        <NuxtLink :to="`/${listing.category.slug}`">{{ listing.category.name }}</NuxtLink>
-        <span> / </span>
-        <span>{{ listing.city?.name }}</span>
-      </nav>
+      <div class="breadcrumb-row mb-3">
+        <nav class="breadcrumbs text-muted">
+          <NuxtLink :to="`/${listing.category.slug}`">{{ listing.category.name }}</NuxtLink>
+          <span> / </span>
+          <span>{{ listing.city?.name }}</span>
+        </nav>
+        <button
+          v-if="!preview"
+          type="button"
+          class="favorite-btn"
+          :class="{ 'favorite-btn-active': isFavorited }"
+          :disabled="togglingFavorite"
+          :aria-label="t(isFavorited ? 'listing.unsaveListing' : 'listing.saveListing')"
+          @click="toggleFavorite"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" :fill="isFavorited ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
+            <path d="M12 21s-7.5-4.7-10-9.3C.5 8 2 4 6 4c2.2 0 3.7 1.3 6 4.2C14.3 5.3 15.8 4 18 4c4 0 5.5 4 4 7.7-2.5 4.6-10 9.3-10 9.3z" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          {{ t(isFavorited ? 'listing.savedListing' : 'listing.saveListing') }}
+        </button>
+      </div>
 
       <h1 class="text-page-title mb-2">{{ listing.title }}</h1>
       <p class="text-muted mb-4">
@@ -136,7 +152,45 @@ const props = defineProps({
 })
 
 const { t } = useI18n()
+const api = useApi()
+const auth = useAuthStore()
 const activePhoto = ref(0)
+
+// T53 — no page anywhere could actually add to "Sačuvano" (Kontrolna tabla
+// → Sačuvano already existed as a list view, GET /users/me/favorites and
+// the favorite endpoints already existed backend-side, but nothing in the
+// UI ever called them). Only checked for logged-in, non-preview viewing —
+// the preview step already disables every other CTA the same way.
+const isFavorited = ref(false)
+const togglingFavorite = ref(false)
+
+if (!props.preview && auth.isAuthenticated) {
+  api
+    .get('/users/me/favorites')
+    .then((favorites) => {
+      isFavorited.value = (favorites || []).some((f) => f.listingId === props.listing.id)
+    })
+    .catch(() => {})
+}
+
+async function toggleFavorite() {
+  if (!auth.isAuthenticated) {
+    await navigateTo(`/prijava?redirect=/oglasi/${props.listing.slug}`)
+    return
+  }
+  togglingFavorite.value = true
+  try {
+    if (isFavorited.value) {
+      await api.delete(`/listings/${props.listing.id}/favorite`)
+      isFavorited.value = false
+    } else {
+      await api.post(`/listings/${props.listing.id}/favorite`, {})
+      isFavorited.value = true
+    }
+  } finally {
+    togglingFavorite.value = false
+  }
+}
 
 // The listing's bookingModel is the owner's preference; canBook/canMessage
 // reflect what the listing's current package actually supports (Osnovni/
@@ -174,6 +228,37 @@ function formatAttrValue(attr) {
   border-radius: $radius-button;
   padding: 10px 16px;
   font-size: $font-size-label;
+}
+
+.breadcrumb-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.favorite-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid $color-border;
+  border-radius: $radius-button;
+  background: $color-surface;
+  color: $color-text-muted;
+  font-size: $font-size-label;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.favorite-btn:hover {
+  border-color: $color-primary;
+  color: $color-primary;
+}
+
+.favorite-btn-active {
+  border-color: $color-primary;
+  color: $color-primary;
 }
 
 .listing-gallery-main {

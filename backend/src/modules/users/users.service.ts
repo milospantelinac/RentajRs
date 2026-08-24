@@ -173,11 +173,15 @@ export class UsersService {
 
   async addFavorite(userId: string, listingId: string) {
     const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: listingId } });
-    return this.prisma.favorite.upsert({
+    const favorite = await this.prisma.favorite.upsert({
       where: { userId_listingId: { userId, listingId } },
       update: {},
       create: { userId, listingId, priceAtAdd: listing.price },
     });
+    // Same BigInt para field as listFavorites() — never crossed into JSON
+    // before since nothing called this endpoint until the listing page's
+    // save button (T53) actually wired it up.
+    return { ...favorite, priceAtAdd: paraToRsd(favorite.priceAtAdd) };
   }
 
   async removeFavorite(userId: string, listingId: string) {

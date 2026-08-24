@@ -520,6 +520,11 @@ export class ListingsService {
     const attributes = await this.taxonomy.resolveAttributesForCategory(listing.categoryId);
     const values = await this.prisma.listingAttribute.findMany({ where: { listingId: listing.id } });
     const valueMap = new Map(values.map((v) => [v.attributeId, v]));
+    // Category.name isn't a column — it lives in the generic Translation
+    // table (see TaxonomyService.getCategoryNames, already used to decorate
+    // search results the same way) — the raw `category: true` include below
+    // only carries slug/id, so the breadcrumb rendered blank without this.
+    const categoryNames = await this.taxonomy.getCategoryNames([listing.categoryId]);
 
     // Ch.11.2/R108 — a listing's package can lack the booking system and/or
     // internal messaging (Osnovni/BASIC has neither). The guest-facing page
@@ -535,7 +540,7 @@ export class ListingsService {
       photos: listing.photos,
       faqs: listing.faqs,
       extraServices: listing.extraServices.map((s: any) => ({ ...s, price: paraToRsd(s.price) })),
-      category: listing.category,
+      category: { ...listing.category, name: categoryNames.get(listing.categoryId) ?? listing.category.slug },
       region: listing.region,
       city: listing.city,
       cityArea: listing.cityArea,

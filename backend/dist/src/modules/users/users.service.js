@@ -188,11 +188,12 @@ let UsersService = class UsersService {
     }
     async addFavorite(userId, listingId) {
         const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: listingId } });
-        return this.prisma.favorite.upsert({
+        const favorite = await this.prisma.favorite.upsert({
             where: { userId_listingId: { userId, listingId } },
             update: {},
             create: { userId, listingId, priceAtAdd: listing.price },
         });
+        return { ...favorite, priceAtAdd: (0, money_1.paraToRsd)(favorite.priceAtAdd) };
     }
     async removeFavorite(userId, listingId) {
         await this.prisma.favorite.deleteMany({ where: { userId, listingId } });
