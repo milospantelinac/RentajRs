@@ -70,6 +70,9 @@ let TaxonomyController = class TaxonomyController {
     adminPromote(id) {
         return this.taxonomyService.adminPromoteCategory(id);
     }
+    adminDeleteCategory(id) {
+        return this.taxonomyService.adminDeleteCategory(id);
+    }
     adminUpsertAttribute(id, dto) {
         return this.taxonomyService.adminUpsertAttribute(id, dto);
     }
@@ -198,6 +201,14 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", void 0)
 ], TaxonomyController.prototype, "adminPromote", null);
+__decorate([
+    (0, require_permissions_decorator_1.RequirePermissions)('manage_categories'),
+    (0, common_1.Delete)('admin/categories/:id'),
+    __param(0, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], TaxonomyController.prototype, "adminDeleteCategory", null);
 __decorate([
     (0, require_permissions_decorator_1.RequirePermissions)('manage_categories'),
     (0, common_1.Post)('admin/categories/:id/attributes'),

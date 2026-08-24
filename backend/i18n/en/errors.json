@@ -15,6 +15,8 @@
   "TERM_NOT_AVAILABLE": "The selected time is no longer available",
   "CATEGORY_MAX_DEPTH": "A category cannot be nested more than three levels deep",
   "CATEGORY_HAS_LISTINGS": "A category with listings cannot be deleted — merge or archive it instead",
+  "CATEGORY_HAS_CHILDREN": "A category with subcategories cannot be deleted — delete or move the subcategories first",
+  "CATEGORY_IS_FALLBACK": "This category is the internal fallback for unassigned listings and cannot be deleted",
   "SUBSCRIPTION_LISTING_LIMIT": "You've reached the listing limit for your current package",
   "PHOTO_LIMIT_EXCEEDED": "A listing can have at most {max} photos",
   "PHOTO_NOT_FOUND": "Photo not found or does not belong to this listing",

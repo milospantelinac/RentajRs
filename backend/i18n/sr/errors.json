@@ -15,6 +15,8 @@
   "TERM_NOT_AVAILABLE": "Izabrani termin više nije dostupan",
   "CATEGORY_MAX_DEPTH": "Kategorija ne može imati više od tri nivoa",
   "CATEGORY_HAS_LISTINGS": "Kategorija sa oglasima se ne može obrisati — spojite je ili arhivirajte",
+  "CATEGORY_HAS_CHILDREN": "Kategorija sa podkategorijama se ne može obrisati — prvo obrišite ili premestite podkategorije",
+  "CATEGORY_IS_FALLBACK": "Ova kategorija je interna rezerva za neraspoređene oglase i ne može se obrisati",
   "SUBSCRIPTION_LISTING_LIMIT": "Dostigli ste broj oglasa dozvoljen na trenutnom paketu",
   "PHOTO_LIMIT_EXCEEDED": "Oglas može imati najviše {max} fotografija",
   "PHOTO_NOT_FOUND": "Fotografija nije pronađena ili ne pripada ovom oglasu",

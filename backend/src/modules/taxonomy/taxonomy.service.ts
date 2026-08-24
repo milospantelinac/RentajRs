@@ -384,6 +384,36 @@ export class TaxonomyService {
     return { message: this.i18n.t('common.SUCCESS') };
   }
 
+  /**
+   * Hard delete — only ever safe for an empty category (no listings, no
+   * subcategories still pointing at it): with either present, deleting it
+   * out from under them would silently orphan real data, so this blocks
+   * instead and points the admin at merge (moves listings elsewhere) or
+   * reject (archives + reassigns to the "Ostalo" fallback) as the ways to
+   * clear it first.
+   */
+  async adminDeleteCategory(id: string) {
+    const category = await this.prisma.category.findUnique({ where: { id } });
+    if (!category) throw new NotFoundException();
+    if (category.slug === FALLBACK_CATEGORY_SLUG) {
+      throw new BadRequestException(this.i18n.t('errors.CATEGORY_IS_FALLBACK'));
+    }
+
+    const childCount = await this.prisma.category.count({ where: { parentId: id } });
+    if (childCount > 0) throw new BadRequestException(this.i18n.t('errors.CATEGORY_HAS_CHILDREN'));
+
+    const listingCount = await this.prisma.listing.count({ where: { categoryId: id } });
+    if (listingCount > 0) throw new BadRequestException(this.i18n.t('errors.CATEGORY_HAS_LISTINGS'));
+
+    // EmptySearch.categoryId is an optional analytics pointer with no DB
+    // cascade — clear it rather than losing the search log to an FK error.
+    await this.prisma.emptySearch.updateMany({ where: { categoryId: id }, data: { categoryId: null } });
+    await this.prisma.categoryAttribute.deleteMany({ where: { categoryId: id } }); // cascades AttributeOption
+    await this.prisma.category.delete({ where: { id } });
+    await this.invalidateTreeCache();
+    return { message: this.i18n.t('common.SUCCESS') };
+  }
+
   // -- Admin: attributes -----------------------------------------------
 
   async adminUpsertAttribute(categoryId: string, dto: UpsertAttributeDto) {

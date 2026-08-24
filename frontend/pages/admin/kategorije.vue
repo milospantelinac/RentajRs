@@ -80,7 +80,10 @@
           <td :data-label="''">
             <button class="btn btn-tertiary btn-sm" @click="selectedAttrCategory = c; loadAttributes()">{{ t('admin.attributes') }}</button>
             <button v-if="c.level > 1" class="btn btn-tertiary btn-sm" @click="promote(c.id)">{{ t('admin.promote') }}</button>
-            <button class="btn btn-tertiary btn-sm" @click="openMerge(c)">{{ t('admin.merge') }}</button>
+            <button v-if="c.status === 'ACTIVE'" class="btn btn-tertiary btn-sm" @click="openMerge(c)">{{ t('admin.merge') }}</button>
+            <button v-if="c.status === 'ACTIVE'" class="btn btn-tertiary btn-sm" @click="archiveCategory(c)">{{ t('admin.archive') }}</button>
+            <button v-else class="btn btn-tertiary btn-sm" @click="approveCategory(c.id)">{{ t('admin.restore') }}</button>
+            <button class="btn btn-danger btn-sm" @click="deleteCategory(c)">{{ t('common.delete') }}</button>
           </td>
         </tr>
       </tbody>
@@ -274,6 +277,29 @@ async function rejectCategory(id) {
 async function promote(id) {
   await api.post(`/admin/categories/${id}/promote`, {})
   await refreshTree()
+}
+
+// Reuses the same endpoint the proposal-rejection flow calls — it already
+// reassigns any listings to the "Ostalo" fallback and archives the category,
+// which is exactly what "archive an existing category" needs too.
+async function archiveCategory(c) {
+  if (!confirm(t('admin.archiveCategoryConfirm', { name: c.name }))) return
+  try {
+    await api.post(`/admin/categories/${c.id}/reject`, {})
+    await refreshTree()
+  } catch (e) {
+    alert(extractErrorMessage(e, t('auth.genericError')))
+  }
+}
+
+async function deleteCategory(c) {
+  if (!confirm(t('admin.deleteCategoryConfirm', { name: c.name }))) return
+  try {
+    await api.delete(`/admin/categories/${c.id}`)
+    await refreshTree()
+  } catch (e) {
+    alert(extractErrorMessage(e, t('auth.genericError')))
+  }
 }
 
 const mergeTarget = ref(null)

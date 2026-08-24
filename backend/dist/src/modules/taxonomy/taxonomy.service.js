@@ -316,6 +316,25 @@ let TaxonomyService = class TaxonomyService {
         await this.invalidateTreeCache();
         return { message: this.i18n.t('common.SUCCESS') };
     }
+    async adminDeleteCategory(id) {
+        const category = await this.prisma.category.findUnique({ where: { id } });
+        if (!category)
+            throw new common_1.NotFoundException();
+        if (category.slug === exports.FALLBACK_CATEGORY_SLUG) {
+            throw new common_1.BadRequestException(this.i18n.t('errors.CATEGORY_IS_FALLBACK'));
+        }
+        const childCount = await this.prisma.category.count({ where: { parentId: id } });
+        if (childCount > 0)
+            throw new common_1.BadRequestException(this.i18n.t('errors.CATEGORY_HAS_CHILDREN'));
+        const listingCount = await this.prisma.listing.count({ where: { categoryId: id } });
+        if (listingCount > 0)
+            throw new common_1.BadRequestException(this.i18n.t('errors.CATEGORY_HAS_LISTINGS'));
+        await this.prisma.emptySearch.updateMany({ where: { categoryId: id }, data: { categoryId: null } });
+        await this.prisma.categoryAttribute.deleteMany({ where: { categoryId: id } });
+        await this.prisma.category.delete({ where: { id } });
+        await this.invalidateTreeCache();
+        return { message: this.i18n.t('common.SUCCESS') };
+    }
     async adminUpsertAttribute(categoryId, dto) {
         const category = await this.prisma.category.findUnique({ where: { id: categoryId } });
         if (!category)

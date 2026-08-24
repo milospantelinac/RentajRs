@@ -114,6 +114,12 @@ export class TaxonomyController {
   }
 
   @RequirePermissions('manage_categories')
+  @Delete('admin/categories/:id')
+  adminDeleteCategory(@Param('id') id: string) {
+    return this.taxonomyService.adminDeleteCategory(id);
+  }
+
+  @RequirePermissions('manage_categories')
   @Post('admin/categories/:id/attributes')
   adminUpsertAttribute(@Param('id') id: string, @Body() dto: UpsertAttributeDto) {
     return this.taxonomyService.adminUpsertAttribute(id, dto);
