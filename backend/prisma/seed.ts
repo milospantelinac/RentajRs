@@ -546,27 +546,10 @@ const CATEGORY_TREE: CategorySeed[] = [
       },
     ],
   },
-  {
-    name: 'Oprema',
-    icon: 'tools',
-    defaultBookingModel: BookingModel.PER_STAY,
-    allowedPriceUnits: [PriceUnit.DAY, PriceUnit.HOUR],
-    defaultPriceUnit: PriceUnit.DAY,
-    attributes: [
-      { key: 'kategorija_opreme', name: 'Vrsta opreme', type: AttributeType.TEXT, isFilter: true, filterType: FilterType.SELECT, required: true },
-      { key: 'stanje', name: 'Stanje', type: AttributeType.LIST, isFilter: true, filterType: FilterType.SELECT, options: [{ key: 'novo', name: 'Novo' }, { key: 'polovno', name: 'Polovno' }] },
-    ],
-  },
-  // Kategorije spec §7 — "u ovoj fazi nema zaključene strukture detalja",
-  // kept ready for future attribute definitions without blocking launch.
-  {
-    name: 'Usluge',
-    icon: 'services',
-    defaultBookingModel: BookingModel.PER_SLOT,
-    allowedPriceUnits: [PriceUnit.HOUR, PriceUnit.SLOT],
-    defaultPriceUnit: PriceUnit.HOUR,
-    attributes: [],
-  },
+  // "Oprema" and "Usluge" (T03) were dropped from v1 scope entirely — see
+  // pruneRemovedCategories() below, which deletes them (and any other
+  // never-real leftover category) from the DB on every reseed rather than
+  // just omitting them here, since upsert-only seeding never removes a row.
   // Hidden fallback parent for rejected category proposals and "Otključaj
   // svoju kategoriju" intake listings (R6/§3.1, Kategorije spec §8) — never
   // shown in navigation, has no SEO page. allowedPriceUnits covers every
@@ -673,6 +656,34 @@ async function seedCategories() {
   console.log(`Seeded ${CATEGORY_TREE.length} top-level categories with subcategories and attributes`);
 }
 
+// T03/T58 — categories that must not exist anywhere on the platform: "Oprema"
+// and "Usluge" (dropped from v1 scope) and "Automobili" (semantic duplicate
+// of "Putnička vozila", confirmed to hold zero real listings). Deleted, not
+// archived, because the AC requires them gone even from the admin category
+// list (adminGetCategoryTree() doesn't filter by status). Owner confirmed
+// (2026-08-23) any listings under these are test data, safe to delete
+// outright without a further check.
+const REMOVED_CATEGORY_SLUGS = ['oprema', 'usluge', 'automobili', 'masine'];
+
+async function pruneRemovedCategories() {
+  for (const slug of REMOVED_CATEGORY_SLUGS) {
+    const category = await prisma.category.findUnique({ where: { slug } });
+    if (!category) continue;
+
+    // EmptySearch.categoryId has no cascade (it's an optional analytics
+    // pointer, not ownership) — clear it rather than losing the search log.
+    await prisma.emptySearch.updateMany({ where: { categoryId: category.id }, data: { categoryId: null } });
+    // Listing.categoryId has no cascade either, but everything hanging off a
+    // Listing (attributes, photos, versions, bookings, favorites, featured
+    // waitlist, ...) does cascade from the listing itself.
+    await prisma.listing.deleteMany({ where: { categoryId: category.id } });
+    // CategoryAttribute -> AttributeOption cascades at the DB level.
+    await prisma.categoryAttribute.deleteMany({ where: { categoryId: category.id } });
+    await prisma.category.delete({ where: { id: category.id } });
+    console.log(`Pruned removed category "${slug}"`);
+  }
+}
+
 // ---------------------------------------------------------------------------
 
 async function seedEmailTemplates() {
@@ -727,6 +738,7 @@ async function main() {
   await seedSettings();
   await seedLocations();
   await seedCategories();
+  await pruneRemovedCategories();
   await seedEmailTemplates();
   await seedStaticPages();
   await seedFaqs();

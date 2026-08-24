@@ -471,25 +471,6 @@ const CATEGORY_TREE = [
         ],
     },
     {
-        name: 'Oprema',
-        icon: 'tools',
-        defaultBookingModel: client_1.BookingModel.PER_STAY,
-        allowedPriceUnits: [client_1.PriceUnit.DAY, client_1.PriceUnit.HOUR],
-        defaultPriceUnit: client_1.PriceUnit.DAY,
-        attributes: [
-            { key: 'kategorija_opreme', name: 'Vrsta opreme', type: client_1.AttributeType.TEXT, isFilter: true, filterType: client_1.FilterType.SELECT, required: true },
-            { key: 'stanje', name: 'Stanje', type: client_1.AttributeType.LIST, isFilter: true, filterType: client_1.FilterType.SELECT, options: [{ key: 'novo', name: 'Novo' }, { key: 'polovno', name: 'Polovno' }] },
-        ],
-    },
-    {
-        name: 'Usluge',
-        icon: 'services',
-        defaultBookingModel: client_1.BookingModel.PER_SLOT,
-        allowedPriceUnits: [client_1.PriceUnit.HOUR, client_1.PriceUnit.SLOT],
-        defaultPriceUnit: client_1.PriceUnit.HOUR,
-        attributes: [],
-    },
-    {
         name: 'Ostalo',
         icon: 'other',
         defaultBookingModel: client_1.BookingModel.PER_STAY,
@@ -573,6 +554,19 @@ async function seedCategories() {
     }
     console.log(`Seeded ${CATEGORY_TREE.length} top-level categories with subcategories and attributes`);
 }
+const REMOVED_CATEGORY_SLUGS = ['oprema', 'usluge', 'automobili', 'masine'];
+async function pruneRemovedCategories() {
+    for (const slug of REMOVED_CATEGORY_SLUGS) {
+        const category = await prisma.category.findUnique({ where: { slug } });
+        if (!category)
+            continue;
+        await prisma.emptySearch.updateMany({ where: { categoryId: category.id }, data: { categoryId: null } });
+        await prisma.listing.deleteMany({ where: { categoryId: category.id } });
+        await prisma.categoryAttribute.deleteMany({ where: { categoryId: category.id } });
+        await prisma.category.delete({ where: { id: category.id } });
+        console.log(`Pruned removed category "${slug}"`);
+    }
+}
 async function seedEmailTemplates() {
     for (const template of email_templates_seed_data_1.emailTemplates) {
         for (const language of [client_1.Language.SR, client_1.Language.EN]) {
@@ -620,6 +614,7 @@ async function main() {
     await seedSettings();
     await seedLocations();
     await seedCategories();
+    await pruneRemovedCategories();
     await seedEmailTemplates();
     await seedStaticPages();
     await seedFaqs();
