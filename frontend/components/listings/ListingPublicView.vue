@@ -75,13 +75,23 @@
             </div>
           </section>
 
-          <section v-if="listing.attributes?.length" class="mb-4">
+          <section v-if="detailAttributes.length" class="mb-4">
             <h2 class="text-section-title mb-3">{{ t('listing.stepAttributes') }}</h2>
             <div class="row">
-              <div v-for="attr in listing.attributes.filter((a) => a.value)" :key="attr.id" class="col-6 col-md-4 mb-2">
+              <div v-for="attr in detailAttributes" :key="attr.id" class="col-6 col-md-4 mb-2">
                 <span class="text-muted">{{ attr.name }}:</span>
                 <strong> {{ formatAttrValue(attr) }}</strong>
               </div>
+            </div>
+          </section>
+
+          <!-- T51 — one unified "Opremljenost" section for every CHECKBOX_GROUP
+               attribute (Sadržaji, and for Vozila/Mašine Oprema + Priključci
+               merged together) instead of a separate row per attribute. -->
+          <section v-if="amenityItems.length" class="mb-4">
+            <h2 class="text-section-title mb-3">{{ t('listing.amenities') }}</h2>
+            <div class="amenities-list">
+              <span v-for="item in amenityItems" :key="item" class="amenity-item">✓ {{ item }}</span>
             </div>
           </section>
 
@@ -216,6 +226,28 @@ const youtubeEmbedUrl = computed(() => {
   return match ? `https://www.youtube.com/embed/${match[1]}` : null
 })
 
+// T57 — CHECKBOX_GROUP (Sadržaji/Oprema/Priključci) is deliberately excluded
+// here; the owner confirmed that data belongs only in the Opremljenost
+// section (T51), not duplicated as a row in Detalji.
+const detailAttributes = computed(() =>
+  (props.listing.attributes || []).filter((a) => a.type !== 'CHECKBOX_GROUP' && a.value),
+)
+
+// T51 — a category can have more than one CHECKBOX_GROUP attribute (Vozila/
+// Mašine: Oprema AND Priključci) — merged into one flat, deduplicated list
+// rather than one row per attribute.
+const amenityItems = computed(() => {
+  const names = new Set()
+  for (const attr of props.listing.attributes || []) {
+    if (attr.type !== 'CHECKBOX_GROUP' || !attr.value?.valueOptionIds?.length) continue
+    for (const id of attr.value.valueOptionIds) {
+      const name = attr.options?.find((o) => o.id === id)?.name
+      if (name) names.add(name)
+    }
+  }
+  return Array.from(names)
+})
+
 function formatPrice(value) {
   return new Intl.NumberFormat('sr-RS').format(value || 0) + ' RSD'
 }
@@ -224,11 +256,20 @@ function unitLabel(unit) {
   return unit ? unit.charAt(0) + unit.slice(1).toLowerCase() : ''
 }
 
+// T54/T57/T71 — never handled valueOptionIds, so every LIST/MULTISELECT
+// attribute (Broj soba, Sprat, Kupatilo, Tip vozila, Menjač, Gorivo, ...)
+// rendered blank even though the value was saved correctly.
 function formatAttrValue(attr) {
   const v = attr.value
   if (!v) return ''
   if (v.valueBoolean !== null && v.valueBoolean !== undefined) return v.valueBoolean ? t('common.yes') : t('common.no')
   if (v.valueNumber !== null && v.valueNumber !== undefined) return `${v.valueNumber}${attr.unit ? ' ' + attr.unit : ''}`
+  if (v.valueOptionIds?.length) {
+    return v.valueOptionIds
+      .map((id) => attr.options?.find((o) => o.id === id)?.name)
+      .filter(Boolean)
+      .join(', ')
+  }
   return v.valueText || ''
 }
 </script>
@@ -319,6 +360,17 @@ function formatAttrValue(attr) {
 
 .listing-description {
   white-space: pre-line;
+}
+
+.amenities-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 24px;
+}
+
+.amenity-item {
+  color: $color-text;
+  font-size: $font-size-body;
 }
 
 .owner-card {
