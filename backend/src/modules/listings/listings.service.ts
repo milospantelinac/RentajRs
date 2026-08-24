@@ -422,6 +422,10 @@ export class ListingsService {
       return selectedOptionKeysByAttrKey.get(parent.key)?.has(a.dependsOnOptionKey!) ?? false;
     };
 
+    // T33 AC — "Sva obavezna polja kategorije" alone doesn't say which one
+    // is actually missing; name them so the owner isn't left guessing.
+    const missingAttributes = requiredAttributes.filter(isConditionMet).filter((a) => !setIds.has(a.id));
+
     const checklist = {
       hasTitle: !!listing.title,
       hasDescription: !!listing.description,
@@ -431,10 +435,10 @@ export class ListingsService {
       hasPaymentMethod: !!listing.paymentMethod,
       hasBankAccountIfNeeded: listing.paymentMethod === 'CASH' || !!owner.bankAccount,
       hasPhone: !!owner.phone,
-      requiredAttributesFilled: requiredAttributes.filter(isConditionMet).every((a) => setIds.has(a.id)),
+      requiredAttributesFilled: missingAttributes.length === 0,
     };
     const ready = Object.values(checklist).every(Boolean);
-    return { ready, checklist };
+    return { ready, checklist, missingAttributeNames: missingAttributes.map((a) => a.name) };
   }
 
   /**

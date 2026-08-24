@@ -316,6 +316,7 @@ let ListingsService = class ListingsService {
                 return true;
             return selectedOptionKeysByAttrKey.get(parent.key)?.has(a.dependsOnOptionKey) ?? false;
         };
+        const missingAttributes = requiredAttributes.filter(isConditionMet).filter((a) => !setIds.has(a.id));
         const checklist = {
             hasTitle: !!listing.title,
             hasDescription: !!listing.description,
@@ -325,10 +326,10 @@ let ListingsService = class ListingsService {
             hasPaymentMethod: !!listing.paymentMethod,
             hasBankAccountIfNeeded: listing.paymentMethod === 'CASH' || !!owner.bankAccount,
             hasPhone: !!owner.phone,
-            requiredAttributesFilled: requiredAttributes.filter(isConditionMet).every((a) => setIds.has(a.id)),
+            requiredAttributesFilled: missingAttributes.length === 0,
         };
         const ready = Object.values(checklist).every(Boolean);
-        return { ready, checklist };
+        return { ready, checklist, missingAttributeNames: missingAttributes.map((a) => a.name) };
     }
     async markPendingApproval(listingId, subscriptionId) {
         const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: listingId } });

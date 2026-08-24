@@ -284,6 +284,7 @@
     "proposeCategoryName": "Naziv kategorije",
     "propose": "Predloži",
     "requiredFieldsChecklist": "Šta još nedostaje",
+    "missingAttributesPrefix": "Nedostaje",
     "checklist": {
       "hasTitle": "Naslov oglasa",
       "hasDescription": "Opis oglasa",

@@ -284,6 +284,7 @@
     "proposeCategoryName": "Category name",
     "propose": "Propose",
     "requiredFieldsChecklist": "What's still missing",
+    "missingAttributesPrefix": "Missing",
     "checklist": {
       "hasTitle": "Listing title",
       "hasDescription": "Listing description",

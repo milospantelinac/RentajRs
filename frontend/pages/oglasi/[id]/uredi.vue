@@ -425,6 +425,11 @@
           <li v-for="(ok, key) in readiness?.checklist" :key="key" :class="ok ? 'text-success' : 'text-error'">
             {{ ok ? '✓' : '✗' }} {{ t(`listing.checklist.${key}`) }}
             <NuxtLink v-if="!ok && key === 'hasPhone'" to="/kontrolna-tabla/podesavanja">{{ t('common.edit') }} →</NuxtLink>
+            <!-- T33 — name the specific missing attribute(s) instead of leaving
+                 the owner to guess which of the category's fields is empty. -->
+            <span v-if="!ok && key === 'requiredAttributesFilled' && readiness?.missingAttributeNames?.length" class="text-muted">
+              ({{ t('listing.missingAttributesPrefix') }}: {{ readiness.missingAttributeNames.join(', ') }})
+            </span>
           </li>
         </ul>
         <p v-if="!readiness?.ready" class="text-muted mb-3">{{ t('listing.notReadyYet') }}</p>
