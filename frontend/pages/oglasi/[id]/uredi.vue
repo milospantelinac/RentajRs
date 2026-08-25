@@ -189,7 +189,7 @@
           <label class="form-label">{{ t('listing.gapAfterMinutes') }}</label>
           <input v-model.number="form.gapAfterMinutes" type="number" min="0" class="form-control" />
         </div>
-        <div v-if="listing?.category?.slug === 'vozila'" class="row">
+        <div v-if="showVehicleTimes" class="row">
           <div class="col-6">
             <div class="form-group mb-3">
               <label class="form-label">{{ t('listing.pickupTime') }}</label>
@@ -632,6 +632,13 @@ const NO_GUEST_COUNT_CATEGORY_SLUGS = ['putnicka-vozila', 'dostavna-vozila', 'gr
 const showGuestCount = computed(() => !NO_GUEST_COUNT_CATEGORY_SLUGS.includes(listing.value?.category?.slug))
 // T37 only — T36 explicitly keeps "Razmak posle rezervacije" for Vozila/Mašine.
 const showGapAfter = computed(() => !isDefinedSlotsModel.value && listing.value?.category?.slug !== 'magacini-i-skladista')
+
+// Bug fix (found while working T36): listings always belong to a leaf
+// category (Putnička/Dostavna vozila), never the "Vozila" parent itself, so
+// comparing against the parent slug here meant these fields could never
+// actually show for a real listing.
+const VEHICLE_CATEGORY_SLUGS = ['putnicka-vozila', 'dostavna-vozila']
+const showVehicleTimes = computed(() => VEHICLE_CATEGORY_SLUGS.includes(listing.value?.category?.slug))
 const allowedPriceUnitsForChoice = computed(() => {
   if (form.bookingModel === 'PER_SLOT') return ['HOUR']
   return listing.value?.category?.allowedPriceUnits || []
