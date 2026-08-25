@@ -12,8 +12,16 @@
               <div class="col-6">{{ booking.listing?.title }}</div>
             </div>
             <div class="row mb-2">
-              <div class="col-6 text-muted">{{ t('booking.term') }}</div>
+              <div class="col-6 text-muted">{{ t('booking.checkIn') }}</div>
               <div class="col-6">{{ new Date(booking.startsAt).toLocaleString('sr-RS') }}</div>
+            </div>
+            <div class="row mb-2">
+              <div class="col-6 text-muted">{{ t('booking.checkOut') }}</div>
+              <div class="col-6">{{ new Date(booking.endsAt).toLocaleString('sr-RS') }}</div>
+            </div>
+            <div v-if="booking.guestCount" class="row mb-2">
+              <div class="col-6 text-muted">{{ t('booking.guestCount') }}</div>
+              <div class="col-6">{{ booking.guestCount }}</div>
             </div>
             <div class="row mb-2">
               <div class="col-6 text-muted">{{ t('booking.totalAmount') }}</div>
@@ -27,15 +35,35 @@
               <div class="col-6 text-muted">{{ t('booking.guestPhone') }}</div>
               <div class="col-6"><a :href="`tel:${booking.guestPhone}`">{{ booking.guestPhone }}</a></div>
             </div>
+            <div v-if="booking.guestMessage" class="row mb-2">
+              <div class="col-6 text-muted">{{ t('booking.guestMessage') }}</div>
+              <div class="col-6">{{ booking.guestMessage }}</div>
+            </div>
           </div>
         </div>
 
+        <!-- T47 — role-aware: the guest sees the QR/pay instructions they
+             need to act on; the owner would only ever be scanning their own
+             collection code here, so they get a status confirmation instead. -->
         <div v-if="booking.status === 'AWAITING_PAYMENT'" class="card mb-4">
           <div class="card-body text-center">
-            <p class="text-body mb-2">{{ t('booking.payInstructions') }}</p>
-            <p class="text-muted mb-3">{{ t('booking.notMediating') }}</p>
-            <img v-if="qrDataUrl" :src="qrDataUrl" :alt="t('booking.scanQr')" class="qr-image mb-3" />
-            <p class="text-muted">{{ t('booking.payDeadline') }}: {{ new Date(booking.paymentDeadline).toLocaleString('sr-RS') }}</p>
+            <template v-if="isOwner">
+              <p class="text-body mb-2">{{ t('booking.ownerAwaitingPaymentNotice') }}</p>
+            </template>
+            <template v-else>
+              <p class="text-body mb-2">{{ t('booking.payInstructions') }}</p>
+              <p class="text-muted mb-3">{{ t('booking.notMediating') }}</p>
+              <img v-if="qrDataUrl" :src="qrDataUrl" :alt="t('booking.scanQr')" class="qr-image mb-3" />
+              <p class="text-muted">{{ t('booking.payDeadline') }}: {{ new Date(booking.paymentDeadline).toLocaleString('sr-RS') }}</p>
+            </template>
+          </div>
+        </div>
+        <!-- T49 — cash bookings skip AWAITING_PAYMENT entirely (confirmed
+             immediately, see BookingsService.approveRequest), so without this
+             they got no payment-related messaging at all. -->
+        <div v-else-if="booking.paymentMethod === 'CASH' && ['CONFIRMED', 'COMPLETED'].includes(booking.status)" class="card mb-4">
+          <div class="card-body text-center">
+            <p class="text-body">{{ t('booking.cashPaymentNotice') }}</p>
           </div>
         </div>
 

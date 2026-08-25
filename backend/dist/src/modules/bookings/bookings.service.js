@@ -65,8 +65,6 @@ let BookingsService = class BookingsService {
             include: { subscription: { include: { package: true } } },
         });
         const guest = await this.prisma.user.findUniqueOrThrow({ where: { id: guestId } });
-        if (!guest.emailVerified)
-            throw new common_1.ForbiddenException(this.i18n.t('errors.EMAIL_NOT_VERIFIED'));
         if (guest.restrictedUntil && guest.restrictedUntil.getTime() > Date.now()) {
             throw new common_1.ForbiddenException(this.i18n.t('errors.ACCOUNT_RESTRICTED'));
         }

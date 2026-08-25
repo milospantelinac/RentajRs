@@ -429,6 +429,12 @@
     "totalAmount": "Total amount",
     "listingTitle": "Listing name",
     "term": "Date/time",
+    "checkIn": "Check-in date",
+    "checkOut": "Check-out date",
+    "guestCount": "Number of guests",
+    "guestMessage": "Guest message",
+    "ownerAwaitingPaymentNotice": "The request has been received. The guest got payment instructions — waiting for them to pay.",
+    "cashPaymentNotice": "This booking is paid in cash on arrival. The booking details have been sent to your email.",
     "notMediating": "Rentaj does not mediate payment — it goes directly to the owner"
   },
   "billing": {

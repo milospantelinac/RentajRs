@@ -429,6 +429,12 @@
     "totalAmount": "Ukupan iznos",
     "listingTitle": "Naziv oglasa",
     "term": "Termin",
+    "checkIn": "Datum dolaska",
+    "checkOut": "Datum odlaska",
+    "guestCount": "Broj gostiju",
+    "guestMessage": "Poruka gosta",
+    "ownerAwaitingPaymentNotice": "Zahtev je primljen. Gost je dobio uputstvo za uplatu — čeka se da je izvrši.",
+    "cashPaymentNotice": "Rezervacija se plaća gotovinski prilikom dolaska. Detalji rezervacije poslati su vam na e-mail.",
     "notMediating": "Rentaj ne posreduje u plaćanju — uplata ide direktno vlasniku"
   },
   "billing": {

@@ -28,9 +28,10 @@ export class BookingsService {
       include: { subscription: { include: { package: true } } },
     });
 
-    // R126 — email must be confirmed before the first booking.
+    // T46 — R126's "email must be confirmed" gate used to apply here too;
+    // the owner asked for it to be dropped specifically for booking requests
+    // (it still applies to publishing a listing, see ListingsService).
     const guest = await this.prisma.user.findUniqueOrThrow({ where: { id: guestId } });
-    if (!guest.emailVerified) throw new ForbiddenException(this.i18n.t('errors.EMAIL_NOT_VERIFIED'));
     // Ch.6.7/ADR-019 — a RESTRICTION dispute outcome temporarily blocks new bookings too.
     if (guest.restrictedUntil && guest.restrictedUntil.getTime() > Date.now()) {
       throw new ForbiddenException(this.i18n.t('errors.ACCOUNT_RESTRICTED'));
