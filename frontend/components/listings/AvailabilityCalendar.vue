@@ -60,7 +60,7 @@
         <div class="calendar-price-row">
           <input v-model.number="priceInput" type="number" min="1" class="form-control" :placeholder="String(defaultPriceForSelected)" />
           <button type="button" class="btn btn-primary-flat btn-sm" :disabled="busy || !priceInput" @click="savePrice">
-            {{ t('common.save') }}
+            {{ priceSaved ? t('common.savedButton') : t('common.save') }}
           </button>
           <button
             v-if="selectedCellData.hasOverride"
@@ -110,6 +110,7 @@ const blocks = ref([]) // [{id, startsAt, endsAt, source}]
 const overrides = ref(new Map()) // 'YYYY-MM-DD' -> price
 const selectedKey = ref(null)
 const priceInput = ref(null)
+const priceSaved = ref(false)
 const busy = ref(false)
 const editorError = ref('')
 
@@ -228,6 +229,7 @@ function selectCell(cell) {
   editorError.value = ''
   selectedKey.value = selectedKey.value === cell.key ? null : cell.key
   priceInput.value = null
+  priceSaved.value = false
 }
 
 async function loadAvailability() {
@@ -290,6 +292,8 @@ async function savePrice() {
       price: priceInput.value,
     })
     await loadAvailability()
+    priceSaved.value = true
+    setTimeout(() => { priceSaved.value = false }, 2000)
   } catch (e) {
     editorError.value = extractErrorMessage(e, t('auth.genericError'))
   } finally {

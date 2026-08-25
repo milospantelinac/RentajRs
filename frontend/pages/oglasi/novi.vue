@@ -48,7 +48,7 @@
       <form class="card" @submit.prevent="submitUncategorized">
         <div class="card-body">
           <div class="form-group mb-3">
-            <label class="form-label">{{ t('listing.title') }}</label>
+            <label class="form-label">{{ t('listing.title') }} *</label>
             <input v-model="uncategorized.title" type="text" class="form-control" required maxlength="200" />
           </div>
           <div class="form-group mb-3">

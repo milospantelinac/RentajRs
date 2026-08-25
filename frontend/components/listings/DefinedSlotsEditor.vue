@@ -30,7 +30,7 @@
         </div>
       </div>
       <div class="form-group mb-3">
-        <label class="form-label">{{ t('listing.price') }} (RSD)</label>
+        <label class="form-label">{{ t('listing.price') }} (RSD) *</label>
         <input v-model.number="form.price" type="number" min="1" class="form-control" />
       </div>
       <button type="button" class="btn btn-primary-flat btn-sm" :disabled="busy || !canAdd" @click="addSlot">
@@ -44,10 +44,16 @@
       <p class="text-label mb-2">{{ t('listing.whExceptions') }}</p>
       <div class="wh-exception-row">
         <input v-model="blockDate" type="date" class="form-control" />
-        <button type="button" class="btn btn-tertiary btn-sm" :disabled="!blockDate" @click="blockWholeDate">
-          {{ t('listing.whBlockDate') }}
+        <button type="button" class="btn btn-tertiary btn-sm" :disabled="!blockDate || blockingDate" @click="blockWholeDate">
+          {{ blockDateSaved ? t('common.savedButton') : t('listing.whBlockDate') }}
         </button>
       </div>
+      <ul v-if="blockedDates.length" class="ds-list mt-2">
+        <li v-for="b in blockedDates" :key="b.id" class="ds-row">
+          <span>{{ formatDate(b.startsAt) }}</span>
+          <button type="button" class="btn-link-danger" @click="removeBlockedDate(b.id)">✕</button>
+        </li>
+      </ul>
     </div>
   </div>
 </template>
@@ -64,6 +70,9 @@ const slots = ref([])
 const busy = ref(false)
 const editorError = ref('')
 const blockDate = ref('')
+const blockedDates = ref([])
+const blockingDate = ref(false)
+const blockDateSaved = ref(false)
 
 const form = reactive({ date: '', from: '10:00', to: '12:00', price: null })
 
@@ -78,6 +87,9 @@ function formatTime(v) {
 function formatPrice(v) {
   return new Intl.NumberFormat('sr-RS').format(v)
 }
+function formatDate(v) {
+  return new Date(v).toLocaleDateString('sr-RS')
+}
 
 async function load() {
   const from = new Date()
@@ -86,6 +98,10 @@ async function load() {
     query: { from: from.toISOString(), to: to.toISOString() },
   })
   slots.value = data.definedSlots || []
+  // T34 — only MANUAL blocks are listed/removable here; BOOKING/GAP/ICAL
+  // blocks come from elsewhere and aren't this editor's to touch (the
+  // backend's own delete endpoint already refuses to remove them).
+  blockedDates.value = (data.blocked || []).filter((b) => b.source === 'MANUAL')
 }
 
 async function addSlot() {
@@ -116,13 +132,27 @@ async function removeSlot(id) {
 
 async function blockWholeDate() {
   if (!blockDate.value) return
-  const start = new Date(`${blockDate.value}T00:00:00`)
-  const end = new Date(start.getTime() + 86400000)
-  await api.post(`/listings/${props.listingId}/availability/blocks`, {
-    startsAt: start.toISOString(),
-    endsAt: end.toISOString(),
-  })
-  blockDate.value = ''
+  blockingDate.value = true
+  try {
+    const start = new Date(`${blockDate.value}T00:00:00`)
+    const end = new Date(start.getTime() + 86400000)
+    const created = await api.post(`/listings/${props.listingId}/availability/blocks`, {
+      startsAt: start.toISOString(),
+      endsAt: end.toISOString(),
+    })
+    blockedDates.value.push(created)
+    blockedDates.value.sort((a, b) => new Date(a.startsAt) - new Date(b.startsAt))
+    blockDate.value = ''
+    blockDateSaved.value = true
+    setTimeout(() => { blockDateSaved.value = false }, 2000)
+  } finally {
+    blockingDate.value = false
+  }
+}
+
+async function removeBlockedDate(id) {
+  await api.delete(`/listings/${props.listingId}/availability/blocks/${id}`)
+  blockedDates.value = blockedDates.value.filter((b) => b.id !== id)
 }
 
 onMounted(load)

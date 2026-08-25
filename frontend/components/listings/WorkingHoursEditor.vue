@@ -46,10 +46,16 @@
       <p class="text-label mb-2">{{ t('listing.whExceptions') }}</p>
       <div class="wh-exception-row">
         <input v-model="blockDate" type="date" class="form-control" />
-        <button type="button" class="btn btn-tertiary btn-sm" :disabled="!blockDate" @click="blockWholeDate">
-          {{ t('listing.whBlockDate') }}
+        <button type="button" class="btn btn-tertiary btn-sm" :disabled="!blockDate || blockingDate" @click="blockWholeDate">
+          {{ blockDateSaved ? t('common.savedButton') : t('listing.whBlockDate') }}
         </button>
       </div>
+      <ul v-if="blockedDates.length" class="wh-override-list mt-2">
+        <li v-for="b in blockedDates" :key="b.id">
+          {{ formatDate(b.startsAt) }}
+          <button type="button" class="btn-link-danger" @click="removeBlockedDate(b.id)">✕</button>
+        </li>
+      </ul>
       <div class="wh-exception-row mt-2">
         <input v-model="overrideDate" type="date" class="form-control" />
         <input v-model="overrideFrom" type="time" class="form-control" />
@@ -97,6 +103,9 @@ const saved = ref(false)
 const editorError = ref('')
 
 const blockDate = ref('')
+const blockedDates = ref([])
+const blockingDate = ref(false)
+const blockDateSaved = ref(false)
 const overrideDate = ref('')
 const overrideFrom = ref('10:00')
 const overrideTo = ref('12:00')
@@ -134,6 +143,10 @@ async function load() {
   }
   hourlyRanges.value = (data.hourlyPriceRanges || []).map((r) => ({ ...r }))
   slotPriceOverrides.value = data.slotPriceOverrides || []
+  // T34 — only MANUAL blocks are listed/removable here; BOOKING/GAP/ICAL
+  // blocks come from elsewhere and aren't this editor's to touch (the
+  // backend's own delete endpoint already refuses to remove them).
+  blockedDates.value = (data.blocked || []).filter((b) => b.source === 'MANUAL')
 }
 
 async function save() {
@@ -160,13 +173,27 @@ async function save() {
 
 async function blockWholeDate() {
   if (!blockDate.value) return
-  const start = new Date(`${blockDate.value}T00:00:00`)
-  const end = new Date(start.getTime() + 86400000)
-  await api.post(`/listings/${props.listingId}/availability/blocks`, {
-    startsAt: start.toISOString(),
-    endsAt: end.toISOString(),
-  })
-  blockDate.value = ''
+  blockingDate.value = true
+  try {
+    const start = new Date(`${blockDate.value}T00:00:00`)
+    const end = new Date(start.getTime() + 86400000)
+    const created = await api.post(`/listings/${props.listingId}/availability/blocks`, {
+      startsAt: start.toISOString(),
+      endsAt: end.toISOString(),
+    })
+    blockedDates.value.push(created)
+    blockedDates.value.sort((a, b) => new Date(a.startsAt) - new Date(b.startsAt))
+    blockDate.value = ''
+    blockDateSaved.value = true
+    setTimeout(() => { blockDateSaved.value = false }, 2000)
+  } finally {
+    blockingDate.value = false
+  }
+}
+
+async function removeBlockedDate(id) {
+  await api.delete(`/listings/${props.listingId}/availability/blocks/${id}`)
+  blockedDates.value = blockedDates.value.filter((b) => b.id !== id)
 }
 
 async function addOverride() {

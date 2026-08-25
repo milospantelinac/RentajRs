@@ -35,18 +35,18 @@
 
     <div class="card">
       <div class="card-head">
-        <h2>{{ t(steps[currentStep].labelKey) }}</h2>
+        <h2>{{ t(steps[currentStep].labelKey) }}<span v-if="steps[currentStep].key === 'photos'"> *</span></h2>
         <p>{{ t(steps[currentStep].descKey) }}</p>
       </div>
 
       <!-- Osnovni podaci -->
       <div v-if="steps[currentStep].key === 'basics'">
         <div class="form-group mb-3">
-          <label class="form-label">{{ t('listing.title') }}</label>
+          <label class="form-label">{{ t('listing.title') }} *</label>
           <input v-model="form.title" type="text" class="form-control" maxlength="200" />
         </div>
         <div class="form-group mb-3">
-          <label class="form-label">{{ t('listing.description') }}</label>
+          <label class="form-label">{{ t('listing.description') }} *</label>
           <textarea v-model="form.description" class="form-control" rows="6" maxlength="5000" />
         </div>
         <div class="form-group mb-3">
@@ -77,7 +77,7 @@
           <div class="row">
             <div class="col-6">
               <div class="form-group mb-3">
-                <label class="form-label">{{ t('listing.price') }} (RSD)</label>
+                <label class="form-label">{{ t('listing.price') }} (RSD) *</label>
                 <input v-model.number="form.price" type="number" min="0" class="form-control" @blur="autoFillWeekendPrice" />
               </div>
             </div>
@@ -137,16 +137,18 @@
 
       <!-- Rezervaciona pravila -->
       <div v-else-if="steps[currentStep].key === 'rules'">
-        <div class="row">
+        <!-- T35 — meaningless once every booking is its own priced slot
+             (Definisani termini): there's no single "duration" to bound. -->
+        <div v-if="!isDefinedSlotsModel" class="row">
           <div class="col-6">
             <div class="form-group mb-3">
-              <label class="form-label">{{ t(form.priceUnit === 'MONTH' ? 'listing.minDurationMonths' : 'listing.minDuration') }}</label>
+              <label class="form-label">{{ t('listing.minDuration') }} ({{ t(`listing.unit${unitLabel(form.priceUnit)}`) }})</label>
               <input v-model.number="form.minDuration" type="number" min="1" class="form-control" />
             </div>
           </div>
           <div class="col-6">
             <div class="form-group mb-3">
-              <label class="form-label">{{ t(form.priceUnit === 'MONTH' ? 'listing.maxDurationMonths' : 'listing.maxDuration') }}</label>
+              <label class="form-label">{{ t('listing.maxDuration') }} ({{ t(`listing.unit${unitLabel(form.priceUnit)}`) }})</label>
               <input v-model.number="form.maxDuration" type="number" min="1" class="form-control" />
             </div>
           </div>
@@ -165,7 +167,9 @@
             </div>
           </div>
         </div>
-        <div class="row">
+        <!-- T36/T37 — a vehicle, machine, or warehouse is rented as a whole
+             unit, not per guest. -->
+        <div v-if="showGuestCount" class="row">
           <div class="col-6">
             <div class="form-group mb-3">
               <label class="form-label">{{ t('listing.minGuests') }}</label>
@@ -179,7 +183,9 @@
             </div>
           </div>
         </div>
-        <div class="form-group mb-3">
+        <!-- T35 (Definisani termini) / T37 (Magacini) — see above; T36
+             deliberately keeps this one for Vozila/Mašine. -->
+        <div v-if="showGapAfter" class="form-group mb-3">
           <label class="form-label">{{ t('listing.gapAfterMinutes') }}</label>
           <input v-model.number="form.gapAfterMinutes" type="number" min="0" class="form-control" />
         </div>
@@ -322,28 +328,28 @@
       <!-- Lokacija -->
       <div v-else-if="steps[currentStep].key === 'location'">
         <div class="form-group mb-3">
-          <label class="form-label">{{ t('listing.region') }}</label>
+          <label class="form-label">{{ t('listing.region') }} *</label>
           <select v-model="location.regionId" class="form-control form-select" @change="onRegionChange">
             <option value="">—</option>
             <option v-for="r in regions" :key="r.id" :value="r.id">{{ r.name }}</option>
           </select>
         </div>
         <div class="form-group mb-3">
-          <label class="form-label">{{ t('listing.city') }}</label>
+          <label class="form-label">{{ t('listing.city') }} *</label>
           <select v-model="location.cityId" class="form-control form-select" @change="onCityChange">
             <option value="">—</option>
             <option v-for="c in citiesInRegion" :key="c.id" :value="c.id">{{ c.name }}</option>
           </select>
         </div>
         <div v-if="cityAreas.length" class="form-group mb-3">
-          <label class="form-label">{{ t('listing.cityArea') }}</label>
+          <label class="form-label">{{ t('listing.cityArea') }} *</label>
           <select v-model="location.cityAreaId" class="form-control form-select">
             <option value="">—</option>
             <option v-for="a in cityAreas" :key="a.id" :value="a.id">{{ a.name }}</option>
           </select>
         </div>
         <div class="form-group mb-3">
-          <label class="form-label">{{ t('listing.address') }}</label>
+          <label class="form-label">{{ t('listing.address') }} *</label>
           <input v-model="location.address" type="text" class="form-control" @blur="previewLocationOnMap" />
         </div>
 
@@ -615,6 +621,17 @@ watch(
 )
 
 const showFlatPriceFields = computed(() => !(form.bookingModel === 'PER_SLOT' && form.slotSubmode === 'DEFINED_SLOTS'))
+
+// T35 — a per-model rule (Definisani termini has no single "duration" to
+// bound), unlike T36/T37 below which are per-category — kept as separate
+// computeds rather than merged, per the tickets' explicit instruction not to
+// conflate the two root causes.
+const isDefinedSlotsModel = computed(() => form.bookingModel === 'PER_SLOT' && form.slotSubmode === 'DEFINED_SLOTS')
+// T36/T37 — rented as a whole unit, not per guest.
+const NO_GUEST_COUNT_CATEGORY_SLUGS = ['putnicka-vozila', 'dostavna-vozila', 'gradjevinske-masine', 'magacini-i-skladista']
+const showGuestCount = computed(() => !NO_GUEST_COUNT_CATEGORY_SLUGS.includes(listing.value?.category?.slug))
+// T37 only — T36 explicitly keeps "Razmak posle rezervacije" for Vozila/Mašine.
+const showGapAfter = computed(() => !isDefinedSlotsModel.value && listing.value?.category?.slug !== 'magacini-i-skladista')
 const allowedPriceUnitsForChoice = computed(() => {
   if (form.bookingModel === 'PER_SLOT') return ['HOUR']
   return listing.value?.category?.allowedPriceUnits || []
