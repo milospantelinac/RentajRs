@@ -1,22 +1,22 @@
 export interface ChargeCardInput {
   amountRsd: number;
   description: string;
-  cardToken?: string; // present when charging a previously-tokenized card (renewal)
 }
 
 export interface ChargeResult {
   success: boolean;
   externalTransactionId: string;
-  cardToken?: string; // returned on first charge, stored for future renewals
   errorMessage?: string;
 }
 
 /**
- * O22 in the Product Bible: card tokenization + recurring charges with Banca
- * Intesa is an *external* risk the doc explicitly says must be confirmed
- * before launch, not something code can resolve. This interface is the seam
- * — swap MockPaymentProvider for a real BancaIntesaProvider once that
- * integration is contracted, without touching SubscriptionsService.
+ * Subscriptions never auto-renew (O22 in the Product Bible ruled out card
+ * tokenization/recurring charges with Banca Intesa — the real NestPay
+ * integration is a one-time 3D Pay Hosting checkout, see
+ * NestPayCheckoutService). This interface covers only one-off charges
+ * (initial individual purchase, featured listings) — the seam lets
+ * MockPaymentProvider be swapped for a real provider later without touching
+ * the callers.
  */
 export abstract class PaymentProvider {
   abstract chargeCard(input: ChargeCardInput): Promise<ChargeResult>;

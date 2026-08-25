@@ -81,32 +81,6 @@ let SubscriptionEmailListener = class SubscriptionEmailListener {
             buttonUrl: `${this.frontendUrl}/kontrolna-tabla/pretplate`,
         });
     }
-    async onRenewalReminder({ subscriptionId }) {
-        const sub = await this.loadSub(subscriptionId);
-        if (!sub)
-            return;
-        await this.email.send({
-            key: 'subscription_renewal_reminder',
-            to: sub.user.email,
-            language: sub.user.language,
-            userId: sub.userId,
-            context: { paket: sub.package.key, datum: (0, format_1.formatDate)(sub.expiresAt, (0, format_1.localeFor)(sub.user.language)) },
-            buttonUrl: `${this.frontendUrl}/kontrolna-tabla/pretplate`,
-        });
-    }
-    async onPaymentFailed({ subscriptionId }) {
-        const sub = await this.loadSub(subscriptionId);
-        if (!sub)
-            return;
-        await this.email.send({
-            key: 'subscription_payment_failed',
-            to: sub.user.email,
-            language: sub.user.language,
-            userId: sub.userId,
-            context: { paket: sub.package.key },
-            buttonUrl: `${this.frontendUrl}/kontrolna-tabla/pretplate`,
-        });
-    }
     async onExpiringSoon({ subscriptionId, daysLeft }) {
         const sub = await this.loadSub(subscriptionId);
         if (!sub)
@@ -147,18 +121,6 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], SubscriptionEmailListener.prototype, "onProFormaIssued", null);
-__decorate([
-    (0, event_emitter_1.OnEvent)('subscription.renewal_reminder'),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
-    __metadata("design:returntype", Promise)
-], SubscriptionEmailListener.prototype, "onRenewalReminder", null);
-__decorate([
-    (0, event_emitter_1.OnEvent)('subscription.payment_failed'),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
-    __metadata("design:returntype", Promise)
-], SubscriptionEmailListener.prototype, "onPaymentFailed", null);
 __decorate([
     (0, event_emitter_1.OnEvent)('subscription.expiring_soon'),
     __metadata("design:type", Function),

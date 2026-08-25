@@ -1,10 +1,9 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Query, Redirect } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Post, Query, Redirect } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { SubscriptionsService } from './subscriptions.service';
 import {
   PurchaseSubscriptionDto,
   PurchaseFeaturedDto,
-  CancelSubscriptionDto,
   AdjustPriceDto,
   InitCheckoutDto,
   AssignFreeFeaturedDto,
@@ -43,6 +42,11 @@ export class SubscriptionsController {
     return this.subscriptionsService.purchaseForListing(userId, dto);
   }
 
+  @Delete('subscriptions/:id')
+  deleteAwaitingPayment(@CurrentUser('id') userId: string, @Param('id') id: string) {
+    return this.subscriptionsService.deleteAwaitingPayment(userId, id);
+  }
+
   // -- Checkout (Banca Intesa NestPay) ------------------------------------
 
   @Post('subscriptions/checkout/init')
@@ -66,11 +70,6 @@ export class SubscriptionsController {
   @Post('subscriptions/nestpay/callback/fail')
   async nestpayFail(@Body() body: Record<string, string>) {
     return { url: await this.subscriptionsService.handleNestPayFail(body), statusCode: 303 };
-  }
-
-  @Post('subscriptions/:id/cancel')
-  cancel(@CurrentUser('id') userId: string, @Param('id') id: string, @Body() dto: CancelSubscriptionDto) {
-    return this.subscriptionsService.cancelSubscription(userId, id, dto);
   }
 
   @Post('featured/purchase')

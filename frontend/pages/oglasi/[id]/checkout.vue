@@ -77,7 +77,7 @@
               {{ t('billing.securePaymentNote') }}
             </div>
 
-            <p class="text-muted checkout-info-note mb-2">{{ t('billing.autoRenewalNotice') }}</p>
+            <p class="text-muted checkout-info-note mb-2">{{ t('billing.threeDSecureNotice') }}</p>
             <p class="text-muted checkout-info-note mb-3">{{ t('billing.afterPaymentNotice') }}</p>
 
             <label class="form-row-inline checkout-terms-checkbox mb-4">

@@ -496,6 +496,15 @@ export class ListingsService {
       where: { id: listing.id },
       data: { status: ListingStatus.DELETED, deletedAt: new Date() },
     });
+    // T21 — a checkout started for this listing but never completed
+    // (AWAITING_PAYMENT, linked via pendingListingId rather than the
+    // listing's own subscriptionId) can never be finished now that the
+    // listing is gone; drop it too instead of leaving it stranded in Moje
+    // pretplate. A subscription that already has real money/an invoice
+    // behind it (PENDING_ACTIVATION or later) is left untouched.
+    await this.prisma.subscription.deleteMany({
+      where: { pendingListingId: listing.id, status: 'AWAITING_PAYMENT' },
+    });
     return { message: this.i18n.t('common.SUCCESS') };
   }
 

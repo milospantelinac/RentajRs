@@ -23,8 +23,6 @@ const payment_provider_interface_1 = require("../../common/payment/payment-provi
 const nestpay_checkout_service_1 = require("../../common/payment/nestpay/nestpay-checkout.service");
 const fiscalization_provider_interface_1 = require("../../common/fiscalization/fiscalization-provider.interface");
 const money_1 = require("../../common/utils/money");
-const DEFAULT_GRACE_PERIOD_DAYS = 7;
-const RETRY_DAYS = [0, 3, 6];
 let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
     constructor(prisma, cache, listings, payment, nestpay, fiscalization, i18n, events, config) {
         this.prisma = prisma;
@@ -122,7 +120,6 @@ let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
                 billingCycle,
                 status: 'PENDING_ACTIVATION',
                 priceAtPurchase: price,
-                autoRenew: user.buyerType !== 'COMPANY',
             },
         });
         if (user.buyerType === 'COMPANY') {
@@ -168,7 +165,6 @@ let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
             await this.prisma.subscription.delete({ where: { id: subscription.id } });
             throw new common_1.BadRequestException('Payment failed');
         }
-        await this.prisma.subscription.update({ where: { id: subscription.id }, data: { cardToken: charge.cardToken } });
         const doc = await this.fiscalization.issueDocument({
             documentType: 'FISCAL_RECEIPT',
             amountRsd: (0, money_1.paraToRsd)(price) ?? 0,
@@ -227,7 +223,6 @@ let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
                 status: 'AWAITING_PAYMENT',
                 priceAtPurchase: price,
                 pendingListingId: dto.listingId,
-                autoRenew: !dto.isCompany,
                 termsAcceptedAt: new Date(),
             },
         });
@@ -567,21 +562,17 @@ let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
             documentNumber: transaction?.invoices[0]?.documentNumber ?? null,
         };
     }
-    async cancelSubscription(userId, subscriptionId, dto) {
+    async deleteAwaitingPayment(userId, subscriptionId) {
         const subscription = await this.prisma.subscription.findUniqueOrThrow({ where: { id: subscriptionId } });
         if (subscription.userId !== userId)
             throw new common_1.ForbiddenException();
-        await this.prisma.subscription.update({
-            where: { id: subscriptionId },
-            data: { autoRenew: false, cancelledAt: new Date() },
-        });
-        void dto;
+        if (subscription.status !== 'AWAITING_PAYMENT') {
+            throw new common_1.BadRequestException('Only a subscription still awaiting payment can be deleted');
+        }
+        await this.prisma.subscription.delete({ where: { id: subscriptionId } });
         return { message: this.i18n.t('common.SUCCESS') };
     }
-    async processRenewalsAndDunning() {
-        await this.sendPreChargeReminders();
-        await this.attemptRenewals();
-        await this.processGracePeriod();
+    async processSubscriptionExpiry() {
         await this.expireOverdueSubscriptions();
         await this.sendExpiringSoonReminders();
     }
@@ -589,102 +580,15 @@ let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
         for (const daysLeft of [7, 3, 1]) {
             const target = addDays(new Date(), daysLeft);
             const subs = await this.prisma.subscription.findMany({
-                where: {
-                    status: 'ACTIVE',
-                    autoRenew: false,
-                    expiresAt: { gte: startOfDay(target), lt: endOfDay(target) },
-                },
+                where: { status: 'ACTIVE', expiresAt: { gte: startOfDay(target), lt: endOfDay(target) } },
             });
             for (const sub of subs) {
                 this.events.emit('subscription.expiring_soon', { subscriptionId: sub.id, daysLeft });
             }
         }
     }
-    async sendPreChargeReminders() {
-        const inThreeDays = addDays(new Date(), 3);
-        const subs = await this.prisma.subscription.findMany({
-            where: { status: 'ACTIVE', autoRenew: true, expiresAt: { gte: startOfDay(inThreeDays), lt: endOfDay(inThreeDays) } },
-        });
-        for (const sub of subs)
-            this.events.emit('subscription.renewal_reminder', { subscriptionId: sub.id });
-    }
-    async attemptRenewals() {
-        const dueToday = await this.prisma.subscription.findMany({
-            where: { status: 'ACTIVE', autoRenew: true, expiresAt: { lte: new Date() } },
-            include: { package: true },
-        });
-        const gracePeriodDays = await this.getGracePeriodDays();
-        for (const sub of dueToday) {
-            const charge = await this.payment.chargeCard({
-                amountRsd: (0, money_1.paraToRsd)(sub.priceAtPurchase) ?? 0,
-                description: `Rentaj — obnova (${sub.package.key})`,
-                cardToken: sub.cardToken ?? undefined,
-            });
-            await this.prisma.transaction.create({
-                data: {
-                    userId: sub.userId,
-                    subscriptionId: sub.id,
-                    amount: sub.priceAtPurchase,
-                    status: charge.success ? 'SUCCESSFUL' : 'FAILED',
-                    type: 'RENEWAL',
-                    bankExternalId: charge.externalTransactionId,
-                    errorMessage: charge.errorMessage,
-                },
-            });
-            if (charge.success) {
-                const cycleDays = sub.billingCycle === 'YEARLY' ? 365 : 30;
-                await this.prisma.subscription.update({
-                    where: { id: sub.id },
-                    data: { expiresAt: new Date(Date.now() + cycleDays * 86_400_000), paymentAttemptCount: 0 },
-                });
-                this.events.emit('subscription.renewed', { subscriptionId: sub.id });
-            }
-            else {
-                await this.prisma.subscription.update({
-                    where: { id: sub.id },
-                    data: { status: 'GRACE', graceUntil: addDays(new Date(), gracePeriodDays), paymentAttemptCount: 1 },
-                });
-                this.events.emit('subscription.payment_failed', { subscriptionId: sub.id, attempt: 0 });
-            }
-        }
-    }
-    async processGracePeriod() {
-        const inGrace = await this.prisma.subscription.findMany({ where: { status: 'GRACE' }, include: { package: true } });
-        const gracePeriodDays = await this.getGracePeriodDays();
-        for (const sub of inGrace) {
-            const daysSinceGraceStart = gracePeriodDays - Math.ceil(((sub.graceUntil?.getTime() ?? 0) - Date.now()) / 86_400_000);
-            if (!RETRY_DAYS.includes(daysSinceGraceStart))
-                continue;
-            const charge = await this.payment.chargeCard({
-                amountRsd: (0, money_1.paraToRsd)(sub.priceAtPurchase) ?? 0,
-                description: `Rentaj — pokušaj naplate (${sub.package.key})`,
-                cardToken: sub.cardToken ?? undefined,
-            });
-            await this.prisma.transaction.create({
-                data: {
-                    userId: sub.userId,
-                    subscriptionId: sub.id,
-                    amount: sub.priceAtPurchase,
-                    status: charge.success ? 'SUCCESSFUL' : 'FAILED',
-                    type: 'RENEWAL',
-                },
-            });
-            if (charge.success) {
-                const cycleDays = sub.billingCycle === 'YEARLY' ? 365 : 30;
-                await this.prisma.subscription.update({
-                    where: { id: sub.id },
-                    data: { status: 'ACTIVE', expiresAt: new Date(Date.now() + cycleDays * 86_400_000), graceUntil: null, paymentAttemptCount: 0 },
-                });
-                this.events.emit('subscription.renewed', { subscriptionId: sub.id });
-            }
-            else {
-                await this.prisma.subscription.update({ where: { id: sub.id }, data: { paymentAttemptCount: { increment: 1 } } });
-                this.events.emit('subscription.payment_failed', { subscriptionId: sub.id, attempt: daysSinceGraceStart });
-            }
-        }
-    }
     async expireOverdueSubscriptions() {
-        const overdue = await this.prisma.subscription.findMany({ where: { status: 'GRACE', graceUntil: { lt: new Date() } } });
+        const overdue = await this.prisma.subscription.findMany({ where: { status: 'ACTIVE', expiresAt: { lt: new Date() } } });
         for (const sub of overdue) {
             const listings = await this.prisma.listing.findMany({ where: { subscriptionId: sub.id } });
             await this.prisma.subscription.update({ where: { id: sub.id }, data: { status: 'EXPIRED' } });
@@ -728,10 +632,6 @@ let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
             30: value?.['30'] ?? 2490,
         };
     }
-    async getGracePeriodDays() {
-        const setting = await this.prisma.setting.findUnique({ where: { key: 'grace_period_days' } });
-        return typeof setting?.value === 'number' ? setting.value : DEFAULT_GRACE_PERIOD_DAYS;
-    }
     serialize(subscription) {
         return {
             ...subscription,
@@ -770,7 +670,7 @@ __decorate([
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
-], SubscriptionsService.prototype, "processRenewalsAndDunning", null);
+], SubscriptionsService.prototype, "processSubscriptionExpiry", null);
 __decorate([
     (0, schedule_1.Cron)(schedule_1.CronExpression.EVERY_DAY_AT_4AM),
     __metadata("design:type", Function),

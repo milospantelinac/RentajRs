@@ -37,6 +37,9 @@ let SubscriptionsController = class SubscriptionsController {
     purchase(userId, dto) {
         return this.subscriptionsService.purchaseForListing(userId, dto);
     }
+    deleteAwaitingPayment(userId, id) {
+        return this.subscriptionsService.deleteAwaitingPayment(userId, id);
+    }
     initCheckout(userId, dto) {
         return this.subscriptionsService.initCheckout(userId, dto);
     }
@@ -45,9 +48,6 @@ let SubscriptionsController = class SubscriptionsController {
     }
     async nestpayFail(body) {
         return { url: await this.subscriptionsService.handleNestPayFail(body), statusCode: 303 };
-    }
-    cancel(userId, id, dto) {
-        return this.subscriptionsService.cancelSubscription(userId, id, dto);
     }
     purchaseFeatured(userId, dto) {
         return this.subscriptionsService.purchaseFeatured(userId, dto);
@@ -106,6 +106,14 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], SubscriptionsController.prototype, "purchase", null);
 __decorate([
+    (0, common_1.Delete)('subscriptions/:id'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)('id')),
+    __param(1, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", void 0)
+], SubscriptionsController.prototype, "deleteAwaitingPayment", null);
+__decorate([
     (0, common_1.Post)('subscriptions/checkout/init'),
     __param(0, (0, current_user_decorator_1.CurrentUser)('id')),
     __param(1, (0, common_1.Body)()),
@@ -131,15 +139,6 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], SubscriptionsController.prototype, "nestpayFail", null);
-__decorate([
-    (0, common_1.Post)('subscriptions/:id/cancel'),
-    __param(0, (0, current_user_decorator_1.CurrentUser)('id')),
-    __param(1, (0, common_1.Param)('id')),
-    __param(2, (0, common_1.Body)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String, subscriptions_dto_1.CancelSubscriptionDto]),
-    __metadata("design:returntype", void 0)
-], SubscriptionsController.prototype, "cancel", null);
 __decorate([
     (0, common_1.Post)('featured/purchase'),
     __param(0, (0, current_user_decorator_1.CurrentUser)('id')),

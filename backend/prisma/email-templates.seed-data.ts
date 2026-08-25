@@ -525,36 +525,6 @@ export const emailTemplates: EmailTemplateSeed[] = [
     },
   },
   {
-    key: 'subscription_renewal_reminder',
-    sr: {
-      subject: 'Pretplata se obnavlja {datum}',
-      heading: 'Pretplata se automatski obnavlja {datum}',
-      bodyText: 'Vaša kartica će biti zadužena za paket {paket} na dan {datum}. Upravljajte pretplatom ako želite da je promenite ili otkažete.',
-      buttonLabel: 'Upravljaj pretplatom',
-    },
-    en: {
-      subject: 'Subscription renews on {datum}',
-      heading: 'Your subscription auto-renews on {datum}',
-      bodyText: 'Your card will be charged for the {paket} package on {datum}. Manage your subscription if you’d like to change or cancel it.',
-      buttonLabel: 'Manage subscription',
-    },
-  },
-  {
-    key: 'subscription_payment_failed',
-    sr: {
-      subject: 'Naplata nije uspela',
-      heading: 'Naplata za {paket} nije uspela',
-      bodyText: 'Nismo uspeli da naplatimo obnovu pretplate. Ažurirajte podatke kartice u roku od 7 dana da oglas ostane aktivan.',
-      buttonLabel: 'Ažuriraj karticu',
-    },
-    en: {
-      subject: 'Payment failed',
-      heading: 'Payment for {paket} failed',
-      bodyText: 'We weren’t able to charge your renewal. Update your card details within 7 days to keep your listing active.',
-      buttonLabel: 'Update card',
-    },
-  },
-  {
     key: 'subscription_expiring_soon',
     sr: {
       subject: 'Oglas prestaje da radi za {broj} dana',

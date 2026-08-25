@@ -46,14 +46,6 @@
               {{ t('listing.viewListing') }}
             </NuxtLink>
             <NuxtLink :to="`/oglasi/${listing.id}/uredi`" class="btn btn-tertiary btn-sm">{{ t('listing.editListing') }}</NuxtLink>
-            <button
-              v-if="listing.status === 'ACTIVE'"
-              class="btn btn-tertiary btn-sm"
-              :disabled="togglingId === listing.id"
-              @click="toggleAvailable(listing)"
-            >
-              {{ listing.available ? t('listing.pauseListing') : t('listing.resumeListing') }}
-            </button>
             <button class="btn btn-danger btn-sm" @click="remove(listing.id)">{{ t('listing.deleteListing') }}</button>
           </td>
         </tr>
@@ -84,24 +76,11 @@ function statusLabel(status) {
   return map[status] || 'Draft'
 }
 function statusBadge(listing) {
-  if (listing.status === 'ACTIVE' && !listing.available) return 'badge-neutral'
   const map = { DRAFT: 'badge-neutral', PENDING_APPROVAL: 'badge-warning', REJECTED: 'badge-critical', ACTIVE: 'badge-success', EXPIRED: 'badge-critical' }
   return map[listing.status] || 'badge-neutral'
 }
 function statusText(listing) {
-  if (listing.status === 'ACTIVE' && !listing.available) return t('listing.statusPaused')
   return t(`listing.status${statusLabel(listing.status)}`)
-}
-
-const togglingId = ref(null)
-async function toggleAvailable(listing) {
-  togglingId.value = listing.id
-  try {
-    await api.patch(`/listings/${listing.id}`, { available: !listing.available })
-    await refresh()
-  } finally {
-    togglingId.value = null
-  }
 }
 
 async function remove(id) {

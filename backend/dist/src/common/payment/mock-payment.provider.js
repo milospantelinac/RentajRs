@@ -21,7 +21,6 @@ let MockPaymentProvider = MockPaymentProvider_1 = class MockPaymentProvider exte
         return {
             success: true,
             externalTransactionId: `mock_txn_${(0, crypto_1.randomUUID)()}`,
-            cardToken: input.cardToken ?? `mock_card_${(0, crypto_1.randomUUID)()}`,
         };
     }
 };

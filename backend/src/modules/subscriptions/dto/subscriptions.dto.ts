@@ -33,12 +33,6 @@ export class PurchaseFeaturedDto {
   durationDays: 7 | 15 | 30;
 }
 
-export class CancelSubscriptionDto {
-  @ApiPropertyOptional()
-  @IsOptional()
-  reason?: string;
-}
-
 /** ZADATAK 1 — checkout page → POST /subscriptions/checkout/init. */
 export class InitCheckoutDto {
   @ApiProperty()

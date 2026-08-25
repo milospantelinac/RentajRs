@@ -371,6 +371,9 @@ let ListingsService = class ListingsService {
             where: { id: listing.id },
             data: { status: client_1.ListingStatus.DELETED, deletedAt: new Date() },
         });
+        await this.prisma.subscription.deleteMany({
+            where: { pendingListingId: listing.id, status: 'AWAITING_PAYMENT' },
+        });
         return { message: this.i18n.t('common.SUCCESS') };
     }
     async getPublicBySlug(slug) {

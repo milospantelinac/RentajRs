@@ -151,7 +151,6 @@ async function seedSettings() {
       description: 'R146 — search result ranking weights',
     },
     { key: 'daily_new_conversation_limit', value: 10, description: 'R77' },
-    { key: 'grace_period_days', value: 7, description: 'R113' },
     { key: 'listing_index_threshold', value: 3, description: 'R135' },
     { key: 'review_window_days', value: 14, description: 'R96' },
     { key: 'default_payment_deadline_hours', value: 48, description: 'R59' },

@@ -12,7 +12,6 @@ export class MockPaymentProvider extends PaymentProvider {
     return {
       success: true,
       externalTransactionId: `mock_txn_${randomUUID()}`,
-      cardToken: input.cardToken ?? `mock_card_${randomUUID()}`,
     };
   }
 }

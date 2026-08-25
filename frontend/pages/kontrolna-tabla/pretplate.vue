@@ -43,14 +43,13 @@
         </div>
 
         <div class="row mb-2">
-          <div class="col-6 text-muted">{{ sub.billingCycle === 'YEARLY' ? t('billing.yearly') : t('billing.monthly') }}</div>
+          <div class="col-6 text-muted">{{ sub.billingCycle === 'YEARLY' ? t('billing.yearly') : t('billing.thirtyDays') }}</div>
           <div class="col-6">{{ formatPrice(sub.priceAtPurchase) }}</div>
         </div>
         <div v-if="sub.expiresAt" class="row mb-2">
           <div class="col-6 text-muted">{{ t('billing.expiresOn') }}</div>
           <div class="col-6">{{ new Date(sub.expiresAt).toLocaleDateString('sr-RS') }}</div>
         </div>
-        <p class="text-muted mb-2">{{ sub.autoRenew ? t('billing.autoRenewOn') : t('billing.autoRenewOff') }}</p>
 
         <p v-if="sub.bankedDays?.length" class="text-muted mb-2">
           {{ t('billing.bankedDaysCount', { count: sub.bankedDays.reduce((s, b) => s + b.days, 0) }) }}
@@ -66,11 +65,12 @@
         </div>
 
         <button
-          v-if="sub.status === 'ACTIVE' && sub.autoRenew"
+          v-if="sub.status === 'AWAITING_PAYMENT'"
           class="btn btn-danger btn-sm"
-          @click="cancel(sub.id)"
+          :disabled="deletingId === sub.id"
+          @click="deleteAwaitingPayment(sub.id)"
         >
-          {{ t('billing.cancelSubscription') }}
+          {{ t('common.delete') }}
         </button>
       </div>
     </div>
@@ -138,29 +138,35 @@ async function attachFree(listingId) {
   }
 }
 
+const deletingId = ref(null)
+async function deleteAwaitingPayment(id) {
+  if (!confirm(t('billing.deleteAwaitingConfirm'))) return
+  deletingId.value = id
+  try {
+    await api.delete(`/subscriptions/${id}`)
+    await refresh()
+  } finally {
+    deletingId.value = null
+  }
+}
+
 function formatPrice(value) {
   return `${new Intl.NumberFormat('sr-RS').format(value || 0)} RSD`
 }
 
 function statusLabel(status) {
   const map = {
-    AWAITING_PAYMENT: 'AwaitingPayment', PENDING_ACTIVATION: 'PendingActivation', ACTIVE: 'Active', GRACE: 'Grace',
+    AWAITING_PAYMENT: 'AwaitingPayment', PENDING_ACTIVATION: 'PendingActivation', ACTIVE: 'Active',
     EXPIRED: 'Expired', CANCELLED: 'Cancelled',
   }
   return map[status] || 'Active'
 }
 function statusBadge(status) {
   const map = {
-    AWAITING_PAYMENT: 'badge-neutral', PENDING_ACTIVATION: 'badge-warning', ACTIVE: 'badge-success', GRACE: 'badge-warning',
+    AWAITING_PAYMENT: 'badge-neutral', PENDING_ACTIVATION: 'badge-warning', ACTIVE: 'badge-success',
     EXPIRED: 'badge-critical', CANCELLED: 'badge-neutral',
   }
   return map[status] || 'badge-neutral'
-}
-
-async function cancel(id) {
-  if (!confirm(t('billing.cancelConfirm'))) return
-  await api.post(`/subscriptions/${id}/cancel`, {})
-  await refresh()
 }
 
 useSeoMeta({ title: t('billing.mySubscriptions') })

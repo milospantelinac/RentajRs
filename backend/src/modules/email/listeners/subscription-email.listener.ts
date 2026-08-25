@@ -89,34 +89,6 @@ export class SubscriptionEmailListener {
     });
   }
 
-  @OnEvent('subscription.renewal_reminder')
-  async onRenewalReminder({ subscriptionId }: { subscriptionId: string }) {
-    const sub = await this.loadSub(subscriptionId);
-    if (!sub) return;
-    await this.email.send({
-      key: 'subscription_renewal_reminder',
-      to: sub.user.email,
-      language: sub.user.language,
-      userId: sub.userId,
-      context: { paket: sub.package.key, datum: formatDate(sub.expiresAt, localeFor(sub.user.language)) },
-      buttonUrl: `${this.frontendUrl}/kontrolna-tabla/pretplate`,
-    });
-  }
-
-  @OnEvent('subscription.payment_failed')
-  async onPaymentFailed({ subscriptionId }: { subscriptionId: string }) {
-    const sub = await this.loadSub(subscriptionId);
-    if (!sub) return;
-    await this.email.send({
-      key: 'subscription_payment_failed',
-      to: sub.user.email,
-      language: sub.user.language,
-      userId: sub.userId,
-      context: { paket: sub.package.key },
-      buttonUrl: `${this.frontendUrl}/kontrolna-tabla/pretplate`,
-    });
-  }
-
   @OnEvent('subscription.expiring_soon')
   async onExpiringSoon({ subscriptionId, daysLeft }: { subscriptionId: string; daysLeft: number }) {
     const sub = await this.loadSub(subscriptionId);

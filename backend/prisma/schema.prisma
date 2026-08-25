@@ -144,7 +144,6 @@ enum SubscriptionStatus {
   AWAITING_PAYMENT // created at checkout, before the NestPay redirect resolves — see nestpay callback handlers
   PENDING_ACTIVATION
   ACTIVE
-  GRACE
   EXPIRED
   CANCELLED
 }
@@ -163,7 +162,6 @@ enum TransactionStatus {
 
 enum TransactionType {
   SUBSCRIPTION
-  RENEWAL
   FEATURED
 }
 
@@ -928,11 +926,7 @@ model Subscription {
   priceAtPurchase     BigInt
   startsAt            DateTime?          @db.Timestamptz
   expiresAt           DateTime?          @db.Timestamptz
-  autoRenew           Boolean            @default(true)
   cancelledAt         DateTime?          @db.Timestamptz
-  graceUntil          DateTime?          @db.Timestamptz
-  paymentAttemptCount Int                @default(0)
-  cardToken           String? // opaque token from the payment provider, never card data (R118)
   // Checkout-page consent checkbox — recorded, not just displayed, since the
   // button click alone isn't proof the buyer actually agreed to anything.
   termsAcceptedAt     DateTime?          @db.Timestamptz

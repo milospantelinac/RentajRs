@@ -15,7 +15,6 @@ exports.CRITICAL_EMAIL_EVENTS = new Set([
     'booking_payment_confirmed',
     'subscription_invoice',
     'subscription_pro_forma',
-    'subscription_payment_failed',
     'booking_confirmed_cash',
     'booking_cancelled',
     'booking_reminder_day_before',
