@@ -6,14 +6,19 @@
           <div class="card-body">
             <h1 class="text-page-title mb-4">{{ t('nav.login') }}</h1>
 
-            <form v-if="step === 'credentials'" @submit.prevent="submitCredentials">
+            <form
+              v-if="step === 'credentials'"
+              @submit.prevent="submitCredentials"
+              @invalid.capture="onInvalidCapture"
+              @input.capture="onInputCapture"
+            >
               <div class="form-group mb-3">
                 <label class="form-label" for="email">E-mail</label>
                 <input id="email" v-model="email" type="email" class="form-control" required />
               </div>
               <div class="form-group mb-3">
                 <label class="form-label" for="password">{{ t('auth.password') }}</label>
-                <input id="password" v-model="password" type="password" class="form-control" required />
+                <PasswordField id="password" v-model="password" required />
               </div>
               <div class="form-row-inline mb-4">
                 <input id="rememberMe" v-model="rememberMe" type="checkbox" class="form-checkbox" />
@@ -34,7 +39,12 @@
               </div>
             </form>
 
-            <form v-else-if="step === 'twoFactor'" @submit.prevent="submitTwoFactor">
+            <form
+              v-else-if="step === 'twoFactor'"
+              @submit.prevent="submitTwoFactor"
+              @invalid.capture="onInvalidCapture"
+              @input.capture="onInputCapture"
+            >
               <p class="text-body mb-3">{{ t('auth.twoFactorPrompt') }}</p>
               <p class="text-muted mb-3">{{ t('auth.twoFactorBackupCodeHint') }}</p>
               <div class="form-group mb-4">
@@ -48,7 +58,12 @@
             </form>
 
             <!-- R127: admin accounts must set up 2FA before their first real login. -->
-            <form v-else-if="step === 'twoFactorSetup'" @submit.prevent="submitTwoFactorSetup">
+            <form
+              v-else-if="step === 'twoFactorSetup'"
+              @submit.prevent="submitTwoFactorSetup"
+              @invalid.capture="onInvalidCapture"
+              @input.capture="onInputCapture"
+            >
               <p class="text-body mb-3">{{ t('auth.twoFactorSetupRequiredMessage') }}</p>
               <p class="text-muted mb-2">{{ t('auth.twoFactorSetupInstructions') }}</p>
               <img v-if="qrCodeDataUrl" :src="qrCodeDataUrl" :alt="t('auth.twoFactorQrAlt')" class="setup-qr mb-3" />
@@ -87,6 +102,7 @@ const auth = useAuthStore()
 const config = useRuntimeConfig()
 const api = useApi()
 const route = useRoute()
+const { onInvalidCapture, onInputCapture } = useLocalizedFormValidation()
 
 const redirectTarget = computed(() => {
   const value = route.query.redirect

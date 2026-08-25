@@ -25,6 +25,15 @@
     "copied": "Copied",
     "add": "Add"
   },
+  "validation": {
+    "required": "Fill in this field",
+    "requiredCheckbox": "Check this box to continue",
+    "email": "Enter a valid email address",
+    "minLength": "Enter at least {min} characters",
+    "maxLength": "Enter at most {max} characters",
+    "pattern": "This format isn't valid",
+    "invalid": "This value isn't valid"
+  },
   "nav": {
     "home": "Home",
     "menu": "Menu",
@@ -105,7 +114,11 @@
     "twoFactorConfirmEnablePasswordPrompt": "Enter your password to continue enabling it",
     "twoFactorPasswordLabel": "Password",
     "genericError": "Something went wrong. Please try again",
-    "acceptTerms": "I accept the terms of use and privacy policy",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
+    "acceptTermsPrefix": "I accept the",
+    "acceptTermsMiddle": "and",
+    "acceptTermsSuffix": "of the site.",
     "registerSuccess": "Account created. Check your email to confirm your address",
     "resetPasswordTitle": "Reset password",
     "newPassword": "New password",

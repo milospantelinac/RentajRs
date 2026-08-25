@@ -25,6 +25,15 @@
     "copied": "Kopirano",
     "add": "Dodaj"
   },
+  "validation": {
+    "required": "Popunite ovo polje",
+    "requiredCheckbox": "Označite ovo polje da biste nastavili",
+    "email": "Unesite ispravnu e-mail adresu",
+    "minLength": "Unesite bar {min} karaktera",
+    "maxLength": "Unesite najviše {max} karaktera",
+    "pattern": "Format nije ispravan",
+    "invalid": "Ova vrednost nije ispravna"
+  },
   "nav": {
     "home": "Početna",
     "menu": "Meni",
@@ -105,7 +114,11 @@
     "twoFactorConfirmEnablePasswordPrompt": "Unesite lozinku da nastavite sa uključivanjem",
     "twoFactorPasswordLabel": "Lozinka",
     "genericError": "Došlo je do greške. Pokušajte ponovo",
-    "acceptTerms": "Prihvatam uslove korišćenja i politiku privatnosti",
+    "showPassword": "Prikaži lozinku",
+    "hidePassword": "Sakrij lozinku",
+    "acceptTermsPrefix": "Prihvatam",
+    "acceptTermsMiddle": "i",
+    "acceptTermsSuffix": "sajta.",
     "registerSuccess": "Nalog je kreiran. Proverite e-mail da potvrdite adresu",
     "resetPasswordTitle": "Resetovanje lozinke",
     "newPassword": "Nova lozinka",

@@ -45,7 +45,12 @@
       <h1 class="text-page-title mb-2">{{ t('listing.unlockYourCategory') }}</h1>
       <p class="text-muted mb-4">{{ t('listing.proposeCategoryExplain') }}</p>
 
-      <form class="card" @submit.prevent="submitUncategorized">
+      <form
+        class="card"
+        @submit.prevent="submitUncategorized"
+        @invalid.capture="onInvalidCapture"
+        @input.capture="onInputCapture"
+      >
         <div class="card-body">
           <div class="form-group mb-3">
             <label class="form-label">{{ t('listing.title') }} *</label>
@@ -98,6 +103,7 @@
 definePageMeta({ middleware: 'auth' })
 const { t } = useI18n()
 const api = useApi()
+const { onInvalidCapture, onInputCapture } = useLocalizedFormValidation()
 const error = ref('')
 const submitting = ref(false)
 const step = ref('top')

@@ -16,7 +16,13 @@
             </div>
           </div>
 
-          <form v-else class="card" @submit.prevent="submit">
+          <form
+            v-else
+            class="card"
+            @submit.prevent="submit"
+            @invalid.capture="onInvalidCapture"
+            @input.capture="onInputCapture"
+          >
             <div class="card-body">
               <div class="form-group mb-3">
                 <label class="form-label">{{ t('contactPage.nameLabel') }}</label>
@@ -74,6 +80,7 @@
 <script setup>
 const { t } = useI18n()
 const api = useApi()
+const { onInvalidCapture, onInputCapture } = useLocalizedFormValidation()
 
 const form = reactive({ name: '', email: '', subject: '', message: '', consent: false, website: '' })
 const error = ref('')
