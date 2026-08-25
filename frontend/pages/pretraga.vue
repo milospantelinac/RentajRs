@@ -85,7 +85,6 @@
               <FilterFields
                 :query="query"
                 :filterable-attributes="filterableAttributes"
-                :show-search-button="false"
                 @set-attr="setAttrFilter"
                 @search="runSearch"
               />
@@ -262,14 +261,15 @@ function clearAllFilters() {
   runSearch()
 }
 
-function setAttrFilter(attributeId, key, value) {
-  const current = attributeFilters.get(attributeId) || { attributeId };
+function setAttrFilter(attributeIds, key, value) {
+  const mapKey = attributeIds.join(',')
+  const current = attributeFilters.get(mapKey) || { attributeIds };
   if (value === '' || value === null || (Array.isArray(value) && value.length === 0)) {
     delete current[key]
   } else {
     current[key] = key === 'min' || key === 'max' ? Number(value) : value
   }
-  attributeFilters.set(attributeId, current)
+  attributeFilters.set(mapKey, current)
 }
 
 async function selectCategory(cat) {
@@ -280,8 +280,14 @@ async function selectCategory(cat) {
   runSearch()
 }
 
-function selectSubcategory(child) {
+// T64/T68/T69 — a subcategory (e.g. "Kuće i vikendice", "Putnička vozila")
+// has its own filterable attributes, distinct from its parent's. This used to
+// leave the panel showing whatever the parent chip had fetched (often
+// nothing, since several parents carry no attributes of their own).
+async function selectSubcategory(child) {
   query.categorySlug = child.slug
+  attributeFilters.clear()
+  filterableAttributes.value = await api.get(`/search/filters?categorySlug=${child.slug}`)
   runSearch()
 }
 

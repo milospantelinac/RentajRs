@@ -21,8 +21,84 @@ export class SearchService {
   /** R47 — only attributes flagged as filters, for the given category (used to render the left panel). */
   async getFilterableAttributes(categorySlug: string) {
     const category = await this.prisma.category.findUniqueOrThrow({ where: { slug: categorySlug } });
-    const attributes = await this.taxonomy.resolveAttributesForCategory(category.id);
-    return attributes.filter((a) => a.isFilter);
+    const ownAttributes = (await this.taxonomy.resolveAttributesForCategory(category.id)).filter((a) => a.isFilter);
+
+    const children = await this.prisma.category.findMany({ where: { parentId: category.id, status: 'ACTIVE' } });
+    if (!children.length) {
+      return ownAttributes.map((a) => ({
+        ...a,
+        attributeIds: [a.id],
+        options: a.options.map((o) => ({ ...o, ids: [o.id] })),
+      }));
+    }
+
+    // T64 — a parent category (e.g. "Nekretnine") can carry none of its own
+    // attributes, with every real field defined once per child subcategory
+    // instead (unlike "Prostori za proslave", which puts shared fields on the
+    // parent itself). Merge same-key filterable attributes across the DIRECT
+    // children so picking the parent chip still surfaces a working filter
+    // panel, without touching how each child's own attributes/options are
+    // modeled or stored.
+    type MergedOption = { id: string; key: string; name: string; ids: string[] };
+    type MergedFilter = {
+      key: string;
+      name: string;
+      type: string;
+      filterType: string | null;
+      unit: string | null;
+      attributeIds: string[];
+      options: Map<string, MergedOption>;
+    };
+    const merged = new Map<string, MergedFilter>();
+    const excluded = new Set<string>(); // keys whose type/filterType conflicts across sources — can't render as one control
+
+    const consider = (attr: (typeof ownAttributes)[number]) => {
+      if (excluded.has(attr.key)) return;
+      const existing = merged.get(attr.key);
+      if (!existing) {
+        merged.set(attr.key, {
+          key: attr.key,
+          name: attr.name,
+          type: attr.type,
+          filterType: attr.filterType,
+          unit: attr.unit,
+          attributeIds: [attr.id],
+          // Every subcategory's own AttributeOption row has its own id even
+          // for the "same" amenity (e.g. "Klima" under Stanovi vs Kuće) — kept
+          // here as `ids` so a search filter can match on any of them.
+          options: new Map(attr.options.map((o) => [o.key, { ...o, ids: [o.id] }])),
+        });
+        return;
+      }
+      if (existing.type !== attr.type || existing.filterType !== attr.filterType) {
+        merged.delete(attr.key);
+        excluded.add(attr.key);
+        return;
+      }
+      existing.attributeIds.push(attr.id);
+      for (const o of attr.options) {
+        const existingOption = existing.options.get(o.key);
+        if (existingOption) existingOption.ids.push(o.id);
+        else existing.options.set(o.key, { ...o, ids: [o.id] });
+      }
+    };
+
+    for (const attr of ownAttributes) consider(attr);
+    for (const child of children) {
+      const childAttributes = (await this.taxonomy.resolveAttributesForCategory(child.id)).filter((a) => a.isFilter);
+      for (const attr of childAttributes) consider(attr);
+    }
+
+    return Array.from(merged.values()).map((m) => ({
+      id: m.attributeIds[0],
+      attributeIds: m.attributeIds,
+      key: m.key,
+      name: m.name,
+      type: m.type,
+      filterType: m.filterType,
+      unit: m.unit,
+      options: Array.from(m.options.values()),
+    }));
   }
 
   async search(dto: SearchListingsDto) {
@@ -247,18 +323,34 @@ export class SearchService {
     }
 
     if (dto.attributes?.length) {
-      const attributeConditions: Prisma.ListingWhereInput[] = dto.attributes.map((filter) => {
-        const attributeMatch: Prisma.ListingAttributeWhereInput = { attributeId: filter.attributeId };
+      const attributeConditions: Prisma.ListingWhereInput[] = [];
+      for (const filter of dto.attributes) {
+        // in: attributeIds — a listing only ever has a row under ONE of these
+        // (see AttributeFilterInput), so this is effectively "any of these
+        // ids has a value matching the rest of the condition".
+        const baseMatch: Prisma.ListingAttributeWhereInput = { attributeId: { in: filter.attributeIds } };
         if (filter.min !== undefined || filter.max !== undefined) {
-          attributeMatch.valueNumber = {
+          baseMatch.valueNumber = {
             ...(filter.min !== undefined ? { gte: filter.min } : {}),
             ...(filter.max !== undefined ? { lte: filter.max } : {}),
           };
         }
-        if (filter.boolean !== undefined) attributeMatch.valueBoolean = filter.boolean;
-        if (filter.optionIds?.length) attributeMatch.valueOptionIds = { hasSome: filter.optionIds };
-        return { attributes: { some: attributeMatch } };
-      });
+        if (filter.boolean !== undefined) baseMatch.valueBoolean = filter.boolean;
+
+        if (filter.optionIds?.length) {
+          // T62/T64 — one condition per selected option (group), ANDed
+          // together: a listing must have EVERY selected amenity, not just
+          // some overlap. Within a group, hasSome accepts any of the ids
+          // that represent that one logical option (plural only for a
+          // merged parent-level filter, where each subcategory stores the
+          // "same" amenity under its own AttributeOption row/id).
+          for (const group of filter.optionIds) {
+            attributeConditions.push({ attributes: { some: { ...baseMatch, valueOptionIds: { hasSome: group } } } });
+          }
+        } else {
+          attributeConditions.push({ attributes: { some: baseMatch } });
+        }
+      }
       where.AND = [...((where.AND as Prisma.ListingWhereInput[]) ?? []), ...attributeConditions];
     }
 

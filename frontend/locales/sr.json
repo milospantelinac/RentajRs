@@ -351,7 +351,8 @@
     "dateTo": "Datum do",
     "resultsCount": "Pronašli smo {count} oglas(a)",
     "activeFilters": "Aktivni filteri",
-    "clearAllFilters": "Obriši sve"
+    "clearAllFilters": "Obriši sve",
+    "applyFilters": "Filtriraj"
   },
   "legalPages": {
     "lastUpdated": "Poslednja izmena: {date}",

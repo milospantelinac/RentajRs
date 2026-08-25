@@ -478,56 +478,60 @@ const CATEGORY_TREE: CategorySeed[] = [
     // dependsOnOptionKey, so a new machine type later is pure data (a new
     // option + a few dependent rows), never a schema or wizard code change.
     attributes: [
+      // T67 — the /pretraga filter panel for this category shows exactly
+      // Tip mašine / Sa rukovaocem / Dostava na lokaciju and nothing else;
+      // every other attribute below keeps its wizard/detail behavior
+      // (required, showOnCard, dependsOn...) but is no longer isFilter.
       { key: 'tip_masine', name: 'Tip mašine', type: AttributeType.LIST, required: true, isFilter: true, filterType: FilterType.SELECT, showOnCard: true, options: opts(['Bager', 'Dizalica / Kran', 'Mini mašina', 'Platforma za rad na visini', 'Transporter / Mini damper', 'Viljuškar']) },
-      { key: 'godina_proizvodnje', name: 'Godina proizvodnje', type: AttributeType.YEAR, isFilter: true, filterType: FilterType.RANGE, showOnCard: true },
-      { key: 'vrsta_pogona', name: 'Vrsta pogona', type: AttributeType.LIST, required: true, isFilter: true, filterType: FilterType.SELECT, showOnCard: true, options: opts(['Dizel', 'Benzin', 'Električni', 'Hibridni']) },
-      { key: 'stanje_masine', name: 'Stanje mašine', type: AttributeType.LIST, isFilter: true, filterType: FilterType.SELECT, options: opts(['Novo', 'Polovno', 'Za delove']) },
-      { key: 'tezina_masine', name: 'Težina mašine', type: AttributeType.NUMBER, unit: 'kg', isFilter: true, filterType: FilterType.RANGE },
-      { key: 'snaga_motora', name: 'Snaga motora', type: AttributeType.NUMBER, unit: 'kW', isFilter: true, filterType: FilterType.RANGE },
+      { key: 'godina_proizvodnje', name: 'Godina proizvodnje', type: AttributeType.YEAR, showOnCard: true },
+      { key: 'vrsta_pogona', name: 'Vrsta pogona', type: AttributeType.LIST, required: true, showOnCard: true, options: opts(['Dizel', 'Benzin', 'Električni', 'Hibridni']) },
+      { key: 'stanje_masine', name: 'Stanje mašine', type: AttributeType.LIST, options: opts(['Novo', 'Polovno', 'Za delove']) },
+      { key: 'tezina_masine', name: 'Težina mašine', type: AttributeType.NUMBER, unit: 'kg' },
+      { key: 'snaga_motora', name: 'Snaga motora', type: AttributeType.NUMBER, unit: 'kW' },
       { key: 'sa_rukovaocem', name: 'Sa rukovaocem', type: AttributeType.BOOLEAN, required: true, isFilter: true, filterType: FilterType.TOGGLE, showOnCard: true },
       { key: 'dostava_na_lokaciju', name: 'Dostava na lokaciju', type: AttributeType.BOOLEAN, isFilter: true, filterType: FilterType.TOGGLE, showOnCard: true },
 
       // -- Bager --
-      { key: 'tip_bagera', name: 'Tip bagera', type: AttributeType.LIST, required: true, isFilter: true, filterType: FilterType.SELECT, showOnCard: true, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'bager', options: opts(['Guseničar', 'Točkaš', 'Mini bager', 'Bager-utovarivač']) },
-      { key: 'max_dubina_kopanja', name: 'Maksimalna dubina kopanja', type: AttributeType.NUMBER, unit: 'm', isFilter: true, filterType: FilterType.RANGE, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'bager' },
-      { key: 'max_radna_visina_bager', name: 'Maksimalna radna visina', type: AttributeType.NUMBER, unit: 'm', isFilter: true, filterType: FilterType.RANGE, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'bager' },
-      { key: 'zapremina_kasike', name: 'Zapremina kašike', type: AttributeType.NUMBER, unit: 'm³', isFilter: true, filterType: FilterType.RANGE, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'bager' },
-      { key: 'tip_kabine_bager', name: 'Tip kabine', type: AttributeType.LIST, isFilter: true, filterType: FilterType.SELECT, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'bager', options: opts(['Otvorena', 'Zatvorena', 'Klimatizovana']) },
+      { key: 'tip_bagera', name: 'Tip bagera', type: AttributeType.LIST, required: true, showOnCard: true, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'bager', options: opts(['Guseničar', 'Točkaš', 'Mini bager', 'Bager-utovarivač']) },
+      { key: 'max_dubina_kopanja', name: 'Maksimalna dubina kopanja', type: AttributeType.NUMBER, unit: 'm', dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'bager' },
+      { key: 'max_radna_visina_bager', name: 'Maksimalna radna visina', type: AttributeType.NUMBER, unit: 'm', dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'bager' },
+      { key: 'zapremina_kasike', name: 'Zapremina kašike', type: AttributeType.NUMBER, unit: 'm³', dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'bager' },
+      { key: 'tip_kabine_bager', name: 'Tip kabine', type: AttributeType.LIST, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'bager', options: opts(['Otvorena', 'Zatvorena', 'Klimatizovana']) },
       { key: 'prikljucci_bager', name: 'Priključci', type: AttributeType.CHECKBOX_GROUP, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'bager', options: opts(['Standardna kašika', 'Hidraulični čekić', 'Grajfer', 'Bušilica / svrdlo', 'Rotirajuća kašika', 'Hidraulični adapteri', 'Tanjirasti priključak', 'Specijalni alati']) },
       { key: 'oprema_bager', name: 'Oprema', type: AttributeType.CHECKBOX_GROUP, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'bager', options: opts(['Daljinsko upravljanje', 'Digitalni displej / kontrolni panel', 'GPS / navigacija', 'Grejanje kabine', 'Klima u kabini', 'LED / radna svetla', 'Parking senzori', 'Sigurnosni pojasevi', 'Telematika / praćenje radnih sati']) },
 
       // -- Dizalica / Kran --
-      { key: 'tip_dizalice', name: 'Tip dizalice / krana', type: AttributeType.LIST, required: true, isFilter: true, filterType: FilterType.SELECT, showOnCard: true, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'dizalica-kran', options: opts(['Toranjski', 'Mobilni', 'Gusenični', 'Auto-dizalica']) },
-      { key: 'nosivost_dizalica', name: 'Nosivost', type: AttributeType.NUMBER, unit: 'kg', required: true, isFilter: true, filterType: FilterType.RANGE, showOnCard: true, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'dizalica-kran' },
-      { key: 'max_visina_dizanja_dizalica', name: 'Maksimalna visina dizanja', type: AttributeType.NUMBER, unit: 'm', required: true, isFilter: true, filterType: FilterType.RANGE, showOnCard: true, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'dizalica-kran' },
-      { key: 'horizontalni_domet', name: 'Horizontalni domet', type: AttributeType.NUMBER, unit: 'm', isFilter: true, filterType: FilterType.RANGE, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'dizalica-kran' },
-      { key: 'tip_kabine_dizalica', name: 'Tip kabine', type: AttributeType.LIST, isFilter: true, filterType: FilterType.SELECT, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'dizalica-kran', options: opts(['Otvorena', 'Zatvorena', 'Klimatizovana']) },
-      { key: 'stabilizatori', name: 'Stabilizatori', type: AttributeType.BOOLEAN, isFilter: true, filterType: FilterType.TOGGLE, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'dizalica-kran' },
-      { key: 'nacin_montaze', name: 'Način montaže', type: AttributeType.LIST, isFilter: true, filterType: FilterType.SELECT, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'dizalica-kran', options: opts(['Fiksna', 'Mobilna', 'Vučna']) },
+      { key: 'tip_dizalice', name: 'Tip dizalice / krana', type: AttributeType.LIST, required: true, showOnCard: true, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'dizalica-kran', options: opts(['Toranjski', 'Mobilni', 'Gusenični', 'Auto-dizalica']) },
+      { key: 'nosivost_dizalica', name: 'Nosivost', type: AttributeType.NUMBER, unit: 'kg', required: true, showOnCard: true, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'dizalica-kran' },
+      { key: 'max_visina_dizanja_dizalica', name: 'Maksimalna visina dizanja', type: AttributeType.NUMBER, unit: 'm', required: true, showOnCard: true, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'dizalica-kran' },
+      { key: 'horizontalni_domet', name: 'Horizontalni domet', type: AttributeType.NUMBER, unit: 'm', dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'dizalica-kran' },
+      { key: 'tip_kabine_dizalica', name: 'Tip kabine', type: AttributeType.LIST, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'dizalica-kran', options: opts(['Otvorena', 'Zatvorena', 'Klimatizovana']) },
+      { key: 'stabilizatori', name: 'Stabilizatori', type: AttributeType.BOOLEAN, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'dizalica-kran' },
+      { key: 'nacin_montaze', name: 'Način montaže', type: AttributeType.LIST, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'dizalica-kran', options: opts(['Fiksna', 'Mobilna', 'Vučna']) },
 
       // -- Mini mašina --
-      { key: 'tip_mini_masine', name: 'Tip mini mašine', type: AttributeType.LIST, required: true, isFilter: true, filterType: FilterType.SELECT, showOnCard: true, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'mini-masina', options: opts(['Mini utovarivač', 'Mini bager', 'Mini damper']) },
+      { key: 'tip_mini_masine', name: 'Tip mini mašine', type: AttributeType.LIST, required: true, showOnCard: true, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'mini-masina', options: opts(['Mini utovarivač', 'Mini bager', 'Mini damper']) },
 
       // -- Platforma za rad na visini --
-      { key: 'tip_platforme', name: 'Tip platforme', type: AttributeType.LIST, required: true, isFilter: true, filterType: FilterType.SELECT, showOnCard: true, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'platforma-za-rad-na-visini', options: opts(['Škarasta', 'Zglobna', 'Teleskopska', 'Guseničarska']) },
-      { key: 'max_radna_visina_platforma', name: 'Maksimalna radna visina', type: AttributeType.NUMBER, unit: 'm', required: true, isFilter: true, filterType: FilterType.RANGE, showOnCard: true, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'platforma-za-rad-na-visini' },
-      { key: 'nosivost_platforma', name: 'Nosivost', type: AttributeType.NUMBER, unit: 'kg', required: true, isFilter: true, filterType: FilterType.RANGE, showOnCard: true, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'platforma-za-rad-na-visini' },
-      { key: 'radni_prostor_platforma', name: 'Radni prostor', type: AttributeType.LIST, isFilter: true, filterType: FilterType.SELECT, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'platforma-za-rad-na-visini', options: opts(['Unutrašnji', 'Spoljašnji', 'Oba']) },
-      { key: 'radni_domet_platforma', name: 'Radni domet', type: AttributeType.NUMBER, unit: 'm', isFilter: true, filterType: FilterType.RANGE, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'platforma-za-rad-na-visini' },
+      { key: 'tip_platforme', name: 'Tip platforme', type: AttributeType.LIST, required: true, showOnCard: true, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'platforma-za-rad-na-visini', options: opts(['Škarasta', 'Zglobna', 'Teleskopska', 'Guseničarska']) },
+      { key: 'max_radna_visina_platforma', name: 'Maksimalna radna visina', type: AttributeType.NUMBER, unit: 'm', required: true, showOnCard: true, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'platforma-za-rad-na-visini' },
+      { key: 'nosivost_platforma', name: 'Nosivost', type: AttributeType.NUMBER, unit: 'kg', required: true, showOnCard: true, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'platforma-za-rad-na-visini' },
+      { key: 'radni_prostor_platforma', name: 'Radni prostor', type: AttributeType.LIST, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'platforma-za-rad-na-visini', options: opts(['Unutrašnji', 'Spoljašnji', 'Oba']) },
+      { key: 'radni_domet_platforma', name: 'Radni domet', type: AttributeType.NUMBER, unit: 'm', dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'platforma-za-rad-na-visini' },
 
       // -- Transporter / Mini damper --
-      { key: 'tip_transportera', name: 'Tip transportera', type: AttributeType.LIST, required: true, isFilter: true, filterType: FilterType.SELECT, showOnCard: true, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'transporter-mini-damper', options: opts(['Gusenični', 'Točkaš']) },
-      { key: 'nosivost_transporter', name: 'Nosivost', type: AttributeType.NUMBER, unit: 'kg', required: true, isFilter: true, filterType: FilterType.RANGE, showOnCard: true, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'transporter-mini-damper' },
-      { key: 'zapremina_korpe', name: 'Zapremina korpe', type: AttributeType.NUMBER, unit: 'm³', isFilter: true, filterType: FilterType.RANGE, showOnCard: true, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'transporter-mini-damper' },
-      { key: 'visina_istovara', name: 'Visina istovara', type: AttributeType.NUMBER, unit: 'm', isFilter: true, filterType: FilterType.RANGE, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'transporter-mini-damper' },
-      { key: 'nacin_kipovanja', name: 'Način kipovanja', type: AttributeType.LIST, isFilter: true, filterType: FilterType.SELECT, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'transporter-mini-damper', options: opts(['Zadnje', 'Bočno', 'Trostrano']) },
+      { key: 'tip_transportera', name: 'Tip transportera', type: AttributeType.LIST, required: true, showOnCard: true, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'transporter-mini-damper', options: opts(['Gusenični', 'Točkaš']) },
+      { key: 'nosivost_transporter', name: 'Nosivost', type: AttributeType.NUMBER, unit: 'kg', required: true, showOnCard: true, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'transporter-mini-damper' },
+      { key: 'zapremina_korpe', name: 'Zapremina korpe', type: AttributeType.NUMBER, unit: 'm³', showOnCard: true, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'transporter-mini-damper' },
+      { key: 'visina_istovara', name: 'Visina istovara', type: AttributeType.NUMBER, unit: 'm', dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'transporter-mini-damper' },
+      { key: 'nacin_kipovanja', name: 'Način kipovanja', type: AttributeType.LIST, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'transporter-mini-damper', options: opts(['Zadnje', 'Bočno', 'Trostrano']) },
 
       // -- Viljuškar --
-      { key: 'tip_viljuskara', name: 'Tip viljuškara', type: AttributeType.LIST, required: true, isFilter: true, filterType: FilterType.SELECT, showOnCard: true, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'viljuskar', options: opts(['Dizel', 'Elektro', 'Gas', 'Teleskopski']) },
-      { key: 'nosivost_viljuskar', name: 'Nosivost', type: AttributeType.NUMBER, unit: 'kg', required: true, isFilter: true, filterType: FilterType.RANGE, showOnCard: true, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'viljuskar' },
-      { key: 'max_visina_dizanja_viljuskar', name: 'Maksimalna visina dizanja', type: AttributeType.NUMBER, unit: 'm', required: true, isFilter: true, filterType: FilterType.RANGE, showOnCard: true, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'viljuskar' },
-      { key: 'radni_prostor_viljuskar', name: 'Radni prostor', type: AttributeType.LIST, isFilter: true, filterType: FilterType.SELECT, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'viljuskar', options: opts(['Unutrašnji', 'Spoljašnji']) },
-      { key: 'radni_domet_viljuskar', name: 'Radni domet', type: AttributeType.NUMBER, unit: 'm', isFilter: true, filterType: FilterType.RANGE, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'viljuskar' },
+      { key: 'tip_viljuskara', name: 'Tip viljuškara', type: AttributeType.LIST, required: true, showOnCard: true, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'viljuskar', options: opts(['Dizel', 'Elektro', 'Gas', 'Teleskopski']) },
+      { key: 'nosivost_viljuskar', name: 'Nosivost', type: AttributeType.NUMBER, unit: 'kg', required: true, showOnCard: true, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'viljuskar' },
+      { key: 'max_visina_dizanja_viljuskar', name: 'Maksimalna visina dizanja', type: AttributeType.NUMBER, unit: 'm', required: true, showOnCard: true, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'viljuskar' },
+      { key: 'radni_prostor_viljuskar', name: 'Radni prostor', type: AttributeType.LIST, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'viljuskar', options: opts(['Unutrašnji', 'Spoljašnji']) },
+      { key: 'radni_domet_viljuskar', name: 'Radni domet', type: AttributeType.NUMBER, unit: 'm', dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'viljuskar' },
     ],
   },
   {
@@ -537,8 +541,11 @@ const CATEGORY_TREE: CategorySeed[] = [
     allowedPriceUnits: [PriceUnit.MONTH],
     defaultPriceUnit: PriceUnit.MONTH,
     attributes: [
-      { key: 'povrsina', name: 'Površina', type: AttributeType.NUMBER, unit: 'm²', required: true, isFilter: true, filterType: FilterType.RANGE, showOnCard: true },
-      { key: 'visina_prostora', name: 'Visina prostora', type: AttributeType.NUMBER, unit: 'm', required: true, isFilter: true, filterType: FilterType.RANGE, showOnCard: true },
+      // T66 — kept as wizard/detail fields (required, showOnCard) but
+      // intentionally not a search filter — the document explicitly asked
+      // for these to be left out of the /pretraga panel for now.
+      { key: 'povrsina', name: 'Površina', type: AttributeType.NUMBER, unit: 'm²', required: true, showOnCard: true },
+      { key: 'visina_prostora', name: 'Visina prostora', type: AttributeType.NUMBER, unit: 'm', required: true, showOnCard: true },
       { key: 'tip_prostora', name: 'Tip prostora', type: AttributeType.LIST, required: true, isFilter: true, filterType: FilterType.SELECT, showOnCard: true, options: opts(['Privatni magacin', 'Poslovni magacin', 'Industrijski magacin', 'Skladišni prostor', 'Hladnjača']) },
       {
         key: 'sadrzaji', name: 'Sadržaji', type: AttributeType.CHECKBOX_GROUP, isFilter: true, filterType: FilterType.SELECT,

@@ -16,9 +16,10 @@ const class_validator_1 = require("class-validator");
 class AttributeFilterInput {
 }
 __decorate([
-    (0, class_validator_1.IsUUID)('4'),
-    __metadata("design:type", String)
-], AttributeFilterInput.prototype, "attributeId", void 0);
+    (0, class_validator_1.IsArray)(),
+    (0, class_validator_1.IsUUID)('4', { each: true }),
+    __metadata("design:type", Array)
+], AttributeFilterInput.prototype, "attributeIds", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsNumber)(),
@@ -37,7 +38,6 @@ __decorate([
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsArray)(),
-    (0, class_validator_1.IsUUID)('4', { each: true }),
     __metadata("design:type", Array)
 ], AttributeFilterInput.prototype, "optionIds", void 0);
 class SearchListingsDto {

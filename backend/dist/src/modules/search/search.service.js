@@ -26,8 +26,64 @@ let SearchService = class SearchService {
     }
     async getFilterableAttributes(categorySlug) {
         const category = await this.prisma.category.findUniqueOrThrow({ where: { slug: categorySlug } });
-        const attributes = await this.taxonomy.resolveAttributesForCategory(category.id);
-        return attributes.filter((a) => a.isFilter);
+        const ownAttributes = (await this.taxonomy.resolveAttributesForCategory(category.id)).filter((a) => a.isFilter);
+        const children = await this.prisma.category.findMany({ where: { parentId: category.id, status: 'ACTIVE' } });
+        if (!children.length) {
+            return ownAttributes.map((a) => ({
+                ...a,
+                attributeIds: [a.id],
+                options: a.options.map((o) => ({ ...o, ids: [o.id] })),
+            }));
+        }
+        const merged = new Map();
+        const excluded = new Set();
+        const consider = (attr) => {
+            if (excluded.has(attr.key))
+                return;
+            const existing = merged.get(attr.key);
+            if (!existing) {
+                merged.set(attr.key, {
+                    key: attr.key,
+                    name: attr.name,
+                    type: attr.type,
+                    filterType: attr.filterType,
+                    unit: attr.unit,
+                    attributeIds: [attr.id],
+                    options: new Map(attr.options.map((o) => [o.key, { ...o, ids: [o.id] }])),
+                });
+                return;
+            }
+            if (existing.type !== attr.type || existing.filterType !== attr.filterType) {
+                merged.delete(attr.key);
+                excluded.add(attr.key);
+                return;
+            }
+            existing.attributeIds.push(attr.id);
+            for (const o of attr.options) {
+                const existingOption = existing.options.get(o.key);
+                if (existingOption)
+                    existingOption.ids.push(o.id);
+                else
+                    existing.options.set(o.key, { ...o, ids: [o.id] });
+            }
+        };
+        for (const attr of ownAttributes)
+            consider(attr);
+        for (const child of children) {
+            const childAttributes = (await this.taxonomy.resolveAttributesForCategory(child.id)).filter((a) => a.isFilter);
+            for (const attr of childAttributes)
+                consider(attr);
+        }
+        return Array.from(merged.values()).map((m) => ({
+            id: m.attributeIds[0],
+            attributeIds: m.attributeIds,
+            key: m.key,
+            name: m.name,
+            type: m.type,
+            filterType: m.filterType,
+            unit: m.unit,
+            options: Array.from(m.options.values()),
+        }));
     }
     async search(dto) {
         const page = dto.page ?? 1;
@@ -188,20 +244,26 @@ let SearchService = class SearchService {
             where.longitude = { gte: dto.mapWest, lte: dto.mapEast };
         }
         if (dto.attributes?.length) {
-            const attributeConditions = dto.attributes.map((filter) => {
-                const attributeMatch = { attributeId: filter.attributeId };
+            const attributeConditions = [];
+            for (const filter of dto.attributes) {
+                const baseMatch = { attributeId: { in: filter.attributeIds } };
                 if (filter.min !== undefined || filter.max !== undefined) {
-                    attributeMatch.valueNumber = {
+                    baseMatch.valueNumber = {
                         ...(filter.min !== undefined ? { gte: filter.min } : {}),
                         ...(filter.max !== undefined ? { lte: filter.max } : {}),
                     };
                 }
                 if (filter.boolean !== undefined)
-                    attributeMatch.valueBoolean = filter.boolean;
-                if (filter.optionIds?.length)
-                    attributeMatch.valueOptionIds = { hasSome: filter.optionIds };
-                return { attributes: { some: attributeMatch } };
-            });
+                    baseMatch.valueBoolean = filter.boolean;
+                if (filter.optionIds?.length) {
+                    for (const group of filter.optionIds) {
+                        attributeConditions.push({ attributes: { some: { ...baseMatch, valueOptionIds: { hasSome: group } } } });
+                    }
+                }
+                else {
+                    attributeConditions.push({ attributes: { some: baseMatch } });
+                }
+            }
             where.AND = [...(where.AND ?? []), ...attributeConditions];
         }
         if (dto.dateFrom && dto.dateTo) {

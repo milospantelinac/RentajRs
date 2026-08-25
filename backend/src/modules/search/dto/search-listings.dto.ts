@@ -15,8 +15,14 @@ import {
 } from 'class-validator';
 
 class AttributeFilterInput {
-  @IsUUID('4')
-  attributeId: string;
+  // An array, not a single id — a filter field can be backed by several
+  // CategoryAttribute rows that share a key (see SearchService.getFilterableAttributes'
+  // parent-category merge, T64): the listing only ever has a value under ONE
+  // of them (whichever subcategory it actually belongs to), so matching is
+  // "any of these ids", not "exactly this one".
+  @IsArray()
+  @IsUUID('4', { each: true })
+  attributeIds: string[];
 
   @IsOptional()
   @IsNumber()
@@ -30,10 +36,14 @@ class AttributeFilterInput {
   @IsBoolean()
   boolean?: boolean;
 
+  // One group per logical selected option, each group listing every id that
+  // represents it (usually just one — several only when a merged parent-level
+  // filter's same amenity is backed by a different AttributeOption row per
+  // subcategory, see SearchService.getFilterableAttributes). A listing
+  // matches a group if it has ANY id in it; it must match EVERY group.
   @IsOptional()
   @IsArray()
-  @IsUUID('4', { each: true })
-  optionIds?: string[];
+  optionIds?: string[][];
 }
 
 /**
