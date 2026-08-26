@@ -104,7 +104,7 @@
           </section>
 
           <section class="mb-4">
-            <h2 class="text-section-title mb-3">{{ t('listing.reviews') }}</h2>
+            <h2 class="text-section-title mb-3">{{ t('listing.reviewsHeading') }}</h2>
             <p v-if="!reviews?.length" class="text-muted">{{ t('reviews.noReviewsYet') }}</p>
             <div v-for="review in reviews" :key="review.id" class="mb-3 card">
               <div class="card-body-sm">

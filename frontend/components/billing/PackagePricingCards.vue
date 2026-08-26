@@ -26,7 +26,16 @@
                 {{ t('billing.yearlySavings', { amount: formatPrice(yearlySavings(pkg)) }) }}
               </p>
               <ul class="package-features">
-                <li>{{ t('billing.featureListings', { count: pkg.listingLimit }) }}</li>
+                <li>{{ pkg.listingLimit > 1 ? t('billing.featureListingsUpTo', { count: pkg.listingLimit }) : t('billing.featureListings', { count: pkg.listingLimit }) }}</li>
+                <li>{{ t('billing.featureVisible30Days') }}</li>
+                <template v-if="pkg.key === 'BASIC'">
+                  <li>{{ t('billing.featureGalleryDescription') }}</li>
+                  <li>{{ t('billing.featureContactInfo') }}</li>
+                </template>
+                <template v-else>
+                  <li>{{ t('billing.featureAllFromBasic') }}</li>
+                  <li>{{ t('billing.featurePrioritySupport') }}</li>
+                </template>
                 <li :class="pkg.hasBookings ? '' : 'package-feature-off'">{{ t('billing.featureBookings') }}</li>
                 <li :class="pkg.hasMessaging ? '' : 'package-feature-off'">{{ t('billing.featureMessaging') }}</li>
                 <li :class="pkg.hasReviews ? '' : 'package-feature-off'">{{ t('billing.featureReviews') }}</li>
@@ -35,12 +44,11 @@
             </div>
             <p v-if="disabledKeys.includes(pkg.key)" class="package-disabled-note">{{ disabledReason }}</p>
             <slot v-else name="cta" :pkg="pkg" />
+            <p class="package-vat-footnote">{{ t('billing.vatFootnote') }}</p>
           </div>
         </div>
       </div>
     </div>
-
-    <p class="text-muted text-center pricing-vat-note">{{ t('billing.notVatRegistered') }}</p>
   </div>
 </template>
 
@@ -123,7 +131,9 @@ function yearlySavings(pkg) {
   text-decoration: line-through;
 }
 
-.pricing-vat-note {
-  margin-top: 8px;
+.package-vat-footnote {
+  color: $color-text-muted;
+  font-size: $font-size-label;
+  margin: 8px 0 0;
 }
 </style>

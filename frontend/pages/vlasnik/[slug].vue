@@ -32,7 +32,7 @@
           </div>
         </div>
 
-        <h2 class="text-section-title mt-4 mb-3">{{ t('listing.reviews') }}</h2>
+        <h2 class="text-section-title mt-4 mb-3">{{ t('listing.reviewsHeading') }}</h2>
         <p v-if="!profile.reviewsReceived?.length" class="text-muted">{{ t('reviews.noReviewsYet') }}</p>
         <div v-for="review in profile.reviewsReceived" :key="review.id" class="mb-3 card">
           <div class="card-body-sm">

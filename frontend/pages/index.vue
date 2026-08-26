@@ -189,18 +189,37 @@
         <span class="section-title-light">{{ t('home.howItWorksVideoTitleStrong') }}</span>&nbsp;<span class="section-title-strong">{{ t('home.howItWorksVideoTitleLight') }}</span>
       </h2>
       <div class="video-frame">
-        <iframe
+        <button
           v-if="videoEmbedUrl.type === 'iframe'"
-          :src="videoEmbedUrl.src"
-          class="video-iframe"
-          title="Rentaj"
-          frameborder="0"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-          allowfullscreen
-        />
+          type="button"
+          class="video-thumbnail"
+          :style="videoEmbedUrl.thumbnail ? { backgroundImage: `url(${videoEmbedUrl.thumbnail})` } : {}"
+          :aria-label="t('home.playVideo')"
+          @click="openVideoModal"
+        >
+          <span class="video-play-icon" aria-hidden="true">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M8 5v14l11-7-11-7Z" fill="currentColor" /></svg>
+          </span>
+        </button>
         <video v-else :src="videoEmbedUrl.src" class="video-native" controls />
       </div>
     </section>
+
+    <Teleport to="body">
+      <div v-if="videoModalOpen" class="video-modal-backdrop" @click.self="closeVideoModal">
+        <div class="video-modal-frame">
+          <button type="button" class="video-modal-close" :aria-label="t('common.close')" @click="closeVideoModal">✕</button>
+          <iframe
+            :src="videoModalSrc"
+            class="video-iframe"
+            title="Rentaj"
+            frameborder="0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowfullscreen
+          />
+        </div>
+      </div>
+    </Teleport>
 
     <section class="container faq-section">
       <div class="faq-section-grid">
@@ -268,13 +287,43 @@ const videoEmbedUrl = computed(() => {
   if (/\.(mp4|webm|ogg)$/i.test(url)) return { type: 'video', src: url }
 
   const youtubeMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([\w-]+)/)
-  if (youtubeMatch) return { type: 'iframe', src: `https://www.youtube.com/embed/${youtubeMatch[1]}` }
+  if (youtubeMatch) {
+    return {
+      type: 'iframe',
+      src: `https://www.youtube.com/embed/${youtubeMatch[1]}`,
+      thumbnail: `https://img.youtube.com/vi/${youtubeMatch[1]}/hqdefault.jpg`,
+    }
+  }
 
   const vimeoMatch = url.match(/vimeo\.com\/(?:video\/)?(\d+)/)
   if (vimeoMatch) return { type: 'iframe', src: `https://player.vimeo.com/video/${vimeoMatch[1]}` }
 
   return { type: 'iframe', src: url }
 })
+
+// T02 — the embed used to load (and autoplay-eligible) inline as soon as the
+// section scrolled into view; now it opens full-screen only once the visitor
+// actually clicks play, with ?autoplay=1 added so it starts immediately there.
+const videoModalOpen = ref(false)
+const videoModalSrc = computed(() => {
+  if (!videoEmbedUrl.value || videoEmbedUrl.value.type !== 'iframe') return ''
+  const sep = videoEmbedUrl.value.src.includes('?') ? '&' : '?'
+  return `${videoEmbedUrl.value.src}${sep}autoplay=1`
+})
+function openVideoModal() {
+  videoModalOpen.value = true
+}
+function closeVideoModal() {
+  videoModalOpen.value = false
+}
+function onVideoModalKeydown(e) {
+  if (e.key === 'Escape') closeVideoModal()
+}
+watch(videoModalOpen, (open) => {
+  if (open) window.addEventListener('keydown', onVideoModalKeydown)
+  else window.removeEventListener('keydown', onVideoModalKeydown)
+})
+onUnmounted(() => window.removeEventListener('keydown', onVideoModalKeydown))
 
 const priceBuckets = computed(() => [
   { value: '', label: t('home.searchPriceLabel') },
@@ -1027,6 +1076,87 @@ useHead({
   width: 100%;
   height: 100%;
   border: none;
+}
+
+.video-thumbnail {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  background-color: $color-dark;
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.video-thumbnail::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(6, 27, 49, 0.35);
+}
+
+.video-play-icon {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+  color: $color-primary;
+  transition: transform 0.15s ease;
+}
+
+.video-thumbnail:hover .video-play-icon {
+  transform: scale(1.06);
+}
+
+.video-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(6, 27, 49, 0.8);
+  z-index: $z-modal;
+}
+
+.video-modal-frame {
+  position: relative;
+  width: 100%;
+  max-width: 960px;
+  aspect-ratio: 16 / 9;
+  background: $color-dark;
+  border-radius: $radius-card;
+  overflow: hidden;
+}
+
+.video-modal-close {
+  position: absolute;
+  top: -40px;
+  right: 0;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.video-modal-close:hover {
+  background: rgba(255, 255, 255, 0.3);
 }
 
 // FAQ -------------------------------------------------------------------

@@ -13,7 +13,6 @@
           <NuxtLink to="/oglasi/novi" class="btn btn-primary-flat btn-block">{{ t('pricing.getStarted') }}</NuxtLink>
         </template>
       </PackagePricingCards>
-      <p class="text-muted text-center pricing-note">{{ t('pricing.noCommission') }}</p>
     </section>
   </div>
 </template>
@@ -36,15 +35,11 @@ useSeoMeta({ title: t('pricing.title'), description: t('pricing.subtitle') })
 
 .pricing-subtitle {
   color: $color-text-muted;
-  max-width: 560px;
+  max-width: 680px;
   margin: 0 auto 24px;
 }
 
 .pricing-cards {
   padding: 48px 0 64px;
-}
-
-.pricing-note {
-  margin-top: 16px;
 }
 </style>

@@ -146,7 +146,7 @@ export const emailTemplates: EmailTemplateSeed[] = [
     sr: {
       subject: 'Vaš oglas je objavljen',
       heading: '"{oglas}" je sada objavljen',
-      bodyText: 'Vaš oglas je prošao proveru i sada je vidljiv na Rentaju. Gosti ga od sada mogu pronaći i rezervisati.',
+      bodyText: 'Vaš oglas je prošao proveru i sada je vidljiv na Rentaj.rs. Gosti ga od sada mogu pronaći i rezervisati.',
       buttonLabel: 'Pogledaj oglas',
     },
     en: {

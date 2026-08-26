@@ -35,7 +35,7 @@
         <div class="col-12 col-md-4">
           <div class="text-label mb-3">{{ t('footer.platformGroup') }}</div>
           <NuxtLink to="/pretraga" class="footer-link">{{ t('nav.search') }}</NuxtLink>
-          <NuxtLink to="/prijava" class="footer-link">{{ t('nav.login') }}</NuxtLink>
+          <NuxtLink v-if="!auth.user" to="/prijava" class="footer-link">{{ t('nav.login') }}</NuxtLink>
           <NuxtLink to="/oglasi/novi" class="footer-link">{{ t('nav.addListing') }}</NuxtLink>
         </div>
       </div>
@@ -77,6 +77,7 @@
 
 <script setup>
 const { t } = useI18n()
+const auth = useAuthStore()
 const year = new Date().getFullYear()
 
 const { data: categories } = await useAsyncData('footer-categories', async () => {
