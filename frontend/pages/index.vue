@@ -208,7 +208,9 @@
     <Teleport to="body">
       <div v-if="videoModalOpen" class="video-modal-backdrop" @click.self="closeVideoModal">
         <div class="video-modal-frame">
-          <button type="button" class="video-modal-close" :aria-label="t('common.close')" @click="closeVideoModal">✕</button>
+          <button type="button" class="video-modal-close" :aria-label="t('common.close')" @click="closeVideoModal">
+            <FontAwesomeIcon icon="xmark" />
+          </button>
           <iframe
             :src="videoModalSrc"
             class="video-iframe"
@@ -1145,12 +1147,14 @@ useHead({
   right: 0;
   width: 32px;
   height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border: none;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.15);
   color: #fff;
   font-size: 16px;
-  line-height: 1;
   cursor: pointer;
   z-index: 1;
 }
