@@ -11,17 +11,18 @@ function formatRsd(para) {
         return '';
     return `${new Intl.NumberFormat('sr-RS').format(rsd)} RSD`;
 }
+const TIME_ZONE = 'Europe/Belgrade';
 function formatDate(date, locale) {
     if (!date)
         return '';
     const d = typeof date === 'string' ? new Date(date) : date;
-    return d.toLocaleDateString(locale, { day: 'numeric', month: 'long', year: 'numeric' });
+    return d.toLocaleDateString(locale, { day: 'numeric', month: 'long', year: 'numeric', timeZone: TIME_ZONE });
 }
 function formatDateTime(date, locale) {
     if (!date)
         return '';
     const d = typeof date === 'string' ? new Date(date) : date;
-    return d.toLocaleString(locale, { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    return d.toLocaleString(locale, { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: TIME_ZONE });
 }
 function localeFor(language) {
     return language === 'EN' ? 'en-US' : 'sr-Latn-RS';

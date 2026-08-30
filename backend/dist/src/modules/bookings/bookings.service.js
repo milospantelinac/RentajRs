@@ -303,7 +303,7 @@ let BookingsService = class BookingsService {
         return updated;
     }
     async cancelByOwner(ownerId, bookingId, dto) {
-        const booking = await this.assertOwnerAccess(ownerId, bookingId, ['REQUESTED', 'AWAITING_PAYMENT', 'CONFIRMED']);
+        const booking = await this.assertOwnerAccess(ownerId, bookingId, ['AWAITING_PAYMENT', 'CONFIRMED']);
         await this.availability.releaseTermsForBooking(booking.id);
         const updated = await this.applyStatus(booking, 'CANCELLED', ownerId, { cancellationReason: dto.reason });
         this.events.emit('booking.cancelled_by_owner', { bookingId: booking.id });
@@ -350,7 +350,11 @@ let BookingsService = class BookingsService {
     async getOne(userId, bookingId) {
         const booking = await this.prisma.booking.findUnique({
             where: { id: bookingId },
-            include: { listing: { select: { title: true, slug: true } }, guest: { select: { phone: true } } },
+            include: {
+                listing: { select: { title: true, slug: true, address: true } },
+                guest: { select: { firstName: true, lastName: true, phone: true } },
+                owner: { select: { firstName: true, lastName: true, phone: true } },
+            },
         });
         if (!booking)
             throw new common_1.NotFoundException();
@@ -490,14 +494,21 @@ let BookingsService = class BookingsService {
         });
     }
     serialize(booking, requestingUserId) {
-        const { guest, ...rest } = booking;
-        const showGuestPhone = !!guest && requestingUserId === booking.ownerId && booking.phoneUnlocked;
+        const { guest, owner, listing, ...rest } = booking;
+        const isOwnerViewing = !!guest && requestingUserId === booking.ownerId;
+        const showGuestPhone = isOwnerViewing && booking.phoneUnlocked;
+        const showOwnerContact = !!owner && requestingUserId === booking.guestId && booking.phoneUnlocked;
         return {
             ...rest,
+            ...(listing
+                ? { listing: { title: listing.title, slug: listing.slug, ...(showOwnerContact && listing.address ? { address: listing.address } : {}) } }
+                : {}),
             pricePerUnit: (0, money_1.paraToRsd)(booking.pricePerUnit),
             totalAmount: (0, money_1.paraToRsd)(booking.totalAmount),
             amountDue: (0, money_1.paraToRsd)(booking.amountDue),
+            ...(isOwnerViewing ? { guestName: `${guest.firstName} ${guest.lastName}` } : {}),
             ...(showGuestPhone ? { guestPhone: guest.phone } : {}),
+            ...(showOwnerContact ? { ownerName: `${owner.firstName} ${owner.lastName}`, ownerPhone: owner.phone } : {}),
         };
     }
 };

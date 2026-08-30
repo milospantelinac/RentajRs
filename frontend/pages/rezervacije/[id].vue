@@ -13,15 +13,21 @@
             </div>
             <div class="row mb-2">
               <div class="col-6 text-muted">{{ t('booking.checkIn') }}</div>
-              <div class="col-6">{{ new Date(booking.startsAt).toLocaleString('sr-RS') }}</div>
+              <div class="col-6">{{ formatCheckDate(booking.startsAt) }}</div>
             </div>
             <div class="row mb-2">
               <div class="col-6 text-muted">{{ t('booking.checkOut') }}</div>
-              <div class="col-6">{{ new Date(booking.endsAt).toLocaleString('sr-RS') }}</div>
+              <div class="col-6">{{ formatCheckDate(booking.endsAt) }}</div>
             </div>
             <div v-if="booking.guestCount" class="row mb-2">
               <div class="col-6 text-muted">{{ t('booking.guestCount') }}</div>
               <div class="col-6">{{ booking.guestCount }}</div>
+            </div>
+            <!-- T78 — the owner was always meant to see the guest's name
+                 (only the phone stays gated behind phoneUnlocked). -->
+            <div v-if="isOwner && booking.guestName" class="row mb-2">
+              <div class="col-6 text-muted">{{ t('booking.guestNameLabel') }}</div>
+              <div class="col-6">{{ booking.guestName }}</div>
             </div>
             <div class="row mb-2">
               <div class="col-6 text-muted">{{ t('booking.totalAmount') }}</div>
@@ -65,13 +71,51 @@
           </div>
         </div>
 
-        <!-- T47 — role-aware: the guest sees the QR/pay instructions they
-             need to act on; the owner would only ever be scanning their own
-             collection code here, so they get a status confirmation instead. -->
+        <!-- T80 — symmetric to the owner getting the guest's phone: the
+             guest only learns how to reach/find the owner once the stay is
+             actually confirmed (backend gates this on phoneUnlocked), never
+             on a bare request. -->
+        <div v-if="!isOwner && booking.ownerName" class="card mb-4">
+          <div class="card-body">
+            <h2 class="text-section-title mb-3">{{ t('booking.ownerContactTitle') }}</h2>
+            <div class="row mb-2">
+              <div class="col-6 text-muted">{{ t('booking.ownerNameLabel') }}</div>
+              <div class="col-6">{{ booking.ownerName }}</div>
+            </div>
+            <div v-if="booking.ownerPhone" class="row mb-2">
+              <div class="col-6 text-muted">{{ t('booking.ownerPhoneLabel') }}</div>
+              <div class="col-6"><a :href="`tel:${booking.ownerPhone}`">{{ booking.ownerPhone }}</a></div>
+            </div>
+            <div v-if="booking.listing?.address" class="row mb-2">
+              <div class="col-6 text-muted">{{ t('booking.listingAddressLabel') }}</div>
+              <div class="col-6">{{ booking.listing.address }}</div>
+            </div>
+            <NuxtLink v-if="booking.listing?.slug" :to="`/oglasi/${booking.listing.slug}`" class="btn btn-tertiary btn-sm mt-2">
+              {{ t('booking.viewListing') }}
+            </NuxtLink>
+          </div>
+        </div>
+
+        <!-- T78/T93 — the owner gets no card at all in the pending state
+             today: no sense of when the request came in, and no explanation
+             of why the calendar looks blocked for a request they haven't
+             acted on yet. -->
+        <div v-if="booking.status === 'REQUESTED' && isOwner" class="card mb-4">
+          <div class="card-body">
+            <p class="text-body mb-2">{{ t('booking.ownerPendingNotice') }}</p>
+            <p class="text-muted mb-0">{{ t('booking.requestReceivedAt') }}: {{ new Date(booking.createdAt).toLocaleString('sr-RS') }}</p>
+          </div>
+        </div>
+
+        <!-- T47/T93 — role-aware: the guest sees the QR/pay instructions
+             they need to act on; the owner gets a status confirmation plus
+             the same deadline the guest sees (T93 — it's the deadline the
+             owner set themselves in the wizard, so hiding it made no sense). -->
         <div v-if="booking.status === 'AWAITING_PAYMENT'" class="card mb-4">
           <div class="card-body text-center">
             <template v-if="isOwner">
               <p class="text-body mb-2">{{ t('booking.ownerAwaitingPaymentNotice') }}</p>
+              <p class="text-muted mb-0">{{ t('booking.payDeadline') }}: {{ new Date(booking.paymentDeadline).toLocaleString('sr-RS') }}</p>
             </template>
             <template v-else>
               <p class="text-body mb-2">{{ t('booking.payInstructions') }}</p>
@@ -81,12 +125,13 @@
             </template>
           </div>
         </div>
-        <!-- T49 — cash bookings skip AWAITING_PAYMENT entirely (confirmed
-             immediately, see BookingsService.approveRequest), so without this
-             they got no payment-related messaging at all. -->
+        <!-- T49/T78 — cash bookings skip AWAITING_PAYMENT entirely (confirmed
+             immediately, see BookingsService.approveRequest); this used to
+             show the guest's own text ("sent to YOUR email") to the owner
+             too, verbatim. -->
         <div v-else-if="booking.paymentMethod === 'CASH' && ['CONFIRMED', 'COMPLETED'].includes(booking.status)" class="card mb-4">
           <div class="card-body text-center">
-            <p class="text-body">{{ t('booking.cashPaymentNotice') }}</p>
+            <p class="text-body">{{ isOwner ? t('booking.cashPaymentNoticeOwner') : t('booking.cashPaymentNotice') }}</p>
           </div>
         </div>
 
@@ -98,13 +143,19 @@
               {{ t('booking.confirmPayment') }}
             </button>
             <button v-if="booking.status === 'CONFIRMED'" class="btn btn-tertiary" @click="act('no-show')">{{ t('booking.markNoShow') }}</button>
-            <button v-if="['REQUESTED','AWAITING_PAYMENT','CONFIRMED'].includes(booking.status)" class="btn btn-danger" @click="act('cancel-by-owner')">
+            <!-- T78 — a REQUESTED booking is never "cancelled" by the owner,
+                 it's rejected (Odbij, above) — a third button here just
+                 confused which action actually applies before approval. -->
+            <button v-if="['AWAITING_PAYMENT','CONFIRMED'].includes(booking.status)" class="btn btn-danger" @click="act('cancel-by-owner')">
               {{ t('booking.cancelBooking') }}
             </button>
           </template>
           <template v-else>
+            <!-- T78 — "Povuci zahtev" while it's still just a request the
+                 owner hasn't acted on; "Otkaži rezervaciju" once it's more
+                 than that (payment instructions already issued). -->
             <button v-if="['REQUESTED','AWAITING_PAYMENT'].includes(booking.status)" class="btn btn-danger" @click="act('cancel')">
-              {{ t('booking.cancelBooking') }}
+              {{ booking.status === 'REQUESTED' ? t('booking.withdrawRequest') : t('booking.cancelBooking') }}
             </button>
             <button v-if="booking.status === 'AWAITING_PAYMENT'" class="btn btn-tertiary" @click="act('dispute-payment')">
               {{ t('booking.reportUnpaidConfirmed') }}
@@ -215,6 +266,17 @@ const cancellationLabel = computed(() => {
 
 function formatPrice(value) {
   return `${new Intl.NumberFormat('sr-RS').format(value || 0)} RSD`
+}
+
+// T82 — a NIGHT/DAY/MONTH booking's startsAt/endsAt are calendar-day
+// boundaries with no meaningful time component (always midnight); showing
+// the time rendered it as "02:00:00" (midnight UTC read back in the local
+// Belgrade offset), implying check-in happens at 2am. A PER_SLOT/HOUR
+// booking's timestamps are a real time of day and must keep showing it.
+const DATE_ONLY_UNITS = ['NIGHT', 'DAY', 'MONTH']
+function formatCheckDate(value) {
+  const d = new Date(value)
+  return DATE_ONLY_UNITS.includes(booking.value?.priceUnit) ? d.toLocaleDateString('sr-RS') : d.toLocaleString('sr-RS')
 }
 
 async function load() {

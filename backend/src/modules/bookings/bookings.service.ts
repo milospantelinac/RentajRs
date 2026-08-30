@@ -387,7 +387,10 @@ export class BookingsService {
   }
 
   async cancelByOwner(ownerId: string, bookingId: string, dto: CancelBookingDto) {
-    const booking = await this.assertOwnerAccess(ownerId, bookingId, ['REQUESTED', 'AWAITING_PAYMENT', 'CONFIRMED']);
+    // T78/T79 — a pending REQUESTED booking is never "cancelled" by the
+    // owner, it's rejected (its own status, see rejectRequest); allowing
+    // both here would let an owner sidestep the REJECTED status entirely.
+    const booking = await this.assertOwnerAccess(ownerId, bookingId, ['AWAITING_PAYMENT', 'CONFIRMED']);
     await this.availability.releaseTermsForBooking(booking.id);
     const updated = await this.applyStatus(booking, 'CANCELLED', ownerId, { cancellationReason: dto.reason });
     this.events.emit('booking.cancelled_by_owner', { bookingId: booking.id });
@@ -443,7 +446,11 @@ export class BookingsService {
   async getOne(userId: string, bookingId: string) {
     const booking = await this.prisma.booking.findUnique({
       where: { id: bookingId },
-      include: { listing: { select: { title: true, slug: true } }, guest: { select: { phone: true } } },
+      include: {
+        listing: { select: { title: true, slug: true, address: true } },
+        guest: { select: { firstName: true, lastName: true, phone: true } },
+        owner: { select: { firstName: true, lastName: true, phone: true } },
+      },
     });
     if (!booking) throw new NotFoundException();
     if (booking.guestId !== userId && booking.ownerId !== userId) throw new ForbiddenException();
@@ -619,20 +626,38 @@ export class BookingsService {
   }
 
   /**
-   * `requestingUserId` + a `guest` relation on `booking` (only getOne()
-   * fetches it) together gate the guest's phone number: visible to the
-   * owner, and only once phoneUnlocked is set (R98/schema comment —
-   * "guest phone visible to owner after acceptance").
+   * `requestingUserId` + a `guest`/`owner`/`listing` relation on `booking`
+   * (only getOne() fetches these) together gate what each side sees of the
+   * other: the owner always sees the guest's NAME (T78 — "dogovoreno"), but
+   * only their phone once phoneUnlocked (R98 — "guest phone visible to
+   * owner after acceptance"). Symmetrically (T80), the guest sees nothing
+   * about the owner or the listing's exact address until phoneUnlocked
+   * flips too (i.e. the booking has actually been confirmed) — before that
+   * they only know what the public listing page already told them.
    */
-  private serialize(booking: Booking & { guest?: { phone: string | null } }, requestingUserId?: string) {
-    const { guest, ...rest } = booking;
-    const showGuestPhone = !!guest && requestingUserId === booking.ownerId && booking.phoneUnlocked;
+  private serialize(
+    booking: Booking & {
+      guest?: { firstName: string; lastName: string; phone: string | null };
+      owner?: { firstName: string; lastName: string; phone: string | null };
+      listing?: { title: string; slug: string; address?: string | null };
+    },
+    requestingUserId?: string,
+  ) {
+    const { guest, owner, listing, ...rest } = booking;
+    const isOwnerViewing = !!guest && requestingUserId === booking.ownerId;
+    const showGuestPhone = isOwnerViewing && booking.phoneUnlocked;
+    const showOwnerContact = !!owner && requestingUserId === booking.guestId && booking.phoneUnlocked;
     return {
       ...rest,
+      ...(listing
+        ? { listing: { title: listing.title, slug: listing.slug, ...(showOwnerContact && listing.address ? { address: listing.address } : {}) } }
+        : {}),
       pricePerUnit: paraToRsd(booking.pricePerUnit),
       totalAmount: paraToRsd(booking.totalAmount),
       amountDue: paraToRsd(booking.amountDue),
+      ...(isOwnerViewing ? { guestName: `${guest!.firstName} ${guest!.lastName}` } : {}),
       ...(showGuestPhone ? { guestPhone: guest!.phone } : {}),
+      ...(showOwnerContact ? { ownerName: `${owner!.firstName} ${owner!.lastName}`, ownerPhone: owner!.phone } : {}),
     };
   }
 }
