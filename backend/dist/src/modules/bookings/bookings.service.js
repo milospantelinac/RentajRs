@@ -86,21 +86,7 @@ let BookingsService = class BookingsService {
         this.assertTermRules({ ...listing, maxGuests: effectiveMaxGuests }, startsAt, endsAt, dto.guestCount);
         const pricePerUnit = slotPrice ?? listing.price;
         const unitCount = dto.monthCount ?? computeUnitCount(listing.priceUnit, startsAt, endsAt);
-        const extraServicesTotal = await this.resolveExtraServicesTotal(listingId, dto.extraServices);
-        const mandatoryFeesTotal = sumMandatoryFees(listing.mandatoryFees);
-        const guestFee = listing.pricePerGuest && dto.guestCount ? listing.pricePerGuest * BigInt(dto.guestCount) : 0n;
-        const unitPriceTotal = !slotPrice && (listing.priceUnit === 'NIGHT' || listing.priceUnit === 'DAY')
-            ? (await this.availability.getNightlyPrices(listingId, startsAt, endsAt, listing.price, listing.weekendPrice)).reduce((sum, p) => sum + p, 0n)
-            : !slotPrice && listing.priceUnit === 'MONTH' && dto.monthCount
-                ? (await this.availability.getMonthlyPrices(listingId, startsAt, dto.monthCount, listing.price)).reduce((sum, p) => sum + p, 0n)
-                : !slotPrice && listing.bookingModel === 'PER_SLOT' && listing.slotSubmode === 'WORKING_HOURS' && listing.priceUnit === 'HOUR'
-                    ? (await this.availability.resolveHourlyPrice(listingId, startsAt, toHHMM(startsAt), listing.price)) *
-                        BigInt(unitCount)
-                    : pricePerUnit * BigInt(unitCount);
-        const totalAmount = unitPriceTotal + guestFee + mandatoryFeesTotal + extraServicesTotal;
-        const amountDue = listing.advancePercent
-            ? (totalAmount * BigInt(listing.advancePercent)) / 100n
-            : totalAmount;
+        const { unitPriceTotal, guestFee, mandatoryFeesTotal, extraServicesTotal, totalAmount, amountDue } = await this.computeTotals(listing, startsAt, endsAt, pricePerUnit, unitCount, slotPrice, dto);
         const booking = await this.prisma.booking.create({
             data: {
                 listingId,
@@ -179,10 +165,14 @@ let BookingsService = class BookingsService {
         }
         const unitCount = computeUnitCount(listing.priceUnit, startsAt, endsAt);
         if (listing.minDuration && unitCount < listing.minDuration) {
-            throw new common_1.BadRequestException(this.i18n.t('bookings.MIN_DURATION', { args: { min: listing.minDuration } }));
+            throw new common_1.BadRequestException(this.i18n.t('bookings.MIN_DURATION', {
+                args: { min: listing.minDuration, unit: durationUnitWord(listing.priceUnit, listing.minDuration) },
+            }));
         }
         if (listing.maxDuration && unitCount > listing.maxDuration) {
-            throw new common_1.BadRequestException(this.i18n.t('bookings.MAX_DURATION', { args: { max: listing.maxDuration } }));
+            throw new common_1.BadRequestException(this.i18n.t('bookings.MAX_DURATION', {
+                args: { max: listing.maxDuration, unit: durationUnitWord(listing.priceUnit, listing.maxDuration) },
+            }));
         }
         if ((listing.minGuests || listing.maxGuests) && guestCount !== undefined) {
             const min = listing.minGuests ?? 1;
@@ -191,6 +181,43 @@ let BookingsService = class BookingsService {
                 throw new common_1.BadRequestException(this.i18n.t('errors.GUEST_COUNT_OUT_OF_RANGE', { args: { min, max: listing.maxGuests ?? min } }));
             }
         }
+    }
+    async computeTotals(listing, startsAt, endsAt, pricePerUnit, unitCount, slotPrice, dto) {
+        const extraServicesTotal = await this.resolveExtraServicesTotal(listing.id, dto.extraServices);
+        const mandatoryFeesTotal = sumMandatoryFees(listing.mandatoryFees);
+        const guestFee = listing.pricePerGuest && dto.guestCount ? listing.pricePerGuest * BigInt(dto.guestCount) : 0n;
+        const unitPriceTotal = !slotPrice && (listing.priceUnit === 'NIGHT' || listing.priceUnit === 'DAY')
+            ? (await this.availability.getNightlyPrices(listing.id, startsAt, endsAt, listing.price, listing.weekendPrice)).reduce((sum, p) => sum + p, 0n)
+            : !slotPrice && listing.priceUnit === 'MONTH' && dto.monthCount
+                ? (await this.availability.getMonthlyPrices(listing.id, startsAt, dto.monthCount, listing.price)).reduce((sum, p) => sum + p, 0n)
+                : !slotPrice && listing.bookingModel === 'PER_SLOT' && listing.slotSubmode === 'WORKING_HOURS' && listing.priceUnit === 'HOUR'
+                    ? (await this.availability.resolveHourlyPrice(listing.id, startsAt, toHHMM(startsAt), listing.price)) *
+                        BigInt(unitCount)
+                    : pricePerUnit * BigInt(unitCount);
+        const totalAmount = unitPriceTotal + guestFee + mandatoryFeesTotal + extraServicesTotal;
+        const amountDue = listing.advancePercent ? (totalAmount * BigInt(listing.advancePercent)) / 100n : totalAmount;
+        return { unitPriceTotal, guestFee, mandatoryFeesTotal, extraServicesTotal, totalAmount, amountDue };
+    }
+    async quotePrice(listingId, dto) {
+        const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: listingId } });
+        if (listing.bookingModel === 'NO_BOOKING') {
+            throw new common_1.BadRequestException(this.i18n.t('errors.LISTING_NOT_BOOKABLE'));
+        }
+        const { startsAt, endsAt, slotPrice } = await this.resolveRequestedTerm(listing, dto);
+        const pricePerUnit = slotPrice ?? listing.price;
+        const unitCount = dto.monthCount ?? computeUnitCount(listing.priceUnit, startsAt, endsAt);
+        const totals = await this.computeTotals(listing, startsAt, endsAt, pricePerUnit, unitCount, slotPrice, dto);
+        return {
+            priceUnit: listing.priceUnit,
+            pricePerUnit: (0, money_1.paraToRsd)(pricePerUnit),
+            unitCount,
+            unitPriceTotal: (0, money_1.paraToRsd)(totals.unitPriceTotal),
+            guestFee: (0, money_1.paraToRsd)(totals.guestFee),
+            mandatoryFeesTotal: (0, money_1.paraToRsd)(totals.mandatoryFeesTotal),
+            extraServicesTotal: (0, money_1.paraToRsd)(totals.extraServicesTotal),
+            totalAmount: (0, money_1.paraToRsd)(totals.totalAmount),
+            amountDue: (0, money_1.paraToRsd)(totals.amountDue),
+        };
     }
     async resolveExtraServicesTotal(listingId, selections) {
         if (!selections?.length)
@@ -515,6 +542,41 @@ function computeUnitCount(priceUnit, startsAt, endsAt) {
         default:
             return 1;
     }
+}
+const DURATION_UNIT_WORDS_SR = {
+    NIGHT: ['noćenje', 'noćenja', 'noćenja'],
+    DAY: ['dan', 'dana', 'dana'],
+    HOUR: ['sat', 'sata', 'sati'],
+    MONTH: ['mesec', 'meseca', 'meseci'],
+    YEAR: ['godina', 'godine', 'godina'],
+    SLOT: ['termin', 'termina', 'termina'],
+};
+const DURATION_UNIT_WORDS_EN = {
+    NIGHT: ['night', 'nights'],
+    DAY: ['day', 'days'],
+    HOUR: ['hour', 'hours'],
+    MONTH: ['month', 'months'],
+    YEAR: ['year', 'years'],
+    SLOT: ['slot', 'slots'],
+};
+function srPluralIndex(n) {
+    const abs = Math.abs(n);
+    const mod10 = abs % 10;
+    const mod100 = abs % 100;
+    if (mod10 === 1 && mod100 !== 11)
+        return 0;
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14))
+        return 1;
+    return 2;
+}
+function durationUnitWord(priceUnit, count) {
+    const isEn = nestjs_i18n_1.I18nContext.current()?.lang === 'en';
+    if (isEn) {
+        const words = DURATION_UNIT_WORDS_EN[priceUnit] ?? DURATION_UNIT_WORDS_EN.NIGHT;
+        return words[count === 1 ? 0 : 1];
+    }
+    const words = DURATION_UNIT_WORDS_SR[priceUnit] ?? DURATION_UNIT_WORDS_SR.NIGHT;
+    return words[srPluralIndex(count)];
 }
 function toHHMM(date) {
     return `${String(date.getUTCHours()).padStart(2, '0')}:${String(date.getUTCMinutes()).padStart(2, '0')}`;

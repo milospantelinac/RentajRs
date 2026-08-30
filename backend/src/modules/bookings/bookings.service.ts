@@ -1,7 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { I18nService } from 'nestjs-i18n';
+import { I18nContext, I18nService } from 'nestjs-i18n';
 import { Booking, BookingStatus, Prisma, PriceUnit } from '@prisma/client';
 import * as QRCode from 'qrcode';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -65,38 +65,8 @@ export class BookingsService {
     // derived from the date span — Sep 1 to Dec 1 must be exactly 3, not
     // round(91/30).
     const unitCount = dto.monthCount ?? computeUnitCount(listing.priceUnit, startsAt, endsAt);
-    const extraServicesTotal = await this.resolveExtraServicesTotal(listingId, dto.extraServices);
-    const mandatoryFeesTotal = sumMandatoryFees(listing.mandatoryFees);
-    const guestFee = listing.pricePerGuest && dto.guestCount ? listing.pricePerGuest * BigInt(dto.guestCount) : 0n;
-
-    // RNT-029 — per-stay (night/day) bookings price each date individually
-    // (weekend price, or an owner's per-date override) rather than a flat
-    // rate x nights; "Po mesecu" prices each calendar month individually the
-    // same way; PER_SLOT + WORKING_HOURS resolves the owner's hourly rate
-    // windows/exceptions for the booking's start time (a booking that spans
-    // more than one rate window is billed at its start time's rate for the
-    // whole duration — splitting one booking across rates isn't supported).
-    // Every other combination keeps the flat unitPrice x unitCount calculation.
-    const unitPriceTotal =
-      !slotPrice && (listing.priceUnit === 'NIGHT' || listing.priceUnit === 'DAY')
-        ? (await this.availability.getNightlyPrices(listingId, startsAt, endsAt, listing.price, listing.weekendPrice)).reduce(
-            (sum, p) => sum + p,
-            0n,
-          )
-        : !slotPrice && listing.priceUnit === 'MONTH' && dto.monthCount
-          ? (await this.availability.getMonthlyPrices(listingId, startsAt, dto.monthCount, listing.price)).reduce(
-              (sum, p) => sum + p,
-              0n,
-            )
-          : !slotPrice && listing.bookingModel === 'PER_SLOT' && listing.slotSubmode === 'WORKING_HOURS' && listing.priceUnit === 'HOUR'
-            ? (await this.availability.resolveHourlyPrice(listingId, startsAt, toHHMM(startsAt), listing.price)) *
-              BigInt(unitCount)
-            : pricePerUnit * BigInt(unitCount);
-
-    const totalAmount = unitPriceTotal + guestFee + mandatoryFeesTotal + extraServicesTotal;
-    const amountDue = listing.advancePercent
-      ? (totalAmount * BigInt(listing.advancePercent)) / 100n
-      : totalAmount;
+    const { unitPriceTotal, guestFee, mandatoryFeesTotal, extraServicesTotal, totalAmount, amountDue } =
+      await this.computeTotals(listing, startsAt, endsAt, pricePerUnit, unitCount, slotPrice, dto);
 
     const booking = await this.prisma.booking.create({
       data: {
@@ -208,10 +178,18 @@ export class BookingsService {
 
     const unitCount = computeUnitCount(listing.priceUnit, startsAt, endsAt);
     if (listing.minDuration && unitCount < listing.minDuration) {
-      throw new BadRequestException(this.i18n.t('bookings.MIN_DURATION', { args: { min: listing.minDuration } }));
+      throw new BadRequestException(
+        this.i18n.t('bookings.MIN_DURATION', {
+          args: { min: listing.minDuration, unit: durationUnitWord(listing.priceUnit, listing.minDuration) },
+        }),
+      );
     }
     if (listing.maxDuration && unitCount > listing.maxDuration) {
-      throw new BadRequestException(this.i18n.t('bookings.MAX_DURATION', { args: { max: listing.maxDuration } }));
+      throw new BadRequestException(
+        this.i18n.t('bookings.MAX_DURATION', {
+          args: { max: listing.maxDuration, unit: durationUnitWord(listing.priceUnit, listing.maxDuration) },
+        }),
+      );
     }
 
     if ((listing.minGuests || listing.maxGuests) && guestCount !== undefined) {
@@ -223,6 +201,88 @@ export class BookingsService {
         );
       }
     }
+  }
+
+  /**
+   * T83 — the exact pricing logic createRequest uses to charge a booking,
+   * extracted so quotePrice() (a live preview, nothing persisted) can never
+   * drift from what a submitted request is actually charged.
+   *
+   * RNT-029 — per-stay (night/day) bookings price each date individually
+   * (weekend price, or an owner's per-date override) rather than a flat
+   * rate x nights; "Po mesecu" prices each calendar month individually the
+   * same way; PER_SLOT + WORKING_HOURS resolves the owner's hourly rate
+   * windows/exceptions for the booking's start time (a booking that spans
+   * more than one rate window is billed at its start time's rate for the
+   * whole duration — splitting one booking across rates isn't supported).
+   * Every other combination keeps the flat unitPrice x unitCount calculation.
+   */
+  private async computeTotals(
+    listing: {
+      id: string;
+      priceUnit: PriceUnit;
+      price: bigint;
+      weekendPrice: bigint | null;
+      pricePerGuest: bigint | null;
+      mandatoryFees: unknown;
+      bookingModel: string;
+      slotSubmode: string | null;
+      advancePercent: number | null;
+    },
+    startsAt: Date,
+    endsAt: Date,
+    pricePerUnit: bigint,
+    unitCount: number,
+    slotPrice: bigint | undefined,
+    dto: Pick<CreateBookingRequestDto, 'guestCount' | 'extraServices' | 'monthCount'>,
+  ) {
+    const extraServicesTotal = await this.resolveExtraServicesTotal(listing.id, dto.extraServices);
+    const mandatoryFeesTotal = sumMandatoryFees(listing.mandatoryFees);
+    const guestFee = listing.pricePerGuest && dto.guestCount ? listing.pricePerGuest * BigInt(dto.guestCount) : 0n;
+
+    const unitPriceTotal =
+      !slotPrice && (listing.priceUnit === 'NIGHT' || listing.priceUnit === 'DAY')
+        ? (await this.availability.getNightlyPrices(listing.id, startsAt, endsAt, listing.price, listing.weekendPrice)).reduce(
+            (sum, p) => sum + p,
+            0n,
+          )
+        : !slotPrice && listing.priceUnit === 'MONTH' && dto.monthCount
+          ? (await this.availability.getMonthlyPrices(listing.id, startsAt, dto.monthCount, listing.price)).reduce(
+              (sum, p) => sum + p,
+              0n,
+            )
+          : !slotPrice && listing.bookingModel === 'PER_SLOT' && listing.slotSubmode === 'WORKING_HOURS' && listing.priceUnit === 'HOUR'
+            ? (await this.availability.resolveHourlyPrice(listing.id, startsAt, toHHMM(startsAt), listing.price)) *
+              BigInt(unitCount)
+            : pricePerUnit * BigInt(unitCount);
+
+    const totalAmount = unitPriceTotal + guestFee + mandatoryFeesTotal + extraServicesTotal;
+    const amountDue = listing.advancePercent ? (totalAmount * BigInt(listing.advancePercent)) / 100n : totalAmount;
+
+    return { unitPriceTotal, guestFee, mandatoryFeesTotal, extraServicesTotal, totalAmount, amountDue };
+  }
+
+  /** T83 — live total for whatever the guest currently has selected, before they submit. Reads only, nothing persisted. */
+  async quotePrice(listingId: string, dto: CreateBookingRequestDto) {
+    const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: listingId } });
+    if (listing.bookingModel === 'NO_BOOKING') {
+      throw new BadRequestException(this.i18n.t('errors.LISTING_NOT_BOOKABLE'));
+    }
+    const { startsAt, endsAt, slotPrice } = await this.resolveRequestedTerm(listing, dto);
+    const pricePerUnit = slotPrice ?? listing.price;
+    const unitCount = dto.monthCount ?? computeUnitCount(listing.priceUnit, startsAt, endsAt);
+    const totals = await this.computeTotals(listing, startsAt, endsAt, pricePerUnit, unitCount, slotPrice, dto);
+    return {
+      priceUnit: listing.priceUnit,
+      pricePerUnit: paraToRsd(pricePerUnit),
+      unitCount,
+      unitPriceTotal: paraToRsd(totals.unitPriceTotal),
+      guestFee: paraToRsd(totals.guestFee),
+      mandatoryFeesTotal: paraToRsd(totals.mandatoryFeesTotal),
+      extraServicesTotal: paraToRsd(totals.extraServicesTotal),
+      totalAmount: paraToRsd(totals.totalAmount),
+      amountDue: paraToRsd(totals.amountDue),
+    };
   }
 
   private async resolveExtraServicesTotal(
@@ -571,6 +631,44 @@ function computeUnitCount(priceUnit: PriceUnit, startsAt: Date, endsAt: Date): n
     default:
       return 1;
   }
+}
+
+const DURATION_UNIT_WORDS_SR: Partial<Record<PriceUnit, [string, string, string]>> = {
+  NIGHT: ['noćenje', 'noćenja', 'noćenja'],
+  DAY: ['dan', 'dana', 'dana'],
+  HOUR: ['sat', 'sata', 'sati'],
+  MONTH: ['mesec', 'meseca', 'meseci'],
+  YEAR: ['godina', 'godine', 'godina'],
+  SLOT: ['termin', 'termina', 'termina'],
+};
+const DURATION_UNIT_WORDS_EN: Partial<Record<PriceUnit, [string, string]>> = {
+  NIGHT: ['night', 'nights'],
+  DAY: ['day', 'days'],
+  HOUR: ['hour', 'hours'],
+  MONTH: ['month', 'months'],
+  YEAR: ['year', 'years'],
+  SLOT: ['slot', 'slots'],
+};
+
+/** Serbian plural bucket for a count — ...1→0 (one), ...2-4→1 (few), else→2 (many), with the 11-14 exception. */
+function srPluralIndex(n: number): 0 | 1 | 2 {
+  const abs = Math.abs(n);
+  const mod10 = abs % 10;
+  const mod100 = abs % 100;
+  if (mod10 === 1 && mod100 !== 11) return 0;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 1;
+  return 2;
+}
+
+/** The noun for MIN_DURATION/MAX_DURATION messages ("10 {unit}") — declined for the current request's language. */
+function durationUnitWord(priceUnit: PriceUnit, count: number): string {
+  const isEn = I18nContext.current()?.lang === 'en';
+  if (isEn) {
+    const words = DURATION_UNIT_WORDS_EN[priceUnit] ?? DURATION_UNIT_WORDS_EN.NIGHT!;
+    return words[count === 1 ? 0 : 1];
+  }
+  const words = DURATION_UNIT_WORDS_SR[priceUnit] ?? DURATION_UNIT_WORDS_SR.NIGHT!;
+  return words[srPluralIndex(count)];
 }
 
 /** HH:MM for the booking's start time — matches how WorkingHours/HourlyPriceRange store clock time (no timezone conversion, same convention as pickupTime/returnTime). */

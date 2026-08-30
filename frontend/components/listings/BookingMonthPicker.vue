@@ -10,11 +10,13 @@
     </div>
     <div class="form-group mb-3">
       <label class="form-label">{{ t('booking.monthCount') }}</label>
-      <input v-model.number="monthCount" type="number" min="1" max="24" class="form-control" />
+      <input v-model.number="monthCount" type="number" :min="minDuration || 1" :max="maxDuration || 24" class="form-control" />
     </div>
     <p v-if="selectedMonth" class="text-muted">
       {{ t('booking.monthRangeSummary', { start: startLabel, end: endLabel }) }}
     </p>
+    <p v-if="selectedMonth && spanBlocked" class="form-error mb-0">{{ t('booking.monthRangeBlocked') }}</p>
+    <p v-else-if="selectedMonth && durationViolation" class="form-error mb-0">{{ durationViolationMessage }}</p>
   </div>
 </template>
 
@@ -25,6 +27,8 @@
 const props = defineProps({
   listingId: { type: String, required: true },
   basePrice: { type: Number, default: 0 },
+  minDuration: { type: Number, default: null },
+  maxDuration: { type: Number, default: null },
 })
 
 const emit = defineEmits(['update:range'])
@@ -58,6 +62,35 @@ const availableMonths = computed(() => {
   })
 })
 
+// T86 — the start month being free doesn't mean the whole span is: a longer
+// monthCount can still run into a later blocked month, which previously went
+// through with no warning at all.
+const spanBlocked = computed(() => {
+  if (!selectedMonth.value) return false
+  const [y, m] = selectedMonth.value.split('-').map(Number)
+  for (let i = 0; i < monthCount.value; i++) {
+    const date = new Date(y, m - 1 + i, 1)
+    const nextMonth = new Date(y, m - 1 + i + 1, 1)
+    if (blocks.value.some((b) => new Date(b.startsAt) < nextMonth && new Date(b.endsAt) > date)) return true
+  }
+  return false
+})
+
+const durationViolation = computed(() => {
+  if (props.minDuration && monthCount.value < props.minDuration) return 'min'
+  if (props.maxDuration && monthCount.value > props.maxDuration) return 'max'
+  return null
+})
+const durationViolationMessage = computed(() => {
+  if (durationViolation.value === 'min') {
+    return t('booking.minDurationMessage', { min: props.minDuration, unit: srDurationUnitWord('MONTH', props.minDuration) })
+  }
+  if (durationViolation.value === 'max') {
+    return t('booking.maxDurationMessage', { max: props.maxDuration, unit: srDurationUnitWord('MONTH', props.maxDuration) })
+  }
+  return ''
+})
+
 const startLabel = computed(() => availableMonths.value.find((m) => m.key === selectedMonth.value)?.label || '')
 const endLabel = computed(() => {
   if (!selectedMonth.value) return ''
@@ -87,7 +120,8 @@ async function loadAvailability() {
 }
 
 watch([selectedMonth, monthCount], () => {
-  emit('update:range', { monthStart: selectedMonth.value || null, monthCount: monthCount.value })
+  const valid = selectedMonth.value && !spanBlocked.value && !durationViolation.value
+  emit('update:range', { monthStart: valid ? selectedMonth.value : null, monthCount: monthCount.value })
 })
 
 onMounted(loadAvailability)

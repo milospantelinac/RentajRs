@@ -27,6 +27,9 @@ let BookingsController = class BookingsController {
     create(guestId, listingId, dto) {
         return this.bookingsService.createRequest(guestId, listingId, dto);
     }
+    quote(listingId, dto) {
+        return this.bookingsService.quotePrice(listingId, dto);
+    }
     listMine(userId, role = 'guest', status) {
         return this.bookingsService.listMine(userId, role, status);
     }
@@ -71,6 +74,14 @@ __decorate([
     __metadata("design:paramtypes", [String, String, create_booking_request_dto_1.CreateBookingRequestDto]),
     __metadata("design:returntype", void 0)
 ], BookingsController.prototype, "create", null);
+__decorate([
+    (0, common_1.Post)('listings/:id/bookings/quote'),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, create_booking_request_dto_1.CreateBookingRequestDto]),
+    __metadata("design:returntype", void 0)
+], BookingsController.prototype, "quote", null);
 __decorate([
     (0, common_1.Get)('bookings/mine'),
     __param(0, (0, current_user_decorator_1.CurrentUser)('id')),

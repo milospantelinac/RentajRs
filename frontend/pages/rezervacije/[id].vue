@@ -39,6 +39,13 @@
               <div class="col-6 text-muted">{{ t('booking.guestMessage') }}</div>
               <div class="col-6">{{ booking.guestMessage }}</div>
             </div>
+            <!-- T87 — frozen at the moment the request was made (Booking.cancellationTermsSnapshot),
+                 not regenerated from the listing's current settings — a later policy edit must
+                 never rewrite what applied to a booking already made under the old one. -->
+            <div v-if="booking.cancellationTermsSnapshot" class="row mb-2">
+              <div class="col-6 text-muted">{{ t('booking.cancellationTerms') }}</div>
+              <div class="col-6">{{ booking.cancellationTermsSnapshot }}</div>
+            </div>
           </div>
         </div>
 

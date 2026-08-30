@@ -5,8 +5,12 @@
         <h1 class="text-page-title mb-1">{{ listing.title }}</h1>
         <p class="text-muted mb-4">{{ t('listing.sendRequest') }}</p>
 
-        <div class="card">
+        <p v-if="isOwnListing" class="text-muted">{{ t('booking.ownListingNotice') }}</p>
+
+        <div v-else class="card">
           <div class="card-body">
+            <BookingRulesSummary :listing="listing" class="mb-3" />
+
             <template v-if="listing.bookingModel === 'PER_SLOT' && listing.slotSubmode === 'DEFINED_SLOTS'">
               <div class="form-group mb-3">
                 <label class="form-label">{{ t('booking.chooseSlot') }}</label>
@@ -16,9 +20,10 @@
                     :key="slot.id"
                     class="btn btn-tertiary btn-sm slot-btn"
                     :class="{ 'slot-btn-active': form.definedSlotId === slot.id }"
-                    @click="form.definedSlotId = slot.id"
+                    @click="selectSlot(slot)"
                   >
-                    {{ formatDateTime(slot.startsAt) }} — {{ formatDateTime(slot.endsAt) }}
+                    <span>{{ formatDateTime(slot.startsAt) }} — {{ formatDateTime(slot.endsAt) }}</span>
+                    <span class="slot-btn-price">{{ formatPrice(slot.price ?? listing.price) }}</span>
                   </button>
                 </div>
                 <p v-else class="text-muted">{{ t('booking.noSlots') }}</p>
@@ -31,6 +36,8 @@
                 <BookingMonthPicker
                   :listing-id="listing.id"
                   :base-price="listing.price"
+                  :min-duration="listing.minDuration"
+                  :max-duration="listing.maxDuration"
                   @update:range="onMonthRangeUpdate"
                 />
               </div>
@@ -44,6 +51,11 @@
                   :base-price="listing.price"
                   :weekend-price="listing.weekendPrice"
                   :show-pricing="true"
+                  :price-unit="listing.priceUnit"
+                  :min-duration="listing.minDuration"
+                  :max-duration="listing.maxDuration"
+                  :earliest-booking-hours="listing.earliestBookingHours"
+                  :max-advance-booking-days="listing.maxAdvanceBookingDays"
                   @update:range="onRangeUpdate"
                 />
               </div>
@@ -59,6 +71,8 @@
                 <BookingDateRangePicker
                   :listing-id="listing.id"
                   :show-pricing="false"
+                  :earliest-booking-hours="listing.earliestBookingHours"
+                  :max-advance-booking-days="listing.maxAdvanceBookingDays"
                   @update:range="onSingleDateUpdate"
                 />
               </div>
@@ -66,7 +80,7 @@
                 <div class="col-6">
                   <div class="form-group mb-3">
                     <label class="form-label">{{ t('booking.startTime') }}</label>
-                    <select v-model="slotStartTime" class="form-control form-select">
+                    <select v-model="slotStartTime" class="form-control form-select" @change="error = ''">
                       <option v-for="time in dayTimeOptions" :key="time" :value="time">{{ time }}</option>
                     </select>
                   </div>
@@ -74,7 +88,7 @@
                 <div class="col-6">
                   <div class="form-group mb-3">
                     <label class="form-label">{{ t('booking.durationHours') }}</label>
-                    <input v-model.number="slotDurationHours" type="number" min="1" max="12" class="form-control" />
+                    <input v-model.number="slotDurationHours" type="number" min="1" max="12" class="form-control" @input="error = ''" />
                   </div>
                 </div>
               </div>
@@ -83,7 +97,14 @@
 
             <div class="form-group mb-3">
               <label class="form-label">{{ t('booking.guestCount') }}</label>
-              <input v-model.number="form.guestCount" type="number" min="1" :max="effectiveMaxGuests || undefined" class="form-control" />
+              <input
+                v-model.number="form.guestCount"
+                type="number"
+                min="1"
+                :max="effectiveMaxGuests || undefined"
+                class="form-control"
+                @input="error = ''"
+              />
               <p v-if="effectiveMaxGuests && form.guestCount > effectiveMaxGuests" class="form-error mb-0 mt-1">
                 {{ t('booking.guestCountExceeds', { max: effectiveMaxGuests }) }}
               </p>
@@ -100,6 +121,36 @@
             <div class="form-group mb-4">
               <label class="form-label">{{ t('booking.message') }}</label>
               <textarea v-model="form.guestMessage" class="form-control" rows="3" />
+            </div>
+
+            <div v-if="quote" class="price-summary mb-3">
+              <div class="row mb-1">
+                <div class="col-8 text-muted">
+                  {{ quote.unitCount }} {{ srDurationUnitWord(listing.priceUnit, quote.unitCount) }}
+                  <span v-if="listing.weekendPrice" class="price-summary-hint">({{ t('booking.weekendPriceIncluded') }})</span>
+                </div>
+                <div class="col-4 text-end">{{ formatPrice(quote.unitPriceTotal) }}</div>
+              </div>
+              <div v-if="quote.guestFee > 0" class="row mb-1">
+                <div class="col-8 text-muted">{{ t('booking.guestFeeLine') }}</div>
+                <div class="col-4 text-end">{{ formatPrice(quote.guestFee) }}</div>
+              </div>
+              <div v-if="quote.mandatoryFeesTotal > 0" class="row mb-1">
+                <div class="col-8 text-muted">{{ t('booking.mandatoryFeesLine') }}</div>
+                <div class="col-4 text-end">{{ formatPrice(quote.mandatoryFeesTotal) }}</div>
+              </div>
+              <div v-if="quote.extraServicesTotal > 0" class="row mb-1">
+                <div class="col-8 text-muted">{{ t('listing.extraServices') }}</div>
+                <div class="col-4 text-end">{{ formatPrice(quote.extraServicesTotal) }}</div>
+              </div>
+              <div class="row price-summary-total mt-2 pt-2">
+                <div class="col-8"><strong>{{ t('booking.totalAmount') }}</strong></div>
+                <div class="col-4 text-end"><strong>{{ formatPrice(quote.totalAmount) }}</strong></div>
+              </div>
+              <div v-if="quote.amountDue !== quote.totalAmount" class="row">
+                <div class="col-8 text-muted">{{ t('booking.payAmount') }}</div>
+                <div class="col-4 text-end">{{ formatPrice(quote.amountDue) }}</div>
+              </div>
             </div>
 
             <p v-if="error" class="form-error mb-3">{{ error }}</p>
@@ -123,6 +174,7 @@ definePageMeta({ middleware: 'auth' })
 const { t } = useI18n()
 const api = useApi()
 const route = useRoute()
+const auth = useAuthStore()
 
 const { data: listing } = await useAsyncData(`booking-listing-${route.params.slug}`, () =>
   api.get(`/listings/public/${route.params.slug}`),
@@ -131,6 +183,11 @@ const { data: listing } = await useAsyncData(`booking-listing-${route.params.slu
 if (listing.value && (listing.value.bookingModel === 'NO_BOOKING' || !listing.value.canBook)) {
   await navigateTo(`/oglasi/${listing.value.slug}`)
 }
+
+// T86 — the server already refuses this (errors.CANNOT_BOOK_OWN_LISTING),
+// but the form let an owner fill the whole thing in first and only found out
+// on submit; gate it up front instead.
+const isOwnListing = computed(() => !!listing.value && auth.user?.id === listing.value.userId)
 
 // Mirrors the backend's dual-source cap (bookings.service.ts createRequest):
 // "Kapacitet ljudi" is a per-category attribute set in the wizard, separate
@@ -164,17 +221,28 @@ const workingHours = ref([])
 const slotStartTime = ref('')
 const slotDurationHours = ref(1)
 
+// T86 — a stale server-rejection message used to sit above the button
+// forever, even after the guest fixed the very thing it complained about
+// (and even once a since-corrected request had already gone through); every
+// selection change clears it instead of waiting for the next submit attempt.
 function onRangeUpdate({ startsAt, endsAt }) {
   form.startsAt = startsAt || ''
   form.endsAt = endsAt || ''
+  error.value = ''
 }
 function onMonthRangeUpdate({ monthStart, monthCount }) {
   form.monthStart = monthStart || ''
   form.monthCount = monthCount || 1
+  error.value = ''
 }
 function onSingleDateUpdate({ startsAt }) {
   form.startsAt = startsAt || ''
   slotStartTime.value = ''
+  error.value = ''
+}
+function selectSlot(slot) {
+  form.definedSlotId = slot.id
+  error.value = ''
 }
 
 const dayTimeOptions = computed(() => {
@@ -200,6 +268,7 @@ function toggleService(service, checked) {
   } else {
     form.extraServices = form.extraServices.filter((s) => s.serviceId !== service.id)
   }
+  error.value = ''
 }
 
 function formatDateTime(value) {
@@ -210,31 +279,72 @@ function formatPrice(value) {
   return `${new Intl.NumberFormat('sr-RS').format(value || 0)} RSD`
 }
 
+// T83 — the exact shape /bookings and /bookings/quote both expect; shared so
+// the live price preview can never compute against a different selection
+// than what submit() actually sends.
+function buildBookingPayload() {
+  const base = {
+    guestCount: form.guestCount,
+    extraServices: form.extraServices.length ? form.extraServices : undefined,
+  }
+  if (form.definedSlotId) {
+    return { ...base, definedSlotId: form.definedSlotId }
+  }
+  if (listing.value.priceUnit === 'MONTH') {
+    if (!form.monthStart) return null
+    return { ...base, monthStart: form.monthStart, monthCount: form.monthCount }
+  }
+  if (listing.value.bookingModel === 'PER_SLOT' && listing.value.slotSubmode === 'WORKING_HOURS') {
+    if (!form.startsAt || !slotStartTime.value) return null
+    const startsAt = new Date(`${form.startsAt}T${slotStartTime.value}:00`)
+    const endsAt = new Date(startsAt.getTime() + slotDurationHours.value * 3600_000)
+    return { ...base, startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() }
+  }
+  if (!form.startsAt || !form.endsAt) return null
+  // PER_STAY range picker gives plain YYYY-MM-DD; a bare date parses as UTC
+  // midnight, matching how the calendar/backend already key nights.
+  return {
+    ...base,
+    startsAt: new Date(`${form.startsAt}T00:00:00.000Z`).toISOString(),
+    endsAt: new Date(`${form.endsAt}T00:00:00.000Z`).toISOString(),
+  }
+}
+
+const quote = ref(null)
+async function refreshQuote() {
+  const payload = buildBookingPayload()
+  if (!payload) {
+    quote.value = null
+    return
+  }
+  try {
+    quote.value = await api.post(`/listings/${listing.value.id}/bookings/quote`, payload)
+  } catch {
+    quote.value = null
+  }
+}
+watch(
+  () => [
+    form.startsAt,
+    form.endsAt,
+    form.monthStart,
+    form.monthCount,
+    form.definedSlotId,
+    form.guestCount,
+    form.extraServices.length,
+    slotStartTime.value,
+    slotDurationHours.value,
+  ],
+  refreshQuote,
+)
+
 async function submit() {
   error.value = ''
+  const payload = buildBookingPayload()
+  if (!payload) return
   submitting.value = true
   try {
-    const payload = {
-      guestCount: form.guestCount,
-      guestMessage: form.guestMessage || undefined,
-      extraServices: form.extraServices.length ? form.extraServices : undefined,
-    }
-    if (form.definedSlotId) {
-      payload.definedSlotId = form.definedSlotId
-    } else if (listing.value.priceUnit === 'MONTH') {
-      payload.monthStart = form.monthStart
-      payload.monthCount = form.monthCount
-    } else if (listing.value.bookingModel === 'PER_SLOT' && listing.value.slotSubmode === 'WORKING_HOURS') {
-      const startsAt = new Date(`${form.startsAt}T${slotStartTime.value}:00`)
-      const endsAt = new Date(startsAt.getTime() + slotDurationHours.value * 3600_000)
-      payload.startsAt = startsAt.toISOString()
-      payload.endsAt = endsAt.toISOString()
-    } else {
-      // PER_STAY range picker gives plain YYYY-MM-DD; a bare date parses as
-      // UTC midnight, matching how the calendar/backend already key nights.
-      payload.startsAt = new Date(`${form.startsAt}T00:00:00.000Z`).toISOString()
-      payload.endsAt = new Date(`${form.endsAt}T00:00:00.000Z`).toISOString()
-    }
+    payload.guestMessage = form.guestMessage || undefined
     const booking = await api.post(`/listings/${listing.value.id}/bookings`, payload)
     await navigateTo(`/rezervacije/${booking.id}`)
   } catch (e) {
@@ -269,11 +379,31 @@ useSeoMeta({ title: () => `${t('listing.sendRequest')} — ${listing.value?.titl
 }
 
 .slot-btn {
-  justify-content: flex-start;
+  justify-content: space-between;
 }
 
 .slot-btn-active {
   border-color: $color-primary;
   color: $color-primary;
+}
+
+.slot-btn-price {
+  color: $color-text-muted;
+  font-size: $font-size-label;
+}
+
+.price-summary {
+  padding: 12px 14px;
+  border: 1px solid $color-border;
+  border-radius: $radius-input;
+  font-size: $font-size-body;
+}
+
+.price-summary-total {
+  border-top: 1px solid $color-border;
+}
+
+.price-summary-hint {
+  font-size: $font-size-label;
 }
 </style>

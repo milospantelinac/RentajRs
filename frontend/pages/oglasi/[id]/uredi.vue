@@ -158,12 +158,14 @@
             <div class="form-group mb-3">
               <label class="form-label">{{ t('listing.earliestBookingHours') }}</label>
               <input v-model.number="form.earliestBookingHours" type="number" min="0" class="form-control" />
+              <p class="form-hint">{{ t('listing.earliestBookingHoursHint') }}</p>
             </div>
           </div>
           <div class="col-6">
             <div class="form-group mb-3">
               <label class="form-label">{{ t('listing.maxAdvanceBookingDays') }}</label>
               <input v-model.number="form.maxAdvanceBookingDays" type="number" min="1" class="form-control" />
+              <p class="form-hint">{{ t('listing.maxAdvanceBookingDaysHint') }}</p>
             </div>
           </div>
         </div>

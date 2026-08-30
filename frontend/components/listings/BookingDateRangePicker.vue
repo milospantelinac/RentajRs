@@ -6,7 +6,15 @@
           <button v-if="i === 0" type="button" class="btn btn-tertiary btn-sm" :disabled="!canGoBack" @click="shiftMonth(-1)">←</button>
           <span v-else />
           <span class="range-picker-month-label">{{ m.label }}</span>
-          <button v-if="i === visibleMonths.length - 1" type="button" class="btn btn-tertiary btn-sm" @click="shiftMonth(1)">→</button>
+          <button
+            v-if="i === visibleMonths.length - 1"
+            type="button"
+            class="btn btn-tertiary btn-sm"
+            :disabled="!canGoForward"
+            @click="shiftMonth(1)"
+          >
+            →
+          </button>
           <span v-else />
         </div>
         <div class="range-picker-grid">
@@ -40,6 +48,7 @@
       <template v-else-if="rangeStart">{{ t('booking.rangePickerPickEnd') }}</template>
       <template v-else>{{ t('booking.rangePickerPickStart') }}</template>
     </p>
+    <p v-if="minDurationViolation" class="form-error range-picker-error mb-0 mt-1">{{ minDurationMessage }}</p>
   </div>
 </template>
 
@@ -53,6 +62,14 @@ const props = defineProps({
   basePrice: { type: Number, default: 0 },
   weekendPrice: { type: Number, default: null },
   showPricing: { type: Boolean, default: true },
+  // T86 — the same rules the server enforces (assertTermRules in
+  // bookings.service.ts), applied here so the calendar simply can't offer a
+  // date it would reject, instead of the guest finding out only after submit.
+  priceUnit: { type: String, default: 'NIGHT' },
+  minDuration: { type: Number, default: null },
+  maxDuration: { type: Number, default: null },
+  earliestBookingHours: { type: Number, default: null },
+  maxAdvanceBookingDays: { type: Number, default: null },
 })
 
 const emit = defineEmits(['update:range'])
@@ -74,6 +91,26 @@ function toKey(d) {
 
 const weekdayLabels = computed(() => t('listing.calendarWeekdays').split(','))
 const canGoBack = computed(() => baseMonth.value.getFullYear() > today.getFullYear() || baseMonth.value.getMonth() > today.getMonth())
+
+// T86 — the calendar must not let a guest pick what the server would reject:
+// dates before earliestBookingHours' notice window, past maxAdvanceBookingDays'
+// horizon, or (once a start date is picked) an end date beyond maxDuration.
+const minSelectableDate = computed(() => {
+  const earliest = new Date(Date.now() + (props.earliestBookingHours || 0) * 3600_000)
+  earliest.setHours(0, 0, 0, 0)
+  return earliest > today ? earliest : today
+})
+const maxSelectableDate = computed(() => {
+  if (!props.maxAdvanceBookingDays) return null
+  const d = new Date(Date.now() + props.maxAdvanceBookingDays * 86_400_000)
+  d.setHours(0, 0, 0, 0)
+  return d
+})
+const canGoForward = computed(() => {
+  if (!maxSelectableDate.value) return true
+  const nextMonthStart = new Date(baseMonth.value.getFullYear(), baseMonth.value.getMonth() + 1, 1)
+  return nextMonthStart <= maxSelectableDate.value
+})
 
 function isBlocked(date) {
   const dayStart = date.getTime()
@@ -99,14 +136,22 @@ function buildMonth(monthDate) {
     const date = new Date(year, month, day)
     const key = toKey(date)
     const past = date < today
+    const beforeEarliest = date < minSelectableDate.value
+    const afterHorizon = maxSelectableDate.value ? date > maxSelectableDate.value : false
     const blocked = isBlocked(date)
+    const exceedsMaxFromStart =
+      !!rangeStart.value &&
+      !rangeEnd.value &&
+      !!props.maxDuration &&
+      date > rangeStart.value &&
+      Math.round((date.getTime() - rangeStart.value.getTime()) / 86_400_000) > props.maxDuration
     const isWeekend = date.getDay() === 5 || date.getDay() === 6
     const override = overrides.value.get(key)
     days.push({
       key,
       day,
       date,
-      disabled: past || blocked,
+      disabled: past || beforeEarliest || afterHorizon || blocked || exceedsMaxFromStart,
       price: override ?? (isWeekend && props.weekendPrice ? props.weekendPrice : props.basePrice),
     })
   }
@@ -146,6 +191,15 @@ const nightCount = computed(() => {
 })
 const nightsLabel = computed(() => t(`booking.rangePickerNights${srPluralCategory(nightCount.value)}`))
 
+// T86 — max duration is enforced by disabling the dates that would exceed it
+// (see buildMonth above); min duration can't be enforced that way (any next
+// selectable day is technically "too short" until enough of them are picked),
+// so it surfaces as a message instead, and blocks the emitted range until fixed.
+const minDurationViolation = computed(() => !!props.minDuration && nightCount.value > 0 && nightCount.value < props.minDuration)
+const minDurationMessage = computed(() =>
+  t('booking.minDurationMessage', { min: props.minDuration, unit: srDurationUnitWord(props.priceUnit, props.minDuration) }),
+)
+
 function selectDate(cell) {
   if (cell.disabled) return
   if (!rangeStart.value || (rangeStart.value && rangeEnd.value)) {
@@ -168,9 +222,10 @@ function selectDate(cell) {
 }
 
 watch([rangeStart, rangeEnd], () => {
+  const endValid = rangeEnd.value && !minDurationViolation.value
   emit('update:range', {
     startsAt: rangeStart.value ? toKey(rangeStart.value) : null,
-    endsAt: rangeEnd.value ? toKey(rangeEnd.value) : null,
+    endsAt: endValid ? toKey(rangeEnd.value) : null,
   })
 })
 
@@ -198,21 +253,22 @@ watch(baseMonth, loadAvailability, { immediate: true })
   padding: 16px;
 }
 
+// T100 — side-by-side at md (768px) forced each month's 7-column grid into a
+// flex item too narrow to hold it (cells have a 40px floor via min-height +
+// aspect-ratio:1, so a month needs ~300px minimum); the grid didn't shrink,
+// it overflowed its column and visually ran into the next month. Sizing by
+// the months' own minimum width instead of a viewport breakpoint means this
+// self-corrects at any container width, including this same component
+// dropped somewhere narrower or wider than the booking form's column.
 .range-picker-months {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   gap: 20px;
 }
 
-@include respond-above(md) {
-  .range-picker-months {
-    flex-direction: row;
-  }
-
-  .range-picker-month {
-    flex: 1;
-    min-width: 0;
-  }
+.range-picker-month {
+  flex: 1 1 300px;
+  min-width: 300px;
 }
 
 .range-picker-nav {

@@ -16,6 +16,11 @@ export class BookingsController {
     return this.bookingsService.createRequest(guestId, listingId, dto);
   }
 
+  @Post('listings/:id/bookings/quote')
+  quote(@Param('id') listingId: string, @Body() dto: CreateBookingRequestDto) {
+    return this.bookingsService.quotePrice(listingId, dto);
+  }
+
   @Get('bookings/mine')
   listMine(
     @CurrentUser('id') userId: string,

@@ -142,6 +142,7 @@
                 </a>
                 <p v-else class="text-muted mt-3 mb-0">{{ t('listing.contactUnavailable') }}</p>
               </template>
+              <BookingRulesSummary v-if="showBookingCta" :listing="listing" class="mt-3" />
             </div>
           </div>
 
@@ -209,7 +210,12 @@ async function toggleFavorite() {
 // reflect what the listing's current package actually supports (Osnovni/
 // BASIC has neither) — both must hold before the guest is offered a CTA
 // the backend would otherwise reject.
-const showBookingCta = computed(() => props.listing.bookingModel !== 'NO_BOOKING' && props.listing.canBook)
+// T86 — the form at the other end of this CTA already refuses an owner
+// booking their own listing; not offering the button at all avoids a dead-end
+// click for the one visitor who can never actually use it.
+const showBookingCta = computed(
+  () => props.listing.bookingModel !== 'NO_BOOKING' && props.listing.canBook && auth.user?.id !== props.listing.userId,
+)
 const ctaLabel = computed(() => {
   if (showBookingCta.value) return t('listing.sendRequest')
   if (props.listing.canMessage) return t('listing.contactOwner')

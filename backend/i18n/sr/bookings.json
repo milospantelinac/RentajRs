@@ -2,8 +2,8 @@
   "END_BEFORE_START": "Kraj termina mora biti posle početka",
   "TOO_SOON": "Ovaj termin je prerano — potrebna je ranija najava",
   "TOO_FAR_AHEAD": "Ovaj termin se ne može rezervisati više od {max} dana unapred",
-  "MIN_DURATION": "Minimalno trajanje je {min}",
-  "MAX_DURATION": "Maksimalno trajanje je {max}",
+  "MIN_DURATION": "Minimalno trajanje je {min} {unit}",
+  "MAX_DURATION": "Maksimalno trajanje je {max} {unit}",
   "OWNER_NO_BANK_ACCOUNT": "Vlasnik nije podesio tekući račun za online plaćanja",
   "TOO_EARLY_FOR_NO_SHOW": "Nedolazak se ne može označiti pre početka rezervacije",
   "INVALID_STATE": "Rezervacija nije u odgovarajućem stanju ({status})"
