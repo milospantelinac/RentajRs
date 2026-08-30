@@ -24,6 +24,13 @@
   color: $color-error;
 }
 
+// T89 — mirrors .form-error for action outcomes worth confirming positively
+// (e.g. "Zahtev je odbijen. Gost je obavešten."), not just failures.
+.form-success {
+  font-size: $font-size-label;
+  color: $color-success;
+}
+
 .form-control {
   width: 100%;
   min-height: $touch-target-min;

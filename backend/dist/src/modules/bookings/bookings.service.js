@@ -353,7 +353,7 @@ let BookingsService = class BookingsService {
             include: {
                 listing: { select: { title: true, slug: true, address: true } },
                 guest: { select: { firstName: true, lastName: true, phone: true } },
-                owner: { select: { firstName: true, lastName: true, phone: true } },
+                owner: { select: { firstName: true, lastName: true, phone: true, bankAccount: true } },
             },
         });
         if (!booking)
@@ -373,7 +373,30 @@ let BookingsService = class BookingsService {
                 };
             }
         }
-        return { ...this.serialize(booking, userId), ...(cancellation ? { cancellation } : {}) };
+        let bankTransferDetails = null;
+        let awaitingPaymentSince = null;
+        if (booking.status === 'AWAITING_PAYMENT') {
+            if (booking.paymentMethod !== 'CASH' && booking.owner.bankAccount) {
+                bankTransferDetails = {
+                    recipientName: `${booking.owner.firstName} ${booking.owner.lastName}`,
+                    recipientAccount: booking.owner.bankAccount,
+                    amountRsd: (0, money_1.paraToRsd)(booking.amountDue),
+                    purpose: booking.listing?.title ?? '',
+                    referenceNumber: booking.id.replace(/-/g, '').slice(0, 20),
+                };
+            }
+            const entry = await this.prisma.bookingHistory.findFirst({
+                where: { bookingId: booking.id, newStatus: 'AWAITING_PAYMENT' },
+                orderBy: { changedAt: 'desc' },
+            });
+            awaitingPaymentSince = entry?.changedAt ?? null;
+        }
+        return {
+            ...this.serialize(booking, userId),
+            ...(cancellation ? { cancellation } : {}),
+            ...(bankTransferDetails ? { bankTransferDetails } : {}),
+            ...(awaitingPaymentSince ? { awaitingPaymentSince } : {}),
+        };
     }
     async listMine(userId, role, status) {
         const bookings = await this.prisma.booking.findMany({

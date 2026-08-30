@@ -120,8 +120,24 @@
             <template v-else>
               <p class="text-body mb-2">{{ t('booking.payInstructions') }}</p>
               <p class="text-muted mb-3">{{ t('booking.notMediating') }}</p>
+              <!-- T91 — this line used to exist only as the image's alt
+                   text, invisible to anyone not using a screen reader. -->
+              <p class="text-body mb-2">{{ t('booking.scanQr') }}</p>
               <img v-if="qrDataUrl" :src="qrDataUrl" :alt="t('booking.scanQr')" class="qr-image mb-3" />
-              <p class="text-muted">{{ t('booking.payDeadline') }}: {{ new Date(booking.paymentDeadline).toLocaleString('sr-RS') }}</p>
+              <p class="text-muted mb-3">{{ t('booking.payDeadline') }}: {{ new Date(booking.paymentDeadline).toLocaleString('sr-RS') }}</p>
+              <!-- T91 — the QR already encodes all of this; a guest paying
+                   from a desktop, a bank counter, or the post office had no
+                   way to read or copy any of it before. -->
+              <div v-if="booking.bankTransferDetails" class="pay-details text-start">
+                <p class="text-label mb-2">{{ t('booking.manualPayTitle') }}</p>
+                <div v-for="field in payDetailFields" :key="field.key" class="pay-detail-row">
+                  <span class="pay-detail-label">{{ field.label }}</span>
+                  <span class="pay-detail-value">{{ field.value }}</span>
+                  <button type="button" class="btn btn-tertiary btn-sm" @click="copyField(field.key, field.value)">
+                    {{ copiedField === field.key ? t('common.copied') : t('common.copy') }}
+                  </button>
+                </div>
+              </div>
             </template>
           </div>
         </div>
@@ -142,7 +158,12 @@
             <button v-if="booking.status === 'AWAITING_PAYMENT'" class="btn btn-primary-flat" @click="act('confirm-payment')">
               {{ t('booking.confirmPayment') }}
             </button>
-            <button v-if="booking.status === 'CONFIRMED'" class="btn btn-tertiary" @click="act('no-show')">{{ t('booking.markNoShow') }}</button>
+            <button
+              v-if="booking.status === 'CONFIRMED'"
+              class="btn btn-tertiary"
+              :disabled="!canMarkNoShow"
+              @click="act('no-show')"
+            >{{ t('booking.markNoShow') }}</button>
             <!-- T78 — a REQUESTED booking is never "cancelled" by the owner,
                  it's rejected (Odbij, above) — a third button here just
                  confused which action actually applies before approval. -->
@@ -157,7 +178,9 @@
             <button v-if="['REQUESTED','AWAITING_PAYMENT'].includes(booking.status)" class="btn btn-danger" @click="act('cancel')">
               {{ booking.status === 'REQUESTED' ? t('booking.withdrawRequest') : t('booking.cancelBooking') }}
             </button>
-            <button v-if="booking.status === 'AWAITING_PAYMENT'" class="btn btn-tertiary" @click="act('dispute-payment')">
+            <!-- T94 — hidden (not just disabled) until the guest has had
+                 meaningfully long to actually pay; see disputePaymentAvailable. -->
+            <button v-if="booking.status === 'AWAITING_PAYMENT' && disputePaymentAvailable" class="btn btn-tertiary" @click="act('dispute-payment')">
               {{ t('booking.reportUnpaidConfirmed') }}
             </button>
             <button v-if="booking.status === 'NO_SHOW' && !booking.noShowDisputed" class="btn btn-tertiary" @click="act('dispute-no-show')">
@@ -165,7 +188,12 @@
             </button>
           </template>
         </div>
+        <!-- T94 — explains why the button above is greyed out, rather than
+             letting the guest wonder, or the owner discover it only via the
+             server's rejection message. -->
+        <p v-if="isOwner && booking.status === 'CONFIRMED' && !canMarkNoShow" class="form-hint mb-0">{{ t('booking.noShowTooEarlyHint') }}</p>
 
+        <p v-if="successMessage" class="form-success mt-3">{{ successMessage }}</p>
         <p v-if="error" class="form-error mt-3">{{ error }}</p>
 
         <div v-if="booking.status === 'COMPLETED'" class="card mt-4">
@@ -223,6 +251,13 @@
       </div>
     </div>
   </div>
+  <!-- T92 — a foreign or nonexistent booking used to leave this whole page
+       blank (just header/footer), with no way to tell whether the link,
+       the account, or the platform was at fault. -->
+  <div v-else-if="notFound" class="container booking-detail py-4 text-center">
+    <p class="text-body mb-3">{{ t('booking.notFoundMessage') }}</p>
+    <NuxtLink to="/kontrolna-tabla/rezervacije" class="btn btn-primary-flat">{{ t('booking.backToMyBookings') }}</NuxtLink>
+  </div>
 </template>
 
 <script setup>
@@ -233,8 +268,10 @@ const route = useRoute()
 const auth = useAuthStore()
 
 const booking = ref(null)
+const notFound = ref(false)
 const qrDataUrl = ref(null)
 const error = ref('')
+const successMessage = ref('')
 
 const reviewStatus = ref(null)
 const reviewForm = reactive({ rating: 0, comment: '', tags: [] })
@@ -264,8 +301,49 @@ const cancellationLabel = computed(() => {
   return booking.value?.cancellation?.by === 'GUEST' ? t('booking.cancelledByGuest') : t('booking.cancelledByOwner')
 })
 
+// T94 — "Prijavi da uplata nije potvrđena" shouldn't appear the instant a
+// booking enters AWAITING_PAYMENT (the guest hasn't had time to pay yet).
+// There's no "I've paid" guest action to gate on (separate proposal, out of
+// scope here), so this uses the same halfway-through-the-window threshold
+// the existing payment-deadline reminder cron already nudges the guest at
+// (bookings.service.ts sendPaymentDeadlineReminders) — by then, enough of
+// the window has passed that "I paid and it's still not confirmed" is a
+// reasonable complaint rather than an impatient one.
+const disputePaymentAvailable = computed(() => {
+  const b = booking.value
+  if (!b?.awaitingPaymentSince || !b?.paymentDeadline) return false
+  const start = new Date(b.awaitingPaymentSince).getTime()
+  const end = new Date(b.paymentDeadline).getTime()
+  return Date.now() >= start + (end - start) / 2
+})
+// T94 — the server already rejects marking no-show before the stay starts;
+// this just stops the button from looking clickable when it can't work yet.
+const canMarkNoShow = computed(() => !!booking.value && new Date(booking.value.startsAt).getTime() <= Date.now())
+
 function formatPrice(value) {
   return `${new Intl.NumberFormat('sr-RS').format(value || 0)} RSD`
+}
+
+// T91 — same fields the IPS QR code already encodes, laid out as copyable
+// text for a guest paying from a desktop, a bank counter, or the post office.
+const payDetailFields = computed(() => {
+  const d = booking.value?.bankTransferDetails
+  if (!d) return []
+  return [
+    { key: 'account', label: t('booking.bankAccountLabel'), value: d.recipientAccount },
+    { key: 'recipient', label: t('booking.recipientLabel'), value: d.recipientName },
+    { key: 'amount', label: t('booking.payAmount'), value: formatPrice(d.amountRsd) },
+    { key: 'purpose', label: t('booking.paymentPurposeLabel'), value: d.purpose },
+    { key: 'reference', label: t('booking.paymentReferenceLabel'), value: d.referenceNumber },
+  ]
+})
+const copiedField = ref('')
+async function copyField(key, value) {
+  await navigator.clipboard.writeText(String(value))
+  copiedField.value = key
+  setTimeout(() => {
+    if (copiedField.value === key) copiedField.value = ''
+  }, 2000)
 }
 
 // T82 — a NIGHT/DAY/MONTH booking's startsAt/endsAt are calendar-day
@@ -280,7 +358,21 @@ function formatCheckDate(value) {
 }
 
 async function load() {
-  booking.value = await api.get(`/bookings/${route.params.id}`)
+  try {
+    booking.value = await api.get(`/bookings/${route.params.id}`)
+  } catch (e) {
+    // T92 — a missing booking (404) and someone else's booking (403) both
+    // used to leave `booking` null with no explanation, rendering a blank
+    // page. Collapsing both into one generic message, rather than
+    // distinguishing "doesn't exist" from "not yours", avoids confirming to
+    // a guesser that a given booking ID actually exists.
+    const status = e?.response?.status
+    if (status === 404 || status === 403) {
+      notFound.value = true
+      return
+    }
+    throw e
+  }
   if (booking.value.status === 'AWAITING_PAYMENT') {
     const qr = await api.get(`/bookings/${route.params.id}/qr`)
     qrDataUrl.value = qr.dataUrl
@@ -314,11 +406,60 @@ async function submitReview() {
   }
 }
 
+// T89 — the 5 actions that either can't be undone (confirm-payment) or
+// immediately have a real consequence for the other side (reject, no-show,
+// both cancellations) ask for confirmation first, naming that consequence.
+// Approve and dispute-payment don't (Approve is what the owner is already
+// trying to do; "Osporite oznaku" is T90's — a full redesign with its own
+// explanation field, not just a yes/no prompt).
+const CANCELLATION_TERMS_FALLBACK = () => t('booking.noCancellationTermsSet')
+const CONFIRM_MESSAGES = {
+  reject: () => t('booking.confirmReject'),
+  'confirm-payment': () => t('booking.confirmPaymentReceived'),
+  'cancel-by-owner': () =>
+    t('booking.confirmCancelOwner', { terms: booking.value.cancellationTermsSnapshot || CANCELLATION_TERMS_FALLBACK() }),
+  cancel: () =>
+    booking.value.status === 'REQUESTED'
+      ? t('booking.confirmWithdraw')
+      : t('booking.confirmCancelGuest', { terms: booking.value.cancellationTermsSnapshot || CANCELLATION_TERMS_FALLBACK() }),
+  'no-show': () => t('booking.confirmNoShow'),
+}
+
+// Resolved from the PRE-action booking state (`previousStatus`), since by
+// the time this runs `load()` has already replaced `booking.value` with the
+// post-action state (e.g. "cancel" always leaves status CANCELLED, whether
+// it was a withdrawn request or an actual cancellation).
+function successMessageFor(action, previousStatus) {
+  switch (action) {
+    case 'approve':
+      return booking.value.status === 'CONFIRMED' ? t('booking.successApproveCash') : t('booking.successApproveBank')
+    case 'reject':
+      return t('booking.successReject')
+    case 'confirm-payment':
+      return t('booking.successPaymentConfirmed')
+    case 'cancel-by-owner':
+      return t('booking.successCancelOwner')
+    case 'cancel':
+      return previousStatus === 'REQUESTED' ? t('booking.successWithdraw') : t('booking.successCancelGuest')
+    case 'no-show':
+      return t('booking.successNoShow')
+    case 'dispute-payment':
+      return t('booking.successDisputePayment')
+    default:
+      return ''
+  }
+}
+
 async function act(action) {
   error.value = ''
+  successMessage.value = ''
+  const confirmMessage = CONFIRM_MESSAGES[action]?.()
+  if (confirmMessage && !window.confirm(confirmMessage)) return
+  const previousStatus = booking.value.status
   try {
     await api.post(`/bookings/${route.params.id}/${action}`, {})
     await load()
+    successMessage.value = successMessageFor(action, previousStatus)
   } catch (e) {
     error.value = extractErrorMessage(e, t('auth.genericError'))
   }
@@ -343,6 +484,34 @@ useSeoMeta({ title: t('nav.dashboard') })
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+// T91 — copyable manual-payment fields (account, recipient, amount, purpose,
+// reference), shown below the QR for anyone who can't just scan it.
+.pay-details {
+  border-top: 1px solid $color-border;
+  padding-top: 12px;
+  margin-top: 4px;
+}
+
+.pay-detail-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  flex-wrap: wrap;
+}
+
+.pay-detail-label {
+  flex: 0 0 120px;
+  font-size: $font-size-label;
+  color: $color-text-muted;
+}
+
+.pay-detail-value {
+  flex: 1 1 auto;
+  font-weight: 600;
+  word-break: break-word;
 }
 
 .rating-stars {

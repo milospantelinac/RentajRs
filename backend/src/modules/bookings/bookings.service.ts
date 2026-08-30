@@ -449,7 +449,7 @@ export class BookingsService {
       include: {
         listing: { select: { title: true, slug: true, address: true } },
         guest: { select: { firstName: true, lastName: true, phone: true } },
-        owner: { select: { firstName: true, lastName: true, phone: true } },
+        owner: { select: { firstName: true, lastName: true, phone: true, bankAccount: true } },
       },
     });
     if (!booking) throw new NotFoundException();
@@ -471,7 +471,38 @@ export class BookingsService {
         };
       }
     }
-    return { ...this.serialize(booking, userId), ...(cancellation ? { cancellation } : {}) };
+
+    // T91 — the QR already encodes these exact fields (see moveToAwaitingPayment);
+    // recomputing them here as plain text isn't a new leak, just the same data
+    // in a form a guest can actually copy/read at a bank counter.
+    // T94 — "since" the payment window opened, so the frontend can gate the
+    // unconfirmed-payment dispute button on being meaningfully into that
+    // window instead of showing it the instant it appears.
+    let bankTransferDetails: { recipientName: string; recipientAccount: string; amountRsd: number | null; purpose: string; referenceNumber: string } | null = null;
+    let awaitingPaymentSince: Date | null = null;
+    if (booking.status === 'AWAITING_PAYMENT') {
+      if (booking.paymentMethod !== 'CASH' && booking.owner.bankAccount) {
+        bankTransferDetails = {
+          recipientName: `${booking.owner.firstName} ${booking.owner.lastName}`,
+          recipientAccount: booking.owner.bankAccount,
+          amountRsd: paraToRsd(booking.amountDue),
+          purpose: booking.listing?.title ?? '',
+          referenceNumber: booking.id.replace(/-/g, '').slice(0, 20),
+        };
+      }
+      const entry = await this.prisma.bookingHistory.findFirst({
+        where: { bookingId: booking.id, newStatus: 'AWAITING_PAYMENT' },
+        orderBy: { changedAt: 'desc' },
+      });
+      awaitingPaymentSince = entry?.changedAt ?? null;
+    }
+
+    return {
+      ...this.serialize(booking, userId),
+      ...(cancellation ? { cancellation } : {}),
+      ...(bankTransferDetails ? { bankTransferDetails } : {}),
+      ...(awaitingPaymentSince ? { awaitingPaymentSince } : {}),
+    };
   }
 
   async listMine(userId: string, role: 'guest' | 'owner', status?: BookingStatus) {
