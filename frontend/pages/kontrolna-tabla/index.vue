@@ -2,7 +2,7 @@
   <div v-if="dashboard">
     <h1 class="text-page-title mb-1">{{ t('dashboard.greeting', { name: auth.user?.firstName }) }}</h1>
     <p class="text-muted mb-4">
-      {{ dashboard.attentionItems.length ? t('dashboard.thingsWaiting', { count: dashboard.attentionItems.length }) : t('dashboard.allCaughtUp') }}
+      {{ dashboard.attentionItems.length ? thingsWaitingText : t('dashboard.allCaughtUp') }}
     </p>
 
     <section v-if="dashboard.attentionItems.length" class="mb-4">
@@ -12,7 +12,7 @@
         class="attention-card mb-2"
         :class="`attention-card-${item.urgency === 'critical' ? 'critical' : item.urgency === 'decision' ? 'decision' : 'info'}`"
       >
-        <span class="text-body">{{ t(`attention.${item.title}`, { count: item.count }) }}</span>
+        <span class="text-body">{{ attentionText(item) }}</span>
         <NuxtLink :to="item.actionUrl" class="btn btn-tertiary btn-sm">{{ t('common.continue') }}</NuxtLink>
       </div>
     </section>
@@ -69,11 +69,25 @@
 
 <script setup>
 definePageMeta({ middleware: 'auth', layout: 'dashboard' })
-const { t } = useI18n()
+const { t, te } = useI18n()
 const api = useApi()
 const auth = useAuthStore()
 
 const { data: dashboard } = await useAsyncData('dashboard', () => api.get('/dashboard'))
+
+const thingsWaitingText = computed(() => {
+  const count = dashboard.value.attentionItems.length
+  return t(`dashboard.thingsWaiting${srPluralCategory(count)}`, { count })
+})
+
+// T85 — most attention item titles carry a count and need a plural form per
+// count (attention.new_requestsOne/Few/Many); a few are fixed phrases with no
+// real plural (attention.term_conflict) and just keep their single key.
+function attentionText(item) {
+  const pluralKey = `attention.${item.title}${srPluralCategory(item.count)}`
+  const key = te(pluralKey) ? pluralKey : `attention.${item.title}`
+  return t(key, { count: item.count })
+}
 
 function formatPrice(value) {
   return `${new Intl.NumberFormat('sr-RS').format(value || 0)} RSD`

@@ -35,7 +35,7 @@
 
     <p class="range-picker-summary">
       <template v-if="rangeStart && rangeEnd">
-        {{ formatDate(rangeStart) }} → {{ formatDate(rangeEnd) }} · {{ nightCount }} {{ t('booking.rangePickerNights') }}
+        {{ formatDate(rangeStart) }} → {{ formatDate(rangeEnd) }} · {{ nightCount }} {{ nightsLabel }}
       </template>
       <template v-else-if="rangeStart">{{ t('booking.rangePickerPickEnd') }}</template>
       <template v-else>{{ t('booking.rangePickerPickStart') }}</template>
@@ -144,6 +144,7 @@ const nightCount = computed(() => {
   if (!rangeStart.value || !rangeEnd.value) return 0
   return Math.round((rangeEnd.value.getTime() - rangeStart.value.getTime()) / 86400000)
 })
+const nightsLabel = computed(() => t(`booking.rangePickerNights${srPluralCategory(nightCount.value)}`))
 
 function selectDate(cell) {
   if (cell.disabled) return
