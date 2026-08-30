@@ -326,12 +326,27 @@ let BookingsService = class BookingsService {
                     bookingId: booking.id,
                     listingId: booking.listingId,
                     submittedByUserId: guestId,
-                    description: dto.explanation ?? '',
+                    description: dto.explanation,
                 },
             }),
         ]);
         this.events.emit('booking.no_show_disputed', { bookingId: booking.id, disputeId: dispute.id });
         return { message: this.i18n.t('common.SUCCESS') };
+    }
+    async overturnNoShow(bookingId, adminId) {
+        const booking = await this.prisma.booking.findUniqueOrThrow({ where: { id: bookingId } });
+        if (booking.status !== 'NO_SHOW') {
+            throw new common_1.BadRequestException(this.i18n.t('bookings.INVALID_STATE', { args: { status: booking.status } }));
+        }
+        try {
+            await this.availability.lockTerm(booking.listingId, booking.startsAt, booking.endsAt, 'BOOKING', { bookingId: booking.id });
+        }
+        catch {
+            throw new common_1.BadRequestException(this.i18n.t('bookings.TERM_NO_LONGER_AVAILABLE'));
+        }
+        const updated = await this.applyStatus(booking, 'CONFIRMED', adminId);
+        this.events.emit('booking.no_show_overturned', { bookingId: booking.id });
+        return updated;
     }
     async disputeUnconfirmedPayment(guestId, bookingId) {
         const booking = await this.assertGuestAccess(guestId, bookingId, ['AWAITING_PAYMENT']);

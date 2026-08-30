@@ -80,6 +80,15 @@ export class AdminController {
     return this.adminService.resolveDispute(adminId, id, dto);
   }
 
+  // T90 — read-only booking summary for the "Povezana rezervacija" link on a
+  // dispute card; gated on the same permission since it exists purely to
+  // support dispute review.
+  @RequirePermissions('resolve_disputes')
+  @Get('admin/bookings/:id')
+  getBookingForAdmin(@Param('id') id: string) {
+    return this.adminService.getBookingForAdmin(id);
+  }
+
   // -- Admin: settings -------------------------------------------------
 
   @RequirePermissions('manage_settings')

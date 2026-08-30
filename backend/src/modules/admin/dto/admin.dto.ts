@@ -2,7 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsBoolean, IsDefined, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
 
 const REPORT_REASONS = ['FRAUD', 'INACCURATE_INFO', 'INAPPROPRIATE_CONTENT', 'DUPLICATE', 'OTHER'] as const;
-const DISPUTE_OUTCOMES = ['WARNING', 'RESTRICTION', 'BLOCK', 'NO_ACTION'] as const;
+const DISPUTE_OUTCOMES = ['WARNING', 'RESTRICTION', 'BLOCK', 'NO_ACTION', 'OVERTURN_NO_SHOW'] as const;
 
 export class ReportListingDto {
   @ApiProperty({ enum: REPORT_REASONS })

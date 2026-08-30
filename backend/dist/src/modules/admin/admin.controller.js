@@ -49,6 +49,9 @@ let AdminController = class AdminController {
     resolveDispute(adminId, id, dto) {
         return this.adminService.resolveDispute(adminId, id, dto);
     }
+    getBookingForAdmin(id) {
+        return this.adminService.getBookingForAdmin(id);
+    }
     listSettings() {
         return this.adminService.listSettings();
     }
@@ -169,6 +172,14 @@ __decorate([
     __metadata("design:paramtypes", [String, String, admin_dto_1.ResolveDisputeDto]),
     __metadata("design:returntype", void 0)
 ], AdminController.prototype, "resolveDispute", null);
+__decorate([
+    (0, require_permissions_decorator_1.RequirePermissions)('resolve_disputes'),
+    (0, common_1.Get)('admin/bookings/:id'),
+    __param(0, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], AdminController.prototype, "getBookingForAdmin", null);
 __decorate([
     (0, require_permissions_decorator_1.RequirePermissions)('manage_settings'),
     (0, common_1.Get)('admin/settings'),

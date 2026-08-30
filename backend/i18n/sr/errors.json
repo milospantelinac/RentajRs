@@ -25,5 +25,6 @@
   "PACKAGE_FEATURE_NOT_INCLUDED": "Vaš trenutni paket za ovaj oglas ne uključuje ovu funkciju. Nadogradite paket da biste je koristili",
   "GUEST_COUNT_OUT_OF_RANGE": "Broj gostiju mora biti između {min} i {max}",
   "ACCOUNT_RESTRICTED": "Nalog je privremeno ograničen zbog kršenja pravila platforme i ne može da izvrši ovu radnju",
-  "PACKAGE_INCOMPATIBLE_BOOKING_MODEL": "Osnovni paket ne uključuje rezervacioni sistem. Izaberite Standard ili Pro paket, ili prvo promenite način rezervisanja na oglasu na „bez rezervacija”"
+  "PACKAGE_INCOMPATIBLE_BOOKING_MODEL": "Osnovni paket ne uključuje rezervacioni sistem. Izaberite Standard ili Pro paket, ili prvo promenite način rezervisanja na oglasu na „bez rezervacija”",
+  "OVERTURN_NOT_APPLICABLE": "Ovaj ishod se primenjuje samo na sporove oko nedolaska koji su vezani za rezervaciju"
 }

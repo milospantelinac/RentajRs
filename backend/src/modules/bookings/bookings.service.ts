@@ -418,12 +418,36 @@ export class BookingsService {
           bookingId: booking.id,
           listingId: booking.listingId,
           submittedByUserId: guestId,
-          description: dto.explanation ?? '',
+          description: dto.explanation,
         },
       }),
     ]);
     this.events.emit('booking.no_show_disputed', { bookingId: booking.id, disputeId: dispute.id });
     return { message: this.i18n.t('common.SUCCESS') };
+  }
+
+  /**
+   * T90 — the one DisputeOutcome that decides about the BOOKING instead of
+   * the account (Ch.6.7/ADR-019 is about the other outcomes, which still
+   * never touch a booking). Called from AdminService.resolveDispute() when
+   * the admin picks OVERTURN_NO_SHOW. Re-locking the term can fail if
+   * someone else booked those exact dates in the time since the no-show
+   * freed them (T88) — that's surfaced to the admin rather than silently
+   * leaving the booking NO_SHOW with no explanation.
+   */
+  async overturnNoShow(bookingId: string, adminId: string) {
+    const booking = await this.prisma.booking.findUniqueOrThrow({ where: { id: bookingId } });
+    if (booking.status !== 'NO_SHOW') {
+      throw new BadRequestException(this.i18n.t('bookings.INVALID_STATE', { args: { status: booking.status } }));
+    }
+    try {
+      await this.availability.lockTerm(booking.listingId, booking.startsAt, booking.endsAt, 'BOOKING', { bookingId: booking.id });
+    } catch {
+      throw new BadRequestException(this.i18n.t('bookings.TERM_NO_LONGER_AVAILABLE'));
+    }
+    const updated = await this.applyStatus(booking, 'CONFIRMED', adminId);
+    this.events.emit('booking.no_show_overturned', { bookingId: booking.id });
+    return updated;
   }
 
   async disputeUnconfirmedPayment(guestId: string, bookingId: string) {

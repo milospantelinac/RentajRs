@@ -13,7 +13,7 @@ exports.UpdateFaqDto = exports.CreateFaqDto = exports.UpdateStaticPageDto = expo
 const swagger_1 = require("@nestjs/swagger");
 const class_validator_1 = require("class-validator");
 const REPORT_REASONS = ['FRAUD', 'INACCURATE_INFO', 'INAPPROPRIATE_CONTENT', 'DUPLICATE', 'OTHER'];
-const DISPUTE_OUTCOMES = ['WARNING', 'RESTRICTION', 'BLOCK', 'NO_ACTION'];
+const DISPUTE_OUTCOMES = ['WARNING', 'RESTRICTION', 'BLOCK', 'NO_ACTION', 'OVERTURN_NO_SHOW'];
 class ReportListingDto {
 }
 exports.ReportListingDto = ReportListingDto;

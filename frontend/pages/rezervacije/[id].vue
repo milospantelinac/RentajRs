@@ -183,15 +183,43 @@
             <button v-if="booking.status === 'AWAITING_PAYMENT' && disputePaymentAvailable" class="btn btn-tertiary" @click="act('dispute-payment')">
               {{ t('booking.reportUnpaidConfirmed') }}
             </button>
-            <button v-if="booking.status === 'NO_SHOW' && !booking.noShowDisputed" class="btn btn-tertiary" @click="act('dispute-no-show')">
-              {{ t('booking.disputeNoShow') }}
-            </button>
+            <button
+              v-if="booking.status === 'NO_SHOW' && !booking.noShowDisputed && !disputingNoShow"
+              class="btn btn-tertiary"
+              @click="disputingNoShow = true"
+            >{{ t('booking.disputeNoShow') }}</button>
           </template>
         </div>
         <!-- T94 — explains why the button above is greyed out, rather than
              letting the guest wonder, or the owner discover it only via the
              server's rejection message. -->
         <p v-if="isOwner && booking.status === 'CONFIRMED' && !canMarkNoShow" class="form-hint mb-0">{{ t('booking.noShowTooEarlyHint') }}</p>
+
+        <!-- T90 — "Osporite oznaku" used to fire immediately with no way to
+             explain why, so the admin reviewing it had nothing to go on. -->
+        <div v-if="disputingNoShow" class="card mt-3">
+          <div class="card-body">
+            <div class="form-group mb-3">
+              <label class="form-label">{{ t('booking.disputeExplanationLabel') }}</label>
+              <textarea
+                v-model="disputeExplanation"
+                class="form-control"
+                rows="3"
+                :placeholder="t('booking.disputeExplanationPlaceholder')"
+                maxlength="1000"
+              ></textarea>
+            </div>
+            <p v-if="disputeError" class="form-error mb-2">{{ disputeError }}</p>
+            <div class="action-buttons">
+              <button
+                class="btn btn-primary-flat btn-sm"
+                :disabled="!disputeExplanation.trim() || submittingDispute"
+                @click="submitDispute"
+              >{{ t('booking.disputeSubmit') }}</button>
+              <button class="btn btn-tertiary btn-sm" @click="disputingNoShow = false">{{ t('common.cancel') }}</button>
+            </div>
+          </div>
+        </div>
 
         <p v-if="successMessage" class="form-success mt-3">{{ successMessage }}</p>
         <p v-if="error" class="form-error mt-3">{{ error }}</p>
@@ -278,6 +306,13 @@ const reviewForm = reactive({ rating: 0, comment: '', tags: [] })
 const reviewError = ref('')
 const submittingReview = ref(false)
 const guestTags = ['ARRIVED_ON_TIME', 'RETURNED_NEATLY', 'COMMUNICATIVE', 'LATE', 'DAMAGE', 'NO_SHOW']
+
+// T90 — "Osporite oznaku" now collects an explanation instead of firing
+// immediately with nothing for the admin to review.
+const disputingNoShow = ref(false)
+const disputeExplanation = ref('')
+const disputeError = ref('')
+const submittingDispute = ref(false)
 
 const isOwner = computed(() => booking.value?.ownerId === auth.user?.id)
 const statusKey = computed(() => {
@@ -462,6 +497,24 @@ async function act(action) {
     successMessage.value = successMessageFor(action, previousStatus)
   } catch (e) {
     error.value = extractErrorMessage(e, t('auth.genericError'))
+  }
+}
+
+// T90 — takes a required explanation instead of firing on a bare click.
+async function submitDispute() {
+  disputeError.value = ''
+  successMessage.value = ''
+  submittingDispute.value = true
+  try {
+    await api.post(`/bookings/${route.params.id}/dispute-no-show`, { explanation: disputeExplanation.value.trim() })
+    disputingNoShow.value = false
+    disputeExplanation.value = ''
+    await load()
+    successMessage.value = t('booking.successDisputeNoShow')
+  } catch (e) {
+    disputeError.value = extractErrorMessage(e, t('auth.genericError'))
+  } finally {
+    submittingDispute.value = false
   }
 }
 

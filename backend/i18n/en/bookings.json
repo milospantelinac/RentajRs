@@ -6,5 +6,6 @@
   "MAX_DURATION": "Maximum duration is {max} {unit}",
   "OWNER_NO_BANK_ACCOUNT": "The owner has not configured a bank account for online payments",
   "TOO_EARLY_FOR_NO_SHOW": "Cannot mark no-show before the booking has started",
-  "INVALID_STATE": "Booking is not in a valid state ({status})"
+  "INVALID_STATE": "Booking is not in a valid state ({status})",
+  "TERM_NO_LONGER_AVAILABLE": "Those dates were booked in the meantime — this can't be undone"
 }

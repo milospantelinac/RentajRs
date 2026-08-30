@@ -4,6 +4,8 @@ import { I18nService } from 'nestjs-i18n';
 import { ProcessingStatus, Language } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
+import { BookingsService } from '../bookings/bookings.service';
+import { paraToRsd } from '../../common/utils/money';
 import { PaymentSettingsService } from '../../common/payment/nestpay/payment-settings.service';
 import { UpdatePaymentSettingsDto } from '../../common/payment/nestpay/dto/payment-settings.dto';
 import {
@@ -25,6 +27,7 @@ export class AdminService {
   constructor(
     private prisma: PrismaService,
     private users: UsersService,
+    private bookings: BookingsService,
     private i18n: I18nService,
     private events: EventEmitter2,
     private paymentSettings: PaymentSettingsService,
@@ -103,22 +106,66 @@ export class AdminService {
       orderBy: { createdAt: 'desc' },
       include: {
         listing: { select: { id: true, title: true, slug: true } },
-        booking: { select: { id: true, status: true } },
+        // T90 — startsAt/endsAt/guest let the admin tell apart which of a
+        // listing's several bookings a dispute is actually about, without
+        // needing to open the linked booking first.
+        booking: { select: { id: true, status: true, startsAt: true, endsAt: true, guest: { select: { firstName: true, lastName: true } } } },
         submittedByUser: { select: { id: true, firstName: true, lastName: true } },
       },
     });
   }
 
-  /** Ch.6.7/ADR-019 — admin decides about the ACCOUNT, never about money. */
+  /**
+   * Read-only, admin-only booking summary for the "Povezana rezervacija" link
+   * on a dispute (T90) — deliberately not the guest/owner detail page's
+   * getOne(), which is gated to the two parties and would 403 an admin.
+   */
+  async getBookingForAdmin(bookingId: string) {
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: {
+        listing: { select: { title: true, slug: true } },
+        guest: { select: { firstName: true, lastName: true, email: true } },
+        owner: { select: { firstName: true, lastName: true, email: true } },
+      },
+    });
+    if (!booking) throw new NotFoundException();
+    return {
+      id: booking.id,
+      status: booking.status,
+      startsAt: booking.startsAt,
+      endsAt: booking.endsAt,
+      createdAt: booking.createdAt,
+      listingTitle: booking.listing?.title,
+      guestName: `${booking.guest.firstName} ${booking.guest.lastName}`,
+      guestEmail: booking.guest.email,
+      ownerName: `${booking.owner.firstName} ${booking.owner.lastName}`,
+      ownerEmail: booking.owner.email,
+      totalAmount: paraToRsd(booking.totalAmount),
+      cancellationTermsSnapshot: booking.cancellationTermsSnapshot,
+    };
+  }
+
+  /** Ch.6.7/ADR-019 — admin decides about the ACCOUNT, never about money; T90's OVERTURN_NO_SHOW is the one exception, and it's about the booking, never the account. */
   async resolveDispute(adminId: string, disputeId: string, dto: ResolveDisputeDto) {
     const dispute = await this.prisma.dispute.findUniqueOrThrow({ where: { id: disputeId } });
+
+    if (dto.outcome === 'OVERTURN_NO_SHOW') {
+      if (dispute.type !== 'DISPUTED_NO_SHOW' || !dispute.bookingId) {
+        throw new BadRequestException(this.i18n.t('errors.OVERTURN_NOT_APPLICABLE'));
+      }
+      // Attempted BEFORE persisting the resolution — a failed overturn (dates
+      // taken again in the meantime) must not leave the dispute marked
+      // resolved with nothing actually having changed.
+      await this.bookings.overturnNoShow(dispute.bookingId, adminId);
+    }
 
     await this.prisma.dispute.update({
       where: { id: disputeId },
       data: { status: 'RESOLVED', outcome: dto.outcome, adminNote: dto.adminNote, handledByUserId: adminId },
     });
 
-    if (dto.targetUserId && dto.outcome !== 'NO_ACTION') {
+    if (dto.targetUserId && dto.outcome !== 'NO_ACTION' && dto.outcome !== 'OVERTURN_NO_SHOW') {
       if (dto.outcome === 'BLOCK') {
         await this.prisma.user.update({ where: { id: dto.targetUserId }, data: { blocked: true, blockedReason: `Dispute ${disputeId}: ${dto.adminNote ?? ''}` } });
         await this.prisma.session.updateMany({ where: { userId: dto.targetUserId, revokedAt: null }, data: { revokedAt: new Date() } });
@@ -136,7 +183,8 @@ export class AdminService {
     }
 
     if (dispute.type === 'DISPUTED_NO_SHOW' && dispute.bookingId) {
-      // Disputing doesn't silently overturn the mark — the admin's WARNING/NO_ACTION call is the resolution (R94).
+      // Disputing doesn't silently overturn the mark — the admin's explicit
+      // outcome (OVERTURN_NO_SHOW, or WARNING/NO_ACTION leaving it standing) is the resolution (R94).
       this.events.emit('booking.no_show_dispute_resolved', { bookingId: dispute.bookingId, outcome: dto.outcome });
     }
 

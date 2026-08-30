@@ -223,6 +223,12 @@ enum DisputeOutcome {
   RESTRICTION
   BLOCK
   NO_ACTION
+  /// T90 — DISPUTED_NO_SHOW only: reverses the booking's NO_SHOW mark back to
+  /// CONFIRMED. Deliberately separate from NO_ACTION (which still leaves the
+  /// mark standing) and never touches the account — Ch.6.7/ADR-019's "admin
+  /// decides about the account, never about money" holds for every other
+  /// outcome; this one instead decides about the booking, never the account.
+  OVERTURN_NO_SHOW
 }
 
 enum EmailStatus {

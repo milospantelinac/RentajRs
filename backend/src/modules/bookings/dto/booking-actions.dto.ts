@@ -1,5 +1,5 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class CancelBookingDto {
   @ApiPropertyOptional()
@@ -16,8 +16,10 @@ export class RejectBookingDto {
 }
 
 export class DisputeNoShowDto {
-  @ApiPropertyOptional()
-  @IsOptional()
+  // T90 — the admin previously received disputes with no explanation at all
+  // (there was nowhere for the guest to write one); now required.
+  @ApiProperty()
+  @IsNotEmpty()
   @IsString()
-  explanation?: string;
+  explanation: string;
 }

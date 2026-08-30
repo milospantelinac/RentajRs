@@ -15,13 +15,16 @@ const event_emitter_1 = require("@nestjs/event-emitter");
 const nestjs_i18n_1 = require("nestjs-i18n");
 const prisma_service_1 = require("../../prisma/prisma.service");
 const users_service_1 = require("../users/users.service");
+const bookings_service_1 = require("../bookings/bookings.service");
+const money_1 = require("../../common/utils/money");
 const payment_settings_service_1 = require("../../common/payment/nestpay/payment-settings.service");
 const PRIORITY_REPORT_THRESHOLD = 3;
 const RESTRICTION_DAYS = 30;
 let AdminService = class AdminService {
-    constructor(prisma, users, i18n, events, paymentSettings) {
+    constructor(prisma, users, bookings, i18n, events, paymentSettings) {
         this.prisma = prisma;
         this.users = users;
+        this.bookings = bookings;
         this.i18n = i18n;
         this.events = events;
         this.paymentSettings = paymentSettings;
@@ -86,18 +89,50 @@ let AdminService = class AdminService {
             orderBy: { createdAt: 'desc' },
             include: {
                 listing: { select: { id: true, title: true, slug: true } },
-                booking: { select: { id: true, status: true } },
+                booking: { select: { id: true, status: true, startsAt: true, endsAt: true, guest: { select: { firstName: true, lastName: true } } } },
                 submittedByUser: { select: { id: true, firstName: true, lastName: true } },
             },
         });
     }
+    async getBookingForAdmin(bookingId) {
+        const booking = await this.prisma.booking.findUnique({
+            where: { id: bookingId },
+            include: {
+                listing: { select: { title: true, slug: true } },
+                guest: { select: { firstName: true, lastName: true, email: true } },
+                owner: { select: { firstName: true, lastName: true, email: true } },
+            },
+        });
+        if (!booking)
+            throw new common_1.NotFoundException();
+        return {
+            id: booking.id,
+            status: booking.status,
+            startsAt: booking.startsAt,
+            endsAt: booking.endsAt,
+            createdAt: booking.createdAt,
+            listingTitle: booking.listing?.title,
+            guestName: `${booking.guest.firstName} ${booking.guest.lastName}`,
+            guestEmail: booking.guest.email,
+            ownerName: `${booking.owner.firstName} ${booking.owner.lastName}`,
+            ownerEmail: booking.owner.email,
+            totalAmount: (0, money_1.paraToRsd)(booking.totalAmount),
+            cancellationTermsSnapshot: booking.cancellationTermsSnapshot,
+        };
+    }
     async resolveDispute(adminId, disputeId, dto) {
         const dispute = await this.prisma.dispute.findUniqueOrThrow({ where: { id: disputeId } });
+        if (dto.outcome === 'OVERTURN_NO_SHOW') {
+            if (dispute.type !== 'DISPUTED_NO_SHOW' || !dispute.bookingId) {
+                throw new common_1.BadRequestException(this.i18n.t('errors.OVERTURN_NOT_APPLICABLE'));
+            }
+            await this.bookings.overturnNoShow(dispute.bookingId, adminId);
+        }
         await this.prisma.dispute.update({
             where: { id: disputeId },
             data: { status: 'RESOLVED', outcome: dto.outcome, adminNote: dto.adminNote, handledByUserId: adminId },
         });
-        if (dto.targetUserId && dto.outcome !== 'NO_ACTION') {
+        if (dto.targetUserId && dto.outcome !== 'NO_ACTION' && dto.outcome !== 'OVERTURN_NO_SHOW') {
             if (dto.outcome === 'BLOCK') {
                 await this.prisma.user.update({ where: { id: dto.targetUserId }, data: { blocked: true, blockedReason: `Dispute ${disputeId}: ${dto.adminNote ?? ''}` } });
                 await this.prisma.session.updateMany({ where: { userId: dto.targetUserId, revokedAt: null }, data: { revokedAt: new Date() } });
@@ -263,6 +298,7 @@ exports.AdminService = AdminService = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
         users_service_1.UsersService,
+        bookings_service_1.BookingsService,
         nestjs_i18n_1.I18nService,
         event_emitter_1.EventEmitter2,
         payment_settings_service_1.PaymentSettingsService])
