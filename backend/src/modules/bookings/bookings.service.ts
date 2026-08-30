@@ -357,7 +357,11 @@ export class BookingsService {
   async rejectRequest(ownerId: string, bookingId: string, dto: RejectBookingDto) {
     const booking = await this.assertOwnerAccess(ownerId, bookingId, ['REQUESTED']);
     await this.availability.releaseTermsForBooking(booking.id);
-    const updated = await this.applyStatus(booking, 'CANCELLED', ownerId, { cancellationReason: dto.reason ?? 'Rejected by owner' });
+    // T79 — a rejected request gets its own status, distinct from CANCELLED:
+    // the email system already sends a different template for the two
+    // (booking_rejected vs booking_cancelled), so the status shown on the
+    // booking itself must not contradict what the guest was told by email.
+    const updated = await this.applyStatus(booking, 'REJECTED', ownerId, { cancellationReason: dto.reason });
     this.events.emit('booking.rejected', { bookingId: booking.id });
     return updated;
   }
@@ -374,6 +378,9 @@ export class BookingsService {
     if (booking.startsAt.getTime() > Date.now()) {
       throw new BadRequestException(this.i18n.t('bookings.TOO_EARLY_FOR_NO_SHOW'));
     }
+    // T88 — a no-show still frees whatever nights/months remain on the term;
+    // the guest not arriving shouldn't cost the owner the rest of the stay too.
+    await this.availability.releaseTermsForBooking(booking.id);
     const updated = await this.applyStatus(booking, 'NO_SHOW', ownerId);
     this.events.emit('booking.no_show', { bookingId: booking.id });
     return updated;
@@ -440,7 +447,24 @@ export class BookingsService {
     });
     if (!booking) throw new NotFoundException();
     if (booking.guestId !== userId && booking.ownerId !== userId) throw new ForbiddenException();
-    return this.serialize(booking, userId);
+
+    // T79 — "ko je otkazao i kada", for both CANCELLED and REJECTED: the
+    // BookingHistory row for the transition into the current status already
+    // has changedByUserId/changedAt, it just was never surfaced to the client.
+    let cancellation: { by: 'GUEST' | 'OWNER' | null; at: Date } | null = null;
+    if (booking.status === 'CANCELLED' || booking.status === 'REJECTED') {
+      const entry = await this.prisma.bookingHistory.findFirst({
+        where: { bookingId: booking.id, newStatus: booking.status },
+        orderBy: { changedAt: 'desc' },
+      });
+      if (entry) {
+        cancellation = {
+          by: entry.changedByUserId === booking.guestId ? 'GUEST' : entry.changedByUserId === booking.ownerId ? 'OWNER' : null,
+          at: entry.changedAt,
+        };
+      }
+    }
+    return { ...this.serialize(booking, userId), ...(cancellation ? { cancellation } : {}) };
   }
 
   async listMine(userId: string, role: 'guest' | 'owner', status?: BookingStatus) {

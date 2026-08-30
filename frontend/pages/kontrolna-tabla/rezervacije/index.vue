@@ -46,7 +46,7 @@ const { t } = useI18n()
 const api = useApi()
 const route = useRoute()
 
-const statuses = ['REQUESTED', 'AWAITING_PAYMENT', 'CONFIRMED', 'COMPLETED', 'CANCELLED', 'EXPIRED', 'NO_SHOW']
+const statuses = ['REQUESTED', 'AWAITING_PAYMENT', 'CONFIRMED', 'COMPLETED', 'CANCELLED', 'REJECTED', 'EXPIRED', 'NO_SHOW']
 const role = ref(route.query.role === 'owner' ? 'owner' : 'guest')
 // Deep links from the dashboard's "needs your attention" cards carry a
 // status too (e.g. ?role=owner&status=REQUESTED) — this used to be silently
@@ -68,14 +68,14 @@ function setRole(r) {
 function statusLabel(status) {
   const map = {
     REQUESTED: 'Requested', AWAITING_PAYMENT: 'AwaitingPayment', CONFIRMED: 'Confirmed',
-    COMPLETED: 'Completed', CANCELLED: 'Cancelled', EXPIRED: 'Expired', NO_SHOW: 'NoShow',
+    COMPLETED: 'Completed', CANCELLED: 'Cancelled', REJECTED: 'Rejected', EXPIRED: 'Expired', NO_SHOW: 'NoShow',
   }
   return map[status] || 'Requested'
 }
 function statusBadge(status) {
   const map = {
     REQUESTED: 'badge-warning', AWAITING_PAYMENT: 'badge-warning', CONFIRMED: 'badge-success',
-    COMPLETED: 'badge-success', CANCELLED: 'badge-critical', EXPIRED: 'badge-critical', NO_SHOW: 'badge-critical',
+    COMPLETED: 'badge-success', CANCELLED: 'badge-critical', REJECTED: 'badge-critical', EXPIRED: 'badge-critical', NO_SHOW: 'badge-critical',
   }
   return map[status] || 'badge-neutral'
 }

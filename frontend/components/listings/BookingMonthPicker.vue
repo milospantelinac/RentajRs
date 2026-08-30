@@ -45,6 +45,16 @@ function monthKey(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
 }
 
+// T88 — BlockedTerm boundaries are UTC instants; `date`/`nextMonth` below are
+// LOCAL-midnight JS Dates, so comparing them directly shifted month
+// boundaries by the local UTC offset and made the month right after a
+// booking's end look blocked too. Re-anchor to UTC midnight of the same
+// calendar month before comparing (see the identical fix in
+// BookingDateRangePicker.vue's isBlocked()).
+function monthStartUTC(date) {
+  return Date.UTC(date.getFullYear(), date.getMonth(), 1)
+}
+
 const availableMonths = computed(() => {
   const now = new Date()
   const start = new Date(now.getFullYear(), now.getMonth(), 1)
@@ -52,7 +62,9 @@ const availableMonths = computed(() => {
     const date = new Date(start.getFullYear(), start.getMonth() + i, 1)
     const nextMonth = new Date(start.getFullYear(), start.getMonth() + i + 1, 1)
     const key = monthKey(date)
-    const blocked = blocks.value.some((b) => new Date(b.startsAt) < nextMonth && new Date(b.endsAt) > date)
+    const blocked = blocks.value.some(
+      (b) => new Date(b.startsAt).getTime() < monthStartUTC(nextMonth) && new Date(b.endsAt).getTime() > monthStartUTC(date),
+    )
     return {
       key,
       label: date.toLocaleDateString(t('listing.calendarLocale'), { month: 'long', year: 'numeric' }),
@@ -71,7 +83,7 @@ const spanBlocked = computed(() => {
   for (let i = 0; i < monthCount.value; i++) {
     const date = new Date(y, m - 1 + i, 1)
     const nextMonth = new Date(y, m - 1 + i + 1, 1)
-    if (blocks.value.some((b) => new Date(b.startsAt) < nextMonth && new Date(b.endsAt) > date)) return true
+    if (blocks.value.some((b) => new Date(b.startsAt).getTime() < monthStartUTC(nextMonth) && new Date(b.endsAt).getTime() > monthStartUTC(date))) return true
   }
   return false
 })

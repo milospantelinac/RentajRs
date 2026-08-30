@@ -132,9 +132,15 @@ const leadingBlanks = computed(() => {
   return (jsDay + 6) % 7 // Monday-first
 })
 
+// T88 — same UTC-anchor fix as BookingDateRangePicker.vue's isBlocked():
+// BlockedTerm boundaries are UTC instants, startDate/endDate here are
+// LOCAL-midnight JS Dates, and comparing them directly shifted every
+// boundary by the local UTC offset — the owner's own calendar showed a
+// booking's checkout day (or the month right after a monthly booking ends)
+// as still taken.
 function statusForRange(startDate, endDate) {
-  const s0 = startDate.getTime()
-  const e0 = endDate.getTime()
+  const s0 = Date.UTC(startDate.getFullYear(), startDate.getMonth(), startDate.getDate())
+  const e0 = Date.UTC(endDate.getFullYear(), endDate.getMonth(), endDate.getDate())
   for (const b of blocks.value) {
     const s = new Date(b.startsAt).getTime()
     const e = new Date(b.endsAt).getTime()

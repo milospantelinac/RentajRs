@@ -112,8 +112,15 @@ const canGoForward = computed(() => {
   return nextMonthStart <= maxSelectableDate.value
 })
 
+// T88 — BlockedTerm.startsAt/endsAt are UTC instants (a date-only "2026-08-28"
+// round-trips through the API as UTC midnight), but `date` here is a
+// LOCAL-midnight JS Date. Comparing local-midnight cells against UTC-anchored
+// terms directly shifted every boundary by the local UTC offset, which in any
+// zone ahead of UTC (Belgrade included) made the checkout day itself look
+// blocked. Re-anchoring the cell to UTC midnight of the same calendar day
+// before comparing matches how the backend interprets it.
 function isBlocked(date) {
-  const dayStart = date.getTime()
+  const dayStart = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())
   const dayEnd = dayStart + 86400000
   return blocks.value.some((b) => new Date(b.startsAt).getTime() < dayEnd && new Date(b.endsAt).getTime() > dayStart)
 }

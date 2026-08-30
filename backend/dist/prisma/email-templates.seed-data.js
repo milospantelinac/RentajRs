@@ -337,13 +337,13 @@ exports.emailTemplates = [
         sr: {
             subject: 'Rezervacija je otkazana',
             heading: 'Rezervacija za "{oglas}" je otkazana',
-            bodyText: 'Razlog: {razlog}. Ako imate pitanja, pogledajte detalje rezervacije.',
+            bodyText: 'Ako imate pitanja, pogledajte detalje rezervacije.',
             buttonLabel: 'Pogledaj detalje',
         },
         en: {
             subject: 'Booking cancelled',
             heading: 'The booking for "{oglas}" was cancelled',
-            bodyText: 'Reason: {razlog}. If you have questions, check the booking details.',
+            bodyText: 'If you have questions, check the booking details.',
             buttonLabel: 'View details',
         },
     },

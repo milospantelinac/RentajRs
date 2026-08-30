@@ -282,7 +282,7 @@ let BookingsService = class BookingsService {
     async rejectRequest(ownerId, bookingId, dto) {
         const booking = await this.assertOwnerAccess(ownerId, bookingId, ['REQUESTED']);
         await this.availability.releaseTermsForBooking(booking.id);
-        const updated = await this.applyStatus(booking, 'CANCELLED', ownerId, { cancellationReason: dto.reason ?? 'Rejected by owner' });
+        const updated = await this.applyStatus(booking, 'REJECTED', ownerId, { cancellationReason: dto.reason });
         this.events.emit('booking.rejected', { bookingId: booking.id });
         return updated;
     }
@@ -297,6 +297,7 @@ let BookingsService = class BookingsService {
         if (booking.startsAt.getTime() > Date.now()) {
             throw new common_1.BadRequestException(this.i18n.t('bookings.TOO_EARLY_FOR_NO_SHOW'));
         }
+        await this.availability.releaseTermsForBooking(booking.id);
         const updated = await this.applyStatus(booking, 'NO_SHOW', ownerId);
         this.events.emit('booking.no_show', { bookingId: booking.id });
         return updated;
@@ -355,7 +356,20 @@ let BookingsService = class BookingsService {
             throw new common_1.NotFoundException();
         if (booking.guestId !== userId && booking.ownerId !== userId)
             throw new common_1.ForbiddenException();
-        return this.serialize(booking, userId);
+        let cancellation = null;
+        if (booking.status === 'CANCELLED' || booking.status === 'REJECTED') {
+            const entry = await this.prisma.bookingHistory.findFirst({
+                where: { bookingId: booking.id, newStatus: booking.status },
+                orderBy: { changedAt: 'desc' },
+            });
+            if (entry) {
+                cancellation = {
+                    by: entry.changedByUserId === booking.guestId ? 'GUEST' : entry.changedByUserId === booking.ownerId ? 'OWNER' : null,
+                    at: entry.changedAt,
+                };
+            }
+        }
+        return { ...this.serialize(booking, userId), ...(cancellation ? { cancellation } : {}) };
     }
     async listMine(userId, role, status) {
         const bookings = await this.prisma.booking.findMany({

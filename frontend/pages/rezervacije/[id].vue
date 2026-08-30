@@ -27,9 +27,20 @@
               <div class="col-6 text-muted">{{ t('booking.totalAmount') }}</div>
               <div class="col-6">{{ formatPrice(booking.totalAmount) }}</div>
             </div>
-            <div class="row mb-2">
+            <!-- T77 — "Iznos za uplatu" only makes sense while payment is
+                 actually pending; once paymentConfirmedAt is set (any status
+                 reached after that point), show what was actually paid
+                 instead of repeating a due amount that's no longer due. -->
+            <div v-if="booking.status === 'AWAITING_PAYMENT'" class="row mb-2">
               <div class="col-6 text-muted">{{ t('booking.payAmount') }}</div>
               <div class="col-6">{{ formatPrice(booking.amountDue) }}</div>
+            </div>
+            <div v-else-if="booking.paymentConfirmedAt" class="row mb-2">
+              <div class="col-6 text-muted">{{ t('booking.paidLabel') }}</div>
+              <div class="col-6">
+                {{ formatPrice(booking.amountDue) }} ·
+                {{ t('booking.paidConfirmedOn', { date: new Date(booking.paymentConfirmedAt).toLocaleDateString('sr-RS') }) }}
+              </div>
             </div>
             <div v-if="isOwner && booking.guestPhone" class="row mb-2">
               <div class="col-6 text-muted">{{ t('booking.guestPhone') }}</div>
@@ -45,6 +56,11 @@
             <div v-if="booking.cancellationTermsSnapshot" class="row mb-2">
               <div class="col-6 text-muted">{{ t('booking.cancellationTerms') }}</div>
               <div class="col-6">{{ booking.cancellationTermsSnapshot }}</div>
+            </div>
+            <!-- T79 — who cancelled/rejected and when, for both sides. -->
+            <div v-if="booking.cancellation" class="row mb-2">
+              <div class="col-6 text-muted">{{ t(`booking.status${statusKey}`) }}</div>
+              <div class="col-6">{{ cancellationLabel }} · {{ new Date(booking.cancellation.at).toLocaleString('sr-RS') }}</div>
             </div>
           </div>
         </div>
@@ -179,16 +195,22 @@ const isOwner = computed(() => booking.value?.ownerId === auth.user?.id)
 const statusKey = computed(() => {
   const map = {
     REQUESTED: 'Requested', AWAITING_PAYMENT: 'AwaitingPayment', CONFIRMED: 'Confirmed',
-    COMPLETED: 'Completed', CANCELLED: 'Cancelled', EXPIRED: 'Expired', NO_SHOW: 'NoShow',
+    COMPLETED: 'Completed', CANCELLED: 'Cancelled', REJECTED: 'Rejected', EXPIRED: 'Expired', NO_SHOW: 'NoShow',
   }
   return map[booking.value?.status] || 'Requested'
 })
 const statusBadgeClass = computed(() => {
   const map = {
     REQUESTED: 'badge-warning', AWAITING_PAYMENT: 'badge-warning', CONFIRMED: 'badge-success',
-    COMPLETED: 'badge-success', CANCELLED: 'badge-critical', EXPIRED: 'badge-critical', NO_SHOW: 'badge-critical',
+    COMPLETED: 'badge-success', CANCELLED: 'badge-critical', REJECTED: 'badge-critical', EXPIRED: 'badge-critical', NO_SHOW: 'badge-critical',
   }
   return map[booking.value?.status] || 'badge-neutral'
+})
+// T79 — the REJECTED status only ever results from the owner rejecting a
+// request (no "who" to disambiguate); CANCELLED can come from either side.
+const cancellationLabel = computed(() => {
+  if (booking.value?.status === 'REJECTED') return t('booking.rejectedByOwner')
+  return booking.value?.cancellation?.by === 'GUEST' ? t('booking.cancelledByGuest') : t('booking.cancelledByOwner')
 })
 
 function formatPrice(value) {

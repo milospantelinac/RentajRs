@@ -360,13 +360,16 @@ export const emailTemplates: EmailTemplateSeed[] = [
     sr: {
       subject: 'Rezervacija je otkazana',
       heading: 'Rezervacija za "{oglas}" je otkazana',
-      bodyText: 'Razlog: {razlog}. Ako imate pitanja, pogledajte detalje rezervacije.',
+      // T79 — this used to interpolate {razlog} unconditionally ("Razlog: .")
+      // even though nothing on the platform collects a cancellation reason;
+      // the owner decided not to add that input, just to stop claiming one exists.
+      bodyText: 'Ako imate pitanja, pogledajte detalje rezervacije.',
       buttonLabel: 'Pogledaj detalje',
     },
     en: {
       subject: 'Booking cancelled',
       heading: 'The booking for "{oglas}" was cancelled',
-      bodyText: 'Reason: {razlog}. If you have questions, check the booking details.',
+      bodyText: 'If you have questions, check the booking details.',
       buttonLabel: 'View details',
     },
   },
