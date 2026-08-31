@@ -25,12 +25,20 @@ export class AdminEmailListener {
     return grants.map((g) => g.user);
   }
 
-  private async sendToAdmins(permissionKey: string, key: string, context: Record<string, string>, buttonUrl: string) {
+  private async sendToAdmins(
+    permissionKey: string,
+    key: string,
+    context: Record<string, string>,
+    buttonUrl: string,
+    excludeUserId?: string,
+  ) {
     const admins = await this.getAdmins(permissionKey);
     await Promise.all(
-      admins.map((admin) =>
-        this.email.send({ key, to: admin.email, language: admin.language, userId: admin.id, context, buttonUrl }),
-      ),
+      admins
+        .filter((admin) => admin.id !== excludeUserId)
+        .map((admin) =>
+          this.email.send({ key, to: admin.email, language: admin.language, userId: admin.id, context, buttonUrl }),
+        ),
     );
   }
 
@@ -116,7 +124,14 @@ export class AdminEmailListener {
     );
   }
 
-  /** R182 — off by default toggle; kept useful only "in the first months" per Ch.22.4. */
+  /**
+   * R182 — off by default toggle; kept useful only "in the first months" per Ch.22.4.
+   * T102 — the booking's own owner already gets `booking_requested_owner`
+   * (booking-email.listener.ts); when that owner also holds resolve_disputes
+   * (a small team's admin account moonlighting as a lister is exactly this
+   * case), they'd otherwise get a second, differently-worded notification
+   * about their own request.
+   */
   @OnEvent('booking.requested')
   async onNewBooking({ bookingId }: { bookingId: string }) {
     const setting = await this.prisma.setting.findUnique({ where: { key: 'admin_new_booking_notifications' } });
@@ -131,6 +146,7 @@ export class AdminEmailListener {
       'admin_new_booking',
       { oglas: booking.listing.title },
       `${this.frontendUrl}/admin`,
+      booking.ownerId,
     );
   }
 }

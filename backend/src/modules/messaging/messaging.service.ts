@@ -141,9 +141,11 @@ export class MessagingService {
       include: {
         listing: { select: { id: true, title: true, slug: true } },
         booking: true,
+        guest: { select: { id: true, firstName: true, lastName: true, avatarUrl: true } },
+        owner: { select: { id: true, firstName: true, lastName: true, avatarUrl: true } },
         messages: {
           orderBy: { sentAt: 'asc' },
-          include: { attachments: true, sender: { select: { id: true, firstName: true, avatarUrl: true } } },
+          include: { attachments: true, sender: { select: { id: true, firstName: true, lastName: true, avatarUrl: true } } },
         },
       },
     });
@@ -153,6 +155,8 @@ export class MessagingService {
     await this.markRead(userId, conversationId);
     return {
       ...conversation,
+      // T103 — the thread header needs to name who you're talking to.
+      counterpart: conversation.guestId === userId ? conversation.owner : conversation.guest,
       booking: conversation.booking
         ? {
             ...conversation.booking,

@@ -2,7 +2,11 @@
   <div v-if="listing" class="container message-page py-4">
     <div class="row justify-content-center">
       <div class="col-12 col-md-6">
-        <h1 class="text-page-title mb-4">{{ t('listing.contactOwner') }}</h1>
+        <h1 class="text-page-title mb-1">{{ t('listing.contactOwner') }}</h1>
+        <p class="text-muted mb-4">
+          {{ t('listing.messageAboutListing') }} <strong>{{ listing.title }}</strong> —
+          {{ listing.user?.firstName }} {{ listing.user?.lastName }}
+        </p>
         <div class="card">
           <div class="card-body">
             <div class="form-group mb-3">
@@ -10,7 +14,7 @@
             </div>
             <p v-if="error" class="form-error mb-3">{{ error }}</p>
             <button class="btn btn-primary-flat btn-block" :disabled="sending" @click="send">
-              {{ sending ? t('common.loading') : t('common.continue') }}
+              {{ sending ? t('common.loading') : t('listing.sendMessageAction') }}
             </button>
           </div>
         </div>

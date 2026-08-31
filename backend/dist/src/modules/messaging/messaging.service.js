@@ -126,9 +126,11 @@ let MessagingService = class MessagingService {
             include: {
                 listing: { select: { id: true, title: true, slug: true } },
                 booking: true,
+                guest: { select: { id: true, firstName: true, lastName: true, avatarUrl: true } },
+                owner: { select: { id: true, firstName: true, lastName: true, avatarUrl: true } },
                 messages: {
                     orderBy: { sentAt: 'asc' },
-                    include: { attachments: true, sender: { select: { id: true, firstName: true, avatarUrl: true } } },
+                    include: { attachments: true, sender: { select: { id: true, firstName: true, lastName: true, avatarUrl: true } } },
                 },
             },
         });
@@ -139,6 +141,7 @@ let MessagingService = class MessagingService {
         await this.markRead(userId, conversationId);
         return {
             ...conversation,
+            counterpart: conversation.guestId === userId ? conversation.owner : conversation.guest,
             booking: conversation.booking
                 ? {
                     ...conversation.booking,

@@ -208,13 +208,13 @@ export const emailTemplates: EmailTemplateSeed[] = [
     sr: {
       subject: 'Zahtev je poslat — čekate odgovor',
       heading: 'Zahtev za "{oglas}" je poslat',
-      bodyText: 'Vlasnik ima 24 časa da odgovori na vaš zahtev za rezervaciju. Obavestićemo vas čim odgovori.',
+      bodyText: 'Vaš zahtev za rezervaciju je poslat vlasniku. Obavestićemo vas čim odgovori.',
       buttonLabel: 'Pogledaj zahtev',
     },
     en: {
       subject: 'Request sent — awaiting a reply',
       heading: 'Your request for "{oglas}" was sent',
-      bodyText: 'The owner has 24 hours to respond to your booking request. We’ll notify you as soon as they do.',
+      bodyText: 'Your booking request has been sent to the owner. We’ll notify you as soon as they respond.',
       buttonLabel: 'View request',
     },
   },
@@ -223,13 +223,13 @@ export const emailTemplates: EmailTemplateSeed[] = [
     sr: {
       subject: 'Nova rezervacija za {oglas}',
       heading: 'Novi zahtev za "{oglas}"',
-      bodyText: 'Dobili ste novi zahtev za rezervaciju. Odgovorite u roku od 24 časa da ne biste izgubili gosta.',
+      bodyText: 'Dobili ste novi zahtev za rezervaciju. Odgovorite što pre da ne biste izgubili gosta.',
       buttonLabel: 'Pogledaj zahtev',
     },
     en: {
       subject: 'New booking for {oglas}',
       heading: 'New request for "{oglas}"',
-      bodyText: 'You’ve received a new booking request. Respond within 24 hours so you don’t lose the guest.',
+      bodyText: 'You’ve received a new booking request. Respond promptly so you don’t lose the guest.',
       buttonLabel: 'View request',
     },
   },
@@ -652,16 +652,16 @@ export const emailTemplates: EmailTemplateSeed[] = [
   {
     key: 'admin_new_booking',
     sr: {
-      subject: 'Nova rezervacija — {oglas}',
-      heading: 'Nova rezervacija je kreirana',
-      bodyText: 'Nova rezervacija je kreirana za "{oglas}". Ovo obaveštenje možete isključiti u podešavanjima.',
-      buttonLabel: 'Pogledaj rezervaciju',
+      subject: 'Novi zahtev za rezervaciju — {oglas}',
+      heading: 'Poslat je novi zahtev za rezervaciju',
+      bodyText: 'Poslat je novi zahtev za rezervaciju za "{oglas}". Ovo obaveštenje možete isključiti u podešavanjima.',
+      buttonLabel: 'Pogledaj zahtev',
     },
     en: {
-      subject: 'New booking — {oglas}',
-      heading: 'A new booking was created',
-      bodyText: 'A new booking was created for "{oglas}". You can turn this notification off in settings.',
-      buttonLabel: 'View booking',
+      subject: 'New booking request — {oglas}',
+      heading: 'A new booking request was submitted',
+      bodyText: 'A new booking request was submitted for "{oglas}". You can turn this notification off in settings.',
+      buttonLabel: 'View request',
     },
   },
 

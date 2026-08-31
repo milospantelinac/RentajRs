@@ -17,6 +17,7 @@ import {
   faSliders,
   faPlus,
   faPen,
+  faPaperclip,
 } from '@fortawesome/free-solid-svg-icons'
 import '@fortawesome/fontawesome-svg-core/styles.css'
 
@@ -41,6 +42,7 @@ library.add(
   faSliders,
   faPlus,
   faPen,
+  faPaperclip,
 )
 
 export default defineNuxtPlugin((nuxtApp) => {

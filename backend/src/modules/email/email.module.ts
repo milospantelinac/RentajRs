@@ -9,6 +9,7 @@ import { SubscriptionEmailListener } from './listeners/subscription-email.listen
 import { AdminEmailListener } from './listeners/admin-email.listener';
 import { DataProtectionEmailListener } from './listeners/data-protection-email.listener';
 import { ContactEmailListener } from './listeners/contact-email.listener';
+import { MessagingEmailListener } from './listeners/messaging-email.listener';
 
 /**
  * Purely reactive — every provider here is an `@OnEvent` listener that turns
@@ -29,6 +30,7 @@ import { ContactEmailListener } from './listeners/contact-email.listener';
     AdminEmailListener,
     DataProtectionEmailListener,
     ContactEmailListener,
+    MessagingEmailListener,
   ],
 })
 export class EmailModule {}

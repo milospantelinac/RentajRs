@@ -28,9 +28,11 @@ let AdminEmailListener = class AdminEmailListener {
         });
         return grants.map((g) => g.user);
     }
-    async sendToAdmins(permissionKey, key, context, buttonUrl) {
+    async sendToAdmins(permissionKey, key, context, buttonUrl, excludeUserId) {
         const admins = await this.getAdmins(permissionKey);
-        await Promise.all(admins.map((admin) => this.email.send({ key, to: admin.email, language: admin.language, userId: admin.id, context, buttonUrl })));
+        await Promise.all(admins
+            .filter((admin) => admin.id !== excludeUserId)
+            .map((admin) => this.email.send({ key, to: admin.email, language: admin.language, userId: admin.id, context, buttonUrl })));
     }
     async onNewListing({ listingId }) {
         const listing = await this.prisma.listing.findUnique({ where: { id: listingId } });
@@ -87,7 +89,7 @@ let AdminEmailListener = class AdminEmailListener {
         });
         if (!booking)
             return;
-        await this.sendToAdmins('resolve_disputes', 'admin_new_booking', { oglas: booking.listing.title }, `${this.frontendUrl}/admin`);
+        await this.sendToAdmins('resolve_disputes', 'admin_new_booking', { oglas: booking.listing.title }, `${this.frontendUrl}/admin`, booking.ownerId);
     }
 };
 exports.AdminEmailListener = AdminEmailListener;
