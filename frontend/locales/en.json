@@ -184,6 +184,7 @@
     "whHourlyRanges": "Price by time of day",
     "whHourlyRangesHint": "Optional — if you don't add a range, the base hourly price from the previous step applies.",
     "whAddRange": "Add range",
+    "whPendingApproval": "Working hours and available days have been changed and are waiting for admin approval — the previous hours stay active until then.",
     "whExceptions": "Exceptions",
     "whBlockDate": "Block date",
     "whSetException": "Set custom price",

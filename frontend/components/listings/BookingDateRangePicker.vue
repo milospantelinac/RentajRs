@@ -70,6 +70,16 @@ const props = defineProps({
   maxDuration: { type: Number, default: null },
   earliestBookingHours: { type: Number, default: null },
   maxAdvanceBookingDays: { type: Number, default: null },
+  // T74 — PER_SLOT/WORKING_HOURS listings are only open on specific days of
+  // the week (ISO Monday=1..Sunday=7); null means "no such restriction"
+  // (PER_STAY listings have no day-of-week concept, so this stays opt-in
+  // rather than changing the default calendar behavior everyone else uses).
+  availableDaysOfWeek: { type: Array, default: null },
+  // T74 — a PER_STAY day is an atomic unit, so any overlapping blocked term
+  // correctly takes the whole cell out; a PER_SLOT/WORKING_HOURS day is a
+  // bucket of independent hourly slots, so one booked hour must not hide the
+  // rest of the day's still-free slots (the time list filters those itself).
+  wholeDayBlocking: { type: Boolean, default: true },
 })
 
 const emit = defineEmits(['update:range'])
@@ -145,7 +155,9 @@ function buildMonth(monthDate) {
     const past = date < today
     const beforeEarliest = date < minSelectableDate.value
     const afterHorizon = maxSelectableDate.value ? date > maxSelectableDate.value : false
-    const blocked = isBlocked(date)
+    const blocked = props.wholeDayBlocking && isBlocked(date)
+    const dayOfWeek = ((date.getDay() + 6) % 7) + 1 // ISO Monday=1
+    const dayUnavailable = !!props.availableDaysOfWeek && !props.availableDaysOfWeek.includes(dayOfWeek)
     const exceedsMaxFromStart =
       !!rangeStart.value &&
       !rangeEnd.value &&
@@ -158,7 +170,7 @@ function buildMonth(monthDate) {
       key,
       day,
       date,
-      disabled: past || beforeEarliest || afterHorizon || blocked || exceedsMaxFromStart,
+      disabled: past || beforeEarliest || afterHorizon || blocked || dayUnavailable || exceedsMaxFromStart,
       price: override ?? (isWeekend && props.weekendPrice ? props.weekendPrice : props.basePrice),
     })
   }

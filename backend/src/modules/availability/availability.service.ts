@@ -144,6 +144,19 @@ export class AvailabilityService {
     return { message: 'ok' };
   }
 
+  /**
+   * T72 — an ACTIVE listing's working-hours edit is queued for moderation
+   * (see setWorkingHours above) rather than applied immediately, but the
+   * wizard had no way to tell the owner that — after a reload it just
+   * re-fetched the still-unapproved live hours and looked like the edit had
+   * been silently lost. Lets WorkingHoursEditor show what's actually pending.
+   */
+  async getPendingWorkingHours(userId: string, listingId: string) {
+    await this.assertOwnership(userId, listingId);
+    const pending = await this.getPendingChangedFields(listingId);
+    return { pending: (pending.workingHoursPending as unknown[] | undefined) ?? null };
+  }
+
   /** Same R31/R32 rule as setWorkingHours — a new slot on a live listing isn't bookable until approved. */
   async createDefinedSlot(userId: string, listingId: string, dto: CreateDefinedSlotDto) {
     const listing = await this.assertOwnership(userId, listingId);

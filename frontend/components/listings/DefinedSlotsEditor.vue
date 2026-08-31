@@ -115,7 +115,16 @@ async function addSlot() {
       endsAt: endsAt.toISOString(),
       price: form.price || undefined,
     })
-    slots.value.push(created)
+    // T75 — on an ACTIVE listing the slot goes to moderation instead of a
+    // real row (createDefinedSlot returns { message, pending }, none of a
+    // slot's own fields), so build the just-added row from what the owner
+    // actually typed rather than trusting the response to look like one.
+    slots.value.push({
+      id: created.id ?? `pending-${Date.now()}`,
+      startsAt: startsAt.toISOString(),
+      endsAt: endsAt.toISOString(),
+      price: form.price || null,
+    })
     slots.value.sort((a, b) => new Date(a.startsAt) - new Date(b.startsAt))
     form.price = null
   } catch (e) {

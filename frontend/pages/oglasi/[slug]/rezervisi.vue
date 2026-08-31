@@ -73,6 +73,8 @@
                   :show-pricing="false"
                   :earliest-booking-hours="listing.earliestBookingHours"
                   :max-advance-booking-days="listing.maxAdvanceBookingDays"
+                  :available-days-of-week="availableDaysOfWeek"
+                  :whole-day-blocking="false"
                   @update:range="onSingleDateUpdate"
                 />
               </div>
@@ -220,6 +222,24 @@ const submitting = ref(false)
 const workingHours = ref([])
 const slotStartTime = ref('')
 const slotDurationHours = ref(1)
+// T74 — already-booked/blocked terms for this listing, used to keep the
+// calendar and "Vreme početka" list from offering what the server would
+// reject anyway (BlockedTerm rows carry exact start/end instants, not whole
+// days, so a single booked hour doesn't need to hide the rest of the day).
+const blocked = ref([])
+
+// T74 — null while workingHours hasn't loaded yet (no restriction rather than
+// a false "every day is closed" flash); once loaded, only the configured
+// days of the week stay clickable in the calendar.
+const availableDaysOfWeek = computed(() =>
+  workingHours.value.length ? [...new Set(workingHours.value.map((h) => h.dayOfWeek))] : null,
+)
+
+function overlapsBlocked(startsAt, endsAt) {
+  const start = new Date(startsAt).getTime()
+  const end = new Date(endsAt).getTime()
+  return blocked.value.some((b) => new Date(b.startsAt).getTime() < end && new Date(b.endsAt).getTime() > start)
+}
 
 // T86 — a stale server-rejection message used to sit above the button
 // forever, even after the guest fixed the very thing it complained about
@@ -259,7 +279,19 @@ const dayTimeOptions = computed(() => {
       if (m >= 60) { m -= 60; h += 1 }
     }
   }
-  return times
+  // T74 — an already-booked/pending slot must not appear in the list at all,
+  // not just get rejected on submit; check against the currently-chosen
+  // duration since that's what would actually be reserved.
+  return times.filter((time) => {
+    const startsAt = new Date(`${form.startsAt}T${time}:00`)
+    const endsAt = new Date(startsAt.getTime() + slotDurationHours.value * 3600_000)
+    return !overlapsBlocked(startsAt, endsAt)
+  })
+})
+// T74 — a duration change (or the list itself refreshing) can invalidate an
+// already-picked start time; don't leave a now-unavailable time selected.
+watch(dayTimeOptions, (times) => {
+  if (slotStartTime.value && !times.includes(slotStartTime.value)) slotStartTime.value = ''
 })
 
 function toggleService(service, checked) {
@@ -357,10 +389,17 @@ async function submit() {
 onMounted(async () => {
   if (listing.value?.bookingModel === 'PER_SLOT' && listing.value?.slotSubmode === 'DEFINED_SLOTS') {
     const availability = await api.get(`/listings/${listing.value.id}/availability`)
-    slots.value = availability.definedSlots || []
+    const blockedTerms = availability.blocked || []
+    // T74 — a defined slot with a pending or confirmed booking on it must
+    // not be offered again; the server already refuses the double-booking,
+    // this just stops the guest from picking it in the first place.
+    slots.value = (availability.definedSlots || []).filter(
+      (s) => !blockedTerms.some((b) => new Date(b.startsAt).getTime() < new Date(s.endsAt).getTime() && new Date(b.endsAt).getTime() > new Date(s.startsAt).getTime()),
+    )
   } else if (listing.value?.bookingModel === 'PER_SLOT' && listing.value?.slotSubmode === 'WORKING_HOURS') {
     const availability = await api.get(`/listings/${listing.value.id}/availability`)
     workingHours.value = availability.workingHours || []
+    blocked.value = availability.blocked || []
   }
 })
 

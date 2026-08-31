@@ -38,6 +38,11 @@
       {{ busy ? t('common.loading') : t('common.save') }}
     </button>
     <p v-if="saved" class="text-success mt-2">{{ t('dashboard.changesSaved') }}</p>
+    <!-- T72 — on an ACTIVE listing this save doesn't take effect until an
+         admin approves it (the days/hours above still show the currently
+         LIVE, unapproved-edit-free values) — without this note, a later
+         reload just looked like the change had silently been lost. -->
+    <p v-if="pendingWorkingHours" class="form-hint mt-2">{{ t('listing.whPendingApproval') }}</p>
     <p v-if="editorError" class="form-error mt-2">{{ editorError }}</p>
 
     <!-- Izuzeci — Dodavanje Oglasa spec §3: block a whole date, or set a
@@ -111,6 +116,9 @@ const overrideFrom = ref('10:00')
 const overrideTo = ref('12:00')
 const overridePrice = ref(null)
 const slotPriceOverrides = ref([])
+// T72 — set once on load and refreshed after every save, so the note stays
+// accurate whether the owner just submitted an edit or is revisiting later.
+const pendingWorkingHours = ref(null)
 
 function toggleDay(day) {
   if (enabledDays.value.has(day)) enabledDays.value.delete(day)
@@ -132,9 +140,10 @@ function formatDate(d) {
 async function load() {
   const from = new Date()
   const to = new Date(Date.now() + 1000 * 60 * 60 * 24 * 365)
-  const data = await api.get(`/listings/${props.listingId}/availability`, {
-    query: { from: from.toISOString(), to: to.toISOString() },
-  })
+  const [data, pendingResult] = await Promise.all([
+    api.get(`/listings/${props.listingId}/availability`, { query: { from: from.toISOString(), to: to.toISOString() } }),
+    api.get(`/listings/${props.listingId}/availability/pending-working-hours`),
+  ])
   const days = new Set((data.workingHours || []).map((h) => h.dayOfWeek))
   enabledDays.value = days
   if (data.workingHours?.length) {
@@ -147,6 +156,7 @@ async function load() {
   // blocks come from elsewhere and aren't this editor's to touch (the
   // backend's own delete endpoint already refuses to remove them).
   blockedDates.value = (data.blocked || []).filter((b) => b.source === 'MANUAL')
+  pendingWorkingHours.value = pendingResult.pending
 }
 
 async function save() {
@@ -158,9 +168,15 @@ async function save() {
       startsAt: rangeFrom.value,
       endsAt: rangeTo.value,
     }))
-    await api.post(`/listings/${props.listingId}/availability/working-hours`, { hours })
+    const { pending } = await api.post(`/listings/${props.listingId}/availability/working-hours`, { hours })
+    pendingWorkingHours.value = pending ? hours : null
+    // T72 — the backend rejected this whenever a range came from load()'s
+    // spread of the stored rows (id/listingId included): this endpoint
+    // fully replaces the set, it never took an id to update by.
     await api.post(`/listings/${props.listingId}/availability/hourly-price-ranges`, {
-      ranges: hourlyRanges.value.filter((r) => r.startTime && r.endTime && r.price),
+      ranges: hourlyRanges.value
+        .filter((r) => r.startTime && r.endTime && r.price)
+        .map((r) => ({ startTime: r.startTime, endTime: r.endTime, price: r.price })),
     })
     saved.value = true
     setTimeout(() => { saved.value = false }, 2000)

@@ -184,6 +184,7 @@
     "whHourlyRanges": "Cena po delu radnog vremena",
     "whHourlyRangesHint": "Opciono — ako ne dodate nijedan interval, koristi se osnovna cena po satu iz prethodnog koraka.",
     "whAddRange": "Dodaj interval",
+    "whPendingApproval": "Radno vreme i dostupni dani su izmenjeni i čekaju odobrenje administratora — do tada je aktivno prethodno podešeno radno vreme.",
     "whExceptions": "Izuzeci",
     "whBlockDate": "Blokiraj datum",
     "whSetException": "Postavi posebnu cenu",

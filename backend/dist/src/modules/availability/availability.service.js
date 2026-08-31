@@ -111,6 +111,11 @@ let AvailabilityService = AvailabilityService_1 = class AvailabilityService {
         ]);
         return { message: 'ok' };
     }
+    async getPendingWorkingHours(userId, listingId) {
+        await this.assertOwnership(userId, listingId);
+        const pending = await this.getPendingChangedFields(listingId);
+        return { pending: pending.workingHoursPending ?? null };
+    }
     async createDefinedSlot(userId, listingId, dto) {
         const listing = await this.assertOwnership(userId, listingId);
         if (listing.status === 'ACTIVE') {

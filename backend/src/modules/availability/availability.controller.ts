@@ -32,6 +32,11 @@ export class AvailabilityController {
     return this.availabilityService.setWorkingHours(userId, id, dto);
   }
 
+  @Get('pending-working-hours')
+  getPendingWorkingHours(@CurrentUser('id') userId: string, @Param('id') id: string) {
+    return this.availabilityService.getPendingWorkingHours(userId, id);
+  }
+
   @Post('slots')
   createSlot(@CurrentUser('id') userId: string, @Param('id') id: string, @Body() dto: CreateDefinedSlotDto) {
     return this.availabilityService.createDefinedSlot(userId, id, dto);
