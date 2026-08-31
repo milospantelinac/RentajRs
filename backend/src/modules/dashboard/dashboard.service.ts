@@ -108,10 +108,23 @@ export class DashboardService {
     return items;
   }
 
+  /**
+   * T97 — "bookingCount" used to mean "bookings as owner" for anyone with a
+   * listing, and "bookings as guest" otherwise, silently dropping whichever
+   * side the account didn't currently match — an owner with a confirmed
+   * booking as a GUEST saw "Rezervacija 0". It now always counts both (a
+   * reservation is a reservation regardless of which side of it you were
+   * on), consistent with Ch.10's "nothing hidden by role" note above.
+   * "confirmedValue" stays owner-earnings-only when isOwner (mixing in a
+   * guest's own spend would conflate money coming in with money going out).
+   */
   private async getStats(userId: string, isOwner: boolean) {
+    const guestBookingCount = await this.prisma.booking.count({
+      where: { guestId: userId, status: { in: ['CONFIRMED', 'COMPLETED'] } },
+    });
+
     if (!isOwner) {
-      const bookingCount = await this.prisma.booking.count({ where: { guestId: userId } });
-      return { listingCount: 0, bookingCount, confirmedValue: 0, avgRating: null };
+      return { listingCount: 0, bookingCount: guestBookingCount, confirmedValue: 0, avgRating: null };
     }
 
     const [listingCount, bookings, listings] = await Promise.all([
@@ -126,7 +139,7 @@ export class DashboardService {
       ? listings.reduce((sum, l) => sum + (Number(l.avgRating) || 0) * l.reviewCount, 0) / totalReviews
       : null;
 
-    return { listingCount, bookingCount: bookings.length, confirmedValue, avgRating };
+    return { listingCount, bookingCount: bookings.length + guestBookingCount, confirmedValue, avgRating };
   }
 
   /** R106 — a brand new owner sees a checklist instead of an empty dashboard. */
@@ -151,12 +164,20 @@ export class DashboardService {
     };
   }
 
+  /**
+   * T97 — "startsAt >= now" only ever matched bookings that hadn't started
+   * yet, so a booking already under way (checked in, ends later this week)
+   * silently fell out of "Sledećih 7 dana" the moment it started. A booking
+   * belongs here whenever any part of it still overlaps the next 7 days —
+   * i.e. it hasn't ended yet, and it starts within that window.
+   */
   private async getUpcoming(userId: string) {
     const bookings = await this.prisma.booking.findMany({
       where: {
         OR: [{ guestId: userId }, { ownerId: userId }],
         status: 'CONFIRMED',
-        startsAt: { gte: new Date(), lt: new Date(Date.now() + 7 * 86_400_000) },
+        startsAt: { lt: new Date(Date.now() + 7 * 86_400_000) },
+        endsAt: { gte: new Date() },
       },
       orderBy: { startsAt: 'asc' },
       include: { listing: { select: { title: true, slug: true } } },

@@ -87,9 +87,11 @@ let DashboardService = class DashboardService {
         return items;
     }
     async getStats(userId, isOwner) {
+        const guestBookingCount = await this.prisma.booking.count({
+            where: { guestId: userId, status: { in: ['CONFIRMED', 'COMPLETED'] } },
+        });
         if (!isOwner) {
-            const bookingCount = await this.prisma.booking.count({ where: { guestId: userId } });
-            return { listingCount: 0, bookingCount, confirmedValue: 0, avgRating: null };
+            return { listingCount: 0, bookingCount: guestBookingCount, confirmedValue: 0, avgRating: null };
         }
         const [listingCount, bookings, listings] = await Promise.all([
             this.prisma.listing.count({ where: { userId, status: { not: 'DELETED' } } }),
@@ -101,7 +103,7 @@ let DashboardService = class DashboardService {
         const avgRating = totalReviews
             ? listings.reduce((sum, l) => sum + (Number(l.avgRating) || 0) * l.reviewCount, 0) / totalReviews
             : null;
-        return { listingCount, bookingCount: bookings.length, confirmedValue, avgRating };
+        return { listingCount, bookingCount: bookings.length + guestBookingCount, confirmedValue, avgRating };
     }
     async getOnboarding(userId) {
         const [listingCount, workingHoursCount, blockedTermCount, icalCount, user] = await Promise.all([
@@ -128,7 +130,8 @@ let DashboardService = class DashboardService {
             where: {
                 OR: [{ guestId: userId }, { ownerId: userId }],
                 status: 'CONFIRMED',
-                startsAt: { gte: new Date(), lt: new Date(Date.now() + 7 * 86_400_000) },
+                startsAt: { lt: new Date(Date.now() + 7 * 86_400_000) },
+                endsAt: { gte: new Date() },
             },
             orderBy: { startsAt: 'asc' },
             include: { listing: { select: { title: true, slug: true } } },

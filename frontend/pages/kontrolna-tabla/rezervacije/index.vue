@@ -1,6 +1,6 @@
 <template>
   <div>
-    <h1 class="text-page-title mb-4">{{ t('dashboard.myBookings') }}</h1>
+    <h1 class="text-page-title mb-4">{{ role === 'owner' ? t('dashboard.requests') : t('dashboard.myBookings') }}</h1>
 
     <div class="form-row-inline mb-4">
       <button class="btn btn-sm" :class="role === 'guest' ? 'btn-primary-flat' : 'btn-tertiary'" @click="setRole('guest')">
@@ -15,7 +15,7 @@
       </select>
     </div>
 
-    <p v-if="!bookings?.length" class="text-muted">{{ t('dashboard.noUpcoming') }}</p>
+    <p v-if="!bookings?.length" class="text-muted">{{ status ? t('dashboard.noBookingsFiltered') : t('dashboard.noBookingsAll') }}</p>
 
     <table v-else class="table table-responsive-cards">
       <thead>
@@ -23,7 +23,7 @@
           <th>{{ t('listing.title') }}</th>
           <th>{{ t('booking.dateTime') }}</th>
           <th>{{ t('booking.totalAmount') }}</th>
-          <th>{{ t('common.search') }}</th>
+          <th>{{ t('common.status') }}</th>
         </tr>
       </thead>
       <tbody>
@@ -31,7 +31,7 @@
           <td :data-label="t('listing.title')">{{ b.listing?.title }}</td>
           <td :data-label="t('booking.dateTime')">{{ new Date(b.startsAt).toLocaleDateString('sr-RS') }}</td>
           <td :data-label="t('booking.totalAmount')">{{ new Intl.NumberFormat('sr-RS').format(b.totalAmount || 0) }} RSD</td>
-          <td :data-label="t('common.search')">
+          <td :data-label="t('common.status')">
             <span class="badge" :class="statusBadge(b.status)">{{ t(`booking.status${statusLabel(b.status)}`) }}</span>
           </td>
         </tr>
@@ -45,6 +45,7 @@ definePageMeta({ middleware: 'auth', layout: 'dashboard' })
 const { t } = useI18n()
 const api = useApi()
 const route = useRoute()
+const router = useRouter()
 
 const statuses = ['REQUESTED', 'AWAITING_PAYMENT', 'CONFIRMED', 'COMPLETED', 'CANCELLED', 'REJECTED', 'EXPIRED', 'NO_SHOW']
 const role = ref(route.query.role === 'owner' ? 'owner' : 'guest')
@@ -60,8 +61,13 @@ async function load() {
   bookings.value = await api.get(`/bookings/mine?${query}`)
 }
 
+// T96 — this only ever updated local state, so the URL kept saying whatever
+// role the page had opened with; refreshing (or sharing the link) silently
+// dropped the user back into that original role instead of the one they'd
+// switched to.
 function setRole(r) {
   role.value = r
+  router.replace({ query: { ...route.query, role: r } })
   load()
 }
 
@@ -81,7 +87,9 @@ function statusBadge(status) {
 }
 
 onMounted(load)
-useSeoMeta({ title: t('dashboard.myBookings') })
+// T96 — both nav links landed on this same page with the tab title always
+// reading "Moje rezervacije", even for the owner's "Zahtevi za rezervaciju".
+useSeoMeta({ title: () => (role.value === 'owner' ? t('dashboard.requests') : t('dashboard.myBookings')) })
 </script>
 
 <style lang="scss" scoped>

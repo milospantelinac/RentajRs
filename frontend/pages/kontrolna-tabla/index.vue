@@ -37,12 +37,20 @@
       </div>
     </section>
 
+    <!-- T97 — the numbers alone didn't say what they counted: "Rezervacija
+         3" while the list below had 7 rows (this only counts CONFIRMED +
+         COMPLETED), "Vrednost" with no hint of the period or whether it's
+         money received vs. still expected. Every card now explains itself. -->
     <section class="row mb-4">
       <div class="col-6 col-md-3 mb-3">
-        <div class="card"><div class="card-body-sm"><p class="text-muted">{{ t('dashboard.listings') }}</p><p class="text-page-title">{{ dashboard.stats.listingCount }}</p></div></div>
+        <div class="card" :title="t('dashboard.listingsExplanation')">
+          <div class="card-body-sm"><p class="text-muted">{{ t('dashboard.listings') }}</p><p class="text-page-title">{{ dashboard.stats.listingCount }}</p></div>
+        </div>
       </div>
       <div class="col-6 col-md-3 mb-3">
-        <div class="card"><div class="card-body-sm"><p class="text-muted">{{ t('dashboard.bookings') }}</p><p class="text-page-title">{{ dashboard.stats.bookingCount }}</p></div></div>
+        <div class="card" :title="t('dashboard.bookingsExplanation')">
+          <div class="card-body-sm"><p class="text-muted">{{ t('dashboard.bookings') }}</p><p class="text-page-title">{{ dashboard.stats.bookingCount }}</p></div>
+        </div>
       </div>
       <div class="col-6 col-md-3 mb-3">
         <div class="card" :title="t('dashboard.valueExplanation')">
@@ -50,7 +58,9 @@
         </div>
       </div>
       <div class="col-6 col-md-3 mb-3">
-        <div class="card"><div class="card-body-sm"><p class="text-muted">{{ t('dashboard.rating') }}</p><p class="text-page-title">{{ dashboard.stats.avgRating ? dashboard.stats.avgRating.toFixed(1) : '—' }}</p></div></div>
+        <div class="card" :title="t('dashboard.ratingExplanation')">
+          <div class="card-body-sm"><p class="text-muted">{{ t('dashboard.rating') }}</p><p class="text-page-title">{{ dashboard.stats.avgRating ? dashboard.stats.avgRating.toFixed(1) : '—' }}</p></div>
+        </div>
       </div>
     </section>
 

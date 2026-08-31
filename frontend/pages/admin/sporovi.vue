@@ -14,7 +14,7 @@
       <div v-for="d in disputes" :key="d.id" class="card mb-3">
         <div class="card-body">
           <p class="text-body mb-1"><strong>{{ t('admin.disputeType') }}:</strong> {{ t(`admin.disputeTypes.${d.type}`) }}</p>
-          <p class="text-muted mb-1">{{ t('admin.submittedAt') }}: {{ new Date(d.createdAt).toLocaleString('sr-RS') }}</p>
+          <p class="text-muted mb-1">{{ t('admin.submittedAt') }}: {{ formatDateTime(d.createdAt) }}</p>
           <p class="text-muted mb-1">
             {{ t('admin.relatedBooking') }}:
             <NuxtLink v-if="d.booking?.id" :to="`/admin/rezervacije/${d.booking.id}`">{{ bookingSummary(d) }}</NuxtLink>

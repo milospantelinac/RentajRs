@@ -20,7 +20,7 @@
         </div>
         <div class="row mb-2">
           <div class="col-6 text-muted">{{ t('admin.submittedAt') }}</div>
-          <div class="col-6">{{ new Date(booking.createdAt).toLocaleString('sr-RS') }}</div>
+          <div class="col-6">{{ formatDateTime(booking.createdAt) }}</div>
         </div>
         <div class="row mb-2">
           <div class="col-6 text-muted">{{ t('booking.guestNameLabel') }}</div>

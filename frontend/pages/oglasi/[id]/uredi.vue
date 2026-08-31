@@ -10,7 +10,7 @@
       <div class="hero-top">
         <div>
           <div class="eyebrow"><span class="pulse-dot" />{{ t('listing.autoSaveNotice') }}</div>
-          <h1>{{ t('listing.wizardTitle') }}</h1>
+          <h1>{{ wizardTitle }}</h1>
           <p v-if="listing?.category?.name" class="wizard-category-name">{{ listing.category.name }}</p>
           <p>{{ t('listing.wizardStepCounter', { current: currentStep + 1, total: steps.length, label: t(steps[currentStep].labelKey) }) }}</p>
         </div>
@@ -1051,7 +1051,14 @@ onMounted(async () => {
   }
 })
 
-useSeoMeta({ title: t('listing.wizardTitle') })
+// T98 — this wizard is reused for editing an already-published listing too
+// (novi.vue just creates a DRAFT and drops the owner here), but it always
+// said "Dodaj oglas" ("Add listing") even when the listing was long since
+// live. Anything past DRAFT means they're editing, not adding.
+const wizardTitle = computed(() =>
+  listing.value?.status && listing.value.status !== 'DRAFT' ? t('listing.wizardEditTitle') : t('listing.wizardTitle'),
+)
+useSeoMeta({ title: () => wizardTitle.value })
 </script>
 
 <style lang="scss" scoped>

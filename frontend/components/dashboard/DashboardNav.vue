@@ -11,9 +11,16 @@
         <span class="dash-nav-icon" aria-hidden="true"><DashboardNavIcon name="list" /></span>
         {{ t('listing.myListings') }}
       </NuxtLink>
-      <NuxtLink to="/kontrolna-tabla/rezervacije?role=owner" class="dash-nav-link">
-        <span class="dash-nav-icon" aria-hidden="true"><DashboardNavIcon name="inbox" /></span>
-        {{ t('dashboard.requests') }}
+      <!-- T96 — this and "Moje rezervacije" below share one path
+           (/kontrolna-tabla/rezervacije) differing only by ?role=; Vue
+           Router's router-link-active ignores query strings, so both used
+           to light up together. `custom` opts out of Router's own active
+           class so isBookingsRoleActive can decide it from the query instead. -->
+      <NuxtLink v-slot="{ href, navigate }" to="/kontrolna-tabla/rezervacije?role=owner" custom>
+        <a :href="href" class="dash-nav-link" :class="{ 'dash-nav-link-active': isBookingsRoleActive('owner') }" @click="navigate">
+          <span class="dash-nav-icon" aria-hidden="true"><DashboardNavIcon name="inbox" /></span>
+          {{ t('dashboard.requests') }}
+        </a>
       </NuxtLink>
       <NuxtLink to="/kontrolna-tabla/pretplate" class="dash-nav-link">
         <span class="dash-nav-icon" aria-hidden="true"><DashboardNavIcon name="card" /></span>
@@ -22,9 +29,11 @@
     </template>
 
     <p class="text-label dash-nav-section">{{ t('dashboard.sectionBooking') }}</p>
-    <NuxtLink to="/kontrolna-tabla/rezervacije?role=guest" class="dash-nav-link">
-      <span class="dash-nav-icon" aria-hidden="true"><DashboardNavIcon name="calendar" /></span>
-      {{ t('dashboard.myBookings') }}
+    <NuxtLink v-slot="{ href, navigate }" to="/kontrolna-tabla/rezervacije?role=guest" custom>
+      <a :href="href" class="dash-nav-link" :class="{ 'dash-nav-link-active': isBookingsRoleActive('guest') }" @click="navigate">
+        <span class="dash-nav-icon" aria-hidden="true"><DashboardNavIcon name="calendar" /></span>
+        {{ t('dashboard.myBookings') }}
+      </a>
     </NuxtLink>
     <NuxtLink to="/kontrolna-tabla/sacuvano" class="dash-nav-link">
       <span class="dash-nav-icon" aria-hidden="true"><DashboardNavIcon name="heart" /></span>
@@ -54,6 +63,14 @@
 <script setup>
 const { t } = useI18n()
 const auth = useAuthStore()
+const route = useRoute()
+
+// T96 — matches DashboardBottomNav's isActive(): only true on the bookings
+// list AND with this exact role in the query, so "Zahtevi za rezervaciju"
+// and "Moje rezervacije" are never both highlighted at once.
+function isBookingsRoleActive(role) {
+  return route.path === '/kontrolna-tabla/rezervacije' && (route.query.role || 'guest') === role
+}
 </script>
 
 <style lang="scss" scoped>
@@ -81,7 +98,8 @@ const auth = useAuthStore()
 }
 
 .dash-nav-link:hover,
-.dash-nav-link.router-link-active {
+.dash-nav-link.router-link-active,
+.dash-nav-link.dash-nav-link-active {
   background: $color-background;
   color: $color-primary;
   text-decoration: none;

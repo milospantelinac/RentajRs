@@ -66,7 +66,7 @@
             <!-- T79 — who cancelled/rejected and when, for both sides. -->
             <div v-if="booking.cancellation" class="row mb-2">
               <div class="col-6 text-muted">{{ t(`booking.status${statusKey}`) }}</div>
-              <div class="col-6">{{ cancellationLabel }} · {{ new Date(booking.cancellation.at).toLocaleString('sr-RS') }}</div>
+              <div class="col-6">{{ cancellationLabel }} · {{ formatDateTime(booking.cancellation.at) }}</div>
             </div>
           </div>
         </div>
@@ -103,7 +103,7 @@
         <div v-if="booking.status === 'REQUESTED' && isOwner" class="card mb-4">
           <div class="card-body">
             <p class="text-body mb-2">{{ t('booking.ownerPendingNotice') }}</p>
-            <p class="text-muted mb-0">{{ t('booking.requestReceivedAt') }}: {{ new Date(booking.createdAt).toLocaleString('sr-RS') }}</p>
+            <p class="text-muted mb-0">{{ t('booking.requestReceivedAt') }}: {{ formatDateTime(booking.createdAt) }}</p>
           </div>
         </div>
 
@@ -115,7 +115,7 @@
           <div class="card-body text-center">
             <template v-if="isOwner">
               <p class="text-body mb-2">{{ t('booking.ownerAwaitingPaymentNotice') }}</p>
-              <p class="text-muted mb-0">{{ t('booking.payDeadline') }}: {{ new Date(booking.paymentDeadline).toLocaleString('sr-RS') }}</p>
+              <p class="text-muted mb-0">{{ t('booking.payDeadline') }}: {{ formatDateTime(booking.paymentDeadline) }}</p>
             </template>
             <template v-else>
               <p class="text-body mb-2">{{ t('booking.payInstructions') }}</p>
@@ -124,7 +124,7 @@
                    text, invisible to anyone not using a screen reader. -->
               <p class="text-body mb-2">{{ t('booking.scanQr') }}</p>
               <img v-if="qrDataUrl" :src="qrDataUrl" :alt="t('booking.scanQr')" class="qr-image mb-3" />
-              <p class="text-muted mb-3">{{ t('booking.payDeadline') }}: {{ new Date(booking.paymentDeadline).toLocaleString('sr-RS') }}</p>
+              <p class="text-muted mb-3">{{ t('booking.payDeadline') }}: {{ formatDateTime(booking.paymentDeadline) }}</p>
               <!-- T91 — the QR already encodes all of this; a guest paying
                    from a desktop, a bank counter, or the post office had no
                    way to read or copy any of it before. -->
@@ -388,8 +388,7 @@ async function copyField(key, value) {
 // booking's timestamps are a real time of day and must keep showing it.
 const DATE_ONLY_UNITS = ['NIGHT', 'DAY', 'MONTH']
 function formatCheckDate(value) {
-  const d = new Date(value)
-  return DATE_ONLY_UNITS.includes(booking.value?.priceUnit) ? d.toLocaleDateString('sr-RS') : d.toLocaleString('sr-RS')
+  return DATE_ONLY_UNITS.includes(booking.value?.priceUnit) ? new Date(value).toLocaleDateString('sr-RS') : formatDateTime(value)
 }
 
 async function load() {
@@ -519,7 +518,11 @@ async function submitDispute() {
 }
 
 onMounted(load)
-useSeoMeta({ title: t('nav.dashboard') })
+// T98 — this used to be the fixed "Kontrolna tabla" title for every single
+// booking, making browser tabs indistinguishable when more than one is open.
+useSeoMeta({
+  title: () => (booking.value ? `${booking.value.listing?.title} — ${formatCheckDate(booking.value.startsAt)}` : t('nav.dashboard')),
+})
 </script>
 
 <style lang="scss" scoped>
