@@ -1,6 +1,6 @@
 <template>
   <div>
-    <NuxtLink to="/admin/sporovi" class="btn btn-tertiary btn-sm mb-3">&larr; {{ t('admin.disputes') }}</NuxtLink>
+    <NuxtLink to="/admin/rezervacije" class="btn btn-tertiary btn-sm mb-3">&larr; {{ t('admin.bookings') }}</NuxtLink>
 
     <p v-if="notFound" class="text-muted">{{ t('admin.bookingNotFound') }}</p>
     <div v-else-if="booking" class="card">
@@ -33,6 +33,10 @@
         <div class="row mb-2">
           <div class="col-6 text-muted">{{ t('booking.totalAmount') }}</div>
           <div class="col-6">{{ new Intl.NumberFormat('sr-RS').format(booking.totalAmount || 0) }} RSD</div>
+        </div>
+        <div v-if="booking.paymentMethod" class="row mb-2">
+          <div class="col-6 text-muted">{{ t('booking.paymentMethodLabel') }}</div>
+          <div class="col-6">{{ booking.paymentMethod === 'CASH' ? t('booking.paymentMethodCash') : t('booking.paymentMethodOnline') }}</div>
         </div>
         <div v-if="booking.cancellationTermsSnapshot" class="row mb-2">
           <div class="col-6 text-muted">{{ t('booking.cancellationTerms') }}</div>
@@ -74,5 +78,5 @@ onMounted(async () => {
   }
 })
 
-useSeoMeta({ title: t('admin.disputes') })
+useSeoMeta({ title: t('admin.bookings') })
 </script>

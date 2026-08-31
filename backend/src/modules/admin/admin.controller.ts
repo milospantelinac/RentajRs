@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { ProcessingStatus, Language } from '@prisma/client';
+import { ProcessingStatus, Language, BookingStatus } from '@prisma/client';
 import { AdminService } from './admin.service';
 import {
   ReportListingDto,
@@ -78,6 +78,15 @@ export class AdminController {
   @Post('admin/disputes/:id/resolve')
   resolveDispute(@CurrentUser('id') adminId: string, @Param('id') id: string, @Body() dto: ResolveDisputeDto) {
     return this.adminService.resolveDispute(adminId, id, dto);
+  }
+
+  // T99 — read-only search across every booking, gated on the same
+  // permission as disputes since it exists to support the same "a guest or
+  // owner called about a booking" workflow.
+  @RequirePermissions('resolve_disputes')
+  @Get('admin/bookings')
+  listBookingsForAdmin(@Query('search') search?: string, @Query('status') status?: BookingStatus) {
+    return this.adminService.listBookingsForAdmin(search, status);
   }
 
   // T90 — read-only booking summary for the "Povezana rezervacija" link on a

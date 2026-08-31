@@ -18,7 +18,7 @@ import { UpdateLocationDto } from './dto/update-location.dto';
 import { UpsertAttributesDto } from './dto/upsert-attributes.dto';
 import { UpsertFaqsDto } from './dto/upsert-faqs.dto';
 import { UpsertExtraServicesDto } from './dto/upsert-extra-services.dto';
-import { RejectListingDto, RejectVersionDto } from './dto/reject-listing.dto';
+import { RejectListingDto } from './dto/reject-listing.dto';
 import { CreateUncategorizedListingDto } from './dto/create-uncategorized-listing.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
@@ -149,21 +149,5 @@ export class ListingsController {
   @Post('admin/listings/:id/reject')
   adminReject(@CurrentUser('id') adminId: string, @Param('id') id: string, @Body() dto: RejectListingDto) {
     return this.listingsService.adminReject(adminId, id, dto);
-  }
-
-  @RequirePermissions('approve_listing')
-  @Post('admin/listings/versions/:versionId/approve')
-  adminApproveVersion(@CurrentUser('id') adminId: string, @Param('versionId') versionId: string) {
-    return this.listingsService.adminApproveVersion(adminId, versionId);
-  }
-
-  @RequirePermissions('approve_listing')
-  @Post('admin/listings/versions/:versionId/reject')
-  adminRejectVersion(
-    @CurrentUser('id') adminId: string,
-    @Param('versionId') versionId: string,
-    @Body() dto: RejectVersionDto,
-  ) {
-    return this.listingsService.adminRejectVersion(adminId, versionId, dto);
   }
 }

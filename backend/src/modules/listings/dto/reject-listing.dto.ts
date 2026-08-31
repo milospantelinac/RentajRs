@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsIn, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsIn, IsOptional, IsString } from 'class-validator';
 
 const REJECTION_REASONS = [
   'MISSING_PHOTOS',
@@ -22,11 +22,4 @@ export class RejectListingDto {
   @IsOptional()
   @IsString()
   note?: string;
-}
-
-export class RejectVersionDto {
-  @ApiProperty()
-  @IsString()
-  @IsNotEmpty()
-  reason: string;
 }

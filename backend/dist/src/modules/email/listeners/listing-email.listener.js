@@ -69,32 +69,6 @@ let ListingEmailListener = class ListingEmailListener {
             buttonUrl: `${this.frontendUrl}/oglasi/${data.listing.id}/uredi`,
         });
     }
-    async onEditApproved({ listingId }) {
-        const data = await this.loadListingAndOwner(listingId);
-        if (!data)
-            return;
-        await this.email.send({
-            key: 'listing_edit_approved',
-            to: data.owner.email,
-            language: data.owner.language,
-            userId: data.owner.id,
-            context: { oglas: data.listing.title },
-            buttonUrl: `${this.frontendUrl}/oglasi/${data.listing.slug}`,
-        });
-    }
-    async onEditRejected({ listingId, reason }) {
-        const data = await this.loadListingAndOwner(listingId);
-        if (!data)
-            return;
-        await this.email.send({
-            key: 'listing_edit_rejected',
-            to: data.owner.email,
-            language: data.owner.language,
-            userId: data.owner.id,
-            context: { oglas: data.listing.title, razlog: reason },
-            buttonUrl: `${this.frontendUrl}/oglasi/${data.listing.id}/uredi`,
-        });
-    }
     async onFavoritePriceDropped({ userId, listingId }) {
         const [user, listing] = await Promise.all([
             this.prisma.user.findUnique({ where: { id: userId } }),
@@ -131,18 +105,6 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], ListingEmailListener.prototype, "onRejected", null);
-__decorate([
-    (0, event_emitter_1.OnEvent)('listing.edit_approved'),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
-    __metadata("design:returntype", Promise)
-], ListingEmailListener.prototype, "onEditApproved", null);
-__decorate([
-    (0, event_emitter_1.OnEvent)('listing.edit_rejected'),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
-    __metadata("design:returntype", Promise)
-], ListingEmailListener.prototype, "onEditRejected", null);
 __decorate([
     (0, event_emitter_1.OnEvent)('listing.favorite_price_dropped'),
     __metadata("design:type", Function),

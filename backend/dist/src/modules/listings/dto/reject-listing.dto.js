@@ -9,7 +9,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.RejectVersionDto = exports.RejectListingDto = void 0;
+exports.RejectListingDto = void 0;
 const swagger_1 = require("@nestjs/swagger");
 const class_validator_1 = require("class-validator");
 const REJECTION_REASONS = [
@@ -36,13 +36,4 @@ __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], RejectListingDto.prototype, "note", void 0);
-class RejectVersionDto {
-}
-exports.RejectVersionDto = RejectVersionDto;
-__decorate([
-    (0, swagger_1.ApiProperty)(),
-    (0, class_validator_1.IsString)(),
-    (0, class_validator_1.IsNotEmpty)(),
-    __metadata("design:type", String)
-], RejectVersionDto.prototype, "reason", void 0);
 //# sourceMappingURL=reject-listing.dto.js.map

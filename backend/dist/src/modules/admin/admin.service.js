@@ -117,8 +117,39 @@ let AdminService = class AdminService {
             ownerName: `${booking.owner.firstName} ${booking.owner.lastName}`,
             ownerEmail: booking.owner.email,
             totalAmount: (0, money_1.paraToRsd)(booking.totalAmount),
+            paymentMethod: booking.paymentMethod,
             cancellationTermsSnapshot: booking.cancellationTermsSnapshot,
         };
+    }
+    async listBookingsForAdmin(search, status) {
+        const bookings = await this.prisma.booking.findMany({
+            where: status ? { status } : undefined,
+            orderBy: { createdAt: 'desc' },
+            take: 500,
+            include: {
+                listing: { select: { title: true } },
+                guest: { select: { firstName: true, lastName: true } },
+                owner: { select: { firstName: true, lastName: true } },
+            },
+        });
+        const needle = search?.trim().toLowerCase();
+        const matches = needle
+            ? bookings.filter((b) => b.listing?.title?.toLowerCase().includes(needle) ||
+                `${b.guest.firstName} ${b.guest.lastName}`.toLowerCase().includes(needle) ||
+                `${b.owner.firstName} ${b.owner.lastName}`.toLowerCase().includes(needle))
+            : bookings;
+        return matches.slice(0, 200).map((b) => ({
+            id: b.id,
+            status: b.status,
+            startsAt: b.startsAt,
+            endsAt: b.endsAt,
+            createdAt: b.createdAt,
+            listingTitle: b.listing?.title,
+            guestName: `${b.guest.firstName} ${b.guest.lastName}`,
+            ownerName: `${b.owner.firstName} ${b.owner.lastName}`,
+            totalAmount: (0, money_1.paraToRsd)(b.totalAmount),
+            paymentMethod: b.paymentMethod,
+        }));
     }
     async resolveDispute(adminId, disputeId, dto) {
         const dispute = await this.prisma.dispute.findUniqueOrThrow({ where: { id: disputeId } });

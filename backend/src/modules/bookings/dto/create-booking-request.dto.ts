@@ -4,6 +4,7 @@ import {
   ArrayMaxSize,
   IsArray,
   IsDateString,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -69,4 +70,11 @@ export class CreateBookingRequestDto {
   @ValidateNested({ each: true })
   @Type(() => ExtraServiceSelection)
   extraServices?: ExtraServiceSelection[];
+
+  // T76 — required only when the listing's own paymentMethod is BOTH; the
+  // guest's actual choice between the two, never BOTH itself.
+  @ApiPropertyOptional({ enum: ['CASH', 'BANK_TRANSFER'], description: 'Required when the listing accepts both payment methods' })
+  @IsOptional()
+  @IsIn(['CASH', 'BANK_TRANSFER'])
+  paymentMethod?: 'CASH' | 'BANK_TRANSFER';
 }

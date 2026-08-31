@@ -66,34 +66,6 @@ export class ListingEmailListener {
     });
   }
 
-  @OnEvent('listing.edit_approved')
-  async onEditApproved({ listingId }: { listingId: string }) {
-    const data = await this.loadListingAndOwner(listingId);
-    if (!data) return;
-    await this.email.send({
-      key: 'listing_edit_approved',
-      to: data.owner.email,
-      language: data.owner.language,
-      userId: data.owner.id,
-      context: { oglas: data.listing.title },
-      buttonUrl: `${this.frontendUrl}/oglasi/${data.listing.slug}`,
-    });
-  }
-
-  @OnEvent('listing.edit_rejected')
-  async onEditRejected({ listingId, reason }: { listingId: string; reason: string }) {
-    const data = await this.loadListingAndOwner(listingId);
-    if (!data) return;
-    await this.email.send({
-      key: 'listing_edit_rejected',
-      to: data.owner.email,
-      language: data.owner.language,
-      userId: data.owner.id,
-      context: { oglas: data.listing.title, razlog: reason },
-      buttonUrl: `${this.frontendUrl}/oglasi/${data.listing.id}/uredi`,
-    });
-  }
-
   @OnEvent('listing.favorite_price_dropped')
   async onFavoritePriceDropped({ userId, listingId }: { userId: string; listingId: string }) {
     const [user, listing] = await Promise.all([

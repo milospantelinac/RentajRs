@@ -32,26 +32,7 @@
         </div>
         <div class="d-flex reply-actions">
           <button class="btn btn-primary-flat btn-sm" @click="approveListing(l.id)">{{ t('admin.approve') }} <span class="shortcut-key">A</span></button>
-          <button class="btn btn-danger btn-sm" @click="openReject('listing', l.id)">{{ t('admin.reject') }} <span class="shortcut-key">D</span></button>
-        </div>
-      </div>
-    </div>
-
-    <h2 class="text-section-title mb-3 mt-4">{{ t('admin.pendingEdits') }}</h2>
-    <p v-if="!queue?.pendingEdits?.length" class="text-muted">{{ t('admin.noItems') }}</p>
-    <div v-for="v in queue?.pendingEdits" :key="v.id" class="card mb-3">
-      <div class="card-body">
-        <div class="d-flex justify-content-between align-items-center mb-2">
-          <strong>{{ v.listing?.title }}</strong>
-          <span class="badge" :class="v.waitingHours > queue.slaHours ? 'badge-critical' : 'badge-warning'">
-            {{ t('admin.waitingHours', { hours: v.waitingHours }) }}
-          </span>
-        </div>
-        <p class="text-muted mb-2">{{ v.listing?.user?.firstName }} {{ v.listing?.user?.lastName }}</p>
-        <pre class="changed-fields">{{ JSON.stringify(v.changedFields, null, 2) }}</pre>
-        <div class="d-flex reply-actions mt-2">
-          <button class="btn btn-primary-flat btn-sm" @click="approveVersion(v.id)">{{ t('admin.approve') }}</button>
-          <button class="btn btn-danger btn-sm" @click="openReject('version', v.id)">{{ t('admin.reject') }}</button>
+          <button class="btn btn-danger btn-sm" @click="openReject(l.id)">{{ t('admin.reject') }} <span class="shortcut-key">D</span></button>
         </div>
       </div>
     </div>
@@ -60,15 +41,11 @@
       <div class="modal-panel card">
         <div class="card-body">
           <h3 class="text-section-title mb-3">{{ t('admin.reject') }}</h3>
-          <div v-if="rejectTarget.type === 'listing'" class="form-group mb-3">
+          <div class="form-group mb-3">
             <label class="form-label">{{ t('admin.reason') }}</label>
             <select v-model="rejectForm.reason" class="form-control form-select">
               <option v-for="r in listingReasons" :key="r" :value="r">{{ t(`admin.rejectReasons.${r}`) }}</option>
             </select>
-          </div>
-          <div v-else class="form-group mb-3">
-            <label class="form-label">{{ t('admin.reason') }}</label>
-            <input v-model="rejectForm.reason" type="text" class="form-control" />
           </div>
           <div class="form-group mb-3">
             <label class="form-label">{{ t('admin.note') }}</label>
@@ -99,9 +76,9 @@ const listingReasons = [
 const rejectTarget = ref(null)
 const rejectForm = reactive({ reason: '', note: '' })
 
-function openReject(type, id) {
-  rejectTarget.value = { type, id }
-  rejectForm.reason = type === 'listing' ? listingReasons[0] : ''
+function openReject(id) {
+  rejectTarget.value = { id }
+  rejectForm.reason = listingReasons[0]
   rejectForm.note = ''
 }
 
@@ -110,17 +87,8 @@ async function approveListing(id) {
   await refresh()
 }
 
-async function approveVersion(id) {
-  await api.post(`/admin/listings/versions/${id}/approve`, {})
-  await refresh()
-}
-
 async function confirmReject() {
-  if (rejectTarget.value.type === 'listing') {
-    await api.post(`/admin/listings/${rejectTarget.value.id}/reject`, { reason: rejectForm.reason, note: rejectForm.note || undefined })
-  } else {
-    await api.post(`/admin/listings/versions/${rejectTarget.value.id}/reject`, { reason: rejectForm.reason })
-  }
+  await api.post(`/admin/listings/${rejectTarget.value.id}/reject`, { reason: rejectForm.reason, note: rejectForm.note || undefined })
   rejectTarget.value = null
   await refresh()
 }
@@ -147,7 +115,7 @@ function handleQueueKeydown(e) {
     approveListing(first.id)
   } else if (e.key === 'd' || e.key === 'D') {
     e.preventDefault()
-    openReject('listing', first.id)
+    openReject(first.id)
   }
 }
 
@@ -163,15 +131,6 @@ useSeoMeta({ title: t('admin.queue') })
   height: 60px;
   object-fit: cover;
   border-radius: $radius-input;
-}
-
-.changed-fields {
-  background: $color-background;
-  padding: 8px;
-  border-radius: $radius-input;
-  font-size: $font-size-muted;
-  overflow-x: auto;
-  max-height: 160px;
 }
 
 .reply-actions {

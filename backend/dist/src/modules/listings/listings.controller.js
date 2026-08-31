@@ -95,12 +95,6 @@ let ListingsController = class ListingsController {
     adminReject(adminId, id, dto) {
         return this.listingsService.adminReject(adminId, id, dto);
     }
-    adminApproveVersion(adminId, versionId) {
-        return this.listingsService.adminApproveVersion(adminId, versionId);
-    }
-    adminRejectVersion(adminId, versionId, dto) {
-        return this.listingsService.adminRejectVersion(adminId, versionId, dto);
-    }
 };
 exports.ListingsController = ListingsController;
 __decorate([
@@ -281,25 +275,6 @@ __decorate([
     __metadata("design:paramtypes", [String, String, reject_listing_dto_1.RejectListingDto]),
     __metadata("design:returntype", void 0)
 ], ListingsController.prototype, "adminReject", null);
-__decorate([
-    (0, require_permissions_decorator_1.RequirePermissions)('approve_listing'),
-    (0, common_1.Post)('admin/listings/versions/:versionId/approve'),
-    __param(0, (0, current_user_decorator_1.CurrentUser)('id')),
-    __param(1, (0, common_1.Param)('versionId')),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String]),
-    __metadata("design:returntype", void 0)
-], ListingsController.prototype, "adminApproveVersion", null);
-__decorate([
-    (0, require_permissions_decorator_1.RequirePermissions)('approve_listing'),
-    (0, common_1.Post)('admin/listings/versions/:versionId/reject'),
-    __param(0, (0, current_user_decorator_1.CurrentUser)('id')),
-    __param(1, (0, common_1.Param)('versionId')),
-    __param(2, (0, common_1.Body)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String, reject_listing_dto_1.RejectVersionDto]),
-    __metadata("design:returntype", void 0)
-], ListingsController.prototype, "adminRejectVersion", null);
 exports.ListingsController = ListingsController = __decorate([
     (0, swagger_1.ApiTags)('listings'),
     (0, common_1.Controller)(),

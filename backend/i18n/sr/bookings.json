@@ -7,5 +7,6 @@
   "OWNER_NO_BANK_ACCOUNT": "Vlasnik nije podesio tekući račun za online plaćanja",
   "TOO_EARLY_FOR_NO_SHOW": "Nedolazak se ne može označiti pre početka rezervacije",
   "INVALID_STATE": "Rezervacija nije u odgovarajućem stanju ({status})",
-  "TERM_NO_LONGER_AVAILABLE": "Termin je u međuvremenu zauzet — poništavanje nije moguće"
+  "TERM_NO_LONGER_AVAILABLE": "Termin je u međuvremenu zauzet — poništavanje nije moguće",
+  "PAYMENT_METHOD_REQUIRED": "Izaberite način plaćanja — gotovina ili online"
 }

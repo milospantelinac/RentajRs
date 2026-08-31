@@ -87,6 +87,16 @@ let BookingsService = class BookingsService {
         const pricePerUnit = slotPrice ?? listing.price;
         const unitCount = dto.monthCount ?? computeUnitCount(listing.priceUnit, startsAt, endsAt);
         const { unitPriceTotal, guestFee, mandatoryFeesTotal, extraServicesTotal, totalAmount, amountDue } = await this.computeTotals(listing, startsAt, endsAt, pricePerUnit, unitCount, slotPrice, dto);
+        let resolvedPaymentMethod;
+        if (listing.paymentMethod === 'BOTH') {
+            if (dto.paymentMethod !== 'CASH' && dto.paymentMethod !== 'BANK_TRANSFER') {
+                throw new common_1.BadRequestException(this.i18n.t('bookings.PAYMENT_METHOD_REQUIRED'));
+            }
+            resolvedPaymentMethod = dto.paymentMethod;
+        }
+        else {
+            resolvedPaymentMethod = listing.paymentMethod ?? 'CASH';
+        }
         const booking = await this.prisma.booking.create({
             data: {
                 listingId,
@@ -107,7 +117,7 @@ let BookingsService = class BookingsService {
                 },
                 totalAmount,
                 amountDue,
-                paymentMethod: listing.paymentMethod ?? 'CASH',
+                paymentMethod: resolvedPaymentMethod,
                 cancellationTermsSnapshot: formatCancellationPolicy(listing.cancellationPolicyType, listing.cancellationThreshold, guest.language),
             },
         });
@@ -123,7 +133,7 @@ let BookingsService = class BookingsService {
         }
         await this.recordHistory(booking.id, null, 'REQUESTED', guestId, false);
         this.events.emit('booking.requested', { bookingId: booking.id });
-        if (listing.paymentMethod !== 'CASH' && !listing.requiresApproval) {
+        if (resolvedPaymentMethod !== 'CASH' && !listing.requiresApproval) {
             return this.moveToAwaitingPayment(booking, listing);
         }
         return this.serialize(booking);
@@ -239,7 +249,7 @@ let BookingsService = class BookingsService {
     async approveRequest(ownerId, bookingId) {
         const booking = await this.assertOwnerAccess(ownerId, bookingId, ['REQUESTED']);
         const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: booking.listingId } });
-        if (listing.paymentMethod === 'CASH') {
+        if (booking.paymentMethod === 'CASH') {
             const updated = await this.applyStatus(booking, 'CONFIRMED', ownerId, {
                 paymentConfirmedAt: new Date(),
                 phoneUnlocked: true,

@@ -125,10 +125,7 @@ let ListingsService = class ListingsService {
         if (mandatoryFees)
             data.mandatoryFees = mandatoryFees;
         const descriptionFlaggedContact = dto.description !== undefined ? (0, contact_detector_1.containsContactInfo)(dto.description) : undefined;
-        if (listing.status === client_1.ListingStatus.ACTIVE && title !== undefined && title !== listing.title) {
-            await this.queueModeratedChange(listing.id, { title });
-        }
-        else if (title !== undefined) {
+        if (title !== undefined) {
             data.title = title;
             if (listing.status === client_1.ListingStatus.DRAFT) {
                 data.slug = await this.uniqueSlug(title || 'novi-oglas');
@@ -155,10 +152,6 @@ let ListingsService = class ListingsService {
             longitude: coords?.longitude,
             ...(dto.googlePlaceId !== undefined ? { googlePlaceId: dto.googlePlaceId } : {}),
         };
-        if (listing.status === client_1.ListingStatus.ACTIVE) {
-            await this.queueModeratedChange(listing.id, locationData);
-            return this.serialize(await this.prisma.listing.findUniqueOrThrow({ where: { id: listing.id } }));
-        }
         const updated = await this.prisma.listing.update({ where: { id: listing.id }, data: locationData });
         return this.serialize(updated);
     }
@@ -239,13 +232,9 @@ let ListingsService = class ListingsService {
             throw new common_1.BadRequestException(this.i18n.t('errors.PHOTO_LIMIT_EXCEEDED', { args: { max: MAX_PHOTOS } }));
         }
         const { url } = await this.uploads.saveImage(file, `listings/${listing.id}`, { maxWidth: 1920 });
-        let versionId;
-        if (listing.status === client_1.ListingStatus.ACTIVE) {
-            versionId = await this.getOrCreatePendingVersionId(listing.id, { photosChanged: true });
-        }
-        const isFirstPhoto = currentCount === 0 && !versionId;
+        const isFirstPhoto = currentCount === 0;
         const photo = await this.prisma.listingPhoto.create({
-            data: { listingId: listing.id, url, displayOrder: currentCount, isCover: isFirstPhoto, versionId },
+            data: { listingId: listing.id, url, displayOrder: currentCount, isCover: isFirstPhoto },
         });
         return photo;
     }
@@ -254,18 +243,7 @@ let ListingsService = class ListingsService {
         const photo = await this.prisma.listingPhoto.findFirst({ where: { id: photoId, listingId: listing.id } });
         if (!photo)
             throw new common_1.NotFoundException();
-        if (listing.status === client_1.ListingStatus.ACTIVE) {
-            const versionId = await this.getOrCreatePendingVersionId(listing.id, { photosChanged: true });
-            if (photo.versionId === versionId) {
-                await this.prisma.listingPhoto.delete({ where: { id: photo.id } });
-            }
-            else {
-                await this.prisma.listingPhoto.update({ where: { id: photo.id }, data: { pendingRemoval: true, versionId } });
-            }
-        }
-        else {
-            await this.prisma.listingPhoto.delete({ where: { id: photo.id } });
-        }
+        await this.prisma.listingPhoto.delete({ where: { id: photo.id } });
         return { message: this.i18n.t('common.SUCCESS') };
     }
     async reorderPhotos(userId, listingId, photoIds) {
@@ -277,10 +255,6 @@ let ListingsService = class ListingsService {
         const liveIds = new Set(livePhotos.map((p) => p.id));
         if (photoIds.length !== liveIds.size || photoIds.some((id) => !liveIds.has(id))) {
             throw new common_1.BadRequestException(this.i18n.t('errors.PHOTO_NOT_FOUND'));
-        }
-        if (listing.status === client_1.ListingStatus.ACTIVE) {
-            await this.queueModeratedChange(listing.id, { photoOrder: photoIds });
-            return { message: this.i18n.t('common.SUCCESS') };
         }
         await this.prisma.$transaction(photoIds.map((id, index) => this.prisma.listingPhoto.update({
             where: { id },
@@ -456,23 +430,16 @@ let ListingsService = class ListingsService {
         });
     }
     async adminGetQueue() {
-        const [listings, versions] = await Promise.all([
-            this.prisma.listing.findMany({
-                where: { status: client_1.ListingStatus.PENDING_APPROVAL },
-                orderBy: { createdAt: 'asc' },
-                include: {
-                    user: { select: { id: true, firstName: true, lastName: true, email: true } },
-                    category: true,
-                    photos: true,
-                    moderations: { where: { decision: null }, orderBy: { createdAt: 'desc' }, take: 1 },
-                },
-            }),
-            this.prisma.listingVersion.findMany({
-                where: { status: client_1.VersionStatus.PENDING },
-                orderBy: { submittedAt: 'asc' },
-                include: { listing: { include: { user: { select: { id: true, firstName: true, lastName: true } } } } },
-            }),
-        ]);
+        const listings = await this.prisma.listing.findMany({
+            where: { status: client_1.ListingStatus.PENDING_APPROVAL },
+            orderBy: { createdAt: 'asc' },
+            include: {
+                user: { select: { id: true, firstName: true, lastName: true, email: true } },
+                category: true,
+                photos: true,
+                moderations: { where: { decision: null }, orderBy: { createdAt: 'desc' }, take: 1 },
+            },
+        });
         const slaHours = await this.getModerationSlaHours();
         return {
             newListings: listings.map((l) => {
@@ -485,11 +452,6 @@ let ListingsService = class ListingsService {
                     hasWarnings: latestModeration?.hasWarnings ?? false,
                 };
             }),
-            pendingEdits: versions.map((v) => ({
-                ...v,
-                listing: this.serialize(v.listing),
-                waitingHours: this.hoursSince(v.submittedAt),
-            })),
             slaHours,
         };
     }
@@ -551,73 +513,6 @@ let ListingsService = class ListingsService {
         });
         return this.serialize(updated);
     }
-    async adminApproveVersion(adminUserId, versionId) {
-        const version = await this.prisma.listingVersion.findUniqueOrThrow({ where: { id: versionId } });
-        const fields = version.changedFields;
-        await this.prisma.$transaction(async (tx) => {
-            const { photosChanged, photoOrder, workingHoursPending, pendingSlotsAdd, ...listingFields } = fields;
-            if (Object.keys(listingFields).length) {
-                await tx.listing.update({ where: { id: version.listingId }, data: listingFields });
-            }
-            if (photosChanged) {
-                await tx.listingPhoto.deleteMany({ where: { versionId: version.id, pendingRemoval: true } });
-                await tx.listingPhoto.updateMany({ where: { versionId: version.id }, data: { versionId: null } });
-            }
-            if (Array.isArray(photoOrder)) {
-                for (let index = 0; index < photoOrder.length; index++) {
-                    await tx.listingPhoto.update({
-                        where: { id: photoOrder[index] },
-                        data: { displayOrder: index, isCover: index === 0 },
-                    });
-                }
-            }
-            if (Array.isArray(workingHoursPending)) {
-                await tx.workingHours.deleteMany({ where: { listingId: version.listingId } });
-                await tx.workingHours.createMany({
-                    data: workingHoursPending.map((h) => ({
-                        listingId: version.listingId,
-                        dayOfWeek: h.dayOfWeek,
-                        startsAt: h.startsAt,
-                        endsAt: h.endsAt,
-                    })),
-                });
-            }
-            if (Array.isArray(pendingSlotsAdd) && pendingSlotsAdd.length) {
-                await tx.definedSlot.createMany({
-                    data: pendingSlotsAdd.map((s) => ({
-                        listingId: version.listingId,
-                        startsAt: new Date(s.startsAt),
-                        endsAt: new Date(s.endsAt),
-                        price: s.price ? (0, money_1.rsdToPara)(s.price) : null,
-                        maxBookings: s.maxBookings ?? 1,
-                    })),
-                });
-            }
-            await tx.listingVersion.update({
-                where: { id: version.id },
-                data: { status: client_1.VersionStatus.APPROVED, reviewedByUserId: adminUserId, reviewedAt: new Date() },
-            });
-        });
-        this.events.emit('listing.edit_approved', { listingId: version.listingId });
-        return { message: this.i18n.t('common.SUCCESS') };
-    }
-    async adminRejectVersion(adminUserId, versionId, dto) {
-        const version = await this.prisma.listingVersion.findUniqueOrThrow({ where: { id: versionId } });
-        await this.prisma.$transaction([
-            this.prisma.listingPhoto.deleteMany({ where: { versionId: version.id } }),
-            this.prisma.listingVersion.update({
-                where: { id: version.id },
-                data: {
-                    status: client_1.VersionStatus.REJECTED,
-                    rejectionReason: dto.reason,
-                    reviewedByUserId: adminUserId,
-                    reviewedAt: new Date(),
-                },
-            }),
-        ]);
-        this.events.emit('listing.edit_rejected', { listingId: version.listingId, reason: dto.reason });
-        return { message: this.i18n.t('common.SUCCESS') };
-    }
     async sendPriceDropNotifications() {
         const favorites = await this.prisma.favorite.findMany({
             where: { priceDropNotifiedAt: null },
@@ -657,31 +552,6 @@ let ListingsService = class ListingsService {
                 cityArea: true,
             },
         });
-    }
-    async queueModeratedChange(listingId, fields) {
-        const versionId = await this.getOrCreatePendingVersionId(listingId, {});
-        const existing = await this.prisma.listingVersion.findUniqueOrThrow({ where: { id: versionId } });
-        const merged = { ...existing.changedFields, ...fields };
-        await this.prisma.listingVersion.update({
-            where: { id: versionId },
-            data: { changedFields: merged },
-        });
-        this.events.emit('listing.edit_submitted', { listingId, versionId });
-    }
-    async getOrCreatePendingVersionId(listingId, initialFields) {
-        const existing = await this.prisma.listingVersion.findFirst({
-            where: { listingId, status: client_1.VersionStatus.PENDING },
-        });
-        if (existing)
-            return existing.id;
-        const { photosChanged, ...rest } = initialFields;
-        const created = await this.prisma.listingVersion.create({
-            data: {
-                listingId,
-                changedFields: (photosChanged ? { photosChanged: true, ...rest } : rest),
-            },
-        });
-        return created.id;
     }
     async runAutomaticChecks(listingId) {
         const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: listingId } });

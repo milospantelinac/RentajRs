@@ -98,11 +98,7 @@ let AvailabilityService = AvailabilityService_1 = class AvailabilityService {
         };
     }
     async setWorkingHours(userId, listingId, dto) {
-        const listing = await this.assertOwnership(userId, listingId);
-        if (listing.status === 'ACTIVE') {
-            await this.queueAvailabilityEdit(listingId, { workingHoursPending: dto.hours });
-            return { message: 'ok', pending: true };
-        }
+        await this.assertOwnership(userId, listingId);
         await this.prisma.$transaction([
             this.prisma.workingHours.deleteMany({ where: { listingId } }),
             this.prisma.workingHours.createMany({
@@ -111,22 +107,8 @@ let AvailabilityService = AvailabilityService_1 = class AvailabilityService {
         ]);
         return { message: 'ok' };
     }
-    async getPendingWorkingHours(userId, listingId) {
-        await this.assertOwnership(userId, listingId);
-        const pending = await this.getPendingChangedFields(listingId);
-        return { pending: pending.workingHoursPending ?? null };
-    }
     async createDefinedSlot(userId, listingId, dto) {
-        const listing = await this.assertOwnership(userId, listingId);
-        if (listing.status === 'ACTIVE') {
-            const current = await this.getPendingChangedFields(listingId);
-            const pendingSlotsAdd = [
-                ...(Array.isArray(current.pendingSlotsAdd) ? current.pendingSlotsAdd : []),
-                { startsAt: dto.startsAt, endsAt: dto.endsAt, price: dto.price ?? null, maxBookings: dto.maxBookings ?? 1 },
-            ];
-            await this.queueAvailabilityEdit(listingId, { pendingSlotsAdd });
-            return { message: 'ok', pending: true };
-        }
+        await this.assertOwnership(userId, listingId);
         const slot = await this.prisma.definedSlot.create({
             data: {
                 listingId,
@@ -335,22 +317,6 @@ let AvailabilityService = AvailabilityService_1 = class AvailabilityService {
             where: { id: sourceId },
             data: { lastSyncedAt: new Date(), failureCount: 0, lastError: null },
         });
-    }
-    async queueAvailabilityEdit(listingId, patch) {
-        const existing = await this.prisma.listingVersion.findFirst({ where: { listingId, status: 'PENDING' } });
-        if (existing) {
-            const merged = { ...existing.changedFields, ...patch };
-            await this.prisma.listingVersion.update({ where: { id: existing.id }, data: { changedFields: merged } });
-            this.events.emit('listing.edit_submitted', { listingId, versionId: existing.id });
-            return existing.id;
-        }
-        const created = await this.prisma.listingVersion.create({ data: { listingId, changedFields: patch } });
-        this.events.emit('listing.edit_submitted', { listingId, versionId: created.id });
-        return created.id;
-    }
-    async getPendingChangedFields(listingId) {
-        const existing = await this.prisma.listingVersion.findFirst({ where: { listingId, status: 'PENDING' } });
-        return existing?.changedFields ?? {};
     }
     async assertOwnership(userId, listingId) {
         const listing = await this.prisma.listing.findUnique({ where: { id: listingId } });

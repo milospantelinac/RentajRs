@@ -115,12 +115,11 @@ async function addSlot() {
       endsAt: endsAt.toISOString(),
       price: form.price || undefined,
     })
-    // T75 — on an ACTIVE listing the slot goes to moderation instead of a
-    // real row (createDefinedSlot returns { message, pending }, none of a
-    // slot's own fields), so build the just-added row from what the owner
-    // actually typed rather than trusting the response to look like one.
+    // T75 — build the just-added row from what the owner actually typed
+    // rather than the raw response, so it renders correctly before the
+    // round-trip completes.
     slots.value.push({
-      id: created.id ?? `pending-${Date.now()}`,
+      id: created.id,
       startsAt: startsAt.toISOString(),
       endsAt: endsAt.toISOString(),
       price: form.price || null,

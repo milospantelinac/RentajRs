@@ -112,6 +112,19 @@
               </p>
             </div>
 
+            <!-- T76 — a "Oba" listing accepts either method but never actually
+                 asked the guest which one; without this the approval step had
+                 no real choice to branch on and silently treated every such
+                 booking as online. -->
+            <div v-if="listing.paymentMethod === 'BOTH'" class="form-group mb-3">
+              <label class="form-label">{{ t('booking.paymentMethodLabel') }}</label>
+              <select v-model="form.paymentMethod" class="form-control form-select" @change="error = ''">
+                <option value="" disabled>{{ t('booking.paymentMethodChoose') }}</option>
+                <option value="CASH">{{ t('booking.paymentMethodCash') }}</option>
+                <option value="BANK_TRANSFER">{{ t('booking.paymentMethodOnline') }}</option>
+              </select>
+            </div>
+
             <div v-if="listing.extraServices?.length" class="mb-3">
               <p class="text-label mb-2">{{ t('listing.extraServices') }}</p>
               <label v-for="service in listing.extraServices" :key="service.id" class="form-row-inline mb-2">
@@ -212,6 +225,7 @@ const form = reactive({
   guestCount: 1,
   guestMessage: '',
   extraServices: [],
+  paymentMethod: '',
 })
 const error = ref('')
 const submitting = ref(false)
@@ -315,9 +329,14 @@ function formatPrice(value) {
 // the live price preview can never compute against a different selection
 // than what submit() actually sends.
 function buildBookingPayload() {
+  // T76 — only meaningful (and only required) when the listing itself
+  // accepts both methods; sending it for a single-method listing is
+  // harmless since the backend ignores it there.
+  if (listing.value.paymentMethod === 'BOTH' && !form.paymentMethod) return null
   const base = {
     guestCount: form.guestCount,
     extraServices: form.extraServices.length ? form.extraServices : undefined,
+    paymentMethod: listing.value.paymentMethod === 'BOTH' ? form.paymentMethod : undefined,
   }
   if (form.definedSlotId) {
     return { ...base, definedSlotId: form.definedSlotId }
@@ -364,6 +383,7 @@ watch(
     form.definedSlotId,
     form.guestCount,
     form.extraServices.length,
+    form.paymentMethod,
     slotStartTime.value,
     slotDurationHours.value,
   ],

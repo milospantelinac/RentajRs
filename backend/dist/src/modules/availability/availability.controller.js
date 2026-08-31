@@ -32,9 +32,6 @@ let AvailabilityController = class AvailabilityController {
     setWorkingHours(userId, id, dto) {
         return this.availabilityService.setWorkingHours(userId, id, dto);
     }
-    getPendingWorkingHours(userId, id) {
-        return this.availabilityService.getPendingWorkingHours(userId, id);
-    }
     createSlot(userId, id, dto) {
         return this.availabilityService.createDefinedSlot(userId, id, dto);
     }
@@ -92,14 +89,6 @@ __decorate([
     __metadata("design:paramtypes", [String, String, availability_dto_1.SetWorkingHoursDto]),
     __metadata("design:returntype", void 0)
 ], AvailabilityController.prototype, "setWorkingHours", null);
-__decorate([
-    (0, common_1.Get)('pending-working-hours'),
-    __param(0, (0, current_user_decorator_1.CurrentUser)('id')),
-    __param(1, (0, common_1.Param)('id')),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String]),
-    __metadata("design:returntype", void 0)
-], AvailabilityController.prototype, "getPendingWorkingHours", null);
 __decorate([
     (0, common_1.Post)('slots'),
     __param(0, (0, current_user_decorator_1.CurrentUser)('id')),

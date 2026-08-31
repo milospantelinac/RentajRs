@@ -5,6 +5,7 @@
     <NuxtLink to="/admin/korisnici" class="admin-nav-link">{{ t('admin.users') }}</NuxtLink>
     <NuxtLink to="/admin/pretplate" class="admin-nav-link">{{ t('admin.subscriptions') }}</NuxtLink>
     <NuxtLink to="/admin/placanje" class="admin-nav-link">{{ t('admin.paymentSettings') }}</NuxtLink>
+    <NuxtLink to="/admin/rezervacije" class="admin-nav-link">{{ t('admin.bookings') }}</NuxtLink>
     <NuxtLink to="/admin/sporovi" class="admin-nav-link">{{ t('admin.disputes') }}</NuxtLink>
     <NuxtLink to="/admin/email-sabloni" class="admin-nav-link">{{ t('admin.emailTemplates') }}</NuxtLink>
     <NuxtLink to="/admin/sadrzaj" class="admin-nav-link">{{ t('admin.content') }}</NuxtLink>

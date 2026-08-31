@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { I18nService } from 'nestjs-i18n';
-import { ProcessingStatus, Language } from '@prisma/client';
+import { ProcessingStatus, Language, BookingStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
 import { BookingsService } from '../bookings/bookings.service';
@@ -118,7 +118,8 @@ export class AdminService {
   /**
    * Read-only, admin-only booking summary for the "Povezana rezervacija" link
    * on a dispute (T90) — deliberately not the guest/owner detail page's
-   * getOne(), which is gated to the two parties and would 403 an admin.
+   * getOne(), which is gated to the two parties and would 403 an admin. Also
+   * the detail view for T99's "Rezervacije" search below.
    */
   async getBookingForAdmin(bookingId: string) {
     const booking = await this.prisma.booking.findUnique({
@@ -142,8 +143,56 @@ export class AdminService {
       ownerName: `${booking.owner.firstName} ${booking.owner.lastName}`,
       ownerEmail: booking.owner.email,
       totalAmount: paraToRsd(booking.totalAmount),
+      paymentMethod: booking.paymentMethod,
       cancellationTermsSnapshot: booking.cancellationTermsSnapshot,
     };
+  }
+
+  /**
+   * T99 — read-only search across every booking so support can find the one
+   * a guest/owner is calling about. No status-changing actions here by
+   * design (SCOPE: "Bez mogućnosti izmene statusa u prvoj verziji").
+   *
+   * The search term is matched against the guest/owner's FULL name (not just
+   * firstName or lastName individually) — a per-field `contains` can't match
+   * "First Last" typed as one string, which is exactly how a support agent
+   * reads it off the booking list they're searching from. Matching happens
+   * in-app rather than in SQL since Prisma can't `contains` a computed
+   * "firstName || ' ' || lastName" column; the take:500 cap keeps this
+   * bounded for an admin tool over what's still a small marketplace.
+   */
+  async listBookingsForAdmin(search?: string, status?: BookingStatus) {
+    const bookings = await this.prisma.booking.findMany({
+      where: status ? { status } : undefined,
+      orderBy: { createdAt: 'desc' },
+      take: 500,
+      include: {
+        listing: { select: { title: true } },
+        guest: { select: { firstName: true, lastName: true } },
+        owner: { select: { firstName: true, lastName: true } },
+      },
+    });
+    const needle = search?.trim().toLowerCase();
+    const matches = needle
+      ? bookings.filter(
+          (b) =>
+            b.listing?.title?.toLowerCase().includes(needle) ||
+            `${b.guest.firstName} ${b.guest.lastName}`.toLowerCase().includes(needle) ||
+            `${b.owner.firstName} ${b.owner.lastName}`.toLowerCase().includes(needle),
+        )
+      : bookings;
+    return matches.slice(0, 200).map((b) => ({
+      id: b.id,
+      status: b.status,
+      startsAt: b.startsAt,
+      endsAt: b.endsAt,
+      createdAt: b.createdAt,
+      listingTitle: b.listing?.title,
+      guestName: `${b.guest.firstName} ${b.guest.lastName}`,
+      ownerName: `${b.owner.firstName} ${b.owner.lastName}`,
+      totalAmount: paraToRsd(b.totalAmount),
+      paymentMethod: b.paymentMethod,
+    }));
   }
 
   /** Ch.6.7/ADR-019 — admin decides about the ACCOUNT, never about money; T90's OVERTURN_NO_SHOW is the one exception, and it's about the booking, never the account. */

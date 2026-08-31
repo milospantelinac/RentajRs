@@ -82,4 +82,10 @@ __decorate([
     (0, class_transformer_1.Type)(() => ExtraServiceSelection),
     __metadata("design:type", Array)
 ], CreateBookingRequestDto.prototype, "extraServices", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ enum: ['CASH', 'BANK_TRANSFER'], description: 'Required when the listing accepts both payment methods' }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsIn)(['CASH', 'BANK_TRANSFER']),
+    __metadata("design:type", String)
+], CreateBookingRequestDto.prototype, "paymentMethod", void 0);
 //# sourceMappingURL=create-booking-request.dto.js.map

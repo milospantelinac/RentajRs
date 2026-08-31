@@ -68,6 +68,19 @@ export class BookingsService {
     const { unitPriceTotal, guestFee, mandatoryFeesTotal, extraServicesTotal, totalAmount, amountDue } =
       await this.computeTotals(listing, startsAt, endsAt, pricePerUnit, unitCount, slotPrice, dto);
 
+    // T76 — a listing set to "Oba" never actually asked the guest which
+    // method they wanted; the booking's own paymentMethod must be a real
+    // choice (CASH or BANK_TRANSFER), never the listing's literal BOTH.
+    let resolvedPaymentMethod: 'CASH' | 'BANK_TRANSFER';
+    if (listing.paymentMethod === 'BOTH') {
+      if (dto.paymentMethod !== 'CASH' && dto.paymentMethod !== 'BANK_TRANSFER') {
+        throw new BadRequestException(this.i18n.t('bookings.PAYMENT_METHOD_REQUIRED'));
+      }
+      resolvedPaymentMethod = dto.paymentMethod;
+    } else {
+      resolvedPaymentMethod = listing.paymentMethod ?? 'CASH';
+    }
+
     const booking = await this.prisma.booking.create({
       data: {
         listingId,
@@ -88,7 +101,7 @@ export class BookingsService {
         } as unknown as Prisma.InputJsonValue,
         totalAmount,
         amountDue,
-        paymentMethod: listing.paymentMethod ?? 'CASH',
+        paymentMethod: resolvedPaymentMethod,
         cancellationTermsSnapshot: formatCancellationPolicy(
           listing.cancellationPolicyType,
           listing.cancellationThreshold,
@@ -110,8 +123,8 @@ export class BookingsService {
     await this.recordHistory(booking.id, null, 'REQUESTED', guestId, false);
     this.events.emit('booking.requested', { bookingId: booking.id });
 
-    // R52: bank-transfer listings that don't require approval skip straight to AWAITING_PAYMENT.
-    if (listing.paymentMethod !== 'CASH' && !listing.requiresApproval) {
+    // R52: bank-transfer bookings that don't require approval skip straight to AWAITING_PAYMENT.
+    if (resolvedPaymentMethod !== 'CASH' && !listing.requiresApproval) {
       return this.moveToAwaitingPayment(booking, listing);
     }
 
@@ -310,7 +323,11 @@ export class BookingsService {
     const booking = await this.assertOwnerAccess(ownerId, bookingId, ['REQUESTED']);
     const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: booking.listingId } });
 
-    if (listing.paymentMethod === 'CASH') {
+    // T76 — branch on the booking's own resolved method, not the listing's
+    // setting: a "Oba" listing's paymentMethod is never CASH, so this used
+    // to always fall through to the QR/online path regardless of what the
+    // guest actually chose.
+    if (booking.paymentMethod === 'CASH') {
       // R181 — cash bookings confirm immediately, no payment-instructions email.
       const updated = await this.applyStatus(booking, 'CONFIRMED', ownerId, {
         paymentConfirmedAt: new Date(),

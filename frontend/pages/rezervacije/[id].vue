@@ -33,6 +33,13 @@
               <div class="col-6 text-muted">{{ t('booking.totalAmount') }}</div>
               <div class="col-6">{{ formatPrice(booking.totalAmount) }}</div>
             </div>
+            <!-- T76 — the guest's choice on a "Oba" listing wasn't shown
+                 anywhere before; both sides need to see what was actually
+                 agreed, not just infer it from which card renders below. -->
+            <div v-if="booking.paymentMethod" class="row mb-2">
+              <div class="col-6 text-muted">{{ t('booking.paymentMethodLabel') }}</div>
+              <div class="col-6">{{ booking.paymentMethod === 'CASH' ? t('booking.paymentMethodCash') : t('booking.paymentMethodOnline') }}</div>
+            </div>
             <!-- T77 — "Iznos za uplatu" only makes sense while payment is
                  actually pending; once paymentConfirmedAt is set (any status
                  reached after that point), show what was actually paid

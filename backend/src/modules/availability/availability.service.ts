@@ -122,19 +122,9 @@ export class AvailabilityService {
 
   // -- Owner management ----------------------------------------------------
 
-  /**
-   * R31/R32 — on an ACTIVE listing, working hours only take effect once an
-   * admin approves the edit; the currently-published hours stay bookable in
-   * the meantime (same guarantee as title/photos/location). Staged as JSON
-   * on the pending ListingVersion rather than a new column, matching how
-   * ListingsService already stages a photo reorder.
-   */
+  /** T84 — applies immediately regardless of listing status; edit moderation was removed. */
   async setWorkingHours(userId: string, listingId: string, dto: SetWorkingHoursDto) {
-    const listing = await this.assertOwnership(userId, listingId);
-    if (listing.status === 'ACTIVE') {
-      await this.queueAvailabilityEdit(listingId, { workingHoursPending: dto.hours });
-      return { message: 'ok', pending: true };
-    }
+    await this.assertOwnership(userId, listingId);
     await this.prisma.$transaction([
       this.prisma.workingHours.deleteMany({ where: { listingId } }),
       this.prisma.workingHours.createMany({
@@ -144,31 +134,9 @@ export class AvailabilityService {
     return { message: 'ok' };
   }
 
-  /**
-   * T72 — an ACTIVE listing's working-hours edit is queued for moderation
-   * (see setWorkingHours above) rather than applied immediately, but the
-   * wizard had no way to tell the owner that — after a reload it just
-   * re-fetched the still-unapproved live hours and looked like the edit had
-   * been silently lost. Lets WorkingHoursEditor show what's actually pending.
-   */
-  async getPendingWorkingHours(userId: string, listingId: string) {
-    await this.assertOwnership(userId, listingId);
-    const pending = await this.getPendingChangedFields(listingId);
-    return { pending: (pending.workingHoursPending as unknown[] | undefined) ?? null };
-  }
-
-  /** Same R31/R32 rule as setWorkingHours — a new slot on a live listing isn't bookable until approved. */
+  /** T84 — applies immediately regardless of listing status; edit moderation was removed. */
   async createDefinedSlot(userId: string, listingId: string, dto: CreateDefinedSlotDto) {
-    const listing = await this.assertOwnership(userId, listingId);
-    if (listing.status === 'ACTIVE') {
-      const current = await this.getPendingChangedFields(listingId);
-      const pendingSlotsAdd = [
-        ...(Array.isArray(current.pendingSlotsAdd) ? current.pendingSlotsAdd : []),
-        { startsAt: dto.startsAt, endsAt: dto.endsAt, price: dto.price ?? null, maxBookings: dto.maxBookings ?? 1 },
-      ];
-      await this.queueAvailabilityEdit(listingId, { pendingSlotsAdd });
-      return { message: 'ok', pending: true };
-    }
+    await this.assertOwnership(userId, listingId);
     const slot = await this.prisma.definedSlot.create({
       data: {
         listingId,
@@ -443,25 +411,6 @@ export class AvailabilityService {
   }
 
   // -- Internal --------------------------------------------------------
-
-  /** Same pending-version mechanism ListingsService uses for title/photos — see its queueModeratedChange(). */
-  private async queueAvailabilityEdit(listingId: string, patch: Record<string, unknown>) {
-    const existing = await this.prisma.listingVersion.findFirst({ where: { listingId, status: 'PENDING' } });
-    if (existing) {
-      const merged = { ...(existing.changedFields as Record<string, unknown>), ...patch };
-      await this.prisma.listingVersion.update({ where: { id: existing.id }, data: { changedFields: merged as any } });
-      this.events.emit('listing.edit_submitted', { listingId, versionId: existing.id });
-      return existing.id;
-    }
-    const created = await this.prisma.listingVersion.create({ data: { listingId, changedFields: patch as any } });
-    this.events.emit('listing.edit_submitted', { listingId, versionId: created.id });
-    return created.id;
-  }
-
-  private async getPendingChangedFields(listingId: string): Promise<Record<string, unknown>> {
-    const existing = await this.prisma.listingVersion.findFirst({ where: { listingId, status: 'PENDING' } });
-    return (existing?.changedFields as Record<string, unknown>) ?? {};
-  }
 
   private async assertOwnership(userId: string, listingId: string) {
     const listing = await this.prisma.listing.findUnique({ where: { id: listingId } });

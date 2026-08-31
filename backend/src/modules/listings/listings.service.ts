@@ -7,7 +7,7 @@ import {
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { I18nService } from 'nestjs-i18n';
-import { ListingStatus, ModerationDecision, Prisma, VersionStatus } from '@prisma/client';
+import { ListingStatus, ModerationDecision, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CacheService } from '../../common/cache/cache.service';
 import { UploadsService } from '../../common/uploads/uploads.service';
@@ -22,7 +22,7 @@ import { UpdateLocationDto } from './dto/update-location.dto';
 import { UpsertAttributesDto } from './dto/upsert-attributes.dto';
 import { UpsertFaqsDto } from './dto/upsert-faqs.dto';
 import { UpsertExtraServicesDto } from './dto/upsert-extra-services.dto';
-import { RejectListingDto, RejectVersionDto } from './dto/reject-listing.dto';
+import { RejectListingDto } from './dto/reject-listing.dto';
 import { CreateUncategorizedListingDto } from './dto/create-uncategorized-listing.dto';
 import { FALLBACK_CATEGORY_SLUG } from '../taxonomy/taxonomy.service';
 
@@ -160,10 +160,7 @@ export class ListingsService {
     const descriptionFlaggedContact =
       dto.description !== undefined ? containsContactInfo(dto.description) : undefined;
 
-    if (listing.status === ListingStatus.ACTIVE && title !== undefined && title !== listing.title) {
-      await this.queueModeratedChange(listing.id, { title });
-      // Everything else in the payload (all immediate fields) still applies now.
-    } else if (title !== undefined) {
+    if (title !== undefined) {
       data.title = title;
       // Slug tracks the title only pre-publish — once ACTIVE, R133's
       // "rename changes the URL with a permanent redirect" is a documented
@@ -183,7 +180,7 @@ export class ListingsService {
     return this.serialize(updated);
   }
 
-  /** Korak 5. Moderated on an ACTIVE listing (R31); direct write pre-publish. */
+  /** Korak 5 — direct write, at any listing status (T84: edit moderation removed). */
   async updateLocation(userId: string, listingId: string, dto: UpdateLocationDto) {
     const listing = await this.assertOwnership(userId, listingId);
     const city = await this.prisma.city.findUniqueOrThrow({ where: { id: dto.cityId } });
@@ -203,11 +200,6 @@ export class ListingsService {
       longitude: coords?.longitude,
       ...(dto.googlePlaceId !== undefined ? { googlePlaceId: dto.googlePlaceId } : {}),
     };
-
-    if (listing.status === ListingStatus.ACTIVE) {
-      await this.queueModeratedChange(listing.id, locationData);
-      return this.serialize(await this.prisma.listing.findUniqueOrThrow({ where: { id: listing.id } }));
-    }
 
     const updated = await this.prisma.listing.update({ where: { id: listing.id }, data: locationData });
     return this.serialize(updated);
@@ -320,14 +312,9 @@ export class ListingsService {
     }
 
     const { url } = await this.uploads.saveImage(file, `listings/${listing.id}`, { maxWidth: 1920 });
-    let versionId: string | undefined;
-    if (listing.status === ListingStatus.ACTIVE) {
-      versionId = await this.getOrCreatePendingVersionId(listing.id, { photosChanged: true });
-    }
-
-    const isFirstPhoto = currentCount === 0 && !versionId;
+    const isFirstPhoto = currentCount === 0;
     const photo = await this.prisma.listingPhoto.create({
-      data: { listingId: listing.id, url, displayOrder: currentCount, isCover: isFirstPhoto, versionId },
+      data: { listingId: listing.id, url, displayOrder: currentCount, isCover: isFirstPhoto },
     });
     return photo;
   }
@@ -337,21 +324,11 @@ export class ListingsService {
     const photo = await this.prisma.listingPhoto.findFirst({ where: { id: photoId, listingId: listing.id } });
     if (!photo) throw new NotFoundException();
 
-    if (listing.status === ListingStatus.ACTIVE) {
-      const versionId = await this.getOrCreatePendingVersionId(listing.id, { photosChanged: true });
-      if (photo.versionId === versionId) {
-        // Photo was added in this same pending version — just drop it outright.
-        await this.prisma.listingPhoto.delete({ where: { id: photo.id } });
-      } else {
-        await this.prisma.listingPhoto.update({ where: { id: photo.id }, data: { pendingRemoval: true, versionId } });
-      }
-    } else {
-      await this.prisma.listingPhoto.delete({ where: { id: photo.id } });
-    }
+    await this.prisma.listingPhoto.delete({ where: { id: photo.id } });
     return { message: this.i18n.t('common.SUCCESS') };
   }
 
-  /** R31/R32: reordering (and the cover-photo change it implies) is a moderated edit on an ACTIVE listing. */
+  /** T84 — applies immediately regardless of listing status; edit moderation was removed. */
   async reorderPhotos(userId: string, listingId: string, photoIds: string[]) {
     const listing = await this.assertOwnership(userId, listingId);
     const livePhotos = await this.prisma.listingPhoto.findMany({
@@ -361,11 +338,6 @@ export class ListingsService {
     const liveIds = new Set(livePhotos.map((p) => p.id));
     if (photoIds.length !== liveIds.size || photoIds.some((id) => !liveIds.has(id))) {
       throw new BadRequestException(this.i18n.t('errors.PHOTO_NOT_FOUND'));
-    }
-
-    if (listing.status === ListingStatus.ACTIVE) {
-      await this.queueModeratedChange(listing.id, { photoOrder: photoIds });
-      return { message: this.i18n.t('common.SUCCESS') };
     }
 
     await this.prisma.$transaction(
@@ -615,26 +587,19 @@ export class ListingsService {
   // -- Admin: moderation -------------------------------------------------
 
   async adminGetQueue() {
-    const [listings, versions] = await Promise.all([
-      this.prisma.listing.findMany({
-        where: { status: ListingStatus.PENDING_APPROVAL },
-        orderBy: { createdAt: 'asc' },
-        include: {
-          user: { select: { id: true, firstName: true, lastName: true, email: true } },
-          category: true,
-          photos: true,
-          // Ch.12.4 — the admin should see only the WARNINGS an automated
-          // check raised, not the whole listing. The undecided moderation
-          // row created in markPendingApproval() carries exactly that.
-          moderations: { where: { decision: null }, orderBy: { createdAt: 'desc' }, take: 1 },
-        },
-      }),
-      this.prisma.listingVersion.findMany({
-        where: { status: VersionStatus.PENDING },
-        orderBy: { submittedAt: 'asc' },
-        include: { listing: { include: { user: { select: { id: true, firstName: true, lastName: true } } } } },
-      }),
-    ]);
+    const listings = await this.prisma.listing.findMany({
+      where: { status: ListingStatus.PENDING_APPROVAL },
+      orderBy: { createdAt: 'asc' },
+      include: {
+        user: { select: { id: true, firstName: true, lastName: true, email: true } },
+        category: true,
+        photos: true,
+        // Ch.12.4 — the admin should see only the WARNINGS an automated
+        // check raised, not the whole listing. The undecided moderation
+        // row created in markPendingApproval() carries exactly that.
+        moderations: { where: { decision: null }, orderBy: { createdAt: 'desc' }, take: 1 },
+      },
+    });
     const slaHours = await this.getModerationSlaHours();
     return {
       newListings: listings.map((l) => {
@@ -647,13 +612,6 @@ export class ListingsService {
           hasWarnings: latestModeration?.hasWarnings ?? false,
         };
       }),
-      // BigInt price fields on the nested listing must be converted here too —
-      // JSON.stringify throws on a raw BigInt, and this endpoint used to leak one.
-      pendingEdits: versions.map((v) => ({
-        ...v,
-        listing: this.serialize(v.listing),
-        waitingHours: this.hoursSince(v.submittedAt),
-      })),
       slaHours,
     };
   }
@@ -729,79 +687,6 @@ export class ListingsService {
     return this.serialize(updated);
   }
 
-  async adminApproveVersion(adminUserId: string, versionId: string) {
-    const version = await this.prisma.listingVersion.findUniqueOrThrow({ where: { id: versionId } });
-    const fields = version.changedFields as Record<string, unknown>;
-
-    await this.prisma.$transaction(async (tx) => {
-      const { photosChanged, photoOrder, workingHoursPending, pendingSlotsAdd, ...listingFields } = fields as any;
-      if (Object.keys(listingFields).length) {
-        await tx.listing.update({ where: { id: version.listingId }, data: listingFields });
-      }
-      if (photosChanged) {
-        await tx.listingPhoto.deleteMany({ where: { versionId: version.id, pendingRemoval: true } });
-        await tx.listingPhoto.updateMany({ where: { versionId: version.id }, data: { versionId: null } });
-      }
-      if (Array.isArray(photoOrder)) {
-        for (let index = 0; index < photoOrder.length; index++) {
-          await tx.listingPhoto.update({
-            where: { id: photoOrder[index] as string },
-            data: { displayOrder: index, isCover: index === 0 },
-          });
-        }
-      }
-      // R31/R32 — availability edits queued by AvailabilityService.queueAvailabilityEdit()
-      // only take effect here, on approval; see its doc comment.
-      if (Array.isArray(workingHoursPending)) {
-        await tx.workingHours.deleteMany({ where: { listingId: version.listingId } });
-        await tx.workingHours.createMany({
-          data: workingHoursPending.map((h: any) => ({
-            listingId: version.listingId,
-            dayOfWeek: h.dayOfWeek,
-            startsAt: h.startsAt,
-            endsAt: h.endsAt,
-          })),
-        });
-      }
-      if (Array.isArray(pendingSlotsAdd) && pendingSlotsAdd.length) {
-        await tx.definedSlot.createMany({
-          data: pendingSlotsAdd.map((s: any) => ({
-            listingId: version.listingId,
-            startsAt: new Date(s.startsAt),
-            endsAt: new Date(s.endsAt),
-            price: s.price ? rsdToPara(s.price) : null,
-            maxBookings: s.maxBookings ?? 1,
-          })),
-        });
-      }
-      await tx.listingVersion.update({
-        where: { id: version.id },
-        data: { status: VersionStatus.APPROVED, reviewedByUserId: adminUserId, reviewedAt: new Date() },
-      });
-    });
-
-    this.events.emit('listing.edit_approved', { listingId: version.listingId });
-    return { message: this.i18n.t('common.SUCCESS') };
-  }
-
-  async adminRejectVersion(adminUserId: string, versionId: string, dto: RejectVersionDto) {
-    const version = await this.prisma.listingVersion.findUniqueOrThrow({ where: { id: versionId } });
-    await this.prisma.$transaction([
-      this.prisma.listingPhoto.deleteMany({ where: { versionId: version.id } }),
-      this.prisma.listingVersion.update({
-        where: { id: version.id },
-        data: {
-          status: VersionStatus.REJECTED,
-          rejectionReason: dto.reason,
-          reviewedByUserId: adminUserId,
-          reviewedAt: new Date(),
-        },
-      }),
-    ]);
-    this.events.emit('listing.edit_rejected', { listingId: version.listingId, reason: dto.reason });
-    return { message: this.i18n.t('common.SUCCESS') };
-  }
-
   /** Ch.22.4 "Pad cene sačuvanog oglasa" — notifies once per drop episode, never spams on every re-check. */
   @Cron(CronExpression.EVERY_DAY_AT_9AM)
   async sendPriceDropNotifications() {
@@ -843,37 +728,6 @@ export class ListingsService {
         cityArea: true,
       },
     });
-  }
-
-  /** R32: an ACTIVE listing must not change what's already public until an edit is approved. */
-  private async queueModeratedChange(listingId: string, fields: Record<string, unknown>) {
-    const versionId = await this.getOrCreatePendingVersionId(listingId, {});
-    const existing = await this.prisma.listingVersion.findUniqueOrThrow({ where: { id: versionId } });
-    const merged = { ...(existing.changedFields as Record<string, unknown>), ...fields };
-    await this.prisma.listingVersion.update({
-      where: { id: versionId },
-      data: { changedFields: merged as unknown as Prisma.InputJsonValue },
-    });
-    this.events.emit('listing.edit_submitted', { listingId, versionId });
-  }
-
-  private async getOrCreatePendingVersionId(
-    listingId: string,
-    initialFields: Record<string, unknown>,
-  ): Promise<string> {
-    const existing = await this.prisma.listingVersion.findFirst({
-      where: { listingId, status: VersionStatus.PENDING },
-    });
-    if (existing) return existing.id;
-
-    const { photosChanged, ...rest } = initialFields as any;
-    const created = await this.prisma.listingVersion.create({
-      data: {
-        listingId,
-        changedFields: (photosChanged ? { photosChanged: true, ...rest } : rest) as unknown as Prisma.InputJsonValue,
-      },
-    });
-    return created.id;
   }
 
   /** Ch.4.5 — automated pre-checks shown to the admin; v1 warns rather than blocks (R119 groundwork). */
