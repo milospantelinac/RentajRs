@@ -121,7 +121,8 @@
             <div class="card-body">
               <p class="text-page-title mb-1">
                 {{ formatPrice(listing.price) }}
-                <span class="text-muted text-body"> / {{ t(`listing.unit${unitLabel(listing.priceUnit)}`) }}</span>
+                <span v-if="listing.priceUnit === 'GUEST'" class="text-muted text-body"> {{ t('listing.pricePerGuestSuffix') }}</span>
+                <span v-else class="text-muted text-body"> / {{ t(`listing.unit${unitLabel(listing.priceUnit)}`) }}</span>
               </p>
               <button v-if="preview" type="button" class="btn btn-primary-flat btn-block mt-3" disabled>
                 {{ ctaLabel }}

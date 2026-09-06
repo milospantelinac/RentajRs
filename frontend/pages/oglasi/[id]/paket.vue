@@ -1,5 +1,8 @@
 <template>
   <div class="container package-page py-4">
+    <!-- T110 — reached both from the listing wizard and from Pretplate's
+         "nadogradnja" — real history-back, not a fixed destination. -->
+    <BackLink fallback="/kontrolna-tabla" class="mb-3" />
     <h1 class="text-page-title mb-4">{{ t('billing.choosePackage') }}</h1>
 
     <PackagePricingCards

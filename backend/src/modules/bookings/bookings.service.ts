@@ -8,6 +8,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { AvailabilityService } from '../availability/availability.service';
 import { buildIpsQrPayload } from '../../common/utils/ips-qr';
 import { paraToRsd, rsdToPara } from '../../common/utils/money';
+import { toBelgradeHHMM } from '../../common/utils/timezone';
 import { CreateBookingRequestDto } from './dto/create-booking-request.dto';
 import { CancelBookingDto, DisputeNoShowDto, RejectBookingDto } from './dto/booking-actions.dto';
 
@@ -60,11 +61,7 @@ export class BookingsService {
     this.assertTermRules({ ...listing, maxGuests: effectiveMaxGuests }, startsAt, endsAt, dto.guestCount);
 
     const pricePerUnit = slotPrice ?? listing.price;
-    // "Po mesecu" (Dodavanje Oglasa spec §3/§4) books in whole calendar
-    // months the guest picked directly (monthCount), not an approximation
-    // derived from the date span — Sep 1 to Dec 1 must be exactly 3, not
-    // round(91/30).
-    const unitCount = dto.monthCount ?? computeUnitCount(listing.priceUnit, startsAt, endsAt);
+    const unitCount = resolvePricingUnitCount(listing.priceUnit, startsAt, endsAt, dto);
     const { unitPriceTotal, guestFee, mandatoryFeesTotal, extraServicesTotal, totalAmount, amountDue } =
       await this.computeTotals(listing, startsAt, endsAt, pricePerUnit, unitCount, slotPrice, dto);
 
@@ -264,8 +261,16 @@ export class BookingsService {
               (sum, p) => sum + p,
               0n,
             )
-          : !slotPrice && listing.bookingModel === 'PER_SLOT' && listing.slotSubmode === 'WORKING_HOURS' && listing.priceUnit === 'HOUR'
-            ? (await this.availability.resolveHourlyPrice(listing.id, startsAt, toHHMM(startsAt), listing.price)) *
+          : // T111 — GUEST-priced WORKING_HOURS listings still resolve the
+            // owner's hourly rate windows/exceptions for the per-unit price
+            // (per the decision: those apply to the per-guest rate exactly
+            // like they apply to the per-hour rate) — only unitCount (guests,
+            // not hours, via resolvePricingUnitCount) differs from HOUR.
+            !slotPrice &&
+              listing.bookingModel === 'PER_SLOT' &&
+              listing.slotSubmode === 'WORKING_HOURS' &&
+              (listing.priceUnit === 'HOUR' || listing.priceUnit === 'GUEST')
+            ? (await this.availability.resolveHourlyPrice(listing.id, startsAt, toBelgradeHHMM(startsAt), listing.price)) *
               BigInt(unitCount)
             : pricePerUnit * BigInt(unitCount);
 
@@ -283,7 +288,7 @@ export class BookingsService {
     }
     const { startsAt, endsAt, slotPrice } = await this.resolveRequestedTerm(listing, dto);
     const pricePerUnit = slotPrice ?? listing.price;
-    const unitCount = dto.monthCount ?? computeUnitCount(listing.priceUnit, startsAt, endsAt);
+    const unitCount = resolvePricingUnitCount(listing.priceUnit, startsAt, endsAt, dto);
     const totals = await this.computeTotals(listing, startsAt, endsAt, pricePerUnit, unitCount, slotPrice, dto);
     return {
       priceUnit: listing.priceUnit,
@@ -734,6 +739,26 @@ export class BookingsService {
   }
 }
 
+/**
+ * T111 — how many priced units this booking covers, for whichever unit the
+ * listing charges by. "Po mesecu" (Dodavanje Oglasa spec §3/§4) books in
+ * whole calendar months the guest picked directly (monthCount), not an
+ * approximation derived from the date span — Sep 1 to Dec 1 must be exactly
+ * 3, not round(91/30). "Po gostu" counts guests instead of time at all; the
+ * booking's own time-slot rules (assertTermRules) are untouched by this —
+ * only how the total is priced changes, never how the term itself works.
+ */
+function resolvePricingUnitCount(
+  priceUnit: PriceUnit,
+  startsAt: Date,
+  endsAt: Date,
+  dto: Pick<CreateBookingRequestDto, 'monthCount' | 'guestCount'>,
+): number {
+  if (dto.monthCount) return dto.monthCount;
+  if (priceUnit === 'GUEST') return Math.max(1, dto.guestCount || 1);
+  return computeUnitCount(priceUnit, startsAt, endsAt);
+}
+
 /** Nights/days/hours/months/years between two timestamps, matching the listing's price unit. */
 function computeUnitCount(priceUnit: PriceUnit, startsAt: Date, endsAt: Date): number {
   const ms = endsAt.getTime() - startsAt.getTime();
@@ -790,11 +815,6 @@ function durationUnitWord(priceUnit: PriceUnit, count: number): string {
   }
   const words = DURATION_UNIT_WORDS_SR[priceUnit] ?? DURATION_UNIT_WORDS_SR.NIGHT!;
   return words[srPluralIndex(count)];
-}
-
-/** HH:MM for the booking's start time — matches how WorkingHours/HourlyPriceRange store clock time (no timezone conversion, same convention as pickupTime/returnTime). */
-function toHHMM(date: Date): string {
-  return `${String(date.getUTCHours()).padStart(2, '0')}:${String(date.getUTCMinutes()).padStart(2, '0')}`;
 }
 
 /** Human-readable snapshot for Booking.cancellationTermsSnapshot (RNT-030 email display) — frozen at booking time so a later policy edit never rewrites past bookings' terms. */

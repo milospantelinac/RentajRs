@@ -88,6 +88,18 @@ export class SetDatePriceDto {
 }
 
 class HourlyPriceRangeRow {
+  @ApiProperty({
+    required: false,
+    minimum: 1,
+    maximum: 7,
+    description: 'ISO day of week, Monday=1; omitted = applies to every day (T104 per-day mode)',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(7)
+  dayOfWeek?: number;
+
   @ApiProperty({ example: '10:00' })
   @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, { message: 'validation.TIME_INVALID' })
   startTime: string;

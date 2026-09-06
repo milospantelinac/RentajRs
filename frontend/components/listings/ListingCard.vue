@@ -34,6 +34,7 @@
       <div class="listing-card-footer">
         <span class="text-body listing-card-price">
           {{ new Intl.NumberFormat('sr-RS').format(listing.price || 0) }} RSD
+          <template v-if="listing.priceUnit === 'GUEST'"> {{ t('listing.pricePerGuestSuffix') }}</template>
         </span>
         <span class="listing-card-details-link">
           {{ t('home.detailsLink') }}

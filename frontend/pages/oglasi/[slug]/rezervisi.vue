@@ -2,6 +2,7 @@
   <div v-if="listing" class="container booking-page py-4">
     <div class="row justify-content-center">
       <div class="col-12 col-md-7">
+        <BackLink :fallback="`/oglasi/${listing.slug}`" class="mb-3" />
         <h1 class="text-page-title mb-1">{{ listing.title }}</h1>
         <p class="text-muted mb-4">{{ t('listing.sendRequest') }}</p>
 
@@ -23,7 +24,10 @@
                     @click="selectSlot(slot)"
                   >
                     <span>{{ formatDateTime(slot.startsAt) }} — {{ formatDateTime(slot.endsAt) }}</span>
-                    <span class="slot-btn-price">{{ formatPrice(slot.price ?? listing.price) }}</span>
+                    <span class="slot-btn-price">
+                      {{ formatPrice(slot.price ?? listing.price) }}
+                      <template v-if="listing.priceUnit === 'GUEST'">{{ t('listing.pricePerGuestSuffix') }}</template>
+                    </span>
                   </button>
                 </div>
                 <p v-else class="text-muted">{{ t('booking.noSlots') }}</p>
@@ -75,6 +79,7 @@
                   :max-advance-booking-days="listing.maxAdvanceBookingDays"
                   :available-days-of-week="availableDaysOfWeek"
                   :whole-day-blocking="false"
+                  :single-date="true"
                   @update:range="onSingleDateUpdate"
                 />
               </div>
@@ -143,6 +148,9 @@
                 <div class="col-8 text-muted">
                   {{ quote.unitCount }} {{ srDurationUnitWord(listing.priceUnit, quote.unitCount) }}
                   <span v-if="listing.weekendPrice" class="price-summary-hint">({{ t('booking.weekendPriceIncluded') }})</span>
+                  <!-- T111 — the total below is a real per-guest estimate,
+                       not a fixed per-term price; say so before submission. -->
+                  <span v-if="listing.priceUnit === 'GUEST'" class="price-summary-hint">({{ t('booking.guestPriceEstimateHint') }})</span>
                 </div>
                 <div class="col-4 text-end">{{ formatPrice(quote.unitPriceTotal) }}</div>
               </div>
@@ -255,6 +263,14 @@ function overlapsBlocked(startsAt, endsAt) {
   return blocked.value.some((b) => new Date(b.startsAt).getTime() < end && new Date(b.endsAt).getTime() > start)
 }
 
+// Belgrade wall-clock time, same as the rest of the booking form — the
+// backend resolves WorkingHours/HourlyPriceRange windows by converting this
+// instant through Europe/Belgrade (see toBelgradeHHMM), not by reading it
+// back verbatim, so this stays a normal local-time construction.
+function slotInstant(dateStr, timeStr) {
+  return new Date(`${dateStr}T${timeStr}:00`)
+}
+
 // T86 — a stale server-rejection message used to sit above the button
 // forever, even after the guest fixed the very thing it complained about
 // (and even once a since-corrected request had already gone through); every
@@ -285,19 +301,26 @@ const dayTimeOptions = computed(() => {
   const ranges = workingHours.value.filter((h) => h.dayOfWeek === dayOfWeek)
   const times = []
   for (const range of ranges) {
-    let [h, m] = range.startsAt.split(':').map(Number)
-    const [endH, endM] = range.endsAt.split(':').map(Number)
-    while (h < endH || (h === endH && m < endM)) {
+    const [sh, sm] = range.startsAt.split(':').map(Number)
+    const [eh, em] = range.endsAt.split(':').map(Number)
+    const startTotal = sh * 60 + sm
+    let endTotal = eh * 60 + em
+    // T104 — "do" <= "od" means this working-hours window crosses midnight
+    // (e.g. 20:00–02:00); a start time is still only offered on the
+    // calendar day the owner configured, so the bound stops at end-of-day
+    // even though the term itself keeps running into the next one.
+    if (endTotal <= startTotal) endTotal += 24 * 60
+    for (let t = startTotal; t < Math.min(endTotal, 24 * 60); t += 60) {
+      const h = Math.floor(t / 60)
+      const m = t % 60
       times.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`)
-      m += 60
-      if (m >= 60) { m -= 60; h += 1 }
     }
   }
   // T74 — an already-booked/pending slot must not appear in the list at all,
   // not just get rejected on submit; check against the currently-chosen
   // duration since that's what would actually be reserved.
   return times.filter((time) => {
-    const startsAt = new Date(`${form.startsAt}T${time}:00`)
+    const startsAt = slotInstant(form.startsAt, time)
     const endsAt = new Date(startsAt.getTime() + slotDurationHours.value * 3600_000)
     return !overlapsBlocked(startsAt, endsAt)
   })
@@ -347,7 +370,7 @@ function buildBookingPayload() {
   }
   if (listing.value.bookingModel === 'PER_SLOT' && listing.value.slotSubmode === 'WORKING_HOURS') {
     if (!form.startsAt || !slotStartTime.value) return null
-    const startsAt = new Date(`${form.startsAt}T${slotStartTime.value}:00`)
+    const startsAt = slotInstant(form.startsAt, slotStartTime.value)
     const endsAt = new Date(startsAt.getTime() + slotDurationHours.value * 3600_000)
     return { ...base, startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() }
   }

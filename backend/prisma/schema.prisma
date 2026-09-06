@@ -64,6 +64,9 @@ enum PriceUnit {
   SLOT
   MONTH
   YEAR
+  /// T111 — Sale za proslave only: the listing's price is per guest rather
+  /// than per hour/term, e.g. wedding/event venues charging "per head".
+  GUEST
 }
 
 enum AttributeType {
@@ -554,6 +557,13 @@ model Listing {
   categoryId              String         @db.Uuid
   subscriptionId          String?        @db.Uuid
   status                  ListingStatus  @default(DRAFT)
+  /// T108 — how far the owner has actually gotten through the add/edit
+  /// wizard, in step *indices* (0-based). A returning visit resumes here
+  /// instead of guessing progress from which optional fields happen to be
+  /// non-empty (basics/pricing steps' fields all persist far earlier via the
+  /// same shared PATCH, so "field is set" can't tell "visited" from "never
+  /// opened this step").
+  wizardStep              Int            @default(0)
   available               Boolean        @default(true) // "trenutno nedostupno" toggle (R34)
   title                   String
   titleTranslatedEn       String?
@@ -806,6 +816,10 @@ model WorkingHours {
 model HourlyPriceRange {
   id        String @id @default(uuid()) @db.Uuid
   listingId String @db.Uuid
+  /// T104 — null applies to every day (the original shared/common mode);
+  /// set restricts this range to that one ISO day (1-7, Monday=1), used only
+  /// when the owner has switched to "posebno radno vreme po danu".
+  dayOfWeek Int?
   startTime String // HH:MM
   endTime   String // HH:MM
   price     BigInt // in para

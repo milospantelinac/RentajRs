@@ -13,6 +13,7 @@
   "PAGE_NOT_FOUND": "Stranica nije pronađena",
   "LISTING_NOT_BOOKABLE": "Ovaj oglas ne prima rezervacije",
   "TERM_NOT_AVAILABLE": "Izabrani termin više nije dostupan",
+  "DEFINED_SLOT_DUPLICATE": "Termin za {date} u {startTime}–{endTime} već postoji",
   "CATEGORY_MAX_DEPTH": "Kategorija ne može imati više od tri nivoa",
   "CATEGORY_HAS_LISTINGS": "Kategorija sa oglasima se ne može obrisati — spojite je ili arhivirajte",
   "CATEGORY_HAS_CHILDREN": "Kategorija sa podkategorijama se ne može obrisati — prvo obrišite ili premestite podkategorije",

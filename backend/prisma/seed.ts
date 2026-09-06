@@ -396,7 +396,7 @@ const CATEGORY_TREE: CategorySeed[] = [
       },
     ],
     children: [
-      { name: 'Sale za proslave', icon: 'hall', defaultBookingModel: BookingModel.PER_SLOT, allowedPriceUnits: [PriceUnit.HOUR, PriceUnit.SLOT], defaultPriceUnit: PriceUnit.SLOT, attributes: [] },
+      { name: 'Sale za proslave', icon: 'hall', defaultBookingModel: BookingModel.PER_SLOT, allowedPriceUnits: [PriceUnit.HOUR, PriceUnit.SLOT, PriceUnit.GUEST], defaultPriceUnit: PriceUnit.SLOT, attributes: [] },
       { name: 'Konferencijske sale', icon: 'meeting', defaultBookingModel: BookingModel.PER_SLOT, allowedPriceUnits: [PriceUnit.HOUR], defaultPriceUnit: PriceUnit.HOUR, attributes: [] },
     ],
   },

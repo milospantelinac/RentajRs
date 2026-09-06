@@ -111,7 +111,7 @@ let BookingEmailListener = class BookingEmailListener {
             language: b.guest.language,
             userId: b.guest.id,
             context: { oglas: b.listing.title },
-            buttonUrl: `${this.frontendUrl}/pretraga`,
+            buttonUrl: this.bookingUrl(b.id),
         });
     }
     async onAwaitingPayment({ bookingId }) {

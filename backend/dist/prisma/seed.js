@@ -339,7 +339,7 @@ const CATEGORY_TREE = [
             },
         ],
         children: [
-            { name: 'Sale za proslave', icon: 'hall', defaultBookingModel: client_1.BookingModel.PER_SLOT, allowedPriceUnits: [client_1.PriceUnit.HOUR, client_1.PriceUnit.SLOT], defaultPriceUnit: client_1.PriceUnit.SLOT, attributes: [] },
+            { name: 'Sale za proslave', icon: 'hall', defaultBookingModel: client_1.BookingModel.PER_SLOT, allowedPriceUnits: [client_1.PriceUnit.HOUR, client_1.PriceUnit.SLOT, client_1.PriceUnit.GUEST], defaultPriceUnit: client_1.PriceUnit.SLOT, attributes: [] },
             { name: 'Konferencijske sale', icon: 'meeting', defaultBookingModel: client_1.BookingModel.PER_SLOT, allowedPriceUnits: [client_1.PriceUnit.HOUR], defaultPriceUnit: client_1.PriceUnit.HOUR, attributes: [] },
         ],
     },

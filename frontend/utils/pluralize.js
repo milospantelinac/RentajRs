@@ -27,6 +27,7 @@ const DURATION_UNIT_WORDS = {
   MONTH: { One: 'mesec', Few: 'meseca', Many: 'meseci' },
   YEAR: { One: 'godina', Few: 'godine', Many: 'godina' },
   SLOT: { One: 'termin', Few: 'termina', Many: 'termina' },
+  GUEST: { One: 'gost', Few: 'gosta', Many: 'gostiju' },
 }
 
 export function srDurationUnitWord(priceUnit, count) {

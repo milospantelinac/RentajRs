@@ -80,7 +80,11 @@ export class BookingEmailListener {
       language: b.guest.language,
       userId: b.guest.id,
       context: { oglas: b.listing.title },
-      buttonUrl: `${this.frontendUrl}/pretraga`,
+      // T79 — was hardcoded to /pretraga (every other booking event links to
+      // the booking itself); the in-app notification bell uses this same
+      // buttonUrl as its linkUrl, so clicking "your request was rejected"
+      // sent the guest to the search page instead of the actual booking.
+      buttonUrl: this.bookingUrl(b.id),
     });
   }
 

@@ -208,4 +208,12 @@ export class UpdateListingDto {
   @IsOptional()
   @IsBoolean()
   available?: boolean;
+
+  // T108 — 0-based wizard step index the owner has reached; drives where a
+  // returning visit resumes instead of guessing from field presence.
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  wizardStep?: number;
 }

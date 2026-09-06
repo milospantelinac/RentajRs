@@ -1,5 +1,6 @@
 <template>
   <div v-if="listing && pkg" class="container checkout-page py-4">
+    <BackLink :fallback="`/oglasi/${route.params.id}/paket`" class="mb-3" />
     <h1 class="text-page-title mb-4">{{ t('billing.checkoutTitle') }}</h1>
 
     <div class="row">

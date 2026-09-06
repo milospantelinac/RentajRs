@@ -2,6 +2,7 @@
   <div v-if="listing" class="container message-page py-4">
     <div class="row justify-content-center">
       <div class="col-12 col-md-6">
+        <BackLink :fallback="`/oglasi/${route.params.slug}`" class="mb-3" />
         <h1 class="text-page-title mb-1">{{ t('listing.contactOwner') }}</h1>
         <p class="text-muted mb-4">
           {{ t('listing.messageAboutListing') }} <strong>{{ listing.title }}</strong> —

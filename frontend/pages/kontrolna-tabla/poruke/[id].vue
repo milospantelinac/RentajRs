@@ -45,6 +45,7 @@
     </div>
 
     <p v-if="attachError" class="form-error mb-2">{{ attachError }}</p>
+    <p v-if="sendError" class="form-error mb-2">{{ sendError }}</p>
     <p v-if="pendingFile" class="text-muted pending-file mb-2">
       📎 {{ pendingFile.name }}
       <button type="button" class="pending-file-remove" @click="pendingFile = null">{{ t('common.cancel') }}</button>
@@ -76,6 +77,7 @@ const content = ref('')
 const fileInputEl = ref(null)
 const pendingFile = ref(null)
 const attachError = ref('')
+const sendError = ref('')
 const sending = ref(false)
 
 async function load() {
@@ -115,6 +117,7 @@ async function send() {
   if (!text) return
 
   sending.value = true
+  sendError.value = ''
   try {
     const message = await api.post(`/conversations/${route.params.id}/messages`, { content: text })
     if (pendingFile.value) {
@@ -124,6 +127,14 @@ async function send() {
     }
     content.value = ''
     pendingFile.value = null
+    await load()
+  } catch (e) {
+    // T107 — this used to have no catch at all: a failed send (or a
+    // message that sent but whose attachment upload then failed) left the
+    // guest staring at an unresponsive composer with nothing in Serbian
+    // explaining why. Reload regardless, since the text message itself may
+    // have gone through even when the attachment step is what threw.
+    sendError.value = extractErrorMessage(e, t('auth.genericError'))
     await load()
   } finally {
     sending.value = false

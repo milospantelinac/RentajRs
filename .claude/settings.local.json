@@ -8,7 +8,8 @@
       "Bash(npm --version)",
       "Bash(where pdftotext *)",
       "Bash(pdftotext -layout \"C:\\\\Users\\\\mpantelinac\\\\Desktop\\\\Rentaj Product Bible.pdf\" \"C:\\\\Users\\\\MPANTE~1\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-mpantelinac-Desktop-rentaj-custom\\\\0a18f529-a112-43df-9e23-2e9575cad894\\\\scratchpad\\\\product_bible.txt\")",
-      "Bash(echo \"EXIT:$?\")"
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(git commit *)"
     ]
   }
 }

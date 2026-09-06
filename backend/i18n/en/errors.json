@@ -13,6 +13,7 @@
   "PAGE_NOT_FOUND": "Page not found",
   "LISTING_NOT_BOOKABLE": "This listing does not accept bookings",
   "TERM_NOT_AVAILABLE": "The selected time is no longer available",
+  "DEFINED_SLOT_DUPLICATE": "A slot for {date} at {startTime}–{endTime} already exists",
   "CATEGORY_MAX_DEPTH": "A category cannot be nested more than three levels deep",
   "CATEGORY_HAS_LISTINGS": "A category with listings cannot be deleted — merge or archive it instead",
   "CATEGORY_HAS_CHILDREN": "A category with subcategories cannot be deleted — delete or move the subcategories first",

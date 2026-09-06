@@ -2,11 +2,12 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Logger } from '@nestjs/common';
-import { I18nService } from 'nestjs-i18n';
+import { I18nContext, I18nService } from 'nestjs-i18n';
 import { OccupancySource } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { parseIcs, buildIcsCalendar } from '../../common/utils/ics';
 import { paraToRsd, rsdToPara } from '../../common/utils/money';
+import { toBelgradeDateOnly, toBelgradeHHMM, toBelgradeISODayOfWeek } from '../../common/utils/timezone';
 import {
   SetWorkingHoursDto,
   CreateDefinedSlotDto,
@@ -137,11 +138,31 @@ export class AvailabilityService {
   /** T84 — applies immediately regardless of listing status; edit moderation was removed. */
   async createDefinedSlot(userId: string, listingId: string, dto: CreateDefinedSlotDto) {
     await this.assertOwnership(userId, listingId);
+    const startsAt = new Date(dto.startsAt);
+    const endsAt = new Date(dto.endsAt);
+    // T105 — "Kopiraj termin" (manual multi-select or the weekly "Ponavljaj"
+    // helper) can land on a date that already has this exact term; create
+    // everything else it asked for but refuse to silently double the one
+    // that collides; the owner needs to know which date, not just that
+    // "something" failed.
+    const duplicate = await this.prisma.definedSlot.findFirst({ where: { listingId, startsAt, endsAt } });
+    if (duplicate) {
+      const isEn = I18nContext.current()?.lang === 'en';
+      throw new ConflictException(
+        this.i18n.t('errors.DEFINED_SLOT_DUPLICATE', {
+          args: {
+            date: startsAt.toLocaleDateString(isEn ? 'en-US' : 'sr-RS', { timeZone: 'Europe/Belgrade' }),
+            startTime: toBelgradeHHMM(startsAt),
+            endTime: toBelgradeHHMM(endsAt),
+          },
+        }),
+      );
+    }
     const slot = await this.prisma.definedSlot.create({
       data: {
         listingId,
-        startsAt: new Date(dto.startsAt),
-        endsAt: new Date(dto.endsAt),
+        startsAt,
+        endsAt,
         price: dto.price ? rsdToPara(dto.price) : undefined,
         maxBookings: dto.maxBookings ?? 1,
       },
@@ -221,6 +242,7 @@ export class AvailabilityService {
       this.prisma.hourlyPriceRange.createMany({
         data: dto.ranges.map((r) => ({
           listingId,
+          dayOfWeek: r.dayOfWeek ?? null,
           startTime: r.startTime,
           endTime: r.endTime,
           price: rsdToPara(r.price),
@@ -259,15 +281,26 @@ export class AvailabilityService {
    * zero-padded 24h (matches the /^([01]\d|2[0-3]):[0-5]\d$/ DTO pattern).
    */
   async resolveHourlyPrice(listingId: string, date: Date, startTime: string, basePrice: bigint): Promise<bigint> {
-    const dateOnly = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+    // T72 — raw UTC getters read a booking's calendar day back shifted by
+    // the Belgrade offset (e.g. a late-evening booking rolling into the next
+    // UTC day), missing a same-day SlotPriceOverride; SlotPriceOverride.date
+    // is itself a Belgrade calendar day, so both sides need the same zone.
+    const dateOnly = toBelgradeDateOnly(date);
     const override = await this.prisma.slotPriceOverride.findFirst({
       where: { listingId, date: dateOnly, startTime: { lte: startTime }, endTime: { gt: startTime } },
     });
     if (override) return override.price;
 
+    // T104 — per-day mode stores each range with its own dayOfWeek; a
+    // day-specific match wins over a shared (dayOfWeek: null) one covering
+    // the same window, though in practice a listing only ever has one kind
+    // of range at a time (the editor doesn't mix modes).
+    const dayOfWeek = toBelgradeISODayOfWeek(date);
     const ranges = await this.prisma.hourlyPriceRange.findMany({ where: { listingId } });
-    const match = ranges.find((r) => r.startTime <= startTime && r.endTime > startTime);
-    return match?.price ?? basePrice;
+    const daySpecific = ranges.find((r) => r.dayOfWeek === dayOfWeek && r.startTime <= startTime && r.endTime > startTime);
+    if (daySpecific) return daySpecific.price;
+    const shared = ranges.find((r) => r.dayOfWeek === null && r.startTime <= startTime && r.endTime > startTime);
+    return shared?.price ?? basePrice;
   }
 
   /** Per-night price for a PER_STAY booking spanning [startsAt, endsAt) — override where set, weekend/base price otherwise. */

@@ -9,6 +9,12 @@
 
       <div class="hero-top">
         <div>
+          <!-- T110 — the wizard auto-saves every step (RNT-032/T108), so
+               leaving mid-way never loses anything; exiting just needs
+               somewhere to go back to. Reached both from "Moji oglasi" and
+               fresh off category selection (novi.vue), so real history-back
+               rather than one fixed destination. -->
+          <BackLink fallback="/kontrolna-tabla/oglasi" variant="light" class="mb-2" />
           <div class="eyebrow"><span class="pulse-dot" />{{ t('listing.autoSaveNotice') }}</div>
           <h1>{{ wizardTitle }}</h1>
           <p v-if="listing?.category?.name" class="wizard-category-name">{{ listing.category.name }}</p>
@@ -84,7 +90,11 @@
             <div class="col-6">
               <div class="form-group mb-3">
                 <label class="form-label">{{ t('listing.priceUnit') }}</label>
-                <select v-model="form.priceUnit" class="form-control form-select" :disabled="form.bookingModel === 'PER_SLOT'">
+                <select
+                  v-model="form.priceUnit"
+                  class="form-control form-select"
+                  :disabled="form.bookingModel === 'PER_SLOT' && !isPartyHallCategory"
+                >
                   <option v-for="unit in allowedPriceUnitsForChoice" :key="unit" :value="unit">
                     {{ t(`listing.unit${unitLabel(unit)}`) }}
                   </option>
@@ -101,7 +111,21 @@
             <p class="text-muted mt-1">{{ t('listing.weekendPriceHint') }}</p>
           </div>
         </template>
-        <p v-else class="text-muted mb-3">{{ t('listing.definedSlotsPriceNotice') }}</p>
+        <template v-else>
+          <!-- T111 — DEFINED_SLOTS still prices each slot individually (next
+               step), but the unit choice lives here since it changes how
+               EVERY slot's price is interpreted, not just a field on this
+               step. -->
+          <div v-if="isPartyHallCategory" class="form-group mb-3">
+            <label class="form-label">{{ t('listing.priceUnit') }}</label>
+            <select v-model="form.priceUnit" class="form-control form-select">
+              <option v-for="unit in allowedPriceUnitsForChoice" :key="unit" :value="unit">
+                {{ t(`listing.unit${unitLabel(unit)}`) }}
+              </option>
+            </select>
+          </div>
+          <p class="text-muted mb-3">{{ t('listing.definedSlotsPriceNotice') }}</p>
+        </template>
       </div>
 
       <!-- Dostupnost / termini -->
@@ -128,10 +152,10 @@
         </template>
 
         <template v-else-if="form.slotSubmode === 'WORKING_HOURS'">
-          <WorkingHoursEditor :listing-id="listingId" />
+          <WorkingHoursEditor ref="workingHoursEditorRef" :listing-id="listingId" />
         </template>
         <template v-else>
-          <DefinedSlotsEditor :listing-id="listingId" />
+          <DefinedSlotsEditor ref="definedSlotsEditorRef" :listing-id="listingId" />
         </template>
       </div>
 
@@ -508,6 +532,12 @@ const saving = ref(false)
 const error = ref('')
 const listing = ref(null)
 const readiness = ref(null)
+// T72 — lets saveCurrentStep() reach WorkingHoursEditor's save() when the
+// step is left via the main CTA instead of the editor's own button.
+const workingHoursEditorRef = ref(null)
+// T26 — lets validateCurrentStep() check whether at least one defined slot
+// exists before letting the owner leave the availability step.
+const definedSlotsEditorRef = ref(null)
 const photos = ref([])
 const regions = ref([])
 const cities = ref([])
@@ -612,11 +642,14 @@ const onlineOptionLabel = computed(() =>
 )
 
 // PER_SLOT never shows a free price-unit choice (always HOUR for working
-// hours, SLOT for defined slots — each slot carries its own price instead).
+// hours, SLOT for defined slots — each slot carries its own price instead) —
+// T111's exception: Sale za proslave may opt into GUEST instead, and that
+// choice should survive switching between the two submodes, not get
+// silently reset back to HOUR/SLOT by this same watcher.
 watch(
   () => [form.bookingModel, form.slotSubmode],
   () => {
-    if (form.bookingModel === 'PER_SLOT') {
+    if (form.bookingModel === 'PER_SLOT' && form.priceUnit !== 'GUEST') {
       form.priceUnit = form.slotSubmode === 'DEFINED_SLOTS' ? 'SLOT' : 'HOUR'
     }
   },
@@ -641,8 +674,14 @@ const showGapAfter = computed(() => !isDefinedSlotsModel.value && listing.value?
 // actually show for a real listing.
 const VEHICLE_CATEGORY_SLUGS = ['putnicka-vozila', 'dostavna-vozila']
 const showVehicleTimes = computed(() => VEHICLE_CATEGORY_SLUGS.includes(listing.value?.category?.slug))
+// T111 — the only category allowed to charge "po gostu" instead of the
+// submode's usual per-hour/per-term rate.
+const isPartyHallCategory = computed(() => listing.value?.category?.slug === 'sale-za-proslave')
+const autoSlotPriceUnit = computed(() => (form.slotSubmode === 'DEFINED_SLOTS' ? 'SLOT' : 'HOUR'))
 const allowedPriceUnitsForChoice = computed(() => {
-  if (form.bookingModel === 'PER_SLOT') return ['HOUR']
+  if (form.bookingModel === 'PER_SLOT') {
+    return isPartyHallCategory.value ? [autoSlotPriceUnit.value, 'GUEST'] : [autoSlotPriceUnit.value]
+  }
   return listing.value?.category?.allowedPriceUnits || []
 })
 const showWeekendPrice = computed(() => showFlatPriceFields.value && ['NIGHT', 'DAY', 'HOUR'].includes(form.priceUnit))
@@ -757,6 +796,17 @@ function validateCurrentStep() {
     if (!photos.value.length) return t('listing.validationPhotosRequired')
   } else if (step === 'pricing') {
     if (showFlatPriceFields.value && !(Number(form.price) > 0)) return t('listing.validationPriceRequired')
+  } else if (step === 'availability') {
+    // T26 — the "*" on Cena (RSD) inside the defined-slots editor did
+    // nothing on its own; the wizard let the owner reach step 4 with zero
+    // slots defined, publishing a "bookable" listing with nothing to book.
+    if (
+      form.bookingModel === 'PER_SLOT' &&
+      form.slotSubmode === 'DEFINED_SLOTS' &&
+      !definedSlotsEditorRef.value?.slots?.length
+    ) {
+      return t('listing.validationSlotsRequired')
+    }
   }
   return ''
 }
@@ -829,40 +879,19 @@ async function loadListing() {
     }
   }
 
-  // RNT-032 — loadListing() only ever runs once, in onMounted; a returning
-  // user opening this URL directly used to always land back on step 1 even
-  // though every earlier step was already saved. Jump to the furthest
-  // incomplete step instead, matching what maxStepReached unlocks below.
-  const resumeStep = computeMaxStepFromListing()
+  // RNT-032/T108 — loadListing() only ever runs once, in onMounted; a
+  // returning user opening this URL directly used to always land back on
+  // step 1 even though every earlier step was already saved. Resume from the
+  // server-persisted wizardStep (set as the owner actually advances through
+  // saveCurrentStep) rather than guessing progress from which fields happen
+  // to be non-empty — availability/rules/payment/attributes are all-optional
+  // steps whose fields already exist with defaults long before the owner
+  // ever opens them, so "field is set" can't tell "visited" from "never
+  // opened this step" (T108: that false-positive made every draft resume at
+  // Location regardless of how far the owner had actually gotten).
+  const resumeStep = Math.min(listing.value.wizardStep || 0, steps.value.length - 1)
   currentStep.value = resumeStep
   maxStepReached.value = Math.max(maxStepReached.value, resumeStep)
-}
-
-/**
- * A returning user opening an in-progress draft shouldn't have to redo the
- * whole wizard from step 1 to unlock where they left off — walk the steps in
- * order and stop at the first one whose data isn't saved yet, matching the
- * same order saveCurrentStep() enforces going forward.
- */
-function computeMaxStepFromListing() {
-  const doneByKey = {
-    basics: () => !!listing.value.title && !!listing.value.description,
-    pricing: () =>
-      Number(listing.value.price) > 0 || (listing.value.bookingModel === 'PER_SLOT' && listing.value.slotSubmode === 'DEFINED_SLOTS'),
-    availability: () => true, // scheduling itself is optional to have touched before moving on
-    rules: () => true, // all optional
-    payment: () => true, // all optional except CASH default, already set
-    attributes: () => true, // required ones enforced by the review checklist, not gate-able from here
-    location: () => !!listing.value.cityId,
-    photos: () => (listing.value.photos || []).length > 0,
-    review: () => true,
-  }
-  let reached = 0
-  for (let i = 0; i < steps.value.length; i++) {
-    if (!doneByKey[steps.value[i].key]()) break
-    reached = i + 1
-  }
-  return Math.min(reached, steps.value.length - 1)
 }
 
 async function onRegionChange() {
@@ -990,10 +1019,16 @@ async function saveCurrentStep() {
         latitude: location.latitude ?? undefined,
         longitude: location.longitude ?? undefined,
       })
-    } else if (step === 'photos' || step === 'availability' || step === 'review') {
+    } else if (step === 'availability') {
+      // T72 — the calendar and defined-slots components already persist each
+      // interaction immediately; only WorkingHoursEditor batches edits behind
+      // its own button, so the main CTA has to trigger that explicitly or a
+      // changed working-hours/day/price-range value is silently dropped.
+      if (form.bookingModel === 'PER_SLOT' && form.slotSubmode === 'WORKING_HOURS' && workingHoursEditorRef.value) {
+        await workingHoursEditorRef.value.save()
+      }
+    } else if (step === 'photos' || step === 'review') {
       // photos: persisted per-upload/reorder already.
-      // availability: the calendar/working-hours/defined-slots components
-      // save directly to their own endpoints as the owner interacts with them.
       // review: nothing to save — navigation handled by the link itself.
     } else {
       // Backend DTOs treat a field as "not provided" only when it's
@@ -1006,7 +1041,15 @@ async function saveCurrentStep() {
 
     if (currentStep.value < steps.value.length - 1) {
       currentStep.value++
-      if (currentStep.value > maxStepReached.value) maxStepReached.value = currentStep.value
+      if (currentStep.value > maxStepReached.value) {
+        maxStepReached.value = currentStep.value
+        // T108 — persist real progress so a returning visit resumes here
+        // instead of guessing from which fields happen to be non-empty
+        // (best-effort: losing this write just means the next successful
+        // step save catches it back up, not worth blocking on).
+        api.patch(`/listings/${listingId}`, { wizardStep: maxStepReached.value }).catch(() => {})
+        if (listing.value) listing.value.wizardStep = maxStepReached.value
+      }
     }
   } catch (e) {
     error.value = extractErrorMessage(e, t('auth.genericError'))

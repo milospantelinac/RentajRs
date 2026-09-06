@@ -19,6 +19,7 @@ const nestjs_i18n_1 = require("nestjs-i18n");
 const prisma_service_1 = require("../../prisma/prisma.service");
 const ics_1 = require("../../common/utils/ics");
 const money_1 = require("../../common/utils/money");
+const timezone_1 = require("../../common/utils/timezone");
 let AvailabilityService = AvailabilityService_1 = class AvailabilityService {
     constructor(prisma, events, i18n) {
         this.prisma = prisma;
@@ -109,11 +110,24 @@ let AvailabilityService = AvailabilityService_1 = class AvailabilityService {
     }
     async createDefinedSlot(userId, listingId, dto) {
         await this.assertOwnership(userId, listingId);
+        const startsAt = new Date(dto.startsAt);
+        const endsAt = new Date(dto.endsAt);
+        const duplicate = await this.prisma.definedSlot.findFirst({ where: { listingId, startsAt, endsAt } });
+        if (duplicate) {
+            const isEn = nestjs_i18n_1.I18nContext.current()?.lang === 'en';
+            throw new common_1.ConflictException(this.i18n.t('errors.DEFINED_SLOT_DUPLICATE', {
+                args: {
+                    date: startsAt.toLocaleDateString(isEn ? 'en-US' : 'sr-RS', { timeZone: 'Europe/Belgrade' }),
+                    startTime: (0, timezone_1.toBelgradeHHMM)(startsAt),
+                    endTime: (0, timezone_1.toBelgradeHHMM)(endsAt),
+                },
+            }));
+        }
         const slot = await this.prisma.definedSlot.create({
             data: {
                 listingId,
-                startsAt: new Date(dto.startsAt),
-                endsAt: new Date(dto.endsAt),
+                startsAt,
+                endsAt,
                 price: dto.price ? (0, money_1.rsdToPara)(dto.price) : undefined,
                 maxBookings: dto.maxBookings ?? 1,
             },
@@ -170,6 +184,7 @@ let AvailabilityService = AvailabilityService_1 = class AvailabilityService {
             this.prisma.hourlyPriceRange.createMany({
                 data: dto.ranges.map((r) => ({
                     listingId,
+                    dayOfWeek: r.dayOfWeek ?? null,
                     startTime: r.startTime,
                     endTime: r.endTime,
                     price: (0, money_1.rsdToPara)(r.price),
@@ -197,15 +212,19 @@ let AvailabilityService = AvailabilityService_1 = class AvailabilityService {
         return { message: 'ok' };
     }
     async resolveHourlyPrice(listingId, date, startTime, basePrice) {
-        const dateOnly = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+        const dateOnly = (0, timezone_1.toBelgradeDateOnly)(date);
         const override = await this.prisma.slotPriceOverride.findFirst({
             where: { listingId, date: dateOnly, startTime: { lte: startTime }, endTime: { gt: startTime } },
         });
         if (override)
             return override.price;
+        const dayOfWeek = (0, timezone_1.toBelgradeISODayOfWeek)(date);
         const ranges = await this.prisma.hourlyPriceRange.findMany({ where: { listingId } });
-        const match = ranges.find((r) => r.startTime <= startTime && r.endTime > startTime);
-        return match?.price ?? basePrice;
+        const daySpecific = ranges.find((r) => r.dayOfWeek === dayOfWeek && r.startTime <= startTime && r.endTime > startTime);
+        if (daySpecific)
+            return daySpecific.price;
+        const shared = ranges.find((r) => r.dayOfWeek === null && r.startTime <= startTime && r.endTime > startTime);
+        return shared?.price ?? basePrice;
     }
     async getNightlyPrices(listingId, startsAt, endsAt, basePrice, weekendPrice) {
         const overrides = await this.prisma.datePriceOverride.findMany({

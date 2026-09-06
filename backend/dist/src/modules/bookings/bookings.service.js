@@ -52,6 +52,7 @@ const prisma_service_1 = require("../../prisma/prisma.service");
 const availability_service_1 = require("../availability/availability.service");
 const ips_qr_1 = require("../../common/utils/ips-qr");
 const money_1 = require("../../common/utils/money");
+const timezone_1 = require("../../common/utils/timezone");
 let BookingsService = class BookingsService {
     constructor(prisma, availability, i18n, events) {
         this.prisma = prisma;
@@ -85,7 +86,7 @@ let BookingsService = class BookingsService {
         const effectiveMaxGuests = capacityAttr?.valueNumber != null ? Number(capacityAttr.valueNumber) : listing.maxGuests;
         this.assertTermRules({ ...listing, maxGuests: effectiveMaxGuests }, startsAt, endsAt, dto.guestCount);
         const pricePerUnit = slotPrice ?? listing.price;
-        const unitCount = dto.monthCount ?? computeUnitCount(listing.priceUnit, startsAt, endsAt);
+        const unitCount = resolvePricingUnitCount(listing.priceUnit, startsAt, endsAt, dto);
         const { unitPriceTotal, guestFee, mandatoryFeesTotal, extraServicesTotal, totalAmount, amountDue } = await this.computeTotals(listing, startsAt, endsAt, pricePerUnit, unitCount, slotPrice, dto);
         let resolvedPaymentMethod;
         if (listing.paymentMethod === 'BOTH') {
@@ -200,10 +201,14 @@ let BookingsService = class BookingsService {
             ? (await this.availability.getNightlyPrices(listing.id, startsAt, endsAt, listing.price, listing.weekendPrice)).reduce((sum, p) => sum + p, 0n)
             : !slotPrice && listing.priceUnit === 'MONTH' && dto.monthCount
                 ? (await this.availability.getMonthlyPrices(listing.id, startsAt, dto.monthCount, listing.price)).reduce((sum, p) => sum + p, 0n)
-                : !slotPrice && listing.bookingModel === 'PER_SLOT' && listing.slotSubmode === 'WORKING_HOURS' && listing.priceUnit === 'HOUR'
-                    ? (await this.availability.resolveHourlyPrice(listing.id, startsAt, toHHMM(startsAt), listing.price)) *
-                        BigInt(unitCount)
-                    : pricePerUnit * BigInt(unitCount);
+                :
+                    !slotPrice &&
+                        listing.bookingModel === 'PER_SLOT' &&
+                        listing.slotSubmode === 'WORKING_HOURS' &&
+                        (listing.priceUnit === 'HOUR' || listing.priceUnit === 'GUEST')
+                        ? (await this.availability.resolveHourlyPrice(listing.id, startsAt, (0, timezone_1.toBelgradeHHMM)(startsAt), listing.price)) *
+                            BigInt(unitCount)
+                        : pricePerUnit * BigInt(unitCount);
         const totalAmount = unitPriceTotal + guestFee + mandatoryFeesTotal + extraServicesTotal;
         const amountDue = listing.advancePercent ? (totalAmount * BigInt(listing.advancePercent)) / 100n : totalAmount;
         return { unitPriceTotal, guestFee, mandatoryFeesTotal, extraServicesTotal, totalAmount, amountDue };
@@ -215,7 +220,7 @@ let BookingsService = class BookingsService {
         }
         const { startsAt, endsAt, slotPrice } = await this.resolveRequestedTerm(listing, dto);
         const pricePerUnit = slotPrice ?? listing.price;
-        const unitCount = dto.monthCount ?? computeUnitCount(listing.priceUnit, startsAt, endsAt);
+        const unitCount = resolvePricingUnitCount(listing.priceUnit, startsAt, endsAt, dto);
         const totals = await this.computeTotals(listing, startsAt, endsAt, pricePerUnit, unitCount, slotPrice, dto);
         return {
             priceUnit: listing.priceUnit,
@@ -598,6 +603,13 @@ exports.BookingsService = BookingsService = __decorate([
         nestjs_i18n_1.I18nService,
         event_emitter_1.EventEmitter2])
 ], BookingsService);
+function resolvePricingUnitCount(priceUnit, startsAt, endsAt, dto) {
+    if (dto.monthCount)
+        return dto.monthCount;
+    if (priceUnit === 'GUEST')
+        return Math.max(1, dto.guestCount || 1);
+    return computeUnitCount(priceUnit, startsAt, endsAt);
+}
 function computeUnitCount(priceUnit, startsAt, endsAt) {
     const ms = endsAt.getTime() - startsAt.getTime();
     const days = ms / (24 * 3600_000);
@@ -650,9 +662,6 @@ function durationUnitWord(priceUnit, count) {
     }
     const words = DURATION_UNIT_WORDS_SR[priceUnit] ?? DURATION_UNIT_WORDS_SR.NIGHT;
     return words[srPluralIndex(count)];
-}
-function toHHMM(date) {
-    return `${String(date.getUTCHours()).padStart(2, '0')}:${String(date.getUTCMinutes()).padStart(2, '0')}`;
 }
 function formatCancellationPolicy(type, threshold, language) {
     const isEn = language === 'EN';

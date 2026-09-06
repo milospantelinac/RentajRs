@@ -2,6 +2,7 @@
   <div v-if="booking" class="container booking-detail py-4">
     <div class="row justify-content-center">
       <div class="col-12 col-md-7">
+        <BackLink fallback="/kontrolna-tabla/rezervacije" class="mb-3" />
         <h1 class="text-page-title mb-1">{{ booking.listing?.title }}</h1>
         <span class="badge mb-4" :class="statusBadgeClass">{{ t(`booking.status${statusKey}`) }}</span>
 

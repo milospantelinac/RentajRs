@@ -111,6 +111,12 @@
 
           <div v-if="loading" class="text-muted">{{ t('common.loading') }}</div>
 
+          <div v-else-if="searchError" class="empty-results card">
+            <div class="card-body text-center">
+              <p class="form-error mb-0">{{ searchError }}</p>
+            </div>
+          </div>
+
           <template v-else-if="results.length">
             <p class="text-muted results-count mb-3">{{ t('search.resultsCount', { count: total }) }}</p>
             <!-- R158: list and map toggle on mobile, sit side by side (stacked here) on desktop. -->
@@ -167,6 +173,7 @@ const filterableAttributes = ref([])
 const results = ref([])
 const total = ref(0)
 const loading = ref(false)
+const searchError = ref('')
 const filtersOpenMobile = ref(false)
 const mapOpenMobile = ref(false)
 const notifyEmail = ref('')
@@ -298,30 +305,29 @@ async function runSearch() {
   // nothing.
   query.mapNorth = query.mapSouth = query.mapEast = query.mapWest = undefined
   mapMovedManually.value = false
-  loading.value = true
   query.page = 1
   await executeSearch()
-  loading.value = false
 }
 
 async function searchThisArea() {
   mapMovedManually.value = false
-  loading.value = true
   query.page = 1
   await executeSearch()
-  loading.value = false
 }
 
 async function goToPage(page) {
   query.page = page
-  loading.value = true
   await executeSearch()
-  loading.value = false
 }
 
-async function executeSearch() {
-  syncUrlFromQuery()
-  const body = {
+// T109 — cityId (and the other fields below) default to '' in `query`, not
+// undefined; the backend's DTO validates cityId as a UUID when present, so
+// posting the raw reactive object as-is (as tryRelaxedSearch used to) always
+// failed validation the moment no city was picked — the common case, since
+// nothing defaults it. Shared so relaxed search can't drift from what a
+// normal search already sends correctly.
+function buildSearchBody() {
+  return {
     ...query,
     priceMin: query.priceMin || undefined,
     priceMax: query.priceMax || undefined,
@@ -331,17 +337,46 @@ async function executeSearch() {
     dateTo: query.dateTo || undefined,
     attributes: attributeFilters.size ? Array.from(attributeFilters.values()) : undefined,
   }
-  const response = await api.post('/search', body)
-  results.value = response.results
-  total.value = response.total
 }
 
+// T109 — none of these ever caught a failed request, so a network blip or a
+// server error left `loading` stuck true forever: the UI just sat on
+// "Učitavanje" with no way out short of leaving the page. Centralizing the
+// try/catch/finally here covers every entry point (initial search, "Pretraži
+// ovo područje", pagination) in one place.
+async function executeSearch() {
+  syncUrlFromQuery()
+  loading.value = true
+  searchError.value = ''
+  try {
+    const response = await api.post('/search', buildSearchBody())
+    results.value = response.results
+    total.value = response.total
+  } catch (e) {
+    searchError.value = extractErrorMessage(e, t('auth.genericError'))
+  } finally {
+    loading.value = false
+  }
+}
+
+// T109 — "Proširi pretragu" (QA: click left it stuck on "Učitavanje"
+// indefinitely). Two bugs compounded here: no error handling (fixed above,
+// same pattern), and posting `query` raw instead of through
+// buildSearchBody() — with cityId defaulting to '' rather than unset, the
+// very first relaxed search with no city picked always failed backend UUID
+// validation, which used to just hang forever instead of surfacing anything.
 async function tryRelaxedSearch() {
   loading.value = true
-  const response = await api.post('/search/relaxed', query)
-  results.value = response.results
-  total.value = response.total
-  loading.value = false
+  searchError.value = ''
+  try {
+    const response = await api.post('/search/relaxed', buildSearchBody())
+    results.value = response.results
+    total.value = response.total
+  } catch (e) {
+    searchError.value = extractErrorMessage(e, t('auth.genericError'))
+  } finally {
+    loading.value = false
+  }
 }
 
 async function submitNotify() {

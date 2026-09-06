@@ -104,6 +104,19 @@ __decorate([
 class HourlyPriceRangeRow {
 }
 __decorate([
+    (0, swagger_1.ApiProperty)({
+        required: false,
+        minimum: 1,
+        maximum: 7,
+        description: 'ISO day of week, Monday=1; omitted = applies to every day (T104 per-day mode)',
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsInt)(),
+    (0, class_validator_1.Min)(1),
+    (0, class_validator_1.Max)(7),
+    __metadata("design:type", Number)
+], HourlyPriceRangeRow.prototype, "dayOfWeek", void 0);
+__decorate([
     (0, swagger_1.ApiProperty)({ example: '10:00' }),
     (0, class_validator_1.Matches)(/^([01]\d|2[0-3]):[0-5]\d$/, { message: 'validation.TIME_INVALID' }),
     __metadata("design:type", String)

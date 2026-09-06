@@ -42,7 +42,11 @@
     </div>
 
     <p class="range-picker-summary">
-      <template v-if="rangeStart && rangeEnd">
+      <template v-if="singleDate">
+        <template v-if="rangeStart">{{ formatDate(rangeStart) }}</template>
+        <template v-else>{{ t('booking.rangePickerPickStart') }}</template>
+      </template>
+      <template v-else-if="rangeStart && rangeEnd">
         {{ formatDate(rangeStart) }} → {{ formatDate(rangeEnd) }} · {{ nightCount }} {{ nightsLabel }}
       </template>
       <template v-else-if="rangeStart">{{ t('booking.rangePickerPickEnd') }}</template>
@@ -80,6 +84,11 @@ const props = defineProps({
   // bucket of independent hourly slots, so one booked hour must not hide the
   // rest of the day's still-free slots (the time list filters those itself).
   wholeDayBlocking: { type: Boolean, default: true },
+  // T72/T106 — PER_SLOT bookings need exactly one date, not a stay range;
+  // without this the calendar still asked for a second "end" date and drew
+  // an in-range highlight between them exactly like PER_STAY, even though
+  // only the first date was ever used.
+  singleDate: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['update:range'])
@@ -214,13 +223,20 @@ const nightsLabel = computed(() => t(`booking.rangePickerNights${srPluralCategor
 // (see buildMonth above); min duration can't be enforced that way (any next
 // selectable day is technically "too short" until enough of them are picked),
 // so it surfaces as a message instead, and blocks the emitted range until fixed.
-const minDurationViolation = computed(() => !!props.minDuration && nightCount.value > 0 && nightCount.value < props.minDuration)
+const minDurationViolation = computed(
+  () => !props.singleDate && !!props.minDuration && nightCount.value > 0 && nightCount.value < props.minDuration,
+)
 const minDurationMessage = computed(() =>
   t('booking.minDurationMessage', { min: props.minDuration, unit: srDurationUnitWord(props.priceUnit, props.minDuration) }),
 )
 
 function selectDate(cell) {
   if (cell.disabled) return
+  if (props.singleDate) {
+    rangeStart.value = cell.date
+    rangeEnd.value = null
+    return
+  }
   if (!rangeStart.value || (rangeStart.value && rangeEnd.value)) {
     rangeStart.value = cell.date
     rangeEnd.value = null
