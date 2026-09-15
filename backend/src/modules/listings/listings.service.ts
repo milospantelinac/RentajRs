@@ -209,6 +209,14 @@ export class ListingsService {
   async updateLocation(userId: string, listingId: string, dto: UpdateLocationDto) {
     const listing = await this.assertOwnership(userId, listingId);
     const city = await this.prisma.city.findUniqueOrThrow({ where: { id: dto.cityId } });
+    // Dizajn 26: before a booking is confirmed guests only see the city and its area, so a
+    // city with areas needs one of them; a city without areas takes none.
+    const areaIds = (await this.prisma.cityArea.findMany({ where: { cityId: city.id }, select: { id: true } })).map((a) => a.id);
+    if (dto.cityAreaId ? !areaIds.includes(dto.cityAreaId) : areaIds.length > 0) {
+      throw new BadRequestException(
+        this.i18n.t(dto.cityAreaId ? 'errors.CITY_AREA_NOT_IN_CITY' : 'errors.CITY_AREA_REQUIRED'),
+      );
+    }
     // RNT-026 — a dragged pin from the wizard's map wins over auto-geocoding;
     // otherwise fall back to R40's original automatic behavior.
     const coords =
@@ -590,8 +598,13 @@ export class ListingsService {
       where: { userId: listing.userId, status: ListingStatus.ACTIVE },
     });
 
+    // Dizajn 26: the address reaches a guest with the confirmed booking (BookingsService's
+    // serialize), never through the public page, which shows the city and its area.
+    const publicListing = this.serialize(listing);
+    delete publicListing.address;
+
     return {
-      ...this.serialize(listing),
+      ...publicListing,
       photos: listing.photos,
       faqs: listing.faqs,
       extraServices: listing.extraServices.map((s: any) => ({ ...s, price: paraToRsd(s.price) })),

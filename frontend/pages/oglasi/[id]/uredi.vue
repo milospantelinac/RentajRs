@@ -605,48 +605,119 @@
         <p v-if="!detailsBlocks.length" class="details-empty">{{ t('listing.noAttributesForCategory') }}</p>
       </div>
 
-      <!-- Lokacija -->
-      <div v-else-if="steps[currentStep].key === 'location'">
-        <div class="form-group mb-3">
-          <label class="form-label">{{ t('listing.region') }} *</label>
-          <select v-model="location.regionId" class="form-control form-select" @change="onRegionChange">
-            <option value="">—</option>
-            <option v-for="r in regions" :key="r.id" :value="r.id">{{ r.name }}</option>
-          </select>
-        </div>
-        <div class="form-group mb-3">
-          <label class="form-label">{{ t('listing.city') }} *</label>
-          <select v-model="location.cityId" class="form-control form-select" @change="onCityChange">
-            <option value="">—</option>
-            <option v-for="c in citiesInRegion" :key="c.id" :value="c.id">{{ c.name }}</option>
-          </select>
-        </div>
-        <div v-if="cityAreas.length" class="form-group mb-3">
-          <label class="form-label">{{ t('listing.cityArea') }} *</label>
-          <select v-model="location.cityAreaId" class="form-control form-select">
-            <option value="">—</option>
-            <option v-for="a in cityAreas" :key="a.id" :value="a.id">{{ a.name }}</option>
-          </select>
-        </div>
-        <div class="form-group mb-3">
-          <label class="form-label">{{ t('listing.address') }} *</label>
-          <input v-model="location.address" type="text" class="form-control" @blur="previewLocationOnMap" />
+      <!-- Dizajn 26: Lokacija, the Forma column of 275:287 (275:345). -->
+      <div v-else-if="steps[currentStep].key === 'location'" class="location">
+        <!-- 277:287 -->
+        <div class="location-row">
+          <div class="location-field">
+            <label for="location-region" class="location-label">
+              {{ t('listing.region') }} <span class="basics-required">*</span>
+            </label>
+            <div class="location-select" :class="{ 'is-empty': !location.regionId, 'is-invalid': locationErrors.regionId }">
+              <select id="location-region" v-model="location.regionId" class="location-select-control" @change="onRegionChange">
+                <option value="">{{ t('listing.detailsSelectPlaceholder') }}</option>
+                <option v-for="r in regions" :key="r.id" :value="r.id">{{ r.name }}</option>
+              </select>
+              <img src="/images/icons/chevron-down.svg" alt="" class="location-select-chevron" />
+            </div>
+            <p v-if="locationErrors.regionId" class="rules-error">
+              <img src="/images/icons/field-error.svg" alt="" />{{ locationErrors.regionId }}
+            </p>
+          </div>
+          <div class="location-field">
+            <label for="location-city" class="location-label">
+              {{ t('listing.city') }} <span class="basics-required">*</span>
+            </label>
+            <div class="location-select" :class="{ 'is-empty': !location.cityId, 'is-invalid': locationErrors.cityId }">
+              <select
+                id="location-city"
+                v-model="location.cityId"
+                class="location-select-control"
+                :disabled="!location.regionId"
+                @change="onCityChange"
+              >
+                <option value="">{{ t('listing.detailsSelectPlaceholder') }}</option>
+                <option v-for="c in citiesInRegion" :key="c.id" :value="c.id">{{ c.name }}</option>
+              </select>
+              <img src="/images/icons/chevron-down.svg" alt="" class="location-select-chevron" />
+            </div>
+            <p v-if="locationErrors.cityId" class="rules-error">
+              <img src="/images/icons/field-error.svg" alt="" />{{ locationErrors.cityId }}
+            </p>
+          </div>
+          <!-- Required only when the city has areas; most cities have none. -->
+          <div class="location-field">
+            <label for="location-area" class="location-label">
+              {{ t('listing.cityArea') }} <span v-if="!location.cityId || cityAreas.length" class="basics-required">*</span>
+            </label>
+            <div class="location-select" :class="{ 'is-empty': !location.cityAreaId, 'is-invalid': locationErrors.cityAreaId }">
+              <select
+                id="location-area"
+                v-model="location.cityAreaId"
+                class="location-select-control"
+                :disabled="!cityAreas.length"
+                @change="locationErrors.cityAreaId = ''"
+              >
+                <option value="">
+                  {{ location.cityId && !cityAreas.length ? t('listing.cityAreaNone') : t('listing.detailsSelectPlaceholder') }}
+                </option>
+                <option v-for="a in cityAreas" :key="a.id" :value="a.id">{{ a.name }}</option>
+              </select>
+              <img src="/images/icons/chevron-down.svg" alt="" class="location-select-chevron" />
+            </div>
+            <p v-if="locationErrors.cityAreaId" class="rules-error">
+              <img src="/images/icons/field-error.svg" alt="" />{{ locationErrors.cityAreaId }}
+            </p>
+          </div>
         </div>
 
-        <div class="form-group mb-3">
-          <label class="form-label">{{ t('listing.mapPinLabel') }}</label>
-          <p class="text-muted mb-2">{{ t('listing.mapPinHint') }}</p>
-          <LocationPickerMap
-            :latitude="location.latitude"
-            :longitude="location.longitude"
-            @update:position="onPinDragged"
-          />
+        <!-- 277:309 -->
+        <div class="location-field">
+          <label for="location-address" class="location-label">
+            {{ t('listing.address') }} <span class="basics-required">*</span>
+          </label>
+          <div class="location-input" :class="{ 'is-invalid': locationErrors.address }" @click="$event.currentTarget.querySelector('input').focus()">
+            <img src="/images/icons/address-pin.svg" alt="" class="location-input-icon" />
+            <input
+              id="location-address"
+              v-model="location.address"
+              type="text"
+              class="location-input-control"
+              @input="locationErrors.address = ''"
+              @blur="previewLocationOnMap"
+            />
+          </div>
+          <p v-if="locationErrors.address" class="rules-error">
+            <img src="/images/icons/field-error.svg" alt="" />{{ locationErrors.address }}
+          </p>
+          <p v-else class="location-hint">
+            {{ t(location.cityId && !cityAreas.length ? 'listing.locationAddressHintNoArea' : 'listing.locationAddressHint') }}
+          </p>
         </div>
 
-        <div class="form-group mb-3">
-          <label class="form-label">{{ t('listing.googlePlaceIdLabel') }}</label>
-          <p class="text-muted mb-2">{{ t('listing.googlePlaceIdHint') }}</p>
-          <input v-model="location.googlePlaceId" type="text" class="form-control" placeholder="ChIJ..." />
+        <!-- 277:318 -->
+        <div class="location-field location-map-field">
+          <p class="location-label">{{ t('listing.mapPinLabel') }}</p>
+          <p class="location-hint location-map-hint">{{ t('listing.mapPinHint') }}</p>
+          <LocationPickerMap :latitude="location.latitude" :longitude="location.longitude" @update:position="onPinDragged" />
+        </div>
+
+        <!-- 277:346 -->
+        <div class="location-field">
+          <label for="location-place-id" class="location-label">
+            {{ t('listing.googlePlaceIdLabel') }}<span class="location-optional">{{ t('common.optional') }}</span>
+          </label>
+          <div class="location-input" @click="$event.currentTarget.querySelector('input').focus()">
+            <input
+              id="location-place-id"
+              v-model="location.googlePlaceId"
+              type="text"
+              class="location-input-control"
+              maxlength="200"
+              placeholder="ChIJ..."
+            />
+          </div>
+          <p class="location-hint">{{ t('listing.googlePlaceIdHint') }}</p>
         </div>
       </div>
 
@@ -938,6 +1009,43 @@
         </p>
         <ul class="wizard-aside-tips">
           <li v-for="tip in paymentTips" :key="tip" class="wizard-aside-tip">
+            <img src="/images/icons/check-brand-tips.svg" alt="" />
+            <span>{{ tip }}</span>
+          </li>
+        </ul>
+      </section>
+    </aside>
+
+    <!-- 275:441: step 7's guest view and tips, in the grid's 400 column beside the form. -->
+    <aside v-if="steps[currentStep].key === 'location'" class="wizard-aside">
+      <!-- 279:287 -->
+      <section class="wizard-aside-card">
+        <p class="wizard-aside-title">
+          {{ t('listing.locationGuestViewTitle') }}
+          <img src="/images/icons/info-circle.svg" alt="" />
+        </p>
+        <!-- 279:292: what the card and the listing page show, then what a confirmed booking adds. -->
+        <dl class="location-states">
+          <div class="location-state">
+            <dt class="location-state-label">{{ t('listing.locationGuestViewBefore') }}</dt>
+            <dd class="location-state-value">{{ locationPublicText }}</dd>
+          </div>
+          <div class="location-state">
+            <dt class="location-state-label">{{ t('listing.locationGuestViewAfter') }}</dt>
+            <dd class="location-state-value">{{ locationConfirmedText }}</dd>
+          </div>
+        </dl>
+        <p class="wizard-aside-caption location-caption">{{ t('listing.locationGuestViewCaption') }}</p>
+      </section>
+
+      <!-- 279:300 -->
+      <section class="wizard-aside-card">
+        <p class="wizard-aside-title">
+          {{ t('listing.stepTipsTitle') }}
+          <img src="/images/icons/info-circle.svg" alt="" />
+        </p>
+        <ul class="wizard-aside-tips">
+          <li v-for="tip in locationTips" :key="tip" class="wizard-aside-tip">
             <img src="/images/icons/check-brand-tips.svg" alt="" />
             <span>{{ tip }}</span>
           </li>
@@ -1811,6 +1919,37 @@ function onPinDragged({ latitude, longitude }) {
   location.latitude = latitude
   location.longitude = longitude
 }
+
+// Dizajn 26 (279:292): before a booking the guest sees the city and its area, the way
+// ListingCard writes them; the address comes with the confirmed booking.
+const locationCity = computed(() => cities.value.find((c) => c.id === location.cityId))
+const locationArea = computed(() => cityAreas.value.find((a) => a.id === location.cityAreaId))
+const locationPublicText = computed(() => {
+  if (!locationCity.value) return t('listing.locationGuestViewNoCity')
+  return [locationCity.value.name, locationArea.value?.name].filter(Boolean).join(' · ')
+})
+const locationConfirmedText = computed(() => {
+  const address = location.address?.trim()
+  if (!address) return t('listing.locationGuestViewNoAddress')
+  const place = locationArea.value?.name || locationCity.value?.name
+  return place ? `${address}, ${place}` : address
+})
+const locationTips = computed(() => Array.from({ length: 5 }, (_, i) => t(`listing.locationTips.tip${i + 1}`)))
+
+// Dizajn 6 errors under the required fields. The area counts only when the city has
+// areas, the rule updateLocation enforces too. Focuses the first field that needs attention.
+const LOCATION_FIELD_IDS = { regionId: 'location-region', cityId: 'location-city', cityAreaId: 'location-area', address: 'location-address' }
+const locationErrors = reactive({ regionId: '', cityId: '', cityAreaId: '', address: '' })
+function validateLocation() {
+  const required = t('validation.required')
+  locationErrors.regionId = location.regionId ? '' : required
+  locationErrors.cityId = location.cityId ? '' : required
+  locationErrors.cityAreaId = cityAreas.value.length && !location.cityAreaId ? required : ''
+  locationErrors.address = location.address?.trim() ? '' : required
+  const first = Object.keys(LOCATION_FIELD_IDS).find((key) => locationErrors[key])
+  if (first) document.getElementById(LOCATION_FIELD_IDS[first])?.focus()
+  return !first
+}
 const attributeValues = reactive({})
 const hasBankAccount = computed(() => !!auth.user?.bankAccount)
 
@@ -2032,9 +2171,7 @@ function isAttributeValueFilled(attr, v) {
 // owner can actually fix it.
 function validateCurrentStep() {
   const step = steps.value[currentStep.value].key
-  if (step === 'location') {
-    if (!location.regionId || !location.cityId || !location.address?.trim()) return t('listing.validationLocationRequired')
-  } else if (step === 'photos') {
+  if (step === 'photos') {
     if (!photos.value.length) return t('listing.validationPhotosRequired')
   } else if (step === 'availability') {
     // T26 — the "*" on Cena (RSD) inside the defined-slots editor did
@@ -2142,10 +2279,13 @@ async function onRegionChange() {
   location.cityId = ''
   location.cityAreaId = ''
   cityAreas.value = []
+  locationErrors.regionId = ''
 }
 
 async function onCityChange() {
   location.cityAreaId = ''
+  locationErrors.cityId = ''
+  locationErrors.cityAreaId = ''
   const city = cities.value.find((c) => c.id === location.cityId)
   cityAreas.value = city ? await api.get(`/locations/cities/${city.slug}/areas`) : []
 }
@@ -2244,6 +2384,7 @@ async function saveCurrentStep() {
   if (steps.value[currentStep.value].key === 'rules' && !validateRules()) return
   if (steps.value[currentStep.value].key === 'payment' && !validatePayment()) return
   if (steps.value[currentStep.value].key === 'attributes' && !validateDetails()) return
+  if (steps.value[currentStep.value].key === 'location' && !validateLocation()) return
   const validationError = validateCurrentStep()
   if (validationError) {
     error.value = validationError
@@ -3233,6 +3374,227 @@ $field-danger-border: #f43f5e;
   flex-shrink: 0;
   width: 16px;
   height: 16px;
+}
+
+// Dizajn 26: step 7's body, read off 275:345 (Forma) and 275:441 (Saveti). The field
+// states are Dizajn 6's (214:429, 214:436).
+.location {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+// 277:287: three equal columns 16 apart, one under another on a phone.
+.location-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.location-row .location-field {
+  flex: 1 1 200px;
+}
+
+// 277:309: the label 8 above its field, the hint 8 below it.
+.location-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+// 277:318: 10 between the label, the hint and the map.
+.location-map-field {
+  gap: 10px;
+}
+
+// 277:290: the asterisk after a space.
+.location-label {
+  display: block;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: normal;
+  color: $color-text;
+}
+
+// 277:349: 8 after the label.
+.location-optional {
+  margin-left: 8px;
+  font-size: 13px;
+  font-weight: 300;
+  color: $color-text-muted;
+}
+
+// 277:317: Light 12; 277:321 puts it on 18px lines.
+.location-hint {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 300;
+  line-height: normal;
+  color: $color-text-muted;
+}
+
+.location-map-hint {
+  line-height: 18px;
+}
+
+.location-select {
+  position: relative;
+}
+
+// 277:291: 48 tall, the text 18 from the left, the 16 chevron 16 from the right.
+.location-select-control {
+  display: block;
+  width: 100%;
+  height: 48px;
+  margin: 0;
+  padding: 0 40px 0 18px;
+  border: 0;
+  border-radius: $radius-input;
+  outline: none;
+  background-color: $color-background;
+  color: $color-text;
+  font-family: $font-family-base;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: normal;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  appearance: none;
+  transition:
+    background-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.location-select.is-empty .location-select-control {
+  color: $color-text-muted;
+}
+
+.location-select-control option {
+  color: $color-text;
+}
+
+.location-select-control:focus {
+  background-color: $color-surface;
+  box-shadow: inset 0 0 0 1.5px $color-primary;
+}
+
+.location-select-control:disabled {
+  cursor: default;
+}
+
+.location-select.is-invalid .location-select-control {
+  background-color: $field-danger-bg;
+  box-shadow: inset 0 0 0 1.5px $field-danger-border;
+}
+
+.location-select-chevron {
+  position: absolute;
+  top: 50%;
+  right: 16px;
+  width: 16px;
+  height: 16px;
+  margin-top: -8px;
+  pointer-events: none;
+}
+
+// 277:312: 49 tall, the 18 pin 18 from the left and 10 before the text.
+.location-input {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 49px;
+  padding: 0 18px;
+  border-radius: $radius-input;
+  background-color: $color-background;
+  cursor: text;
+  transition:
+    background-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.location-input:focus-within {
+  background-color: $color-surface;
+  box-shadow: inset 0 0 0 1.5px $color-primary;
+}
+
+.location-input.is-invalid {
+  background-color: $field-danger-bg;
+  box-shadow: inset 0 0 0 1.5px $field-danger-border;
+}
+
+.location-input-icon {
+  display: block;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+}
+
+.location-input-control {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: $color-text;
+  font-family: $font-family-base;
+  font-size: 15px;
+  line-height: normal;
+}
+
+.location-input-control::placeholder {
+  color: $color-text-muted;
+  opacity: 1;
+}
+
+// 279:292: two rows on the page grey with a line between them, drawn inside the row.
+.location-states {
+  margin: 0;
+  border-radius: $radius-input;
+  background: $color-background;
+  overflow: hidden;
+}
+
+.location-state {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 12px 16px;
+}
+
+.location-state + .location-state {
+  padding-top: 11px;
+  border-top: 1px solid $color-border;
+}
+
+// 279:294
+.location-state-label {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: normal;
+  letter-spacing: 0.3px;
+  color: $color-text-muted;
+}
+
+// 279:295
+.location-state-value {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: normal;
+  color: $color-text;
+  overflow-wrap: anywhere;
+}
+
+// 279:299
+.location-caption {
+  line-height: 18px;
 }
 
 // 237:300

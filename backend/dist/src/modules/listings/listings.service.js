@@ -157,6 +157,10 @@ let ListingsService = class ListingsService {
     async updateLocation(userId, listingId, dto) {
         const listing = await this.assertOwnership(userId, listingId);
         const city = await this.prisma.city.findUniqueOrThrow({ where: { id: dto.cityId } });
+        const areaIds = (await this.prisma.cityArea.findMany({ where: { cityId: city.id }, select: { id: true } })).map((a) => a.id);
+        if (dto.cityAreaId ? !areaIds.includes(dto.cityAreaId) : areaIds.length > 0) {
+            throw new common_1.BadRequestException(this.i18n.t(dto.cityAreaId ? 'errors.CITY_AREA_NOT_IN_CITY' : 'errors.CITY_AREA_REQUIRED'));
+        }
         const coords = dto.latitude !== undefined && dto.longitude !== undefined
             ? { latitude: dto.latitude, longitude: dto.longitude }
             : await this.geocoding.geocode(dto.address, city.name);
@@ -424,8 +428,10 @@ let ListingsService = class ListingsService {
         const ownerListingCount = await this.prisma.listing.count({
             where: { userId: listing.userId, status: client_1.ListingStatus.ACTIVE },
         });
+        const publicListing = this.serialize(listing);
+        delete publicListing.address;
         return {
-            ...this.serialize(listing),
+            ...publicListing,
             photos: listing.photos,
             faqs: listing.faqs,
             extraServices: listing.extraServices.map((s) => ({ ...s, price: (0, money_1.paraToRsd)(s.price) })),

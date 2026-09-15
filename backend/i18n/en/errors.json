@@ -28,6 +28,8 @@
   "GUEST_COUNT_OUT_OF_RANGE": "Guest count must be between {min} and {max}",
   "DURATION_MIN_ABOVE_MAX": "The minimum duration cannot be longer than the maximum",
   "GUESTS_MIN_ABOVE_MAX": "The minimum number of guests cannot be higher than the maximum",
+  "CITY_AREA_REQUIRED": "Select a city area",
+  "CITY_AREA_NOT_IN_CITY": "The selected city area is not in the selected city",
   "CANCELLATION_THRESHOLD_REQUIRED": "Enter how many days or hours before the start cancellation is free",
   "ACCOUNT_RESTRICTED": "This account is temporarily restricted for a platform-rules violation and cannot perform this action",
   "PACKAGE_INCOMPATIBLE_BOOKING_MODEL": "The Basic package doesn't include the booking system. Choose Standard or Pro, or first switch the listing's booking model to \"no booking\"",

@@ -28,6 +28,8 @@
   "GUEST_COUNT_OUT_OF_RANGE": "Broj gostiju mora biti između {min} i {max}",
   "DURATION_MIN_ABOVE_MAX": "Minimalno trajanje ne može biti duže od maksimalnog",
   "GUESTS_MIN_ABOVE_MAX": "Minimalan broj gostiju ne može biti veći od maksimalnog",
+  "CITY_AREA_REQUIRED": "Izaberite deo grada",
+  "CITY_AREA_NOT_IN_CITY": "Izabrani deo grada ne pripada izabranom gradu",
   "CANCELLATION_THRESHOLD_REQUIRED": "Unesite do koliko dana ili sati pre početka je otkazivanje besplatno",
   "ACCOUNT_RESTRICTED": "Nalog je privremeno ograničen zbog kršenja pravila platforme i ne može da izvrši ovu radnju",
   "PACKAGE_INCOMPATIBLE_BOOKING_MODEL": "Osnovni paket ne uključuje rezervacioni sistem. Izaberite Standard ili Pro paket, ili prvo promenite način rezervisanja na oglasu na „bez rezervacija”",
