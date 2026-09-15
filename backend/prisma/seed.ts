@@ -166,6 +166,12 @@ async function seedSettings() {
       description:
         'Ch.18.3 — YouTube/Vimeo/direct video URL for the homepage "how it works" section; section is hidden entirely while this is empty',
     },
+    {
+      key: 'homepage_video_thumbnail',
+      value: null,
+      description:
+        'Poster image shown over the homepage "how it works" video before playback; uploaded from /admin/sadrzaj. Falls back to YouTube\'s own thumbnail when empty',
+    },
   ];
 
   // Create-only, same reasoning as seedStaticPages/seedFaqs below — this
@@ -199,6 +205,39 @@ async function seedLocations() {
     Kosovo: ['Kosovska Mitrovica'],
   };
 
+  // Locative for headings like "Oglasi u Beogradu" (Dizajn 8). Listed rather
+  // than derived: the ending changes irregularly (Šabac -> Šapcu, Čačak ->
+  // Čačku) and two-word names decline the adjective too.
+  const locative: Record<string, string> = {
+    Beograd: 'Beogradu',
+    'Novi Sad': 'Novom Sadu',
+    Subotica: 'Subotici',
+    Zrenjanin: 'Zrenjaninu',
+    Pančevo: 'Pančevu',
+    Sombor: 'Somboru',
+    Kikinda: 'Kikindi',
+    'Sremska Mitrovica': 'Sremskoj Mitrovici',
+    Kragujevac: 'Kragujevcu',
+    Kruševac: 'Kruševcu',
+    Jagodina: 'Jagodini',
+    Čačak: 'Čačku',
+    'Gornji Milanovac': 'Gornjem Milanovcu',
+    Užice: 'Užicu',
+    Valjevo: 'Valjevu',
+    Šabac: 'Šapcu',
+    Loznica: 'Loznici',
+    Zaječar: 'Zaječaru',
+    Bor: 'Boru',
+    Negotin: 'Negotinu',
+    Kladovo: 'Kladovu',
+    Niš: 'Nišu',
+    Leskovac: 'Leskovcu',
+    Vranje: 'Vranju',
+    Pirot: 'Pirotu',
+    Prokuplje: 'Prokuplju',
+    'Kosovska Mitrovica': 'Kosovskoj Mitrovici',
+  };
+
   const beogradAreas = [
     'Vračar',
     'Novi Beograd',
@@ -223,8 +262,16 @@ async function seedLocations() {
     for (const cityName of cities) {
       const city = await prisma.city.upsert({
         where: { slug: slugify(cityName) },
-        update: {},
-        create: { regionId: region.id, name: cityName, slug: slugify(cityName) },
+        // Unlike the rest of this seed, the locative is backfilled on every
+        // run: it was added after these rows already existed, and it is
+        // reference data no admin edits, so there is nothing to overwrite.
+        update: { nameLocative: locative[cityName] ?? null },
+        create: {
+          regionId: region.id,
+          name: cityName,
+          slug: slugify(cityName),
+          nameLocative: locative[cityName] ?? null,
+        },
       });
 
       const areas = cityName === 'Beograd' ? beogradAreas : cityName === 'Novi Sad' ? novisadAreas : [];
@@ -292,6 +339,8 @@ interface CategorySeed {
   allowedPriceUnits: PriceUnit[];
   defaultPriceUnit: PriceUnit;
   icon: string;
+  /** Dizajn 17 — the grey line under the category's card on /oglasi/novi, copy from frame 172:287. */
+  shortDescription?: string;
   attributes: AttributeSeed[];
   children?: CategorySeed[];
 }
@@ -325,6 +374,7 @@ const CATEGORY_TREE: CategorySeed[] = [
   {
     name: 'Nekretnine',
     icon: 'home',
+    shortDescription: 'Stanovi, kuće i vikendice',
     defaultBookingModel: BookingModel.PER_STAY,
     allowedPriceUnits: [PriceUnit.NIGHT, PriceUnit.MONTH],
     defaultPriceUnit: PriceUnit.NIGHT,
@@ -383,6 +433,7 @@ const CATEGORY_TREE: CategorySeed[] = [
   {
     name: 'Prostori za proslave',
     icon: 'party',
+    shortDescription: 'Sale, bašte i restorani',
     defaultBookingModel: BookingModel.PER_SLOT,
     allowedPriceUnits: [PriceUnit.HOUR, PriceUnit.SLOT],
     defaultPriceUnit: PriceUnit.SLOT,
@@ -403,6 +454,7 @@ const CATEGORY_TREE: CategorySeed[] = [
   {
     name: 'Igraonice',
     icon: 'toy',
+    shortDescription: 'Igraonice i rođendaonice',
     defaultBookingModel: BookingModel.PER_SLOT,
     allowedPriceUnits: [PriceUnit.HOUR, PriceUnit.SLOT],
     defaultPriceUnit: PriceUnit.SLOT,
@@ -418,6 +470,7 @@ const CATEGORY_TREE: CategorySeed[] = [
   {
     name: 'Vozila',
     icon: 'car',
+    shortDescription: 'Putnička i dostavna vozila',
     defaultBookingModel: BookingModel.PER_STAY,
     allowedPriceUnits: [PriceUnit.DAY, PriceUnit.HOUR],
     defaultPriceUnit: PriceUnit.DAY,
@@ -472,6 +525,7 @@ const CATEGORY_TREE: CategorySeed[] = [
   {
     name: 'Građevinske mašine',
     icon: 'excavator',
+    shortDescription: 'Bageri, viljuškari, platforme',
     defaultBookingModel: BookingModel.PER_STAY,
     allowedPriceUnits: [PriceUnit.DAY],
     defaultPriceUnit: PriceUnit.DAY,
@@ -543,6 +597,7 @@ const CATEGORY_TREE: CategorySeed[] = [
   {
     name: 'Magacini i skladišta',
     icon: 'warehouse',
+    shortDescription: 'Magacini, skladišta i hladnjače',
     defaultBookingModel: BookingModel.PER_STAY,
     allowedPriceUnits: [PriceUnit.MONTH],
     defaultPriceUnit: PriceUnit.MONTH,
@@ -606,6 +661,9 @@ async function seedCategoryNode(node: CategorySeed, parentId: string | null, ord
   });
 
   await setTranslation('CATEGORY', category.id, 'name', node.name);
+  if (node.shortDescription) {
+    await setTranslation('CATEGORY', category.id, 'shortDescription', node.shortDescription);
+  }
 
   for (const [i, attr] of node.attributes.entries()) {
     const attrFields = {

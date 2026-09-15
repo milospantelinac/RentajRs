@@ -23,6 +23,12 @@
               </select>
             </div>
           </div>
+          <div class="col-12">
+            <div class="form-group mb-3">
+              <label class="form-label">{{ t('admin.categoryShortDescription') }}</label>
+              <input v-model="createForm.shortDescription" type="text" class="form-control" maxlength="120" />
+            </div>
+          </div>
           <div class="col-12 col-md-6">
             <div class="form-group mb-3">
               <label class="form-label">{{ t('admin.bookingModel') }}</label>
@@ -247,7 +253,7 @@ async function assignCategory(listingId) {
 
 const showCreate = ref(false)
 const createForm = reactive({
-  name: '', parentId: undefined, defaultBookingModel: 'PER_STAY', defaultPriceUnit: 'NIGHT', allowedPriceUnits: ['NIGHT'],
+  name: '', shortDescription: '', parentId: undefined, defaultBookingModel: 'PER_STAY', defaultPriceUnit: 'NIGHT', allowedPriceUnits: ['NIGHT'],
 })
 
 function toggleUnit(u) {
@@ -260,6 +266,7 @@ async function createCategory() {
   await api.post('/admin/categories', createForm)
   showCreate.value = false
   createForm.name = ''
+  createForm.shortDescription = ''
   await refreshTree()
 }
 

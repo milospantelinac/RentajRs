@@ -50,9 +50,11 @@ export class CreateDefinedSlotDto {
   @IsDateString()
   endsAt: string;
 
-  @ApiProperty({ required: false, description: 'RSD, overrides the listing base price for this slot' })
-  @IsOptional()
-  price?: number;
+  // Dizajn 22: required, a slot without its own price was booked at the listing's price (0 for defined slots).
+  @ApiProperty({ description: 'RSD for this slot' })
+  @IsInt()
+  @IsPositive()
+  price: number;
 
   @ApiProperty({ required: false, default: 1 })
   @IsOptional()

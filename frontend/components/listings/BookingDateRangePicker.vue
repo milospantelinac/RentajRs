@@ -89,6 +89,13 @@ const props = defineProps({
   // an in-range highlight between them exactly like PER_STAY, even though
   // only the first date was ever used.
   singleDate: { type: Boolean, default: false },
+  // Dizajn 11 — a guest can pick the term in the listing page's booking card
+  // and land here with it already chosen; without these the calendar would
+  // open empty and quietly ask for the same dates a second time. YYYY-MM-DD.
+  initialStart: { type: String, default: '' },
+  initialEnd: { type: String, default: '' },
+  // Dizajn 22: the availability step's date fields open it in a narrow popover.
+  monthCount: { type: Number, default: 2 },
 })
 
 const emit = defineEmits(['update:range'])
@@ -98,11 +105,24 @@ const api = useApi()
 
 const today = new Date()
 today.setHours(0, 0, 0, 0)
-const baseMonth = ref(new Date(today.getFullYear(), today.getMonth(), 1))
+
+// A bare YYYY-MM-DD parses as UTC midnight, which lands on the previous day in
+// any negative-offset zone — build the local date explicitly instead.
+function fromKey(value) {
+  if (!value) return null
+  const [year, month, day] = value.split('-').map(Number)
+  return new Date(year, month - 1, day)
+}
+
+const rangeStart = ref(fromKey(props.initialStart))
+const rangeEnd = ref(props.singleDate ? null : fromKey(props.initialEnd))
+const baseMonth = ref(
+  rangeStart.value
+    ? new Date(rangeStart.value.getFullYear(), rangeStart.value.getMonth(), 1)
+    : new Date(today.getFullYear(), today.getMonth(), 1),
+)
 const blocks = ref([])
 const overrides = ref(new Map())
-const rangeStart = ref(null)
-const rangeEnd = ref(null)
 
 function toKey(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -125,6 +145,17 @@ const maxSelectableDate = computed(() => {
   d.setHours(0, 0, 0, 0)
   return d
 })
+// Dizajn 23: a stay starts at UTC midnight of its first date (rezervisi.vue), and
+// that instant is what the server holds to the notice and the horizon.
+function stayStartInstant(date) {
+  return Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())
+}
+function stayStartsTooSoon(date) {
+  return !!props.earliestBookingHours && stayStartInstant(date) < Date.now() + props.earliestBookingHours * 3600_000
+}
+function stayStartsTooLate(date) {
+  return !!props.maxAdvanceBookingDays && stayStartInstant(date) > Date.now() + props.maxAdvanceBookingDays * 86_400_000
+}
 const canGoForward = computed(() => {
   if (!maxSelectableDate.value) return true
   const nextMonthStart = new Date(baseMonth.value.getFullYear(), baseMonth.value.getMonth() + 1, 1)
@@ -162,8 +193,12 @@ function buildMonth(monthDate) {
     const date = new Date(year, month, day)
     const key = toKey(date)
     const past = date < today
-    const beforeEarliest = date < minSelectableDate.value
-    const afterHorizon = maxSelectableDate.value ? date > maxSelectableDate.value : false
+    // A single date (working hours) keeps the whole day, since its later hours can
+    // still be far enough ahead; the time list checks each start itself.
+    const beforeEarliest = props.singleDate ? date < minSelectableDate.value : stayStartsTooSoon(date)
+    const afterHorizon = props.singleDate
+      ? !!maxSelectableDate.value && date > maxSelectableDate.value
+      : stayStartsTooLate(date)
     const blocked = props.wholeDayBlocking && isBlocked(date)
     const dayOfWeek = ((date.getDay() + 6) % 7) + 1 // ISO Monday=1
     const dayUnavailable = !!props.availableDaysOfWeek && !props.availableDaysOfWeek.includes(dayOfWeek)
@@ -191,10 +226,11 @@ function buildMonth(monthDate) {
   }
 }
 
-const visibleMonths = computed(() => [
-  buildMonth(baseMonth.value),
-  buildMonth(new Date(baseMonth.value.getFullYear(), baseMonth.value.getMonth() + 1, 1)),
-])
+const visibleMonths = computed(() =>
+  Array.from({ length: props.monthCount }, (_, i) =>
+    buildMonth(new Date(baseMonth.value.getFullYear(), baseMonth.value.getMonth() + i, 1)),
+  ),
+)
 
 function cellClasses(cell) {
   const inRange =
@@ -256,13 +292,19 @@ function selectDate(cell) {
   rangeEnd.value = cell.date
 }
 
-watch([rangeStart, rangeEnd], () => {
-  const endValid = rangeEnd.value && !minDurationViolation.value
-  emit('update:range', {
-    startsAt: rangeStart.value ? toKey(rangeStart.value) : null,
-    endsAt: endValid ? toKey(rangeEnd.value) : null,
-  })
-})
+// Immediate so a range handed in through initialStart/initialEnd reaches the
+// parent's form without the guest having to touch the calendar again.
+watch(
+  [rangeStart, rangeEnd],
+  () => {
+    const endValid = rangeEnd.value && !minDurationViolation.value
+    emit('update:range', {
+      startsAt: rangeStart.value ? toKey(rangeStart.value) : null,
+      endsAt: endValid ? toKey(rangeEnd.value) : null,
+    })
+  },
+  { immediate: true },
+)
 
 async function loadAvailability() {
   const from = new Date(baseMonth.value)

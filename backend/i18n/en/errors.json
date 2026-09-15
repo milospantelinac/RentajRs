@@ -21,11 +21,17 @@
   "SUBSCRIPTION_LISTING_LIMIT": "You've reached the listing limit for your current package",
   "PHOTO_LIMIT_EXCEEDED": "A listing can have at most {max} photos",
   "PHOTO_NOT_FOUND": "Photo not found or does not belong to this listing",
+  "FILE_REQUIRED": "Choose a file to upload",
   "PERMISSION_DENIED": "You do not have permission to perform this action",
   "RATE_LIMITED": "Too many requests. Please try again later",
   "PACKAGE_FEATURE_NOT_INCLUDED": "Your current package for this listing does not include this feature. Upgrade your package to use it",
   "GUEST_COUNT_OUT_OF_RANGE": "Guest count must be between {min} and {max}",
+  "DURATION_MIN_ABOVE_MAX": "The minimum duration cannot be longer than the maximum",
+  "GUESTS_MIN_ABOVE_MAX": "The minimum number of guests cannot be higher than the maximum",
+  "CANCELLATION_THRESHOLD_REQUIRED": "Enter how many days or hours before the start cancellation is free",
   "ACCOUNT_RESTRICTED": "This account is temporarily restricted for a platform-rules violation and cannot perform this action",
   "PACKAGE_INCOMPATIBLE_BOOKING_MODEL": "The Basic package doesn't include the booking system. Choose Standard or Pro, or first switch the listing's booking model to \"no booking\"",
-  "OVERTURN_NOT_APPLICABLE": "This outcome only applies to no-show disputes tied to a booking"
+  "OVERTURN_NOT_APPLICABLE": "This outcome only applies to no-show disputes tied to a booking",
+  "LISTING_CATEGORY_CHANGE_NOT_ALLOWED": "The category can only be changed before the listing is submitted for approval",
+  "CATEGORY_NOT_SELECTABLE": "This category can't be chosen for a listing"
 }

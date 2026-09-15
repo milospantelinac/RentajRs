@@ -1,24 +1,25 @@
-// Design tokens transcribed directly from Product Bible Chapter 18 (Design
-// system). Every color/radius/font-size used anywhere in the app should
-// reference one of these — never a hard-coded hex or px value — so the whole
-// platform reads as one product, including pages with no Figma reference.
+// Design tokens transcribed directly from the Rentaj Figma redesign (Trello
+// "Dizajn 1 — Vizuelni temelj"). Every color/radius/font-size used anywhere
+// in the app should reference one of these — never a hard-coded hex or px
+// value — so the whole platform reads as one product, including pages with
+// no Figma reference of their own (Dizajn 1's explicit goal).
 
-// Colors (Ch.18.2) ------------------------------------------------------
-// Refined 2026-08 to match the updated brand reference (Figma) — same
-// semantic roles, tighter values (near-black instead of pure gray, etc.).
+// Colors (Dizajn 1) ------------------------------------------------------
 $color-gradient-start: #1abaf3;
 $color-gradient-mid: #0957df;
 $color-gradient-end: #001ed4;
-$color-primary: #0957df;
+$color-primary: #0957df; // action, active state
 $color-dark: #0f1b33; // buttons, tags
-$color-background: #f9fafd;
+$color-background: #f9fafd; // fields and subtle backgrounds
 $color-surface: #ffffff;
-$color-text: #061b31;
-$color-text-muted: #637384;
-$color-border: #e4ebf2;
-$color-success: #12b76a;
-$color-warning: #f59e0b;
-$color-error: #e5484d;
+$color-text: #061b31; // primary text
+$color-text-muted: #637384; // secondary text
+$color-border: #e4ebf2; // lines and outlines
+$color-accent-tint: #ecf2fc; // info block and selected state
+$color-success: #12b76a; // no exact hex given in the spec — kept as-is (P15)
+$color-warning: #b88208; // rating and warning ink, sits on $color-warning-bg
+$color-warning-bg: #fff4d9;
+$color-error: #d1293d;
 
 // R149: the blue gradient is reserved for marketing surfaces (Home Page
 // hero/CTAs) — never the dashboard or admin panel, which use flat
@@ -32,27 +33,42 @@ $color-urgency-critical: $color-error; // losing money or a booking
 $color-urgency-decision: $color-warning; // needs a decision
 $color-urgency-info: $color-primary; // review when you get a chance
 
-// Typography (Ch.18.3) — R150: Funnel Sans is the only font on the platform.
+// Typography (Dizajn 1) — Funnel Sans is the only font on the platform.
 $font-family-base:
   'Funnel Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 
-$font-size-page-title: 26px;
-$font-weight-page-title: 600;
-$font-size-section-title: 19px;
-$font-weight-section-title: 600;
+// Page/section title: Funnel Sans Regular 48/56 with -1.68px tracking, read
+// straight off the Figma heading nodes (e.g. 26:139). The second word renders
+// muted (see .text-page-title-muted in _typography.scss) — "prepoznatljiv
+// Rentaj potpis, obavezno" per Dizajn 1. Mobile steps down to keep long
+// titles from overflowing a phone width, same responsive pattern as before.
+$font-size-page-title: 48px;
+$line-height-page-title: 56px;
+$letter-spacing-page-title: -0.035em; // -1.68px at 48px
+$font-size-page-title-mobile: 34px;
+$font-weight-page-title: 400;
+$font-size-section-title: 24px;
+$font-weight-section-title: 600; // SemiBold
+$font-weight-card-title: 500; // Medium 15–17
 $font-size-body: 15px; // deliberately not the usual 14px — see Ch.18.3
 $font-weight-body: 400;
 $font-size-muted: 13px;
+$font-weight-muted: 300; // Light — "sitno / pomoćno" role
 $font-size-label: 12px;
 
-// Radii & elevation (Ch.18.4) --------------------------------------------
-$radius-card: 14px;
-$radius-button: 8px;
+// Radii & elevation (Dizajn 1) --------------------------------------------
+$radius-card: 16px;
+$radius-panel: 24px; // large panels — wizard step card, filter drawer, etc.
+$radius-button: 12px;
 $radius-badge: 6px;
-$radius-input: 8px;
+$radius-input: 12px;
 $radius-pill: 999px;
 
-$shadow-card: 0 1px 2px rgba(15, 27, 51, 0.04), 0 4px 12px rgba(15, 27, 51, 0.06);
+// Shadows apply ONLY to cards, tables and panels — never buttons or fields
+// (Dizajn 1). A shadowed card has no border (see .card in _cards.scss).
+$shadow-card: 0 8px 24px rgba(97, 115, 133, 0.1), 0 1px 3px rgba(97, 115, 133, 0.05);
+// Wide elements (900px and up) use a softer, longer-throw shadow.
+$shadow-card-wide: 0 6px 20px rgba(97, 115, 133, 0.08), 0 1px 3px rgba(97, 115, 133, 0.04);
 
 // Spacing scale — 4px base unit, used by the spacing utilities in
 // _spacing.scss and directly by components.

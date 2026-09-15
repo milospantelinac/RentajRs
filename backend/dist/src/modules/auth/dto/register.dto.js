@@ -13,6 +13,7 @@ exports.RegisterDto = void 0;
 const swagger_1 = require("@nestjs/swagger");
 const class_validator_1 = require("class-validator");
 const not_common_password_validator_1 = require("../../../common/validators/not-common-password.validator");
+const undefined_if_blank_transform_1 = require("../../../common/validators/undefined-if-blank.transform");
 class RegisterDto {
 }
 exports.RegisterDto = RegisterDto;
@@ -35,6 +36,13 @@ __decorate([
     (0, class_validator_1.IsEmail)(),
     __metadata("design:type", String)
 ], RegisterDto.prototype, "email", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Optional at sign-up (Dizajn 16); same format rule as the profile form.' }),
+    (0, class_validator_1.IsOptional)(),
+    undefined_if_blank_transform_1.undefinedIfBlank,
+    (0, class_validator_1.Matches)(/^\+?[0-9\s()-]{6,20}$/, { message: 'validation.PHONE_INVALID' }),
+    __metadata("design:type", String)
+], RegisterDto.prototype, "phone", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)(),
     (0, not_common_password_validator_1.NotCommonPassword)(),

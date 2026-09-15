@@ -16,14 +16,17 @@ const rules = computed(() => {
   const l = props.listing
   const lines = []
 
-  if (l.minDuration && l.maxDuration) {
+  // Dizajn 23: a defined slot has its own length, and working hours count in hours.
+  const unit = getDurationUnit(l)
+  const durationRules = !isDefinedSlotsListing(l)
+  if (durationRules && l.minDuration && l.maxDuration) {
     lines.push(
-      t('booking.durationRangeRule', { min: l.minDuration, max: l.maxDuration, unit: srDurationUnitWord(l.priceUnit, l.maxDuration) }),
+      t('booking.durationRangeRule', { min: l.minDuration, max: l.maxDuration, unit: srDurationUnitWord(unit, l.maxDuration) }),
     )
-  } else if (l.minDuration) {
-    lines.push(t('booking.minDurationRule', { min: l.minDuration, unit: srDurationUnitWord(l.priceUnit, l.minDuration) }))
-  } else if (l.maxDuration) {
-    lines.push(t('booking.maxDurationRule', { max: l.maxDuration, unit: srDurationUnitWord(l.priceUnit, l.maxDuration) }))
+  } else if (durationRules && l.minDuration) {
+    lines.push(t('booking.minDurationRule', { min: l.minDuration, unit: srDurationUnitWord(unit, l.minDuration) }))
+  } else if (durationRules && l.maxDuration) {
+    lines.push(t('booking.maxDurationRule', { max: l.maxDuration, unit: srDurationUnitWord(unit, l.maxDuration) }))
   }
 
   if (l.maxAdvanceBookingDays) lines.push(t('booking.horizonRule', { days: l.maxAdvanceBookingDays }))

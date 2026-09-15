@@ -14,6 +14,10 @@ import {
 } from './dto/admin-category.dto';
 
 const CACHE_TTL = 60 * 30; // 30 min — categories/attributes change rarely and are admin-invalidated below
+// Bump the suffix whenever a tree node gains or loses a field: Redis outlives a
+// deploy, so the old key would keep serving the previous shape for up to
+// CACHE_TTL. v2 — Dizajn 17's shortDescription.
+const TREE_CACHE_KEY = 'taxonomy:tree:v2';
 const FUZZY_THRESHOLD = 0.35;
 export const FALLBACK_CATEGORY_SLUG = 'ostalo';
 
@@ -30,7 +34,7 @@ export class TaxonomyService {
 
   /** Two-level navigation (R49): main categories, each with its direct children. */
   async getCategoryTree() {
-    return this.cache.getOrSet('taxonomy:tree', CACHE_TTL, async () => {
+    return this.cache.getOrSet(TREE_CACHE_KEY, CACHE_TTL, async () => {
       const categories = await this.prisma.category.findMany({
         // T60 — "Ostalo" is an internal fallback for uncategorized listings
         // (createUncategorizedListing), never a real browsable/selectable
@@ -38,7 +42,26 @@ export class TaxonomyService {
         where: { status: 'ACTIVE', slug: { not: FALLBACK_CATEGORY_SLUG } },
         orderBy: { displayOrder: 'asc' },
       });
-      const names = await this.getTranslationMap('CATEGORY', categories.map((c) => c.id));
+      const categoryIds = categories.map((c) => c.id);
+      const [names, shortDescriptions] = await Promise.all([
+        this.getTranslationMap('CATEGORY', categoryIds),
+        // Dizajn 17 — the one line under each card on /oglasi/novi. A field of
+        // its own rather than `description`, which is the long copy the
+        // /[categorySlug] page prints and uses as its meta description.
+        this.getTranslationMap('CATEGORY', categoryIds, 'shortDescription'),
+      ]);
+
+      // Category.listingCount is a denormalised column the schema describes as
+      // "refreshed by a scheduled job" — that job was never written, so the
+      // column has always read 0 everywhere it surfaced. Counted live here
+      // instead: one grouped query, and the whole tree is Redis-cached for
+      // CACHE_TTL anyway, so this costs one aggregate per cache miss.
+      const counts = await this.prisma.listing.groupBy({
+        by: ['categoryId'],
+        where: { status: 'ACTIVE' },
+        _count: { _all: true },
+      });
+      const directCount = new Map(counts.map((row) => [row.categoryId, row._count._all]));
 
       const byParent = new Map<string, typeof categories>();
       for (const cat of categories) {
@@ -47,21 +70,32 @@ export class TaxonomyService {
         byParent.get(key)!.push(cat);
       }
 
-      const toNode = (cat: (typeof categories)[number]): any => ({
-        id: cat.id,
-        slug: cat.slug,
-        icon: cat.icon,
-        name: names.get(cat.id) ?? cat.slug,
-        listingCount: cat.listingCount,
-        children: (byParent.get(cat.id) ?? []).map(toNode),
-      });
+      // A parent's count is its whole subtree (R49): "Sve nekretnine" has to
+      // equal Stanovi + Kuće + Sobe plus anything filed on the parent itself,
+      // which is also how a search on the parent slug matches (categorySubtreeIds).
+      const toNode = (cat: (typeof categories)[number]): any => {
+        const children = (byParent.get(cat.id) ?? []).map(toNode);
+        const listingCount =
+          (directCount.get(cat.id) ?? 0) + children.reduce((sum: number, child: any) => sum + child.listingCount, 0);
+        return {
+          id: cat.id,
+          slug: cat.slug,
+          icon: cat.icon,
+          name: names.get(cat.id) ?? cat.slug,
+          shortDescription: shortDescriptions.get(cat.id) ?? null,
+          listingCount,
+          children,
+        };
+      };
 
       return (byParent.get('root') ?? []).map(toNode);
     });
   }
 
   async getCategoryBySlug(slug: string) {
-    const cached = await this.cache.get(`taxonomy:category:${slug}`);
+    // v2 (Dizajn 25): attribute options come in their displayOrder now, and the new key
+    // keeps Redis from serving the old order after a deploy.
+    const cached = await this.cache.get(`taxonomy:category:v2:${slug}`);
     if (cached) return cached;
 
     const category = await this.prisma.category.findUnique({ where: { slug } });
@@ -86,7 +120,7 @@ export class TaxonomyService {
     const children = childCategories.map((c) => ({ id: c.id, slug: c.slug, name: childNames.get(c.id) ?? c.slug }));
 
     const result = { ...category, name: name ?? category.slug, description, attributes, children };
-    await this.cache.set(`taxonomy:category:${slug}`, result, CACHE_TTL);
+    await this.cache.set(`taxonomy:category:v2:${slug}`, result, CACHE_TTL);
     return result;
   }
 
@@ -98,7 +132,8 @@ export class TaxonomyService {
    * instantly without a data migration.
    */
   async resolveAttributesForCategory(categoryId: string) {
-    return this.cache.getOrSet(`taxonomy:attributes:${categoryId}`, CACHE_TTL, async () => {
+    // v2 (Dizajn 25), like the category key above.
+    return this.cache.getOrSet(`taxonomy:attributes:v2:${categoryId}`, CACHE_TTL, async () => {
       const chain: string[] = [];
       let current: { id: string; parentId: string | null } | null =
         await this.prisma.category.findUnique({ where: { id: categoryId }, select: { id: true, parentId: true } });
@@ -114,7 +149,8 @@ export class TaxonomyService {
 
       const attributes = await this.prisma.categoryAttribute.findMany({
         where: { categoryId: { in: chain } },
-        include: { options: true },
+        // Dizajn 25: options in the order the seed gives them, which is the frames' order.
+        include: { options: { orderBy: { displayOrder: 'asc' } } },
         orderBy: [{ categoryId: 'asc' }, { displayOrder: 'asc' }],
       });
       // Re-order to match root->leaf chain order rather than arbitrary categoryId order.
@@ -243,6 +279,11 @@ export class TaxonomyService {
     return this.getTranslationMap('CATEGORY', categoryIds, 'name', language);
   }
 
+  /** Same as getCategoryNames, for AttributeOption ids — e.g. resolving a LIST/CHECKBOX_GROUP key-fact value's display name. */
+  async getOptionNames(optionIds: string[], language: Language = Language.SR): Promise<Map<string, string>> {
+    return this.getTranslationMap('OPTION', optionIds, 'name', language);
+  }
+
   // -- Admin ---------------------------------------------------------------
 
   async adminGetCategoryTree() {
@@ -292,6 +333,8 @@ export class TaxonomyService {
     });
     await this.setTranslation('CATEGORY', category.id, 'name', dto.name);
     if (dto.description) await this.setTranslation('CATEGORY', category.id, 'description', dto.description);
+    if (dto.shortDescription)
+      await this.setTranslation('CATEGORY', category.id, 'shortDescription', dto.shortDescription);
     await this.invalidateTreeCache();
     return category;
   }
@@ -312,6 +355,7 @@ export class TaxonomyService {
     });
     if (dto.name) await this.setTranslation('CATEGORY', id, 'name', dto.name);
     if (dto.description) await this.setTranslation('CATEGORY', id, 'description', dto.description);
+    if (dto.shortDescription) await this.setTranslation('CATEGORY', id, 'shortDescription', dto.shortDescription);
     await this.invalidateTreeCache(id);
     return this.prisma.category.findUnique({ where: { id } });
   }
@@ -523,7 +567,7 @@ export class TaxonomyService {
   }
 
   private async invalidateTreeCache(categoryId?: string) {
-    await this.cache.del('taxonomy:tree');
+    await this.cache.del(TREE_CACHE_KEY);
     await this.cache.delByPrefix('taxonomy:category:');
     await this.cache.delByPrefix('taxonomy:attributes:');
   }

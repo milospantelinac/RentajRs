@@ -4,6 +4,7 @@ import { I18nService } from 'nestjs-i18n';
 import * as crypto from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { UploadsService } from '../../common/uploads/uploads.service';
+import { TaxonomyService } from '../taxonomy/taxonomy.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { paraToRsd } from '../../common/utils/money';
 
@@ -37,6 +38,7 @@ export class UsersService {
     private uploads: UploadsService,
     private i18n: I18nService,
     private events: EventEmitter2,
+    private taxonomy: TaxonomyService,
   ) {}
 
   /** R13: "owner" is never stored — it's whether the user has >=1 ACTIVE listing. Single source of truth — see AuthService/DashboardService. */
@@ -157,10 +159,24 @@ export class UsersService {
       orderBy: { addedAt: 'desc' },
       include: {
         listing: {
-          include: { photos: { where: { isCover: true }, take: 1 }, city: true, category: { select: { slug: true } } },
+          include: {
+            photos: { where: { isCover: true }, take: 1 },
+            city: true,
+            category: true,
+            // Dizajn 3/4 — same key-facts data shape as SearchService.serializeResult,
+            // so ListingCard renders identically here and in search results.
+            attributes: { include: { attribute: { select: { key: true, unit: true, type: true } } } },
+          },
         },
       },
     });
+
+    const categoryNames = await this.taxonomy.getCategoryNames(favorites.map((f) => f.listing.category.id));
+    const optionIds = [
+      ...new Set(favorites.flatMap((f) => f.listing.attributes.flatMap((a) => a.valueOptionIds))),
+    ];
+    const optionNames = optionIds.length ? await this.taxonomy.getOptionNames(optionIds) : new Map<string, string>();
+
     // Price-drop signal (Ch.10 "Ako stigne" item) — compare today's price to the price when saved.
     // Prisma's BigInt (para) fields must be converted before this crosses into JSON — see money.ts.
     // weekendPrice/pricePerGuest are BigInt too (like price) — left unconverted in the ...f.listing
@@ -174,6 +190,16 @@ export class UsersService {
         price: paraToRsd(f.listing.price),
         weekendPrice: paraToRsd(f.listing.weekendPrice),
         pricePerGuest: paraToRsd(f.listing.pricePerGuest),
+        category: { ...f.listing.category, name: categoryNames.get(f.listing.category.id) ?? f.listing.category.slug },
+        attributes: f.listing.attributes.map((a) => ({
+          key: a.attribute.key,
+          type: a.attribute.type,
+          unit: a.attribute.unit,
+          valueNumber: a.valueNumber !== null ? Number(a.valueNumber) : null,
+          valueText: a.valueText,
+          valueBoolean: a.valueBoolean,
+          optionNames: a.valueOptionIds.map((id) => optionNames.get(id)).filter(Boolean),
+        })),
       },
     }));
   }

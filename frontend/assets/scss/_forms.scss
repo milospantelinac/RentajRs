@@ -1,6 +1,8 @@
 @use 'tokens' as *;
 
-// Form field: 8px radius, border, blue focus ring (Ch.18.4).
+// Form controls — Dizajn 6: 51px tall, 12px radius, #F9FAFD fill, no border,
+// no shadow. Border only appears for focus/error, drawn over a transparent
+// 1px border at rest so it never shifts layout.
 
 .form-group {
   display: flex;
@@ -9,9 +11,15 @@
 }
 
 .form-label {
-  font-size: $font-size-muted;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: $font-weight-card-title; // Medium
   color: $color-text;
+}
+
+// Dizajn 18/19/20/... — "obavezna polja imaju zvezdicu u labeli".
+// Usage: <label class="form-label">Naziv <span class="form-label-required">*</span></label>
+.form-label-required {
+  color: $color-primary;
 }
 
 .form-hint {
@@ -20,36 +28,36 @@
 }
 
 .form-error {
-  font-size: $font-size-label;
+  font-size: $font-size-muted;
+  font-weight: $font-weight-muted; // Light
   color: $color-error;
 }
 
 // T89 — mirrors .form-error for action outcomes worth confirming positively
 // (e.g. "Zahtev je odbijen. Gost je obavešten."), not just failures.
 .form-success {
-  font-size: $font-size-label;
+  font-size: $font-size-muted;
+  font-weight: $font-weight-muted;
   color: $color-success;
 }
 
 .form-control {
   width: 100%;
-  min-height: $touch-target-min;
-  padding: 0 14px;
+  min-height: 51px;
+  padding: 16px 20px;
   font-family: $font-family-base;
-  font-size: $font-size-body;
+  font-size: 15px;
   color: $color-text;
-  background: $color-surface;
-  border: 1px solid $color-border;
+  background: $color-background;
+  border: 1px solid transparent;
   border-radius: $radius-input;
-  transition:
-    border-color 0.15s ease,
-    box-shadow 0.15s ease;
+  transition: border-color 0.15s ease;
 }
 
 textarea.form-control {
   min-height: 96px;
-  padding-top: 10px;
-  padding-bottom: 10px;
+  padding-top: 16px;
+  padding-bottom: 16px;
   resize: vertical;
 }
 
@@ -60,29 +68,48 @@ textarea.form-control {
 .form-control:focus {
   outline: none;
   border-color: $color-primary;
-  box-shadow: 0 0 0 3px rgba(27, 79, 216, 0.15);
 }
 
 .form-control.is-invalid {
   border-color: $color-error;
 }
 
-.form-control.is-invalid:focus {
-  box-shadow: 0 0 0 3px rgba(229, 72, 77, 0.15);
-}
-
 .form-control:disabled {
-  background: $color-background;
   color: $color-text-muted;
   cursor: not-allowed;
 }
 
+// Unit/suffix shown inside the field, right-aligned ("m²", "kg", "RSD / noć"
+// on wizard price/measurement fields) — Dizajn 6 and reused across the wizard.
+// Usage: <div class="form-control-wrap"><input class="form-control" />
+// <span class="form-control-suffix">m²</span></div>
+.form-control-wrap {
+  position: relative;
+}
+
+.form-control-wrap .form-control {
+  padding-right: 48px;
+}
+
+.form-control-suffix {
+  position: absolute;
+  top: 50%;
+  right: 20px;
+  transform: translateY(-50%);
+  font-size: $font-size-muted;
+  font-weight: $font-weight-muted;
+  color: $color-text-muted;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
 .form-select {
   appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236B7280' stroke-width='1.5' fill='none' fill-rule='evenodd'/%3E%3C/svg%3E");
+  // Mirrors $color-text-muted (#637384) — data-URIs can't reference SCSS vars.
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23637384' stroke-width='1.5' fill='none' fill-rule='evenodd'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: right 14px center;
-  padding-right: 36px;
+  background-position: right 20px center;
+  padding-right: 44px;
 }
 
 .form-checkbox,
@@ -96,6 +123,107 @@ textarea.form-control {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+// Dizajn 6 — "opcija / čekiranje": 245x44 tile used for amenities/equipment
+// grids (wizard step 6) and pill-style filter toggles. Not yet consumed by
+// any page — Dizajn 25 wires this into the wizard's Opremljenost section.
+// Usage: <label class="option-tile" :class="{ 'option-tile-selected': checked }">
+// <input type="checkbox" class="option-tile-input" /><AttributeIcon .../><span>...</span></label>
+.option-tile {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 245px;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: $radius-input;
+  background: $color-surface;
+  border: 1px solid $color-border;
+  font-size: $font-size-muted;
+  color: $color-text-muted;
+  cursor: pointer;
+}
+
+.option-tile-selected {
+  background: $color-accent-tint;
+  border-color: transparent;
+  color: $color-text;
+}
+
+.option-tile-input {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  accent-color: $color-primary;
+}
+
+// Dizajn 6 — "pilula / čip": capacity, room-count style single-choice pills.
+// Not yet consumed — Dizajn 9/19 wire this into the filter panel and wizard.
+.chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 20px;
+  border-radius: $radius-pill;
+  background: $color-surface;
+  border: 1px solid $color-border;
+  color: $color-text;
+  font-size: $font-size-muted;
+  cursor: pointer;
+}
+
+.chip-selected {
+  border-color: $color-primary;
+  color: $color-primary;
+}
+
+// Dizajn 6 — toggle switch, blue when on, gray when off. Not yet consumed —
+// Dizajn 8/38 wire this into "Samo online rezervacija" and notification prefs.
+// Usage: <label class="switch"><input type="checkbox" class="switch-input" />
+// <span class="switch-track"></span></label>
+.switch {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.switch-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+
+.switch-track {
+  position: relative;
+  width: 38px;
+  height: 22px;
+  border-radius: $radius-pill;
+  background: $color-border;
+  transition: background-color 0.15s ease;
+}
+
+.switch-track::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: $radius-pill;
+  background: $color-surface;
+  transition: transform 0.15s ease;
+}
+
+.switch-input:checked + .switch-track {
+  background: $color-primary;
+}
+
+.switch-input:checked + .switch-track::before {
+  transform: translateX(16px);
 }
 
 // Honeypot field for the anti-bot check (R177) — visually and

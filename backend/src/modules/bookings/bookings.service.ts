@@ -9,6 +9,7 @@ import { AvailabilityService } from '../availability/availability.service';
 import { buildIpsQrPayload } from '../../common/utils/ips-qr';
 import { paraToRsd, rsdToPara } from '../../common/utils/money';
 import { toBelgradeHHMM } from '../../common/utils/timezone';
+import { GUEST_CAPACITY_ATTRIBUTE_KEYS } from '../../common/utils/guest-capacity';
 import { CreateBookingRequestDto } from './dto/create-booking-request.dto';
 import { CancelBookingDto, DisputeNoShowDto, RejectBookingDto } from './dto/booking-actions.dto';
 
@@ -49,15 +50,17 @@ export class BookingsService {
     }
 
     const { startsAt, endsAt, slotPrice } = await this.resolveRequestedTerm(listing, dto);
-    // "Kapacitet ljudi" (Nekretnine/Sale za proslave/Igraonice wizard step 6)
-    // is a separate CategoryAttribute from the generic minGuests/maxGuests
-    // pair set in step 4 — an owner can fill in one without the other, so
-    // guest-count validation has to honor whichever cap is actually set.
-    const capacityAttr = await this.prisma.listingAttribute.findFirst({
-      where: { listingId, attribute: { key: 'kapacitet_ljudi' } },
+    // "Kapacitet ljudi" (Nekretnine, Prostori za proslave) and "Kapacitet dece"
+    // (Igraonice) from wizard step 6 are CategoryAttributes separate from the
+    // maxGuests set in step 4. Dizajn 23: both cap the guests, so the lower applies.
+    const capacityAttrs = await this.prisma.listingAttribute.findMany({
+      where: { listingId, attribute: { key: { in: GUEST_CAPACITY_ATTRIBUTE_KEYS } }, valueNumber: { not: null } },
       select: { valueNumber: true },
     });
-    const effectiveMaxGuests = capacityAttr?.valueNumber != null ? Number(capacityAttr.valueNumber) : listing.maxGuests;
+    const guestCaps = [listing.maxGuests, ...capacityAttrs.map((attr) => Number(attr.valueNumber))].filter(
+      (cap): cap is number => cap != null && cap > 0,
+    );
+    const effectiveMaxGuests = guestCaps.length ? Math.min(...guestCaps) : null;
     this.assertTermRules({ ...listing, maxGuests: effectiveMaxGuests }, startsAt, endsAt, dto.guestCount);
 
     const pricePerUnit = slotPrice ?? listing.price;
@@ -113,7 +116,8 @@ export class BookingsService {
       await this.prisma.booking.delete({ where: { id: booking.id } });
       throw err;
     }
-    if (listing.gapAfterMinutes) {
+    // Dizajn 23: a defined slot has its own length, so the gap doesn't follow it.
+    if (listing.gapAfterMinutes && !isDefinedSlots(listing)) {
       await this.availability.applyGapAfter(listingId, endsAt, listing.gapAfterMinutes);
     }
 
@@ -162,6 +166,8 @@ export class BookingsService {
       earliestBookingHours: number | null;
       maxAdvanceBookingDays: number | null;
       priceUnit: PriceUnit;
+      bookingModel: string;
+      slotSubmode: string | null;
     },
     startsAt: Date,
     endsAt: Date,
@@ -186,20 +192,25 @@ export class BookingsService {
       }
     }
 
-    const unitCount = computeUnitCount(listing.priceUnit, startsAt, endsAt);
-    if (listing.minDuration && unitCount < listing.minDuration) {
-      throw new BadRequestException(
-        this.i18n.t('bookings.MIN_DURATION', {
-          args: { min: listing.minDuration, unit: durationUnitWord(listing.priceUnit, listing.minDuration) },
-        }),
-      );
-    }
-    if (listing.maxDuration && unitCount > listing.maxDuration) {
-      throw new BadRequestException(
-        this.i18n.t('bookings.MAX_DURATION', {
-          args: { max: listing.maxDuration, unit: durationUnitWord(listing.priceUnit, listing.maxDuration) },
-        }),
-      );
+    // Dizajn 23: a defined slot has its own length, and working hours are booked by
+    // the hour even when the price is per guest.
+    if (!isDefinedSlots(listing)) {
+      const durationUnit: PriceUnit = listing.bookingModel === 'PER_SLOT' ? 'HOUR' : listing.priceUnit;
+      const unitCount = computeUnitCount(durationUnit, startsAt, endsAt);
+      if (listing.minDuration && unitCount < listing.minDuration) {
+        throw new BadRequestException(
+          this.i18n.t('bookings.MIN_DURATION', {
+            args: { min: listing.minDuration, unit: durationUnitWord(durationUnit, listing.minDuration) },
+          }),
+        );
+      }
+      if (listing.maxDuration && unitCount > listing.maxDuration) {
+        throw new BadRequestException(
+          this.i18n.t('bookings.MAX_DURATION', {
+            args: { max: listing.maxDuration, unit: durationUnitWord(durationUnit, listing.maxDuration) },
+          }),
+        );
+      }
     }
 
     if ((listing.minGuests || listing.maxGuests) && guestCount !== undefined) {
@@ -270,9 +281,21 @@ export class BookingsService {
               listing.bookingModel === 'PER_SLOT' &&
               listing.slotSubmode === 'WORKING_HOURS' &&
               (listing.priceUnit === 'HOUR' || listing.priceUnit === 'GUEST')
-            ? (await this.availability.resolveHourlyPrice(listing.id, startsAt, toBelgradeHHMM(startsAt), listing.price)) *
-              BigInt(unitCount)
-            : pricePerUnit * BigInt(unitCount);
+            ? (await this.availability.resolveHourlyPrice(
+                listing.id,
+                startsAt,
+                toBelgradeHHMM(startsAt),
+                listing.price,
+                // Dizajn 21: the wizard offers a weekend price for the hourly rate, not the per-guest one.
+                listing.priceUnit === 'HOUR' ? listing.weekendPrice : null,
+              )) * BigInt(unitCount)
+            : // Dizajn 21: a stay billed by the hour prices each hour the way a night is priced.
+              !slotPrice && listing.bookingModel === 'PER_STAY' && listing.priceUnit === 'HOUR'
+              ? (await this.availability.getHourlyStayPrices(listing.id, startsAt, endsAt, listing.price, listing.weekendPrice)).reduce(
+                  (sum, p) => sum + p,
+                  0n,
+                )
+              : pricePerUnit * BigInt(unitCount);
 
     const totalAmount = unitPriceTotal + guestFee + mandatoryFeesTotal + extraServicesTotal;
     const amountDue = listing.advancePercent ? (totalAmount * BigInt(listing.advancePercent)) / 100n : totalAmount;
@@ -757,6 +780,11 @@ function resolvePricingUnitCount(
   if (dto.monthCount) return dto.monthCount;
   if (priceUnit === 'GUEST') return Math.max(1, dto.guestCount || 1);
   return computeUnitCount(priceUnit, startsAt, endsAt);
+}
+
+/** Dizajn 23: a defined slot carries its own length, so the duration and gap rules skip it. */
+function isDefinedSlots(listing: { bookingModel: string; slotSubmode: string | null }): boolean {
+  return listing.bookingModel === 'PER_SLOT' && listing.slotSubmode === 'DEFINED_SLOTS';
 }
 
 /** Nights/days/hours/months/years between two timestamps, matching the listing's price unit. */

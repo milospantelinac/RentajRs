@@ -113,6 +113,23 @@ let ListingsService = class ListingsService {
                 throw new common_1.BadRequestException('bookingModel must match the category\'s booking model, or be NO_BOOKING');
             }
         }
+        const rulePairs = [
+            ['minDuration', 'maxDuration', 'errors.DURATION_MIN_ABOVE_MAX'],
+            ['minGuests', 'maxGuests', 'errors.GUESTS_MIN_ABOVE_MAX'],
+        ];
+        for (const [minField, maxField, message] of rulePairs) {
+            const changed = [minField, maxField].some((field) => dto[field] !== undefined && dto[field] !== listing[field]);
+            const min = dto[minField] !== undefined ? dto[minField] : listing[minField];
+            const max = dto[maxField] !== undefined ? dto[maxField] : listing[maxField];
+            if (changed && min != null && max != null && min > max)
+                throw new common_1.BadRequestException(this.i18n.t(message));
+        }
+        const cancellationChanged = ['cancellationPolicyType', 'cancellationThreshold'].some((field) => dto[field] !== undefined && dto[field] !== listing[field]);
+        const policy = dto.cancellationPolicyType !== undefined ? dto.cancellationPolicyType : listing.cancellationPolicyType;
+        const threshold = dto.cancellationThreshold !== undefined ? dto.cancellationThreshold : listing.cancellationThreshold;
+        if (cancellationChanged && (policy === 'FREE_UNTIL_DAYS' || policy === 'FREE_UNTIL_HOURS') && threshold == null) {
+            throw new common_1.BadRequestException(this.i18n.t('errors.CANCELLATION_THRESHOLD_REQUIRED'));
+        }
         const priceFields = {};
         if (dto.price !== undefined)
             priceFields.price = (0, money_1.rsdToPara)(dto.price);
@@ -167,7 +184,7 @@ let ListingsService = class ListingsService {
             if (type === 'TEXT' || type === 'TEXTAREA')
                 return !!v.valueText;
             if (type === 'BOOLEAN')
-                return true;
+                return v.valueBoolean !== null && v.valueBoolean !== undefined;
             return (v.valueOptionIds ?? []).length > 0;
         });
         const toClear = submitted.filter((v) => !toWrite.includes(v)).map((v) => v.attributeId);
@@ -404,6 +421,9 @@ let ListingsService = class ListingsService {
         const canBook = listing.subscription?.package?.hasBookings ?? false;
         const canMessage = listing.subscription?.package?.hasMessaging ?? false;
         const { phone, ...ownerRest } = listing.user;
+        const ownerListingCount = await this.prisma.listing.count({
+            where: { userId: listing.userId, status: client_1.ListingStatus.ACTIVE },
+        });
         return {
             ...this.serialize(listing),
             photos: listing.photos,
@@ -413,7 +433,7 @@ let ListingsService = class ListingsService {
             region: listing.region,
             city: listing.city,
             cityArea: listing.cityArea,
-            owner: { ...ownerRest, phone: canMessage ? undefined : phone },
+            owner: { ...ownerRest, phone: canMessage ? undefined : phone, listingCount: ownerListingCount },
             attributes: attributes.map((a) => ({ ...a, value: valueMap.get(a.id) ?? null })),
             canBook,
             canMessage,
@@ -505,13 +525,59 @@ let ListingsService = class ListingsService {
         });
         return listings.map((l) => this.serialize(l));
     }
+    async changeCategory(userId, listingId, categoryId) {
+        const listing = await this.assertOwnership(userId, listingId);
+        if (listing.status !== client_1.ListingStatus.DRAFT || listing.pendingCategoryAssignment) {
+            throw new common_1.BadRequestException(this.i18n.t('errors.LISTING_CATEGORY_CHANGE_NOT_ALLOWED'));
+        }
+        const category = await this.prisma.category.findUnique({
+            where: { id: categoryId },
+            include: { children: { where: { status: 'ACTIVE' }, select: { id: true } } },
+        });
+        if (!category || category.status !== 'ACTIVE' || category.children.length || category.slug === taxonomy_service_2.FALLBACK_CATEGORY_SLUG) {
+            throw new common_1.BadRequestException(this.i18n.t('errors.CATEGORY_NOT_SELECTABLE'));
+        }
+        if (category.id === listing.categoryId)
+            return this.serialize(listing);
+        const attributeIds = (await this.taxonomy.resolveAttributesForCategory(category.id)).map((attr) => attr.id);
+        const [, updated] = await this.prisma.$transaction([
+            this.prisma.listingAttribute.deleteMany({ where: { listingId, attributeId: { notIn: attributeIds } } }),
+            this.prisma.listing.update({
+                where: { id: listingId },
+                data: {
+                    categoryId: category.id,
+                    ...this.bookingFieldsForCategory(listing, category),
+                    slotSubmode: category.defaultBookingModel === 'PER_SLOT' ? listing.slotSubmode : null,
+                },
+            }),
+        ]);
+        return this.serialize(updated);
+    }
     async adminAssignCategory(listingId, categoryId) {
+        const listing = await this.prisma.listing.findUnique({ where: { id: listingId } });
+        if (!listing)
+            throw new common_1.NotFoundException(this.i18n.t('errors.LISTING_NOT_FOUND'));
         const category = await this.prisma.category.findUniqueOrThrow({ where: { id: categoryId } });
         const updated = await this.prisma.listing.update({
             where: { id: listingId },
-            data: { categoryId: category.id, pendingCategoryAssignment: false },
+            data: {
+                categoryId: category.id,
+                pendingCategoryAssignment: false,
+                ...this.bookingFieldsForCategory(listing, category),
+            },
         });
+        if (listing.pendingCategoryAssignment) {
+            this.events.emit('listing.category_assigned', { listingId, userId: listing.userId });
+        }
         return this.serialize(updated);
+    }
+    bookingFieldsForCategory(listing, category) {
+        const bookingModel = listing.bookingModel === 'NO_BOOKING' ? listing.bookingModel : category.defaultBookingModel;
+        return {
+            bookingModel,
+            priceUnit: category.allowedPriceUnits.includes(listing.priceUnit) ? listing.priceUnit : category.defaultPriceUnit,
+            icalExportToken: listing.icalExportToken ?? (bookingModel === 'PER_STAY' ? crypto.randomUUID() : undefined),
+        };
     }
     async sendPriceDropNotifications() {
         const favorites = await this.prisma.favorite.findMany({

@@ -18,6 +18,8 @@ import {
   faPlus,
   faPen,
   faPaperclip,
+  faArrowsRotate,
+  faLockOpen,
 } from '@fortawesome/free-solid-svg-icons'
 import '@fortawesome/fontawesome-svg-core/styles.css'
 
@@ -43,6 +45,8 @@ library.add(
   faPlus,
   faPen,
   faPaperclip,
+  faArrowsRotate,
+  faLockOpen,
 )
 
 export default defineNuxtPlugin((nuxtApp) => {

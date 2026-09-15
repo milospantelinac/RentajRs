@@ -53,6 +53,7 @@ const availability_service_1 = require("../availability/availability.service");
 const ips_qr_1 = require("../../common/utils/ips-qr");
 const money_1 = require("../../common/utils/money");
 const timezone_1 = require("../../common/utils/timezone");
+const guest_capacity_1 = require("../../common/utils/guest-capacity");
 let BookingsService = class BookingsService {
     constructor(prisma, availability, i18n, events) {
         this.prisma = prisma;
@@ -79,11 +80,12 @@ let BookingsService = class BookingsService {
             throw new common_1.ForbiddenException(this.i18n.t('errors.PACKAGE_FEATURE_NOT_INCLUDED'));
         }
         const { startsAt, endsAt, slotPrice } = await this.resolveRequestedTerm(listing, dto);
-        const capacityAttr = await this.prisma.listingAttribute.findFirst({
-            where: { listingId, attribute: { key: 'kapacitet_ljudi' } },
+        const capacityAttrs = await this.prisma.listingAttribute.findMany({
+            where: { listingId, attribute: { key: { in: guest_capacity_1.GUEST_CAPACITY_ATTRIBUTE_KEYS } }, valueNumber: { not: null } },
             select: { valueNumber: true },
         });
-        const effectiveMaxGuests = capacityAttr?.valueNumber != null ? Number(capacityAttr.valueNumber) : listing.maxGuests;
+        const guestCaps = [listing.maxGuests, ...capacityAttrs.map((attr) => Number(attr.valueNumber))].filter((cap) => cap != null && cap > 0);
+        const effectiveMaxGuests = guestCaps.length ? Math.min(...guestCaps) : null;
         this.assertTermRules({ ...listing, maxGuests: effectiveMaxGuests }, startsAt, endsAt, dto.guestCount);
         const pricePerUnit = slotPrice ?? listing.price;
         const unitCount = resolvePricingUnitCount(listing.priceUnit, startsAt, endsAt, dto);
@@ -129,7 +131,7 @@ let BookingsService = class BookingsService {
             await this.prisma.booking.delete({ where: { id: booking.id } });
             throw err;
         }
-        if (listing.gapAfterMinutes) {
+        if (listing.gapAfterMinutes && !isDefinedSlots(listing)) {
             await this.availability.applyGapAfter(listingId, endsAt, listing.gapAfterMinutes);
         }
         await this.recordHistory(booking.id, null, 'REQUESTED', guestId, false);
@@ -174,16 +176,19 @@ let BookingsService = class BookingsService {
                 throw new common_1.BadRequestException(this.i18n.t('bookings.TOO_FAR_AHEAD', { args: { max: listing.maxAdvanceBookingDays } }));
             }
         }
-        const unitCount = computeUnitCount(listing.priceUnit, startsAt, endsAt);
-        if (listing.minDuration && unitCount < listing.minDuration) {
-            throw new common_1.BadRequestException(this.i18n.t('bookings.MIN_DURATION', {
-                args: { min: listing.minDuration, unit: durationUnitWord(listing.priceUnit, listing.minDuration) },
-            }));
-        }
-        if (listing.maxDuration && unitCount > listing.maxDuration) {
-            throw new common_1.BadRequestException(this.i18n.t('bookings.MAX_DURATION', {
-                args: { max: listing.maxDuration, unit: durationUnitWord(listing.priceUnit, listing.maxDuration) },
-            }));
+        if (!isDefinedSlots(listing)) {
+            const durationUnit = listing.bookingModel === 'PER_SLOT' ? 'HOUR' : listing.priceUnit;
+            const unitCount = computeUnitCount(durationUnit, startsAt, endsAt);
+            if (listing.minDuration && unitCount < listing.minDuration) {
+                throw new common_1.BadRequestException(this.i18n.t('bookings.MIN_DURATION', {
+                    args: { min: listing.minDuration, unit: durationUnitWord(durationUnit, listing.minDuration) },
+                }));
+            }
+            if (listing.maxDuration && unitCount > listing.maxDuration) {
+                throw new common_1.BadRequestException(this.i18n.t('bookings.MAX_DURATION', {
+                    args: { max: listing.maxDuration, unit: durationUnitWord(durationUnit, listing.maxDuration) },
+                }));
+            }
         }
         if ((listing.minGuests || listing.maxGuests) && guestCount !== undefined) {
             const min = listing.minGuests ?? 1;
@@ -206,9 +211,11 @@ let BookingsService = class BookingsService {
                         listing.bookingModel === 'PER_SLOT' &&
                         listing.slotSubmode === 'WORKING_HOURS' &&
                         (listing.priceUnit === 'HOUR' || listing.priceUnit === 'GUEST')
-                        ? (await this.availability.resolveHourlyPrice(listing.id, startsAt, (0, timezone_1.toBelgradeHHMM)(startsAt), listing.price)) *
-                            BigInt(unitCount)
-                        : pricePerUnit * BigInt(unitCount);
+                        ? (await this.availability.resolveHourlyPrice(listing.id, startsAt, (0, timezone_1.toBelgradeHHMM)(startsAt), listing.price, listing.priceUnit === 'HOUR' ? listing.weekendPrice : null)) * BigInt(unitCount)
+                        :
+                            !slotPrice && listing.bookingModel === 'PER_STAY' && listing.priceUnit === 'HOUR'
+                                ? (await this.availability.getHourlyStayPrices(listing.id, startsAt, endsAt, listing.price, listing.weekendPrice)).reduce((sum, p) => sum + p, 0n)
+                                : pricePerUnit * BigInt(unitCount);
         const totalAmount = unitPriceTotal + guestFee + mandatoryFeesTotal + extraServicesTotal;
         const amountDue = listing.advancePercent ? (totalAmount * BigInt(listing.advancePercent)) / 100n : totalAmount;
         return { unitPriceTotal, guestFee, mandatoryFeesTotal, extraServicesTotal, totalAmount, amountDue };
@@ -609,6 +616,9 @@ function resolvePricingUnitCount(priceUnit, startsAt, endsAt, dto) {
     if (priceUnit === 'GUEST')
         return Math.max(1, dto.guestCount || 1);
     return computeUnitCount(priceUnit, startsAt, endsAt);
+}
+function isDefinedSlots(listing) {
+    return listing.bookingModel === 'PER_SLOT' && listing.slotSubmode === 'DEFINED_SLOTS';
 }
 function computeUnitCount(priceUnit, startsAt, endsAt) {
     const ms = endsAt.getTime() - startsAt.getTime();

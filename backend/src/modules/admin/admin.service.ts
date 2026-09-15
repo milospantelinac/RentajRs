@@ -7,6 +7,7 @@ import { UsersService } from '../users/users.service';
 import { BookingsService } from '../bookings/bookings.service';
 import { paraToRsd } from '../../common/utils/money';
 import { PaymentSettingsService } from '../../common/payment/nestpay/payment-settings.service';
+import { UploadsService } from '../../common/uploads/uploads.service';
 import { UpdatePaymentSettingsDto } from '../../common/payment/nestpay/dto/payment-settings.dto';
 import {
   ReportListingDto,
@@ -31,6 +32,7 @@ export class AdminService {
     private i18n: I18nService,
     private events: EventEmitter2,
     private paymentSettings: PaymentSettingsService,
+    private uploads: UploadsService,
   ) {}
 
   // -- Users -----------------------------------------------------------
@@ -253,6 +255,35 @@ export class AdminService {
     await this.prisma.setting.update({ where: { key }, data: { value: dto.value as any } });
     await this.logAction(adminId, 'update_setting', 'Setting', key, existing.value, dto.value);
     return { message: this.i18n.t('common.SUCCESS') };
+  }
+
+  // -- Homepage video poster --------------------------------------------
+
+  /**
+   * The poster shown over the homepage video before it is played. Stored as a
+   * Setting rather than its own table so it lives beside homepage_video_url
+   * and reuses the settings audit trail.
+   */
+  async setHomepageVideoThumbnail(adminId: string, file: Express.Multer.File) {
+    if (!file) throw new BadRequestException(this.i18n.t('errors.FILE_REQUIRED'));
+    const { url } = await this.uploads.saveImage(file, 'homepage', { maxWidth: 1600 });
+    return this.writeVideoThumbnail(adminId, url);
+  }
+
+  async removeHomepageVideoThumbnail(adminId: string) {
+    return this.writeVideoThumbnail(adminId, '');
+  }
+
+  private async writeVideoThumbnail(adminId: string, url: string) {
+    const key = 'homepage_video_thumbnail';
+    const existing = await this.prisma.setting.findUnique({ where: { key } });
+    await this.prisma.setting.upsert({
+      where: { key },
+      create: { key, value: url, description: 'Poster image for the homepage "how it works" video' },
+      update: { value: url },
+    });
+    await this.logAction(adminId, 'update_setting', 'Setting', key, existing?.value ?? null, url);
+    return { thumbnailUrl: url || null };
   }
 
   // -- Payment settings (Banca Intesa NestPay connector) ----------------

@@ -163,7 +163,7 @@ export class AvailabilityService {
         listingId,
         startsAt,
         endsAt,
-        price: dto.price ? rsdToPara(dto.price) : undefined,
+        price: rsdToPara(dto.price),
         maxBookings: dto.maxBookings ?? 1,
       },
     });
@@ -276,11 +276,18 @@ export class AvailabilityService {
   /**
    * Resolves the actual price for one hourly booking: a date+time-specific
    * SlotPriceOverride wins, then whichever HourlyPriceRange's window
-   * contains the booking's start time, else the listing's flat base price.
+   * contains the booking's start time, then the weekend price when the
+   * booking starts on a Friday or Saturday, else the listing's flat base price.
    * Compares HH:MM strings lexically, which is safe since they're always
    * zero-padded 24h (matches the /^([01]\d|2[0-3]):[0-5]\d$/ DTO pattern).
    */
-  async resolveHourlyPrice(listingId: string, date: Date, startTime: string, basePrice: bigint): Promise<bigint> {
+  async resolveHourlyPrice(
+    listingId: string,
+    date: Date,
+    startTime: string,
+    basePrice: bigint,
+    weekendPrice: bigint | null = null,
+  ): Promise<bigint> {
     // T72 — raw UTC getters read a booking's calendar day back shifted by
     // the Belgrade offset (e.g. a late-evening booking rolling into the next
     // UTC day), missing a same-day SlotPriceOverride; SlotPriceOverride.date
@@ -300,7 +307,12 @@ export class AvailabilityService {
     const daySpecific = ranges.find((r) => r.dayOfWeek === dayOfWeek && r.startTime <= startTime && r.endTime > startTime);
     if (daySpecific) return daySpecific.price;
     const shared = ranges.find((r) => r.dayOfWeek === null && r.startTime <= startTime && r.endTime > startTime);
-    return shared?.price ?? basePrice;
+    if (shared) return shared.price;
+
+    // Dizajn 21: the wizard's "Cena za vikend" covers hourly listings too, on
+    // the same Friday and Saturday as a stay's weekend nights (ISO 5 and 6).
+    const isWeekend = dayOfWeek === 5 || dayOfWeek === 6;
+    return isWeekend && weekendPrice ? weekendPrice : basePrice;
   }
 
   /** Per-night price for a PER_STAY booking spanning [startsAt, endsAt) — override where set, weekend/base price otherwise. */
@@ -315,6 +327,29 @@ export class AvailabilityService {
       const key = d.toISOString().slice(0, 10);
       const isWeekend = d.getUTCDay() === 5 || d.getUTCDay() === 6; // Fri/Sat night
       prices.push(overrideByDate.get(key) ?? (isWeekend && weekendPrice ? weekendPrice : basePrice));
+    }
+    return prices;
+  }
+
+  /**
+   * Dizajn 21: per-hour price for a PER_STAY booking billed by the HOUR over
+   * [startsAt, endsAt). Each hour takes its date's override, else the weekend
+   * price on a Friday or Saturday, else the base price: the rule
+   * getNightlyPrices applies to a night, on the same UTC calendar dates.
+   */
+  async getHourlyStayPrices(listingId: string, startsAt: Date, endsAt: Date, basePrice: bigint, weekendPrice: bigint | null) {
+    const firstDate = new Date(startsAt);
+    firstDate.setUTCHours(0, 0, 0, 0);
+    const overrides = await this.prisma.datePriceOverride.findMany({
+      where: { listingId, date: { gte: firstDate, lt: endsAt } },
+    });
+    const overrideByDate = new Map(overrides.map((o) => [o.date.toISOString().slice(0, 10), o.price]));
+
+    const prices: bigint[] = [];
+    for (let time = startsAt.getTime(); time < endsAt.getTime(); time += 3600_000) {
+      const hour = new Date(time);
+      const isWeekend = hour.getUTCDay() === 5 || hour.getUTCDay() === 6;
+      prices.push(overrideByDate.get(hour.toISOString().slice(0, 10)) ?? (isWeekend && weekendPrice ? weekendPrice : basePrice));
     }
     return prices;
   }

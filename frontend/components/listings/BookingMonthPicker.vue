@@ -3,7 +3,7 @@
     <div class="form-group mb-3">
       <label class="form-label">{{ t('booking.monthStart') }}</label>
       <select v-model="selectedMonth" class="form-control form-select">
-        <option v-for="m in availableMonths" :key="m.key" :value="m.key" :disabled="m.blocked">
+        <option v-for="m in availableMonths" :key="m.key" :value="m.key" :disabled="m.blocked || m.outsideRules">
           {{ m.label }}{{ m.blocked ? ` (${t('listing.calendarBlocked')})` : m.price ? ` — ${formatPrice(m.price)} RSD` : '' }}
         </option>
       </select>
@@ -29,6 +29,9 @@ const props = defineProps({
   basePrice: { type: Number, default: 0 },
   minDuration: { type: Number, default: null },
   maxDuration: { type: Number, default: null },
+  // Dizajn 23: the server holds a month's first instant to the notice and the horizon.
+  earliestBookingHours: { type: Number, default: null },
+  maxAdvanceBookingDays: { type: Number, default: null },
 })
 
 const emit = defineEmits(['update:range'])
@@ -65,10 +68,15 @@ const availableMonths = computed(() => {
     const blocked = blocks.value.some(
       (b) => new Date(b.startsAt).getTime() < monthStartUTC(nextMonth) && new Date(b.endsAt).getTime() > monthStartUTC(date),
     )
+    const firstInstant = monthStartUTC(date)
+    const outsideRules =
+      (!!props.earliestBookingHours && firstInstant < now.getTime() + props.earliestBookingHours * 3600_000) ||
+      (!!props.maxAdvanceBookingDays && firstInstant > now.getTime() + props.maxAdvanceBookingDays * 86_400_000)
     return {
       key,
       label: date.toLocaleDateString(t('listing.calendarLocale'), { month: 'long', year: 'numeric' }),
       blocked,
+      outsideRules,
       price: overrides.value.get(key),
     }
   })

@@ -1,140 +1,203 @@
 <template>
-  <div class="wh-editor">
-    <p class="text-label mb-2">{{ t('listing.whAvailableDays') }}</p>
-    <div class="wh-days">
-      <label v-for="d in DAYS" :key="d.value" class="wh-day" :class="{ 'wh-day-active': enabledDays.has(d.value) }">
-        <input type="checkbox" class="d-none" :checked="enabledDays.has(d.value)" @change="toggleDay(d.value)" />
-        {{ t(d.labelKey) }}
-      </label>
-    </div>
+  <!-- Dizajn 22: the Forma column of 239:287 (Radno vreme, drawn for Igraonice). -->
+  <div class="avail">
+    <!-- 252:287 -->
+    <section class="avail-section">
+      <p id="wh-days-label" class="avail-label">{{ t('listing.whAvailableDays') }} <span class="avail-required">*</span></p>
+      <div class="avail-days" role="group" aria-labelledby="wh-days-label">
+        <label v-for="d in DAYS" :key="d.value" class="avail-day" :class="{ 'is-on': enabledDays.has(d.value) }">
+          <input type="checkbox" class="visually-hidden" :checked="enabledDays.has(d.value)" @change="toggleDay(d.value)" />
+          <span class="avail-day-box" aria-hidden="true">
+            <img v-if="enabledDays.has(d.value)" src="/images/icons/day-check.svg" alt="" />
+          </span>
+          {{ t(d.labelKey) }}
+        </label>
+      </div>
+      <p v-if="daysError" class="avail-error"><img src="/images/icons/field-error.svg" alt="" />{{ daysError }}</p>
+    </section>
 
-    <!-- T104 — one shared range for every active day (existing behavior), or
-         each day gets its own "od-do" including the ability to cross
-         midnight (e.g. 20:00–02:00: "do" <= "od" means the term runs into
-         the next calendar day). -->
-    <div class="form-group mt-3 mb-2">
-      <label class="form-row-inline">
-        <input v-model="perDayMode" type="checkbox" class="form-checkbox" />
-        {{ t('listing.whPerDayToggle') }}
-      </label>
-    </div>
-
-    <template v-if="!perDayMode">
-      <div class="row">
-        <div class="col-6">
-          <div class="form-group mb-1">
-            <label class="form-label">{{ t('listing.whFrom') }}</label>
-            <input v-model="commonFrom" type="time" class="form-control" />
+    <!-- 252:324 -->
+    <section class="avail-section avail-section-tight">
+      <p class="avail-label">{{ t('listing.whWorkingHours') }} <span class="avail-required">*</span></p>
+      <template v-if="!perDayMode">
+        <div class="avail-hours">
+          <div class="avail-hours-field">
+            <label for="wh-from" class="avail-sublabel">{{ t('listing.whFrom') }}</label>
+            <AvailabilityTimeSelect id="wh-from" v-model="commonFrom" />
+          </div>
+          <div class="avail-hours-field">
+            <label for="wh-to" class="avail-sublabel">{{ t('listing.whTo') }}</label>
+            <AvailabilityTimeSelect id="wh-to" v-model="commonTo" />
           </div>
         </div>
-        <div class="col-6">
-          <div class="form-group mb-1">
-            <label class="form-label">{{ t('listing.whTo') }}</label>
-            <input v-model="commonTo" type="time" class="form-control" />
-          </div>
-        </div>
-      </div>
-      <p class="text-muted mb-3">{{ t('listing.whMidnightCrossHint') }}</p>
+        <!-- T104: hours that end at or before they start run into the next day. -->
+        <p v-if="crossesMidnight(commonFrom, commonTo)" class="avail-hint">{{ t('listing.whMidnightCrossHint') }}</p>
+      </template>
 
-      <p class="text-label mb-2 mt-3">{{ t('listing.whHourlyRanges') }}</p>
-      <p class="text-muted mb-2">{{ t('listing.whHourlyRangesHint') }}</p>
-      <div v-for="(r, i) in hourlyRanges" :key="i" class="wh-range-row">
-        <input v-model="r.startTime" type="time" class="form-control" />
-        <span>—</span>
-        <input v-model="r.endTime" type="time" class="form-control" />
-        <input v-model.number="r.price" type="number" min="1" class="form-control" :placeholder="t('listing.pricePerHour')" />
-        <button type="button" class="btn btn-tertiary btn-sm" @click="hourlyRanges.splice(i, 1)">✕</button>
-      </div>
-      <button type="button" class="btn btn-tertiary btn-sm mb-3" @click="addRange">+ {{ t('listing.whAddRange') }}</button>
-    </template>
+      <!-- 252:340 -->
+      <label class="avail-toggle-row">
+        <input v-model="perDayMode" type="checkbox" role="switch" class="visually-hidden" />
+        <span class="avail-toggle" :class="{ 'is-on': perDayMode }" aria-hidden="true" />
+        <span class="avail-toggle-text">
+          <span class="avail-toggle-title">
+            {{ t('listing.whPerDayToggle') }}
+            <img src="/images/icons/info-circle.svg" alt="" />
+          </span>
+          <span class="avail-toggle-caption">{{ t(perDayMode ? 'listing.whPerDayCaptionOn' : 'listing.whPerDayCaptionOff') }}</span>
+        </span>
+      </label>
 
-    <template v-else>
-      <div v-for="day in enabledDaysList" :key="day.value" class="wh-day-panel mt-3">
-        <p class="text-label mb-2">{{ t(day.labelKey) }}</p>
-        <div class="row">
-          <div class="col-6">
-            <div class="form-group mb-1">
-              <label class="form-label">{{ t('listing.whFrom') }}</label>
-              <input v-model="dayTimes[day.value].from" type="time" class="form-control" />
+      <template v-if="perDayMode">
+        <div v-for="day in enabledDaysList" :key="day.value" class="avail-day-block">
+          <p class="avail-day-name">{{ t(day.labelKey) }}</p>
+          <div class="avail-hours">
+            <div class="avail-hours-field">
+              <label :for="`wh-from-${day.value}`" class="avail-sublabel">{{ t('listing.whFrom') }}</label>
+              <AvailabilityTimeSelect :id="`wh-from-${day.value}`" v-model="dayTimes[day.value].from" />
+            </div>
+            <div class="avail-hours-field">
+              <label :for="`wh-to-${day.value}`" class="avail-sublabel">{{ t('listing.whTo') }}</label>
+              <AvailabilityTimeSelect :id="`wh-to-${day.value}`" v-model="dayTimes[day.value].to" />
             </div>
           </div>
-          <div class="col-6">
-            <div class="form-group mb-1">
-              <label class="form-label">{{ t('listing.whTo') }}</label>
-              <input v-model="dayTimes[day.value].to" type="time" class="form-control" />
-            </div>
+          <p v-if="crossesMidnight(dayTimes[day.value].from, dayTimes[day.value].to)" class="avail-hint">
+            {{ t('listing.whMidnightCrossHint') }}
+          </p>
+          <div v-if="enabledDaysList.length > 1" class="avail-actions">
+            <button type="button" class="avail-link" @click="copyDayTimeToOthers(day.value)">{{ t('listing.whCopyToOtherDays') }}</button>
           </div>
         </div>
-        <p class="text-muted mb-2">{{ t('listing.whMidnightCrossHint') }}</p>
-        <button type="button" class="btn btn-tertiary btn-sm mb-2" @click="copyDayTimeToOthers(day.value)">
-          {{ t('listing.whCopyToOtherDays') }}
-        </button>
+      </template>
+    </section>
 
-        <p class="text-label mb-2 mt-2">{{ t('listing.whHourlyRanges') }}</p>
-        <div v-for="(r, i) in dayHourlyRanges[day.value]" :key="i" class="wh-range-row">
-          <input v-model="r.startTime" type="time" class="form-control" />
-          <span>—</span>
-          <input v-model="r.endTime" type="time" class="form-control" />
-          <input v-model.number="r.price" type="number" min="1" class="form-control" :placeholder="t('listing.pricePerHour')" />
-          <button type="button" class="btn btn-tertiary btn-sm" @click="dayHourlyRanges[day.value].splice(i, 1)">✕</button>
+    <!-- 252:349 -->
+    <section class="avail-section avail-section-tight">
+      <p class="avail-label">
+        {{ t('listing.whHourlyRanges') }}
+        <span class="avail-label-note">{{ t('common.optional') }}</span>
+      </p>
+      <p class="avail-hint">{{ rangesHint }}</p>
+
+      <div v-for="group in rangeGroups" :key="group.key" class="avail-day-block">
+        <p v-if="group.label" class="avail-day-name">{{ group.label }}</p>
+        <div v-if="group.ranges.length" class="avail-ranges">
+          <div v-for="(r, i) in group.ranges" :key="i" class="avail-range">
+            <AvailabilityTimeSelect v-model="r.startTime" class="avail-range-time" :aria-label="t('listing.whFrom')" />
+            <span class="avail-range-dash" aria-hidden="true">-</span>
+            <AvailabilityTimeSelect v-model="r.endTime" class="avail-range-time" :aria-label="t('listing.whTo')" />
+            <span class="avail-price">
+              <input
+                type="text"
+                inputmode="numeric"
+                autocomplete="off"
+                class="avail-price-input"
+                :aria-label="t('listing.price')"
+                :value="formatRsdInput(r.price)"
+                @input="r.price = applyRsdInput($event)"
+              />
+              <span class="avail-price-suffix">{{ priceSuffix }}</span>
+            </span>
+            <button type="button" class="avail-icon-btn" :aria-label="t('listing.whRemoveRange')" @click="group.ranges.splice(i, 1)">
+              <img src="/images/icons/remove-x-muted.svg" alt="" />
+            </button>
+          </div>
         </div>
-        <div class="wh-day-range-actions mb-3">
-          <button type="button" class="btn btn-tertiary btn-sm" @click="addDayRange(day.value)">+ {{ t('listing.whAddRange') }}</button>
+        <div v-if="group.key !== 'all'" class="avail-actions">
+          <button type="button" class="avail-btn" @click="addRange(group.key)">+ {{ t('listing.whAddRange') }}</button>
           <button
-            v-if="dayHourlyRanges[day.value]?.length"
+            v-if="group.ranges.length && enabledDaysList.length > 1"
             type="button"
-            class="btn btn-tertiary btn-sm"
-            @click="copyDayRangesToOthers(day.value)"
-          >{{ t('listing.whCopyToOtherDays') }}</button>
+            class="avail-link"
+            @click="copyDayRangesToOthers(group.key)"
+          >
+            {{ t('listing.whCopyToOtherDays') }}
+          </button>
         </div>
       </div>
-    </template>
 
-    <button type="button" class="btn btn-primary-flat btn-sm" :disabled="busy" @click="save">
-      {{ busy ? t('common.loading') : t('common.save') }}
-    </button>
-    <p v-if="saved" class="text-success mt-2">{{ t('dashboard.changesSaved') }}</p>
-    <p v-if="editorError" class="form-error mt-2">{{ editorError }}</p>
+      <!-- 252:385: the frame's note about the button is left out, the button says it itself. -->
+      <div class="avail-actions">
+        <button v-if="!perDayMode" type="button" class="avail-btn" @click="addRange('all')">+ {{ t('listing.whAddRange') }}</button>
+        <button type="button" class="avail-btn avail-btn-soft" :disabled="busy" @click="save">
+          {{ saved ? t('common.savedButton') : busy ? t('common.loading') : t('common.save') }}
+        </button>
+      </div>
+      <p v-if="editorError" class="avail-error"><img src="/images/icons/field-error.svg" alt="" />{{ editorError }}</p>
+    </section>
 
-    <!-- Izuzeci — Dodavanje Oglasa spec §3: block a whole date, or set a
-         one-off price for a specific date+time window. -->
-    <div class="wh-exceptions mt-4">
-      <p class="text-label mb-2">{{ t('listing.whExceptions') }}</p>
-      <div class="wh-exception-row">
-        <input v-model="blockDate" type="date" class="form-control" />
-        <button type="button" class="btn btn-tertiary btn-sm" :disabled="!blockDate || blockingDate" @click="blockWholeDate">
+    <!-- 252:394: Dodavanje Oglasa spec §3, block a whole date or price one date's window. -->
+    <section class="avail-section">
+      <p class="avail-label">
+        {{ t('listing.whExceptions') }}
+        <span class="avail-label-note">{{ t('listing.whExceptionsCaption') }}</span>
+      </p>
+      <!-- 252:398 -->
+      <div class="avail-exception-row">
+        <span class="avail-exception-label">{{ t('listing.whBlockDate') }}</span>
+        <AvailabilityDateField
+          v-model="blockDate"
+          class="avail-exception-date"
+          :listing-id="listingId"
+          :placeholder="t('listing.datePlaceholder')"
+          :aria-label="t('listing.whBlockDate')"
+        />
+        <button type="button" class="avail-btn" :disabled="blockingDate" @click="blockWholeDate">
           {{ blockDateSaved ? t('common.savedButton') : t('listing.whBlockDate') }}
         </button>
       </div>
-      <ul v-if="blockedDates.length" class="wh-override-list mt-2">
-        <li v-for="b in blockedDates" :key="b.id">
-          {{ formatDate(b.startsAt) }}
-          <button type="button" class="btn-link-danger" @click="removeBlockedDate(b.id)">✕</button>
-        </li>
-      </ul>
-      <div class="wh-exception-row mt-2">
-        <input v-model="overrideDate" type="date" class="form-control" />
-        <input v-model="overrideFrom" type="time" class="form-control" />
-        <input v-model="overrideTo" type="time" class="form-control" />
-        <input v-model.number="overridePrice" type="number" min="1" class="form-control" :placeholder="t('listing.pricePerHour')" />
-        <button type="button" class="btn btn-tertiary btn-sm" :disabled="!overrideDate || !overridePrice" @click="addOverride">
+      <!-- 252:406 -->
+      <div class="avail-exception-row">
+        <span class="avail-exception-label">{{ t('listing.whSpecialPrice') }}</span>
+        <AvailabilityDateField
+          v-model="overrideDate"
+          class="avail-exception-date-sm"
+          :listing-id="listingId"
+          :placeholder="t('listing.datePlaceholder')"
+          :aria-label="t('listing.whSpecialPrice')"
+        />
+        <AvailabilityTimeSelect v-model="overrideFrom" class="avail-exception-time" :aria-label="t('listing.whFrom')" />
+        <AvailabilityTimeSelect v-model="overrideTo" class="avail-exception-time" :aria-label="t('listing.whTo')" />
+        <input
+          type="text"
+          inputmode="numeric"
+          autocomplete="off"
+          class="avail-exception-price"
+          :aria-label="t('listing.price')"
+          :placeholder="priceSuffix"
+          :value="formatRsdInput(overridePrice)"
+          @input="overridePrice = applyRsdInput($event)"
+        />
+        <button type="button" class="avail-btn" :disabled="settingOverride" @click="addOverride">
           {{ t('listing.whSetException') }}
         </button>
       </div>
+      <p v-if="exceptionsError" class="avail-error"><img src="/images/icons/field-error.svg" alt="" />{{ exceptionsError }}</p>
 
-      <ul v-if="slotPriceOverrides.length" class="wh-override-list mt-2">
-        <li v-for="o in slotPriceOverrides" :key="o.id">
-          {{ formatDate(o.date) }}, {{ o.startTime }}–{{ o.endTime }}: {{ formatPrice(o.price) }} RSD
-          <button type="button" class="btn-link-danger" @click="removeOverride(o.id)">✕</button>
-        </li>
-      </ul>
-    </div>
+      <!-- 252:424: both kinds of exception in one list, by date. -->
+      <div v-if="exceptions.length" class="avail-list">
+        <p class="avail-list-head">
+          {{ t('listing.whExceptionsListTitle') }}
+          <img src="/images/icons/info-circle.svg" alt="" />
+        </p>
+        <div v-for="item in exceptions" :key="item.key" class="avail-list-row">
+          <span class="avail-list-text">
+            <span class="avail-list-title">{{ item.title }}</span>
+            <span class="avail-list-sub">{{ item.subtitle }}</span>
+          </span>
+          <button type="button" class="avail-link" @click="item.remove">{{ t('listing.whRemove') }}</button>
+        </div>
+      </div>
+    </section>
   </div>
 </template>
 
 <script setup>
 const props = defineProps({
   listingId: { type: String, required: true },
+  // Step 2's values, for the hints and the live preview beside the form.
+  basePrice: { type: Number, default: 0 },
+  weekendPrice: { type: Number, default: null },
+  priceUnit: { type: String, default: 'HOUR' },
 })
 
 const { t } = useI18n()
@@ -157,6 +220,7 @@ const hourlyRanges = ref([])
 const busy = ref(false)
 const saved = ref(false)
 const editorError = ref('')
+const daysError = ref('')
 
 // T104 — "posebno radno vreme po danu": each active day gets its own
 // from/to and its own hourly price ranges, instead of one shared range for
@@ -176,9 +240,34 @@ const overrideDate = ref('')
 const overrideFrom = ref('10:00')
 const overrideTo = ref('12:00')
 const overridePrice = ref(null)
+const settingOverride = ref(false)
 const slotPriceOverrides = ref([])
+const exceptionsError = ref('')
+
+// 252:367: the rate step 2 set, per hour or (T111, Sale za proslave) per guest.
+const unitKey = computed(() => (props.priceUnit === 'GUEST' ? 'GUEST' : 'HOUR'))
+const priceSuffix = computed(() => `RSD / ${t(unitKey.value === 'GUEST' ? 'listing.unitGuest' : 'listing.unitHour')}`)
+// resolveHourlyPrice only applies the weekend price to the hourly rate.
+const weekendApplies = computed(() => unitKey.value === 'HOUR' && Number(props.weekendPrice) > 0)
+const rangesHint = computed(() =>
+  t(weekendApplies.value ? 'listing.whHourlyRangesHintWeekend' : 'listing.whHourlyRangesHint', {
+    unit: t(`listing.whPriceUnitPhrase.${unitKey.value}`),
+  }),
+)
+
+// Common mode edits one list for every day; per-day mode one list per active day.
+const rangeGroups = computed(() =>
+  perDayMode.value
+    ? enabledDaysList.value.map((d) => ({ key: d.value, label: t(d.labelKey), ranges: dayHourlyRanges.value[d.value] || [] }))
+    : [{ key: 'all', label: '', ranges: hourlyRanges.value }],
+)
+
+function crossesMidnight(from, to) {
+  return !!from && !!to && to <= from
+}
 
 function toggleDay(day) {
+  daysError.value = ''
   if (enabledDays.value.has(day)) {
     enabledDays.value.delete(day)
     return
@@ -194,13 +283,14 @@ function toggleDay(day) {
   }
 }
 
-function addRange() {
-  hourlyRanges.value.push({ startTime: '10:00', endTime: '18:00', price: null })
-}
-
-function addDayRange(day) {
-  if (!dayHourlyRanges.value[day]) dayHourlyRanges.value[day] = []
-  dayHourlyRanges.value[day].push({ startTime: '10:00', endTime: '18:00', price: null })
+function addRange(groupKey) {
+  const range = { startTime: '10:00', endTime: '18:00', price: null }
+  if (groupKey === 'all') {
+    hourlyRanges.value.push(range)
+    return
+  }
+  if (!dayHourlyRanges.value[groupKey]) dayHourlyRanges.value[groupKey] = []
+  dayHourlyRanges.value[groupKey].push(range)
 }
 
 function copyDayTimeToOthers(sourceDay) {
@@ -229,13 +319,95 @@ watch(perDayMode, (isPerDay) => {
   }
 })
 
+const rsdFormatter = new Intl.NumberFormat('sr-RS')
 function formatPrice(v) {
-  return new Intl.NumberFormat('sr-RS').format(v)
+  return rsdFormatter.format(v)
 }
 
-function formatDate(d) {
-  return new Date(d).toLocaleDateString('sr-RS')
+// 252:431 "1. januar 2027.", 254:295 "Subota, 12. septembar".
+const longDateFormatter = new Intl.DateTimeFormat('sr-Latn-RS', { day: 'numeric', month: 'long', year: 'numeric' })
+const weekdayFormatter = new Intl.DateTimeFormat('sr-Latn-RS', { weekday: 'long', day: 'numeric', month: 'long' })
+
+function dateFromKey(key) {
+  const [year, month, day] = key.slice(0, 10).split('-').map(Number)
+  return new Date(year, month - 1, day)
 }
+function localDateKey(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+const exceptions = computed(() => {
+  const blocked = blockedDates.value.map((b) => {
+    const start = new Date(b.startsAt)
+    return {
+      key: `block-${b.id}`,
+      sortKey: `${localDateKey(start)} 00:00`,
+      title: longDateFormatter.format(start),
+      subtitle: t('listing.whExceptionBlocked'),
+      remove: () => removeBlockedDate(b.id),
+    }
+  })
+  const priced = slotPriceOverrides.value.map((o) => ({
+    key: `price-${o.id}`,
+    sortKey: `${o.date.slice(0, 10)} ${o.startTime}`,
+    title: `${longDateFormatter.format(dateFromKey(o.date))} · ${o.startTime}-${o.endTime}`,
+    subtitle: t('listing.whExceptionPrice', { price: `${formatPrice(o.price)} ${priceSuffix.value}` }),
+    remove: () => removeOverride(o.id),
+  }))
+  return [...blocked, ...priced].sort((a, b) => a.sortKey.localeCompare(b.sortKey))
+})
+
+function isDateBlocked(date) {
+  const dayStart = date.getTime()
+  const dayEnd = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1).getTime()
+  return blockedDates.value.some((b) => new Date(b.startsAt).getTime() < dayEnd && new Date(b.endsAt).getTime() > dayStart)
+}
+
+function addHours(time, hours) {
+  const [h, m] = time.split(':').map(Number)
+  const total = (h * 60 + m + hours * 60) % (24 * 60)
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
+}
+
+// The order AvailabilityService.resolveHourlyPrice uses: the date's special
+// price, then the range the start falls in, then the weekend, then the base.
+function resolvePreviewPrice(date, dayOfWeek, startTime, ranges) {
+  const key = localDateKey(date)
+  const override = slotPriceOverrides.value.find((o) => o.date.slice(0, 10) === key && o.startTime <= startTime && o.endTime > startTime)
+  if (override) return Number(override.price)
+  const range = ranges.find((r) => r.startTime <= startTime && r.endTime > startTime)
+  if (range) return Number(range.price)
+  if (weekendApplies.value && (dayOfWeek === 5 || dayOfWeek === 6)) return Number(props.weekendPrice)
+  return Number(props.basePrice) || 0
+}
+
+// 254:292: the next open day, two hours from the start of its last price range
+// (or of its working hours), priced the way a booking would be.
+const preview = computed(() => {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  for (let offset = 1; offset <= 62; offset++) {
+    const date = new Date(today.getFullYear(), today.getMonth(), today.getDate() + offset)
+    const dayOfWeek = ((date.getDay() + 6) % 7) + 1
+    if (!enabledDays.value.has(dayOfWeek) || isDateBlocked(date)) continue
+    const hours = perDayMode.value && dayTimes.value[dayOfWeek] ? dayTimes.value[dayOfWeek] : { from: commonFrom.value, to: commonTo.value }
+    const ranges = (perDayMode.value ? dayHourlyRanges.value[dayOfWeek] || [] : hourlyRanges.value)
+      .filter((r) => r.startTime && r.endTime && r.price)
+      .sort((a, b) => a.startTime.localeCompare(b.startTime))
+    const from = ranges.length ? ranges[ranges.length - 1].startTime : hours.from
+    const count = unitKey.value === 'GUEST' ? 1 : 2
+    const unitPrice = resolvePreviewPrice(date, dayOfWeek, from, ranges)
+    const label = weekdayFormatter.format(date)
+    return {
+      date: label.charAt(0).toUpperCase() + label.slice(1),
+      from,
+      to: addHours(from, 2),
+      line: `${count} ${srDurationUnitWord(unitKey.value, count)} × ${formatPrice(unitPrice)} RSD`,
+      total: `${formatPrice(unitPrice * count)} RSD`,
+    }
+  }
+  return null
+})
 
 async function load() {
   const from = new Date()
@@ -279,9 +451,15 @@ async function load() {
   blockedDates.value = (data.blocked || []).filter((b) => b.source === 'MANUAL')
 }
 
+// Dizajn 22: "Dostupni dani *" needs at least one day. Returns false without
+// saving when it has none, so the wizard stays on the step.
 async function save() {
-  busy.value = true
   editorError.value = ''
+  if (!enabledDays.value.size) {
+    daysError.value = t('listing.whDaysRequired')
+    return false
+  }
+  busy.value = true
   try {
     const hours = perDayMode.value
       ? Array.from(enabledDays.value).map((day) => ({
@@ -312,8 +490,12 @@ async function save() {
     }
     await api.post(`/listings/${props.listingId}/availability/hourly-price-ranges`, { ranges })
 
+    // 252:391: the button reads "Sačuvano" for a moment.
     saved.value = true
-    setTimeout(() => { saved.value = false }, 2000)
+    setTimeout(() => {
+      saved.value = false
+    }, 2000)
+    return true
   } catch (e) {
     editorError.value = extractErrorMessage(e, t('auth.genericError'))
     throw e
@@ -326,11 +508,16 @@ async function save() {
 // entirely (working hours/days/ranges only ever saved via this editor's own
 // internal button), so an owner who never touched that button silently lost
 // the edit. Exposed so the wizard can call this on its own save-and-continue.
-defineExpose({ save })
+defineExpose({ save, preview })
 
+// 252:404 and 252:422 look ready before anything is filled in, so a click says what is missing.
 async function blockWholeDate() {
-  if (!blockDate.value) return
+  if (!blockDate.value) {
+    exceptionsError.value = t('listing.whExceptionDateRequired')
+    return
+  }
   blockingDate.value = true
+  exceptionsError.value = ''
   try {
     const start = new Date(`${blockDate.value}T00:00:00`)
     const end = new Date(start.getTime() + 86400000)
@@ -339,102 +526,65 @@ async function blockWholeDate() {
       endsAt: end.toISOString(),
     })
     blockedDates.value.push(created)
-    blockedDates.value.sort((a, b) => new Date(a.startsAt) - new Date(b.startsAt))
     blockDate.value = ''
     blockDateSaved.value = true
-    setTimeout(() => { blockDateSaved.value = false }, 2000)
+    setTimeout(() => {
+      blockDateSaved.value = false
+    }, 2000)
+  } catch (e) {
+    exceptionsError.value = extractErrorMessage(e, t('auth.genericError'))
   } finally {
     blockingDate.value = false
   }
 }
 
 async function removeBlockedDate(id) {
-  await api.delete(`/listings/${props.listingId}/availability/blocks/${id}`)
-  blockedDates.value = blockedDates.value.filter((b) => b.id !== id)
+  exceptionsError.value = ''
+  try {
+    await api.delete(`/listings/${props.listingId}/availability/blocks/${id}`)
+    blockedDates.value = blockedDates.value.filter((b) => b.id !== id)
+  } catch (e) {
+    exceptionsError.value = extractErrorMessage(e, t('auth.genericError'))
+  }
 }
 
 async function addOverride() {
-  const created = await api.post(`/listings/${props.listingId}/availability/slot-price-overrides`, {
-    date: overrideDate.value,
-    startTime: overrideFrom.value,
-    endTime: overrideTo.value,
-    price: overridePrice.value,
-  })
-  slotPriceOverrides.value.push(created)
-  overrideDate.value = ''
-  overridePrice.value = null
+  if (!overrideDate.value || !overridePrice.value) {
+    exceptionsError.value = t('listing.whSpecialPriceIncomplete')
+    return
+  }
+  settingOverride.value = true
+  exceptionsError.value = ''
+  try {
+    const created = await api.post(`/listings/${props.listingId}/availability/slot-price-overrides`, {
+      date: overrideDate.value,
+      startTime: overrideFrom.value,
+      endTime: overrideTo.value,
+      price: overridePrice.value,
+    })
+    slotPriceOverrides.value.push(created)
+    overrideDate.value = ''
+    overridePrice.value = null
+  } catch (e) {
+    exceptionsError.value = extractErrorMessage(e, t('auth.genericError'))
+  } finally {
+    settingOverride.value = false
+  }
 }
 
 async function removeOverride(id) {
-  await api.delete(`/listings/${props.listingId}/availability/slot-price-overrides/${id}`)
-  slotPriceOverrides.value = slotPriceOverrides.value.filter((o) => o.id !== id)
+  exceptionsError.value = ''
+  try {
+    await api.delete(`/listings/${props.listingId}/availability/slot-price-overrides/${id}`)
+    slotPriceOverrides.value = slotPriceOverrides.value.filter((o) => o.id !== id)
+  } catch (e) {
+    exceptionsError.value = extractErrorMessage(e, t('auth.genericError'))
+  }
 }
 
 onMounted(load)
 </script>
 
 <style lang="scss" scoped>
-.wh-days {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.wh-day {
-  padding: 8px 14px;
-  border: 1px solid $color-border;
-  border-radius: $radius-pill;
-  font-size: $font-size-muted;
-  cursor: pointer;
-  color: $color-text-muted;
-}
-
-.wh-day-active {
-  background: $color-primary;
-  border-color: $color-primary;
-  color: $color-surface;
-}
-
-.wh-range-row {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr 1fr auto;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 8px;
-}
-
-.wh-exception-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-}
-
-.wh-override-list {
-  list-style: none;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: $font-size-muted;
-}
-
-.btn-link-danger {
-  background: none;
-  border: none;
-  color: $color-error;
-  cursor: pointer;
-  font-size: 12px;
-}
-
-.wh-day-panel {
-  padding: 12px;
-  border: 1px solid $color-border;
-  border-radius: 10px;
-}
-
-.wh-day-range-actions {
-  display: flex;
-  gap: 8px;
-}
+@use '@/assets/scss/availability-editor';
 </style>

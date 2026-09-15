@@ -49,6 +49,7 @@ const nestjs_i18n_1 = require("nestjs-i18n");
 const crypto = __importStar(require("crypto"));
 const prisma_service_1 = require("../../prisma/prisma.service");
 const uploads_service_1 = require("../../common/uploads/uploads.service");
+const taxonomy_service_1 = require("../taxonomy/taxonomy.service");
 const money_1 = require("../../common/utils/money");
 const DELETION_TOKEN_TTL_MS = 60 * 60_000;
 const ME_SELECT = {
@@ -72,11 +73,12 @@ const ME_SELECT = {
     createdAt: true,
 };
 let UsersService = class UsersService {
-    constructor(prisma, uploads, i18n, events) {
+    constructor(prisma, uploads, i18n, events, taxonomy) {
         this.prisma = prisma;
         this.uploads = uploads;
         this.i18n = i18n;
         this.events = events;
+        this.taxonomy = taxonomy;
     }
     async isOwner(userId) {
         const count = await this.prisma.listing.count({ where: { userId, status: 'ACTIVE' } });
@@ -175,10 +177,20 @@ let UsersService = class UsersService {
             orderBy: { addedAt: 'desc' },
             include: {
                 listing: {
-                    include: { photos: { where: { isCover: true }, take: 1 }, city: true, category: { select: { slug: true } } },
+                    include: {
+                        photos: { where: { isCover: true }, take: 1 },
+                        city: true,
+                        category: true,
+                        attributes: { include: { attribute: { select: { key: true, unit: true, type: true } } } },
+                    },
                 },
             },
         });
+        const categoryNames = await this.taxonomy.getCategoryNames(favorites.map((f) => f.listing.category.id));
+        const optionIds = [
+            ...new Set(favorites.flatMap((f) => f.listing.attributes.flatMap((a) => a.valueOptionIds))),
+        ];
+        const optionNames = optionIds.length ? await this.taxonomy.getOptionNames(optionIds) : new Map();
         return favorites.map((f) => ({
             ...f,
             priceAtAdd: (0, money_1.paraToRsd)(f.priceAtAdd),
@@ -188,6 +200,16 @@ let UsersService = class UsersService {
                 price: (0, money_1.paraToRsd)(f.listing.price),
                 weekendPrice: (0, money_1.paraToRsd)(f.listing.weekendPrice),
                 pricePerGuest: (0, money_1.paraToRsd)(f.listing.pricePerGuest),
+                category: { ...f.listing.category, name: categoryNames.get(f.listing.category.id) ?? f.listing.category.slug },
+                attributes: f.listing.attributes.map((a) => ({
+                    key: a.attribute.key,
+                    type: a.attribute.type,
+                    unit: a.attribute.unit,
+                    valueNumber: a.valueNumber !== null ? Number(a.valueNumber) : null,
+                    valueText: a.valueText,
+                    valueBoolean: a.valueBoolean,
+                    optionNames: a.valueOptionIds.map((id) => optionNames.get(id)).filter(Boolean),
+                })),
             },
         }));
     }
@@ -309,7 +331,8 @@ exports.UsersService = UsersService = __decorate([
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
         uploads_service_1.UploadsService,
         nestjs_i18n_1.I18nService,
-        event_emitter_1.EventEmitter2])
+        event_emitter_1.EventEmitter2,
+        taxonomy_service_1.TaxonomyService])
 ], UsersService);
 function slugify(input) {
     const map = {

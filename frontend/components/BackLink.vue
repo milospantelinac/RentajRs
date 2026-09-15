@@ -41,10 +41,15 @@ function goBack() {
 </script>
 
 <style lang="scss" scoped>
+// Figma "Button / Nazad" (e.g. 593:515) — the same white, #E4EBF2-bordered
+// tertiary button, a step larger than .btn-sm: 40px tall, 18px sides, 14px.
 .back-link {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  min-height: 40px;
+  padding: 0 18px;
+  font-size: 14px;
 }
 
 .back-link-light {

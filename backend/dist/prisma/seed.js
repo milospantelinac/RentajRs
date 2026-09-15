@@ -165,6 +165,11 @@ async function seedSettings() {
             value: null,
             description: 'Ch.18.3 — YouTube/Vimeo/direct video URL for the homepage "how it works" section; section is hidden entirely while this is empty',
         },
+        {
+            key: 'homepage_video_thumbnail',
+            value: null,
+            description: 'Poster image shown over the homepage "how it works" video before playback; uploaded from /admin/sadrzaj. Falls back to YouTube\'s own thumbnail when empty',
+        },
     ];
     let created = 0;
     for (const setting of settings) {
@@ -185,6 +190,35 @@ async function seedLocations() {
         'Istočna Srbija': ['Zaječar', 'Bor', 'Negotin', 'Kladovo'],
         'Južna Srbija': ['Niš', 'Leskovac', 'Vranje', 'Pirot', 'Prokuplje'],
         Kosovo: ['Kosovska Mitrovica'],
+    };
+    const locative = {
+        Beograd: 'Beogradu',
+        'Novi Sad': 'Novom Sadu',
+        Subotica: 'Subotici',
+        Zrenjanin: 'Zrenjaninu',
+        Pančevo: 'Pančevu',
+        Sombor: 'Somboru',
+        Kikinda: 'Kikindi',
+        'Sremska Mitrovica': 'Sremskoj Mitrovici',
+        Kragujevac: 'Kragujevcu',
+        Kruševac: 'Kruševcu',
+        Jagodina: 'Jagodini',
+        Čačak: 'Čačku',
+        'Gornji Milanovac': 'Gornjem Milanovcu',
+        Užice: 'Užicu',
+        Valjevo: 'Valjevu',
+        Šabac: 'Šapcu',
+        Loznica: 'Loznici',
+        Zaječar: 'Zaječaru',
+        Bor: 'Boru',
+        Negotin: 'Negotinu',
+        Kladovo: 'Kladovu',
+        Niš: 'Nišu',
+        Leskovac: 'Leskovcu',
+        Vranje: 'Vranju',
+        Pirot: 'Pirotu',
+        Prokuplje: 'Prokuplju',
+        'Kosovska Mitrovica': 'Kosovskoj Mitrovici',
     };
     const beogradAreas = [
         'Vračar',
@@ -208,8 +242,13 @@ async function seedLocations() {
         for (const cityName of cities) {
             const city = await prisma.city.upsert({
                 where: { slug: slugify(cityName) },
-                update: {},
-                create: { regionId: region.id, name: cityName, slug: slugify(cityName) },
+                update: { nameLocative: locative[cityName] ?? null },
+                create: {
+                    regionId: region.id,
+                    name: cityName,
+                    slug: slugify(cityName),
+                    nameLocative: locative[cityName] ?? null,
+                },
             });
             const areas = cityName === 'Beograd' ? beogradAreas : cityName === 'Novi Sad' ? novisadAreas : [];
             for (const areaName of areas) {
@@ -272,6 +311,7 @@ const CATEGORY_TREE = [
     {
         name: 'Nekretnine',
         icon: 'home',
+        shortDescription: 'Stanovi, kuće i vikendice',
         defaultBookingModel: client_1.BookingModel.PER_STAY,
         allowedPriceUnits: [client_1.PriceUnit.NIGHT, client_1.PriceUnit.MONTH],
         defaultPriceUnit: client_1.PriceUnit.NIGHT,
@@ -326,6 +366,7 @@ const CATEGORY_TREE = [
     {
         name: 'Prostori za proslave',
         icon: 'party',
+        shortDescription: 'Sale, bašte i restorani',
         defaultBookingModel: client_1.BookingModel.PER_SLOT,
         allowedPriceUnits: [client_1.PriceUnit.HOUR, client_1.PriceUnit.SLOT],
         defaultPriceUnit: client_1.PriceUnit.SLOT,
@@ -346,6 +387,7 @@ const CATEGORY_TREE = [
     {
         name: 'Igraonice',
         icon: 'toy',
+        shortDescription: 'Igraonice i rođendaonice',
         defaultBookingModel: client_1.BookingModel.PER_SLOT,
         allowedPriceUnits: [client_1.PriceUnit.HOUR, client_1.PriceUnit.SLOT],
         defaultPriceUnit: client_1.PriceUnit.SLOT,
@@ -361,6 +403,7 @@ const CATEGORY_TREE = [
     {
         name: 'Vozila',
         icon: 'car',
+        shortDescription: 'Putnička i dostavna vozila',
         defaultBookingModel: client_1.BookingModel.PER_STAY,
         allowedPriceUnits: [client_1.PriceUnit.DAY, client_1.PriceUnit.HOUR],
         defaultPriceUnit: client_1.PriceUnit.DAY,
@@ -409,6 +452,7 @@ const CATEGORY_TREE = [
     {
         name: 'Građevinske mašine',
         icon: 'excavator',
+        shortDescription: 'Bageri, viljuškari, platforme',
         defaultBookingModel: client_1.BookingModel.PER_STAY,
         allowedPriceUnits: [client_1.PriceUnit.DAY],
         defaultPriceUnit: client_1.PriceUnit.DAY,
@@ -456,6 +500,7 @@ const CATEGORY_TREE = [
     {
         name: 'Magacini i skladišta',
         icon: 'warehouse',
+        shortDescription: 'Magacini, skladišta i hladnjače',
         defaultBookingModel: client_1.BookingModel.PER_STAY,
         allowedPriceUnits: [client_1.PriceUnit.MONTH],
         defaultPriceUnit: client_1.PriceUnit.MONTH,
@@ -501,6 +546,9 @@ async function seedCategoryNode(node, parentId, order) {
         },
     });
     await setTranslation('CATEGORY', category.id, 'name', node.name);
+    if (node.shortDescription) {
+        await setTranslation('CATEGORY', category.id, 'shortDescription', node.shortDescription);
+    }
     for (const [i, attr] of node.attributes.entries()) {
         const attrFields = {
             type: attr.type,

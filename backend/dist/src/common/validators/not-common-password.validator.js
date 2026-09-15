@@ -52,7 +52,7 @@ function NotCommonPassword(validationOptions) {
             options: validationOptions ?? { message: 'Password is too weak' },
             validator: {
                 validate(value) {
-                    return typeof value === 'string' && value.length >= 8 && !isCommonPassword(value);
+                    return typeof value === 'string' && value.length >= 8 && /\d/.test(value) && !isCommonPassword(value);
                 },
             },
         });

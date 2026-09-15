@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CacheService } from '../../common/cache/cache.service';
 import { TaxonomyService } from '../taxonomy/taxonomy.service';
 import { paraToRsd, rsdToPara } from '../../common/utils/money';
+import { GUEST_CAPACITY_ATTRIBUTE_KEYS } from '../../common/utils/guest-capacity';
 import { SearchListingsDto } from './dto/search-listings.dto';
 
 const RELEVANCE_CANDIDATE_POOL = 200;
@@ -145,7 +146,8 @@ export class SearchService {
     ]);
 
     const categoryNames = await this.taxonomy.getCategoryNames(rows.map((r) => r.category.id));
-    const results = rows.map((r) => this.serializeResult(r, categoryNames));
+    const optionNames = await this.buildOptionNamesMap(rows);
+    const results = rows.map((r) => this.serializeResult(r, categoryNames, optionNames));
     return { results, total, page, pageSize };
   }
 
@@ -199,7 +201,22 @@ export class SearchService {
     const pageItems = scored.slice((page - 1) * pageSize, (page - 1) * pageSize + pageSize);
 
     const categoryNames = await this.taxonomy.getCategoryNames(pageItems.map((s) => s.listing.category.id));
-    return { results: pageItems.map((s) => this.serializeResult(s.listing, categoryNames)), total, page, pageSize };
+    const optionNames = await this.buildOptionNamesMap(pageItems.map((s) => s.listing));
+    return {
+      results: pageItems.map((s) => this.serializeResult(s.listing, categoryNames, optionNames)),
+      total,
+      page,
+      pageSize,
+    };
+  }
+
+  /** Dizajn 3/4 — resolves the AttributeOption ids stored on LIST/CHECKBOX_GROUP
+   * key-fact values into their display names, in one batched query across the
+   * whole result page rather than per listing. */
+  private async buildOptionNamesMap(listings: any[]): Promise<Map<string, string>> {
+    const optionIds = [...new Set(listings.flatMap((l) => l.attributes.flatMap((a: any) => a.valueOptionIds)))];
+    if (!optionIds.length) return new Map();
+    return this.taxonomy.getOptionNames(optionIds);
   }
 
   private async getRankingWeights(): Promise<{
@@ -263,7 +280,7 @@ export class SearchService {
 
   /** Same query with location/date constraints dropped — offered to the user after an empty result set. */
   async relaxedSearch(dto: SearchListingsDto) {
-    const relaxed: SearchListingsDto = { ...dto, cityId: undefined, cityAreaId: undefined, dateFrom: undefined, dateTo: undefined };
+    const relaxed: SearchListingsDto = { ...dto, cityId: undefined, cityAreaId: undefined, cityAreaIds: undefined, dateFrom: undefined, dateTo: undefined };
     return this.search(relaxed);
   }
 
@@ -293,7 +310,12 @@ export class SearchService {
 
     if (dto.regionId) where.regionId = dto.regionId;
     if (dto.cityId) where.cityId = dto.cityId;
-    if (dto.cityAreaId) where.cityAreaId = dto.cityAreaId;
+    // Dizajn 9's filter panel lets a guest tick several parts of a city at
+    // once; cityAreaId stays for the single-value callers (Dizajn 8's pill,
+    // saved links) and the two are OR-ed into one `in` when both arrive.
+    const cityAreaIds = [...new Set([...(dto.cityAreaIds ?? []), ...(dto.cityAreaId ? [dto.cityAreaId] : [])])];
+    if (cityAreaIds.length === 1) where.cityAreaId = cityAreaIds[0];
+    else if (cityAreaIds.length > 1) where.cityAreaId = { in: cityAreaIds };
 
     if (dto.priceMin !== undefined || dto.priceMax !== undefined) {
       where.price = {
@@ -306,6 +328,14 @@ export class SearchService {
       where.AND = [
         ...((where.AND as Prisma.ListingWhereInput[]) ?? []),
         { OR: [{ maxGuests: null }, { maxGuests: { gte: dto.guests } }] },
+        // Dizajn 23: the capacity from wizard step 6 caps the guests too.
+        {
+          NOT: {
+            attributes: {
+              some: { attribute: { key: { in: GUEST_CAPACITY_ATTRIBUTE_KEYS } }, valueNumber: { lt: dto.guests } },
+            },
+          },
+        },
       ];
     }
 
@@ -374,6 +404,54 @@ export class SearchService {
     return where;
   }
 
+  /**
+   * Dizajn 11 — the "Slični oglasi u <gradu>" row at the foot of a listing
+   * page. Same category, the listing's own city first so the row is actually
+   * useful to someone already looking at Senjak, then topped up from the rest
+   * of the country rather than left half-empty in a city with two listings of
+   * that kind. Reuses the search card's serialization so the row renders
+   * through the same ListingCard as everywhere else (Dizajn 3).
+   */
+  async getSimilarListings(slug: string, take = 4) {
+    const listing = await this.prisma.listing.findUnique({
+      where: { slug },
+      select: { id: true, categoryId: true, cityId: true },
+    });
+    if (!listing) return { results: [] };
+
+    const base: Prisma.ListingWhereInput = {
+      status: 'ACTIVE',
+      available: true,
+      categoryId: listing.categoryId,
+    };
+
+    const rows = listing.cityId
+      ? await this.prisma.listing.findMany({
+          where: { ...base, cityId: listing.cityId, id: { not: listing.id } },
+          orderBy: { publishedAt: 'desc' },
+          take,
+          include: this.resultInclude(),
+        })
+      : [];
+
+    if (rows.length < take) {
+      rows.push(
+        ...(await this.prisma.listing.findMany({
+          where: { ...base, id: { notIn: [listing.id, ...rows.map((r) => r.id)] } },
+          orderBy: { publishedAt: 'desc' },
+          take: take - rows.length,
+          include: this.resultInclude(),
+        })),
+      );
+    }
+
+    if (!rows.length) return { results: [] };
+
+    const categoryNames = await this.taxonomy.getCategoryNames(rows.map((r) => r.category.id));
+    const optionNames = await this.buildOptionNamesMap(rows);
+    return { results: rows.map((r) => this.serializeResult(r, categoryNames, optionNames)) };
+  }
+
   private resultInclude() {
     return {
       // Same last-approved-state guarantee as getPublicBySlug (R32) — a
@@ -384,6 +462,10 @@ export class SearchService {
       city: true,
       cityArea: true,
       user: { select: { avgResponseTimeMinutes: true } },
+      // Dizajn 3/4 — the search-result card's "traka ključnih činjenica"
+      // reads real attribute values; which 3 keys are shown and in what
+      // order is decided client-side per category (utils/keyFacts.js).
+      attributes: { include: { attribute: { select: { key: true, unit: true, type: true } } } },
     } satisfies Prisma.ListingInclude;
   }
 
@@ -453,7 +535,7 @@ export class SearchService {
     return typeof setting?.value === 'number' ? setting.value : 3;
   }
 
-  private serializeResult(listing: any, categoryNames: Map<string, string>) {
+  private serializeResult(listing: any, categoryNames: Map<string, string>, optionNames: Map<string, string>) {
     return {
       id: listing.id,
       slug: listing.slug,
@@ -474,6 +556,17 @@ export class SearchService {
       coverPhoto: listing.photos[0] ?? null,
       latitude: listing.latitude,
       longitude: listing.longitude,
+      // Dizajn 3/4 — raw values for the card's key-facts strip; utils/keyFacts.js
+      // on the frontend picks which 3 to show and formats them per category.
+      attributes: listing.attributes.map((a: any) => ({
+        key: a.attribute.key,
+        type: a.attribute.type,
+        unit: a.attribute.unit,
+        valueNumber: a.valueNumber !== null ? Number(a.valueNumber) : null,
+        valueText: a.valueText,
+        valueBoolean: a.valueBoolean,
+        optionNames: a.valueOptionIds.map((id: string) => optionNames.get(id)).filter(Boolean),
+      })),
     };
   }
 }

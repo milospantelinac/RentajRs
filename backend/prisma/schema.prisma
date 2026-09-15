@@ -516,12 +516,17 @@ model Region {
 }
 
 model City {
-  id        String   @id @default(uuid()) @db.Uuid
-  regionId  String   @db.Uuid
-  name      String
-  slug      String   @unique
-  latitude  Decimal? @db.Decimal(10, 7)
-  longitude Decimal? @db.Decimal(10, 7)
+  id       String @id @default(uuid()) @db.Uuid
+  regionId String @db.Uuid
+  name     String
+  slug     String @unique
+  // Serbian locative ("u Beogradu", "u Šapcu", "u Novom Sadu") for headings
+  // that put the city into a sentence. Can't be derived from `name` — the
+  // locative drops and changes consonants (Šabac -> Šapcu) and agrees with
+  // the adjective in two-word names — so it is stored, not computed.
+  nameLocative String?
+  latitude     Decimal? @db.Decimal(10, 7)
+  longitude    Decimal? @db.Decimal(10, 7)
 
   region        Region        @relation(fields: [regionId], references: [id])
   areas         CityArea[]
