@@ -722,58 +722,65 @@
       </div>
 
       <!-- Fotografije -->
-      <div v-else-if="steps[currentStep].key === 'photos'">
-        <p class="text-muted mb-3">{{ t('listing.photoCountRecommendation') }}</p>
-        <div
-          class="dropzone"
-          :class="{ 'dropzone-active': dropzoneActive }"
-          @click="fileInput.click()"
-          @dragover.prevent="dropzoneActive = true"
-          @dragleave.prevent="dropzoneActive = false"
-          @drop.prevent="onDropFiles"
-        >
-          <div class="dropzone-icon">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 16V4M12 4l-4 4M12 4l4 4" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /><path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="white" stroke-width="2" stroke-linecap="round" /></svg>
-          </div>
-          <strong>{{ t('listing.dropzoneTitle') }}</strong>
-          <span>{{ t('listing.dropzoneHint') }}</span>
-          <input ref="fileInput" type="file" accept="image/*" multiple class="d-none" @change="onFileInputChange" />
-        </div>
+      <!-- 283:287 to 283:319: the blue recommendation, the grid of uploaded photos with the
+           "Dodaj još" tile, the dropzone, then the note about the order. -->
+      <div v-else-if="steps[currentStep].key === 'photos'" class="photos">
+        <!-- 283:287 -->
+        <p class="photos-notice">{{ t('listing.photoCountRecommendation') }}</p>
 
-        <div class="photo-grid">
+        <!-- 283:290 -->
+        <div v-if="photos.length" class="photos-grid">
           <div
             v-for="(photo, index) in photos"
             :key="photo.id"
-            class="photo"
+            class="photos-item"
             draggable="true"
             @dragstart="onPhotoDragStart(index)"
             @dragover.prevent
             @drop.prevent="onPhotoDrop(index)"
           >
-            <img :src="photo.url" :alt="photo.altText || ''" />
+            <img :src="photo.url" :alt="photo.altText || ''" class="photos-image" />
+            <!-- 283:292: the pill only labels the first photo — the cover follows the order,
+                 which the owner changes by dragging (283:320). -->
+            <span v-if="index === 0" class="photos-cover">{{ t('listing.coverPhotoBadge') }}</span>
+            <!-- 283:294 -->
             <button
-              class="photo-badge"
-              :class="{ 'photo-badge-inactive': index !== 0 }"
-              :title="index === 0 ? t('listing.coverPhotoBadge') : t('listing.setCoverPhotoHint')"
-              @click.stop="setCoverPhoto(index)"
+              type="button"
+              class="photos-remove"
+              :aria-label="t('listing.removePhoto')"
+              @click.stop="removePhoto(photo.id)"
             >
-              ★ {{ index === 0 ? t('listing.coverPhotoBadge') : '' }}
+              <img src="/images/icons/photo-remove-x.svg" alt="" />
             </button>
-            <button class="photo-remove" :aria-label="t('listing.removePhoto')" @click.stop="removePhoto(photo.id)">✕</button>
-            <span class="photo-drag" aria-hidden="true">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><circle cx="8" cy="6" r="1.6" fill="#334155" /><circle cx="16" cy="6" r="1.6" fill="#334155" /><circle cx="8" cy="12" r="1.6" fill="#334155" /><circle cx="16" cy="12" r="1.6" fill="#334155" /><circle cx="8" cy="18" r="1.6" fill="#334155" /><circle cx="16" cy="18" r="1.6" fill="#334155" /></svg>
-            </span>
           </div>
-          <div class="photo photo-add" @click="fileInput.click()">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="#0957df" stroke-width="2.2" stroke-linecap="round" /></svg>
+
+          <!-- 283:309 -->
+          <button v-if="!photosAtLimit" type="button" class="photos-add" @click="fileInput.click()">
+            <img src="/images/icons/plus-muted.svg" alt="" class="photos-add-icon" />
             {{ t('listing.addMorePhotos') }}
-          </div>
+          </button>
         </div>
 
-        <div v-if="photos.length > 1" class="grid-hint">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2" /><path d="M12 8v5M12 16h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg>
-          {{ t('listing.setCoverPhotoHint') }}
+        <!-- 283:313 -->
+        <div
+          v-if="!photosAtLimit"
+          class="photos-dropzone"
+          :class="{ 'is-active': dropzoneActive }"
+          @click="fileInput.click()"
+          @dragover.prevent="dropzoneActive = true"
+          @dragleave.prevent="dropzoneActive = false"
+          @drop.prevent="onDropFiles"
+        >
+          <img src="/images/icons/upload-brand.svg" alt="" class="photos-dropzone-icon" />
+          <strong class="photos-dropzone-title">{{ t('listing.dropzoneTitle') }}</strong>
+          <span class="photos-dropzone-hint">{{ t('listing.dropzoneHint', { max: PHOTO_MAX_SIZE_MB }) }}</span>
         </div>
+        <p v-else class="photos-limit">{{ t('listing.photoLimitReached', { max: PHOTO_MAX_COUNT }) }}</p>
+
+        <input ref="fileInput" type="file" :accept="PHOTO_ACCEPT" multiple class="d-none" @change="onFileInputChange" />
+
+        <!-- 283:319: the frame always has photos; with none there is nothing to drag. -->
+        <p v-if="photos.length" class="photos-order-note">{{ t('listing.photosOrderNote') }}</p>
       </div>
 
       <!-- Pregled -->
@@ -1094,6 +1101,38 @@
       </section>
     </aside>
 
+    <!-- 281:412: step 8's live preview of the search card and the tips, in the grid's 400
+         column beside the form. -->
+    <aside v-if="steps[currentStep].key === 'photos'" class="wizard-aside">
+      <!-- 285:287 -->
+      <section class="wizard-aside-card">
+        <p class="wizard-aside-title">
+          {{ t('listing.photosCardPreviewTitle') }}
+          <img src="/images/icons/info-circle.svg" alt="" />
+        </p>
+        <!-- 680:1879 is the Dizajn 3 card itself; here it only shows what the cover photo
+             does to the card, so nothing inside it is clickable. -->
+        <div class="photos-card" aria-hidden="true">
+          <ListingCard :listing="cardPreviewListing" />
+        </div>
+        <p class="wizard-aside-caption photos-card-caption">{{ t('listing.photosCardPreviewCaption') }}</p>
+      </section>
+
+      <!-- 285:309 -->
+      <section class="wizard-aside-card">
+        <p class="wizard-aside-title">
+          {{ t('listing.stepTipsTitle') }}
+          <img src="/images/icons/info-circle.svg" alt="" />
+        </p>
+        <ul class="wizard-aside-tips">
+          <li v-for="tip in photosTips" :key="tip" class="wizard-aside-tip">
+            <img src="/images/icons/check-brand-tips.svg" alt="" />
+            <span>{{ tip }}</span>
+          </li>
+        </ul>
+      </section>
+    </aside>
+
     <!-- 228:376 -->
     <div class="wizard-actions">
       <div class="wizard-actions-back">
@@ -1142,6 +1181,12 @@ const cityAreas = ref([])
 const fileInput = ref(null)
 const dropzoneActive = ref(false)
 const draggedPhotoIndex = ref(null)
+// What the upload endpoint really accepts: UploadsService's ALLOWED_MIME_TYPES and
+// MAX_PHOTO_SIZE_MB, and ListingsService's MAX_PHOTOS. The frame's hint says "JPG, PNG do
+// 10MB", which would let the owner pick a file the API then rejects.
+const PHOTO_ACCEPT = 'image/jpeg,image/png,image/webp'
+const PHOTO_MAX_SIZE_MB = 8
+const PHOTO_MAX_COUNT = 20
 const mySubscriptions = ref([])
 const finishing = ref(false)
 // Dizajn 20 (228:325, 228:334): the counters' limits, the same as UpdateListingDto's.
@@ -1898,6 +1943,33 @@ const detailsTips = computed(() => {
   )
 })
 
+// Dizajn 27 (283:309, 283:313): at 20 photos the API refuses another one, so the tile and
+// the dropzone give way to a line that says why.
+const photosAtLimit = computed(() => photos.value.length >= PHOTO_MAX_COUNT)
+
+// 285:314: five tips a category, three for a category added later — the same split as
+// step 6's, and off the same category kind.
+const photosTips = computed(() => {
+  const kind = detailsCopyKind.value
+  return Array.from({ length: kind === 'default' ? 3 : 5 }, (_, i) => t(`listing.photosTips.${kind}.tip${i + 1}`))
+})
+
+// 680:1879: the real search card, fed the values the wizard holds right now — the cover is
+// photos[0], so a new first photo shows up in the preview straight away.
+const cardPreviewListing = computed(() => ({
+  id: listingId,
+  slug: listing.value?.slug || '',
+  title: form.title.trim() || t('listing.photosCardPreviewNoTitle'),
+  coverPhoto: photos.value[0] || null,
+  category: listing.value?.category || null,
+  city: locationCity.value || listing.value?.city || null,
+  cityArea: locationArea.value || listing.value?.cityArea || null,
+  avgRating: listing.value?.avgRating ?? null,
+  price: form.price,
+  priceUnit: form.priceUnit,
+  attributes: detailsPreviewAttributes.value.map(flattenListingAttribute),
+}))
+
 const location = reactive({ regionId: '', cityId: '', cityAreaId: '', address: '', latitude: null, longitude: null, googlePlaceId: '' })
 
 async function previewLocationOnMap() {
@@ -2325,24 +2397,44 @@ async function downscaleImage(file) {
   }
 }
 
+// A rejected upload (wrong format, too large, 20 already there) used to throw out of the
+// handler and leave the step looking as if nothing happened; it now stops the batch and
+// says so in the step's own error line.
 async function uploadFile(rawFile) {
   const file = await downscaleImage(rawFile)
   const formData = new FormData()
   formData.append('file', file)
-  const photo = await api.post(`/listings/${listingId}/photos`, formData)
-  photos.value.push(photo)
+  try {
+    const photo = await api.post(`/listings/${listingId}/photos`, formData)
+    photos.value.push(photo)
+    return true
+  } catch (err) {
+    error.value = err?.data?.message || t('listing.photosUploadFailed')
+    return false
+  }
+}
+
+async function uploadFiles(files) {
+  error.value = ''
+  for (const file of files) {
+    if (photosAtLimit.value) {
+      error.value = t('listing.photoLimitReached', { max: PHOTO_MAX_COUNT })
+      break
+    }
+    if (!(await uploadFile(file))) break
+  }
 }
 
 async function onFileInputChange(evt) {
   const files = Array.from(evt.target.files || [])
   evt.target.value = ''
-  for (const file of files) await uploadFile(file)
+  await uploadFiles(files)
 }
 
 async function onDropFiles(evt) {
   dropzoneActive.value = false
-  const files = Array.from(evt.dataTransfer?.files || []).filter((f) => f.type.startsWith('image/'))
-  for (const file of files) await uploadFile(file)
+  const files = Array.from(evt.dataTransfer?.files || []).filter((f) => PHOTO_ACCEPT.includes(f.type))
+  await uploadFiles(files)
 }
 
 async function removePhoto(photoId) {
@@ -2368,14 +2460,6 @@ function onPhotoDrop(targetIndex) {
   persistPhotoOrder()
 }
 
-function setCoverPhoto(index) {
-  if (index === 0) return
-  const arr = [...photos.value]
-  const [moved] = arr.splice(index, 1)
-  arr.unshift(moved)
-  photos.value = arr
-  persistPhotoOrder()
-}
 
 async function saveCurrentStep() {
   error.value = ''
@@ -4892,192 +4976,209 @@ $field-danger-border: #f43f5e;
   }
 }
 
-// ===== Dropzone =====
-.dropzone {
-  border: 2px dashed #c9d4ee;
-  border-radius: $radius-card;
-  background: #fafbff;
-  padding: 38px 24px;
+// Dizajn 27: step 8's body, read off 283:287 (Forma) and 285:287 (Saveti).
+
+// 281:345
+.photos {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease;
-  margin-bottom: 28px;
+  gap: 20px;
 }
 
-.dropzone:hover,
-.dropzone-active {
-  border-color: $color-primary;
-  background: #f2f6ff;
-}
-
-.dropzone-icon {
-  width: 52px;
-  height: 52px;
-  border-radius: 16px;
-  background: $gradient-marketing;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 14px;
-  box-shadow: 0 10px 20px -8px rgba(9, 87, 223, 0.5);
-}
-
-.dropzone strong {
-  font-size: 15px;
-  font-weight: 700;
-  margin-bottom: 4px;
-  display: block;
-}
-
-.dropzone span {
+// 283:287
+.photos-notice {
+  margin: 0;
+  padding: 12px 16px;
+  border-radius: $radius-input;
+  background: $color-accent-tint;
   font-size: 13px;
-  color: $color-text-muted;
+  line-height: normal;
+  color: $color-primary;
 }
 
-// ===== Photo grid =====
-.photo-grid {
+// 283:290: three 245 tiles a row, 12 apart, the way the frame lays them out inside 760.
+.photos-grid {
   display: flex;
   flex-wrap: wrap;
-  margin: 0 -8px 14px;
+  gap: 12px;
 }
 
-.photo {
+// 283:291
+.photos-item {
   position: relative;
+  width: 245px;
+  height: 168px;
   border-radius: $radius-input;
   overflow: hidden;
-  height: 150px;
-  background: #eef1f7;
-  border: 1px solid $color-border;
   cursor: grab;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-  width: calc(50% - 16px);
-  margin: 0 8px 16px;
+  background: $color-background;
 }
 
-@include respond-above(sm) {
-  .photo {
-    width: calc(25% - 16px);
-  }
-}
-
-.photo:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 12px 24px -10px rgba(16, 29, 61, 0.25);
-}
-
-.photo img {
-  position: absolute;
-  inset: 0;
+.photos-image {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-.photo-badge {
+// 283:292
+.photos-cover {
   position: absolute;
-  top: 8px;
-  left: 8px;
-  background: $color-primary;
-  color: $color-surface;
-  font-size: 10.5px;
-  font-weight: 700;
-  padding: 4px 9px;
+  top: 10px;
+  left: 10px;
+  padding: 5px 10px;
   border-radius: $radius-pill;
+  background: $color-surface;
+  backdrop-filter: blur(4.725px);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: normal;
+  color: $color-text;
+}
+
+// 283:294
+.photos-remove {
+  position: absolute;
+  top: 10px;
+  right: 10px;
   display: flex;
-  align-items: center;
-  gap: 4px;
-  box-shadow: 0 4px 10px -2px rgba(9, 87, 223, 0.5);
+  width: 28px;
+  height: 28px;
+  padding: 0;
   border: none;
+  border-radius: $radius-pill;
+  background: $color-text;
   cursor: pointer;
 }
 
-.photo-badge-inactive {
-  background: rgba(15, 23, 42, 0.45);
-  opacity: 0;
-  transition: opacity 0.15s ease;
+.photos-remove img {
+  display: block;
+  width: 28px;
+  height: 28px;
 }
 
-.photo:hover .photo-badge-inactive {
-  opacity: 1;
-}
+// 283:309 and 283:313 — dashed #E4EBF2 over a 12 radius. As on novi.vue's unlock card
+// (174:347), the stroke is painted rather than set as a border: Figma's 1.5 inside stroke
+// takes no space and its dashes run about 6 on / 5 off, where a CSS dashed border snaps to
+// 1px and draws about 3 on / 2 off. The SVG strokes the edge 3 wide so 1.5 shows inside.
+$photos-dash-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='100%25' height='100%25' rx='12' fill='none' stroke='%23000' stroke-width='3' stroke-dasharray='6 5'/%3E%3C/svg%3E");
 
-.photo-remove {
+.photos-add::before,
+.photos-dropzone::before {
+  content: '';
   position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 24px;
-  height: 24px;
-  border-radius: $radius-pill;
-  background: rgba(15, 23, 42, 0.55);
-  color: $color-surface;
-  border: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 13px;
-  opacity: 0;
-  transition: opacity 0.15s ease;
-  cursor: pointer;
+  inset: 0;
+  background-color: $color-border;
+  -webkit-mask: $photos-dash-mask center / 100% 100% no-repeat;
+  mask: $photos-dash-mask center / 100% 100% no-repeat;
+  pointer-events: none;
+  transition: background-color 0.15s ease;
 }
 
-.photo:hover .photo-remove {
-  opacity: 1;
-}
-
-.photo-drag {
-  position: absolute;
-  bottom: 8px;
-  right: 8px;
-  width: 24px;
-  height: 24px;
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.9);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  transition: opacity 0.15s ease;
-}
-
-.photo:hover .photo-drag {
-  opacity: 1;
-}
-
-.photo-add {
+// 283:309
+.photos-add {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  border: 1.5px dashed #c9d4ee;
-  background: #fafbff;
-  color: $color-primary;
-  font-size: 12px;
-  font-weight: 600;
+  width: 245px;
+  height: 168px;
+  border: 0;
+  border-radius: $radius-input;
+  background: $color-background;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: normal;
+  color: $color-text-muted;
   cursor: pointer;
 }
 
-.photo-add:hover {
-  background: #f2f6ff;
-  border-color: $color-primary;
+.photos-add-icon {
+  display: block;
+  width: 24px;
+  height: 24px;
 }
 
-.grid-hint {
+.photos-add:hover::before,
+.photos-dropzone:hover::before,
+.photos-dropzone.is-active::before {
+  background-color: $color-primary;
+}
+
+// 283:313
+.photos-dropzone {
+  position: relative;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 8px;
-  font-size: 12.5px;
-  color: $color-text-muted;
-  margin-bottom: 12px;
+  justify-content: center;
+  gap: 6px;
+  padding: 34px 24px;
+  border: 0;
+  border-radius: $radius-input;
+  background: $color-background;
+  text-align: center;
+  cursor: pointer;
 }
 
-.grid-hint svg {
-  flex-shrink: 0;
-  color: $color-primary;
+.photos-dropzone-icon {
+  display: block;
+  width: 28px;
+  height: 28px;
+}
+
+// 283:317: the frame's two lines measure 19 and 16, which Chrome's own "normal" rounds up
+// past — stated so the zone keeps the frame's 143.
+.photos-dropzone-title {
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 19px;
+  color: $color-text;
+}
+
+// 283:318
+.photos-dropzone-hint {
+  font-size: 13px;
+  font-weight: 300;
+  line-height: 16px;
+  color: $color-text-muted;
+}
+
+.photos-limit {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 300;
+  line-height: normal;
+  color: $color-text-muted;
+}
+
+// 283:319
+.photos-order-note {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 300;
+  line-height: normal;
+  color: $color-text-muted;
+}
+
+// 680:1879 sits 280 wide inside the 352 the card's padding leaves, and only shows.
+.photos-card {
+  width: 280px;
+  max-width: 100%;
+  pointer-events: none;
+}
+
+// 285:308
+.photos-card-caption {
+  line-height: 18px;
+}
+
+@include respond-below(sm) {
+  .photos-item,
+  .photos-add {
+    width: calc(50% - 6px);
+  }
 }
 
 /* T29 — a 20-30+ item checkbox list (Sadržaji/Oprema/Priključci) in one

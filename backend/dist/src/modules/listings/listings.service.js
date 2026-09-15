@@ -265,6 +265,12 @@ let ListingsService = class ListingsService {
         if (!photo)
             throw new common_1.NotFoundException();
         await this.prisma.listingPhoto.delete({ where: { id: photo.id } });
+        const remaining = await this.prisma.listingPhoto.findMany({
+            where: { listingId: listing.id, versionId: null, pendingRemoval: false },
+            orderBy: { displayOrder: 'asc' },
+            select: { id: true },
+        });
+        await this.prisma.$transaction(remaining.map((p, index) => this.prisma.listingPhoto.update({ where: { id: p.id }, data: { displayOrder: index, isCover: index === 0 } })));
         return { message: this.i18n.t('common.SUCCESS') };
     }
     async reorderPhotos(userId, listingId, photoIds) {

@@ -48,23 +48,25 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.UploadsService = void 0;
 const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
+const nestjs_i18n_1 = require("nestjs-i18n");
 const fs = __importStar(require("fs/promises"));
 const path = __importStar(require("path"));
 const crypto_1 = require("crypto");
 const sharp_1 = __importDefault(require("sharp"));
 const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 let UploadsService = class UploadsService {
-    constructor(config) {
+    constructor(config, i18n) {
         this.config = config;
+        this.i18n = i18n;
     }
     async saveImage(file, folder, options = { maxWidth: 1600 }) {
         if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
-            throw new common_1.BadRequestException('Only JPEG, PNG or WEBP images are allowed');
+            throw new common_1.BadRequestException(this.i18n.t('errors.IMAGE_TYPE_NOT_ALLOWED'));
         }
         const maxSizeMb = options.maxSizeMb ?? this.config.get('uploads.maxPhotoSizeMb');
         const maxSizeBytes = maxSizeMb * 1024 * 1024;
         if (file.size > maxSizeBytes) {
-            throw new common_1.BadRequestException('File is too large');
+            throw new common_1.BadRequestException(this.i18n.t('errors.IMAGE_TOO_LARGE', { args: { max: maxSizeMb } }));
         }
         let processed;
         try {
@@ -75,7 +77,7 @@ let UploadsService = class UploadsService {
                 .toBuffer();
         }
         catch {
-            throw new common_1.BadRequestException('The uploaded file is not a valid image');
+            throw new common_1.BadRequestException(this.i18n.t('errors.IMAGE_INVALID'));
         }
         const dir = path.join(process.cwd(), this.config.get('uploads.dir'), folder);
         await fs.mkdir(dir, { recursive: true });
@@ -107,6 +109,7 @@ let UploadsService = class UploadsService {
 exports.UploadsService = UploadsService;
 exports.UploadsService = UploadsService = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [config_1.ConfigService])
+    __metadata("design:paramtypes", [config_1.ConfigService,
+        nestjs_i18n_1.I18nService])
 ], UploadsService);
 //# sourceMappingURL=uploads.service.js.map

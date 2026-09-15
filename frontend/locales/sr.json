@@ -453,10 +453,9 @@
     "changeCategory": "Promeni kategoriju",
     "autoSaveNotice": "Napredak se čuva automatski",
     "dropzoneTitle": "Prevuci fotografije ovde",
-    "dropzoneHint": "ili klikni da izabereš sa uređaja · JPG, PNG do 10MB",
-    "photoCountRecommendation": "Preporučujemo bar 5 fotografija — oglasi sa više fotografija dobijaju više upita.",
+    "dropzoneHint": "ili klikni da izabereš sa uređaja · JPG, PNG, WEBP do {max}MB",
+    "photoCountRecommendation": "Preporučujemo bar 5 fotografija; oglasi sa više fotografija dobijaju više upita.",
     "coverPhotoBadge": "Naslovna",
-    "setCoverPhotoHint": "Klikni na zvezdicu da postaviš drugu fotografiju kao naslovnu",
     "addMorePhotos": "Dodaj još",
     "wizardStepsProgress": "{current} / {total} koraka",
     "bookingModelNone": "Bez rezervacije — samo kontakt",
@@ -819,7 +818,83 @@
     "similarListings": "Slični oglasi",
     "inCity": "u {city}",
     "seeAllListings": "Pogledaj sve oglase",
-    "messageOwner": "Pošalji poruku vlasniku"
+    "messageOwner": "Pošalji poruku vlasniku",
+    "photosOrderNote": "Prevlačenjem menjate redosled; prva fotografija automatski postaje naslovna.",
+    "photoLimitReached": "Dostigli ste najveći broj fotografija ({max}). Obrišite neku da biste dodali novu.",
+    "photosUploadFailed": "Fotografija nije otpremljena. Proverite format i veličinu, pa pokušajte ponovo.",
+    "photosCardPreviewTitle": "Kartica u pretrazi",
+    "photosCardPreviewCaption": "Naslovna fotografija je jedino što gost vidi pre nego što otvori oglas.",
+    "photosCardPreviewNoTitle": "Naslov oglasa",
+    "photosTips": {
+      "playroom": {
+        "tip1": "Za naslovnu izaberite širok kadar cele sale, ne detalj; gost tako odmah proceni prostor.",
+        "tip2": "Slikajte danju, sa upaljenim svetlima; mračne fotografije gube u pretrazi.",
+        "tip3": "Pokažite i zonu za roditelje; to je čest razlog izbora igraonice.",
+        "tip4": "Izbegavajte fotografije sa decom koja se mogu prepoznati bez saglasnosti roditelja.",
+        "tip5": "Bar jedna fotografija je obavezna, ali oglasi sa pet i više dobijaju znatno više upita."
+      },
+      "apartment": {
+        "tip1": "Za naslovnu izaberite širok kadar dnevne sobe, ne detalj; gost tako odmah proceni prostor.",
+        "tip2": "Slikajte danju, uz razmaknute zavese; mračne fotografije gube u pretrazi.",
+        "tip3": "Pokažite i kuhinju i kupatilo; to su prve prostorije koje gost traži.",
+        "tip4": "Sklonite lične stvari iz kadra pre slikanja.",
+        "tip5": "Bar jedna fotografija je obavezna, ali oglasi sa pet i više dobijaju znatno više upita."
+      },
+      "house": {
+        "tip1": "Za naslovnu izaberite kadar cele kuće spolja; gost tako odmah proceni objekat.",
+        "tip2": "Slikajte danju, uz razmaknute zavese; mračne fotografije gube u pretrazi.",
+        "tip3": "Pokažite i dvorište, terasu i bazen ako ih imate; to je čest razlog izbora.",
+        "tip4": "Sklonite lične stvari iz kadra pre slikanja.",
+        "tip5": "Bar jedna fotografija je obavezna, ali oglasi sa pet i više dobijaju znatno više upita."
+      },
+      "room": {
+        "tip1": "Za naslovnu izaberite kadar cele sobe sa krevetom; gost tako odmah proceni prostor.",
+        "tip2": "Slikajte danju, uz razmaknute zavese; mračne fotografije gube u pretrazi.",
+        "tip3": "Pokažite i kupatilo, bez obzira na to da li je zajedničko.",
+        "tip4": "Sklonite lične stvari iz kadra pre slikanja.",
+        "tip5": "Bar jedna fotografija je obavezna, ali oglasi sa pet i više dobijaju znatno više upita."
+      },
+      "eventSpace": {
+        "tip1": "Za naslovnu izaberite širok kadar cele sale, ne detalj; gost tako odmah proceni prostor.",
+        "tip2": "Slikajte danju, sa upaljenim svetlima; mračne fotografije gube u pretrazi.",
+        "tip3": "Pokažite i sto postavljen za goste; tako se prostor lakše zamisli pun.",
+        "tip4": "Dodajte i kadar ulaza, parkinga ili bašte ako ih imate.",
+        "tip5": "Bar jedna fotografija je obavezna, ali oglasi sa pet i više dobijaju znatno više upita."
+      },
+      "car": {
+        "tip1": "Za naslovnu izaberite kadar celog vozila iz ugla, ne detalj; gost tako odmah prepozna model.",
+        "tip2": "Slikajte danju i na opranom vozilu; mračne fotografije gube u pretrazi.",
+        "tip3": "Pokažite i enterijer, instrument tablu i prtljažnik.",
+        "tip4": "Sakrijte registarsku oznaku ako ne želite da bude vidljiva.",
+        "tip5": "Bar jedna fotografija je obavezna, ali oglasi sa pet i više dobijaju znatno više upita."
+      },
+      "van": {
+        "tip1": "Za naslovnu izaberite kadar celog vozila iz ugla; gost tako odmah prepozna model.",
+        "tip2": "Slikajte danju i na opranom vozilu; mračne fotografije gube u pretrazi.",
+        "tip3": "Pokažite i tovarni prostor sa otvorenim vratima.",
+        "tip4": "Sakrijte registarsku oznaku ako ne želite da bude vidljiva.",
+        "tip5": "Bar jedna fotografija je obavezna, ali oglasi sa pet i više dobijaju znatno više upita."
+      },
+      "machine": {
+        "tip1": "Za naslovnu izaberite kadar cele mašine sa strane; gost tako odmah prepozna tip.",
+        "tip2": "Slikajte danju, po mogućstvu na radilištu; mračne fotografije gube u pretrazi.",
+        "tip3": "Pokažite i priključke i kabinu.",
+        "tip4": "Dodajte kadar sa kojeg se vidi stanje guma ili gusenica.",
+        "tip5": "Bar jedna fotografija je obavezna, ali oglasi sa pet i više dobijaju znatno više upita."
+      },
+      "warehouse": {
+        "tip1": "Za naslovnu izaberite širok kadar celog prostora iznutra; gost tako odmah proceni kvadraturu.",
+        "tip2": "Slikajte danju, sa upaljenim svetlima; mračne fotografije gube u pretrazi.",
+        "tip3": "Pokažite i ulaz, rampu i pristupni put.",
+        "tip4": "Dodajte kadar sa kojeg se vidi visina prostora.",
+        "tip5": "Bar jedna fotografija je obavezna, ali oglasi sa pet i više dobijaju znatno više upita."
+      },
+      "default": {
+        "tip1": "Za naslovnu izaberite širok kadar, ne detalj; gost tako odmah proceni šta izdajete.",
+        "tip2": "Slikajte po dnevnom svetlu; mračne fotografije gube u pretrazi.",
+        "tip3": "Bar jedna fotografija je obavezna, ali oglasi sa pet i više dobijaju znatno više upita."
+      }
+    }
   },
   "search": {
     "sortRelevance": "Preporučeno",

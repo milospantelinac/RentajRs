@@ -112,7 +112,7 @@ export function getCardKeyFacts(listing) {
 // category attribute with its raw ListingAttribute row attached, while search
 // results arrive pre-flattened; normalising here lets both feed the same
 // formatters instead of duplicating them per payload shape.
-function flattenDetailAttribute(attr) {
+export function flattenListingAttribute(attr) {
   const v = attr.value || {}
   return {
     key: attr.key,
@@ -146,7 +146,7 @@ export function getListingKeyFacts(listing) {
     if (facts.length >= 6) break
     const attr = byKey.get(key)
     if (!attr) continue
-    const flat = flattenDetailAttribute(attr)
+    const flat = flattenListingAttribute(attr)
     const noun = COUNT_NOUNS[key]
     if (noun && flat.valueNumber !== null) {
       facts.push({ key, value: String(flat.valueNumber), label: noun[srPluralCategory(flat.valueNumber)] })

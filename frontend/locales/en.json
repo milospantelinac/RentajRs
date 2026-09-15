@@ -453,10 +453,9 @@
     "changeCategory": "Change category",
     "autoSaveNotice": "Your progress saves automatically",
     "dropzoneTitle": "Drag photos here",
-    "dropzoneHint": "or click to choose from your device · JPG, PNG up to 10MB",
-    "photoCountRecommendation": "We recommend at least 5 photos — listings with more photos get more inquiries.",
+    "dropzoneHint": "or click to choose from your device · JPG, PNG, WEBP up to {max}MB",
+    "photoCountRecommendation": "We recommend at least 5 photos; listings with more photos get more inquiries.",
     "coverPhotoBadge": "Cover",
-    "setCoverPhotoHint": "Click the star to set another photo as the cover",
     "addMorePhotos": "Add more",
     "wizardStepsProgress": "{current} / {total} steps",
     "bookingModelNone": "No booking — contact only",
@@ -819,7 +818,83 @@
     "similarListings": "Similar listings",
     "inCity": "in {city}",
     "seeAllListings": "See all listings",
-    "messageOwner": "Message the owner"
+    "messageOwner": "Message the owner",
+    "photosOrderNote": "Drag to reorder; the first photo automatically becomes the cover.",
+    "photoLimitReached": "You have reached the maximum number of photos ({max}). Delete one to add another.",
+    "photosUploadFailed": "The photo was not uploaded. Check its format and size, then try again.",
+    "photosCardPreviewTitle": "Card in search",
+    "photosCardPreviewCaption": "The cover photo is the only thing a guest sees before opening the listing.",
+    "photosCardPreviewNoTitle": "Listing title",
+    "photosTips": {
+      "playroom": {
+        "tip1": "For the cover choose a wide shot of the whole room, not a detail; that way a guest sizes up the space at once.",
+        "tip2": "Shoot by day with the lights on; dark photos lose out in search.",
+        "tip3": "Show the parents area too; it is a common reason for choosing a playroom.",
+        "tip4": "Avoid photos of children who can be recognised without their parents consent.",
+        "tip5": "One photo is the minimum, but listings with five or more get far more inquiries."
+      },
+      "apartment": {
+        "tip1": "For the cover choose a wide shot of the living room, not a detail; that way a guest sizes up the space at once.",
+        "tip2": "Shoot by day with the curtains open; dark photos lose out in search.",
+        "tip3": "Show the kitchen and the bathroom too; those are the first rooms a guest looks for.",
+        "tip4": "Clear personal belongings out of the frame before you shoot.",
+        "tip5": "One photo is the minimum, but listings with five or more get far more inquiries."
+      },
+      "house": {
+        "tip1": "For the cover choose a shot of the whole house from outside; that way a guest sizes up the property at once.",
+        "tip2": "Shoot by day with the curtains open; dark photos lose out in search.",
+        "tip3": "Show the yard, the terrace and the pool if you have them; they are a common reason for choosing a house.",
+        "tip4": "Clear personal belongings out of the frame before you shoot.",
+        "tip5": "One photo is the minimum, but listings with five or more get far more inquiries."
+      },
+      "room": {
+        "tip1": "For the cover choose a shot of the whole room with the bed; that way a guest sizes up the space at once.",
+        "tip2": "Shoot by day with the curtains open; dark photos lose out in search.",
+        "tip3": "Show the bathroom too, shared or not.",
+        "tip4": "Clear personal belongings out of the frame before you shoot.",
+        "tip5": "One photo is the minimum, but listings with five or more get far more inquiries."
+      },
+      "eventSpace": {
+        "tip1": "For the cover choose a wide shot of the whole hall, not a detail; that way a guest sizes up the space at once.",
+        "tip2": "Shoot by day with the lights on; dark photos lose out in search.",
+        "tip3": "Show a table set for guests too; it makes the space easier to picture full.",
+        "tip4": "Add a shot of the entrance, the parking or the garden if you have them.",
+        "tip5": "One photo is the minimum, but listings with five or more get far more inquiries."
+      },
+      "car": {
+        "tip1": "For the cover choose a shot of the whole vehicle at an angle, not a detail; that way a guest recognises the model at once.",
+        "tip2": "Shoot by day and with the vehicle washed; dark photos lose out in search.",
+        "tip3": "Show the interior, the dashboard and the boot too.",
+        "tip4": "Hide the number plate if you would rather it were not visible.",
+        "tip5": "One photo is the minimum, but listings with five or more get far more inquiries."
+      },
+      "van": {
+        "tip1": "For the cover choose a shot of the whole vehicle at an angle; that way a guest recognises the model at once.",
+        "tip2": "Shoot by day and with the vehicle washed; dark photos lose out in search.",
+        "tip3": "Show the cargo area with the doors open too.",
+        "tip4": "Hide the number plate if you would rather it were not visible.",
+        "tip5": "One photo is the minimum, but listings with five or more get far more inquiries."
+      },
+      "machine": {
+        "tip1": "For the cover choose a side shot of the whole machine; that way a guest recognises the type at once.",
+        "tip2": "Shoot by day, on site where possible; dark photos lose out in search.",
+        "tip3": "Show the attachments and the cab too.",
+        "tip4": "Add a shot that shows the state of the tyres or tracks.",
+        "tip5": "One photo is the minimum, but listings with five or more get far more inquiries."
+      },
+      "warehouse": {
+        "tip1": "For the cover choose a wide shot of the whole space from inside; that way a guest sizes up the area at once.",
+        "tip2": "Shoot by day with the lights on; dark photos lose out in search.",
+        "tip3": "Show the entrance, the ramp and the access road too.",
+        "tip4": "Add a shot that shows the height of the space.",
+        "tip5": "One photo is the minimum, but listings with five or more get far more inquiries."
+      },
+      "default": {
+        "tip1": "For the cover choose a wide shot, not a detail; that way a guest sizes up what you are renting at once.",
+        "tip2": "Shoot in daylight; dark photos lose out in search.",
+        "tip3": "One photo is the minimum, but listings with five or more get far more inquiries."
+      }
+    }
   },
   "search": {
     "sortRelevance": "Recommended",
