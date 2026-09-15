@@ -22,6 +22,12 @@ export class SearchController {
   }
 
   @Public()
+  @Get('similar')
+  getSimilar(@Query('slug') slug: string) {
+    return this.searchService.getSimilarListings(slug);
+  }
+
+  @Public()
   @Get('sitemap-urls')
   getSitemapUrls() {
     return this.searchService.getSitemapUrls();

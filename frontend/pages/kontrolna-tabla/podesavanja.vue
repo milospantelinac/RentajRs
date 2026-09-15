@@ -384,12 +384,12 @@ async function deleteAccount() {
 }
 
 // R87 — the backend stores a NotificationSetting row per exact email
-// template key (45 of them); grouping into a handful of categories here
+// template key (46 of them); grouping into a handful of categories here
 // keeps the UI usable while still writing per-event rows underneath. Only
 // non-critical events appear as toggleable — money/security/confirmed-
 // booking emails always send (see backend CRITICAL_EMAIL_EVENTS).
 const NOTIFICATION_CATEGORIES = [
-  { key: 'Listings', events: ['listing_submitted_for_approval', 'listing_approved', 'listing_rejected', 'listing_edit_approved', 'listing_edit_rejected', 'listing_price_dropped'] },
+  { key: 'Listings', events: ['listing_submitted_for_approval', 'listing_approved', 'listing_rejected', 'listing_category_assigned', 'listing_edit_approved', 'listing_edit_rejected', 'listing_price_dropped'] },
   { key: 'Bookings', events: ['booking_requested_guest', 'booking_requested_owner', 'booking_request_unopened_reminder', 'booking_rejected', 'booking_expired', 'booking_no_show_marked'] },
   { key: 'Messages', events: ['new_message'] },
   { key: 'Reviews', events: ['review_invitation', 'reviews_published', 'review_reminder_7d', 'review_replied'] },

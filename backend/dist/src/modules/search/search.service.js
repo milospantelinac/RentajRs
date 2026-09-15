@@ -15,6 +15,7 @@ const prisma_service_1 = require("../../prisma/prisma.service");
 const cache_service_1 = require("../../common/cache/cache.service");
 const taxonomy_service_1 = require("../taxonomy/taxonomy.service");
 const money_1 = require("../../common/utils/money");
+const guest_capacity_1 = require("../../common/utils/guest-capacity");
 const RELEVANCE_CANDIDATE_POOL = 200;
 const DEFAULT_PAGE_SIZE = 20;
 const RANKING_WEIGHTS_CACHE_KEY = 'settings:ranking_weights';
@@ -114,7 +115,8 @@ let SearchService = class SearchService {
             }),
         ]);
         const categoryNames = await this.taxonomy.getCategoryNames(rows.map((r) => r.category.id));
-        const results = rows.map((r) => this.serializeResult(r, categoryNames));
+        const optionNames = await this.buildOptionNamesMap(rows);
+        const results = rows.map((r) => this.serializeResult(r, categoryNames, optionNames));
         return { results, total, page, pageSize };
     }
     async searchWithRelevanceRanking(where, page, pageSize) {
@@ -148,7 +150,19 @@ let SearchService = class SearchService {
         scored.sort((a, b) => b.score - a.score);
         const pageItems = scored.slice((page - 1) * pageSize, (page - 1) * pageSize + pageSize);
         const categoryNames = await this.taxonomy.getCategoryNames(pageItems.map((s) => s.listing.category.id));
-        return { results: pageItems.map((s) => this.serializeResult(s.listing, categoryNames)), total, page, pageSize };
+        const optionNames = await this.buildOptionNamesMap(pageItems.map((s) => s.listing));
+        return {
+            results: pageItems.map((s) => this.serializeResult(s.listing, categoryNames, optionNames)),
+            total,
+            page,
+            pageSize,
+        };
+    }
+    async buildOptionNamesMap(listings) {
+        const optionIds = [...new Set(listings.flatMap((l) => l.attributes.flatMap((a) => a.valueOptionIds)))];
+        if (!optionIds.length)
+            return new Map();
+        return this.taxonomy.getOptionNames(optionIds);
     }
     async getRankingWeights() {
         return this.cache.getOrSet(RANKING_WEIGHTS_CACHE_KEY, 300, async () => {
@@ -194,7 +208,7 @@ let SearchService = class SearchService {
         });
     }
     async relaxedSearch(dto) {
-        const relaxed = { ...dto, cityId: undefined, cityAreaId: undefined, dateFrom: undefined, dateTo: undefined };
+        const relaxed = { ...dto, cityId: undefined, cityAreaId: undefined, cityAreaIds: undefined, dateFrom: undefined, dateTo: undefined };
         return this.search(relaxed);
     }
     async buildWhere(dto) {
@@ -219,8 +233,11 @@ let SearchService = class SearchService {
             where.regionId = dto.regionId;
         if (dto.cityId)
             where.cityId = dto.cityId;
-        if (dto.cityAreaId)
-            where.cityAreaId = dto.cityAreaId;
+        const cityAreaIds = [...new Set([...(dto.cityAreaIds ?? []), ...(dto.cityAreaId ? [dto.cityAreaId] : [])])];
+        if (cityAreaIds.length === 1)
+            where.cityAreaId = cityAreaIds[0];
+        else if (cityAreaIds.length > 1)
+            where.cityAreaId = { in: cityAreaIds };
         if (dto.priceMin !== undefined || dto.priceMax !== undefined) {
             where.price = {
                 ...(dto.priceMin !== undefined ? { gte: (0, money_1.rsdToPara)(dto.priceMin) } : {}),
@@ -231,6 +248,13 @@ let SearchService = class SearchService {
             where.AND = [
                 ...(where.AND ?? []),
                 { OR: [{ maxGuests: null }, { maxGuests: { gte: dto.guests } }] },
+                {
+                    NOT: {
+                        attributes: {
+                            some: { attribute: { key: { in: guest_capacity_1.GUEST_CAPACITY_ATTRIBUTE_KEYS } }, valueNumber: { lt: dto.guests } },
+                        },
+                    },
+                },
             ];
         }
         if (dto.onlineBookingOnly) {
@@ -279,6 +303,40 @@ let SearchService = class SearchService {
         }
         return where;
     }
+    async getSimilarListings(slug, take = 4) {
+        const listing = await this.prisma.listing.findUnique({
+            where: { slug },
+            select: { id: true, categoryId: true, cityId: true },
+        });
+        if (!listing)
+            return { results: [] };
+        const base = {
+            status: 'ACTIVE',
+            available: true,
+            categoryId: listing.categoryId,
+        };
+        const rows = listing.cityId
+            ? await this.prisma.listing.findMany({
+                where: { ...base, cityId: listing.cityId, id: { not: listing.id } },
+                orderBy: { publishedAt: 'desc' },
+                take,
+                include: this.resultInclude(),
+            })
+            : [];
+        if (rows.length < take) {
+            rows.push(...(await this.prisma.listing.findMany({
+                where: { ...base, id: { notIn: [listing.id, ...rows.map((r) => r.id)] } },
+                orderBy: { publishedAt: 'desc' },
+                take: take - rows.length,
+                include: this.resultInclude(),
+            })));
+        }
+        if (!rows.length)
+            return { results: [] };
+        const categoryNames = await this.taxonomy.getCategoryNames(rows.map((r) => r.category.id));
+        const optionNames = await this.buildOptionNamesMap(rows);
+        return { results: rows.map((r) => this.serializeResult(r, categoryNames, optionNames)) };
+    }
     resultInclude() {
         return {
             photos: { where: { isCover: true, pendingRemoval: false, versionId: null }, take: 1 },
@@ -286,6 +344,7 @@ let SearchService = class SearchService {
             city: true,
             cityArea: true,
             user: { select: { avgResponseTimeMinutes: true } },
+            attributes: { include: { attribute: { select: { key: true, unit: true, type: true } } } },
         };
     }
     async getSitemapUrls() {
@@ -344,7 +403,7 @@ let SearchService = class SearchService {
         const setting = await this.prisma.setting.findUnique({ where: { key: 'listing_index_threshold' } });
         return typeof setting?.value === 'number' ? setting.value : 3;
     }
-    serializeResult(listing, categoryNames) {
+    serializeResult(listing, categoryNames, optionNames) {
         return {
             id: listing.id,
             slug: listing.slug,
@@ -365,6 +424,15 @@ let SearchService = class SearchService {
             coverPhoto: listing.photos[0] ?? null,
             latitude: listing.latitude,
             longitude: listing.longitude,
+            attributes: listing.attributes.map((a) => ({
+                key: a.attribute.key,
+                type: a.attribute.type,
+                unit: a.attribute.unit,
+                valueNumber: a.valueNumber !== null ? Number(a.valueNumber) : null,
+                valueText: a.valueText,
+                valueBoolean: a.valueBoolean,
+                optionNames: a.valueOptionIds.map((id) => optionNames.get(id)).filter(Boolean),
+            })),
         };
     }
 };

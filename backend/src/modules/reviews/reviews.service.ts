@@ -120,7 +120,9 @@ export class ReviewsService {
       where: { listingId, published: true, hiddenByAdmin: false, direction: 'GUEST_TO_OWNER' },
       orderBy: { publishedAt: 'desc' },
       include: {
-        author: { select: { id: true, firstName: true, avatarUrl: true } },
+        // Dizajn 11 — a review card is signed "Miloš J.", so the surname's
+        // initial has to come along; the full surname is never rendered.
+        author: { select: { id: true, firstName: true, lastName: true, avatarUrl: true } },
         tags: true,
         reply: true,
       },

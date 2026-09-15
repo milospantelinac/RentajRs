@@ -42,6 +42,8 @@
                   :base-price="listing.price"
                   :min-duration="listing.minDuration"
                   :max-duration="listing.maxDuration"
+                  :earliest-booking-hours="listing.earliestBookingHours"
+                  :max-advance-booking-days="listing.maxAdvanceBookingDays"
                   @update:range="onMonthRangeUpdate"
                 />
               </div>
@@ -52,6 +54,8 @@
                 <label class="form-label">{{ t('booking.rangePickerLabel') }}</label>
                 <BookingDateRangePicker
                   :listing-id="listing.id"
+                  :initial-start="form.startsAt"
+                  :initial-end="form.endsAt"
                   :base-price="listing.price"
                   :weekend-price="listing.weekendPrice"
                   :show-pricing="true"
@@ -74,6 +78,7 @@
                 <label class="form-label">{{ t('booking.pickDate') }}</label>
                 <BookingDateRangePicker
                   :listing-id="listing.id"
+                  :initial-start="form.startsAt"
                   :show-pricing="false"
                   :earliest-booking-hours="listing.earliestBookingHours"
                   :max-advance-booking-days="listing.maxAdvanceBookingDays"
@@ -95,7 +100,9 @@
                 <div class="col-6">
                   <div class="form-group mb-3">
                     <label class="form-label">{{ t('booking.durationHours') }}</label>
-                    <input v-model.number="slotDurationHours" type="number" min="1" max="12" class="form-control" @input="error = ''" />
+                    <select v-model.number="slotDurationHours" class="form-control form-select" @change="error = ''">
+                      <option v-for="hours in durationOptions" :key="hours" :value="hours">{{ hours }}</option>
+                    </select>
                   </div>
                 </div>
               </div>
@@ -107,13 +114,16 @@
               <input
                 v-model.number="form.guestCount"
                 type="number"
-                min="1"
+                :min="minGuests"
                 :max="effectiveMaxGuests || undefined"
                 class="form-control"
                 @input="error = ''"
               />
               <p v-if="effectiveMaxGuests && form.guestCount > effectiveMaxGuests" class="form-error mb-0 mt-1">
                 {{ t('booking.guestCountExceeds', { max: effectiveMaxGuests }) }}
+              </p>
+              <p v-else-if="form.guestCount < minGuests" class="form-error mb-0 mt-1">
+                {{ t('booking.guestCountBelow', { min: minGuests }) }}
               </p>
             </div>
 
@@ -180,7 +190,7 @@
 
             <button
               class="btn btn-primary-flat btn-block"
-              :disabled="submitting || (effectiveMaxGuests && form.guestCount > effectiveMaxGuests)"
+              :disabled="submitting || guestCountOutOfRange"
               @click="submit"
             >
               {{ submitting ? t('common.loading') : t('listing.sendRequest') }}
@@ -212,25 +222,25 @@ if (listing.value && (listing.value.bookingModel === 'NO_BOOKING' || !listing.va
 // on submit; gate it up front instead.
 const isOwnListing = computed(() => !!listing.value && auth.user?.id === listing.value.userId)
 
-// Mirrors the backend's dual-source cap (bookings.service.ts createRequest):
-// "Kapacitet ljudi" is a per-category attribute set in the wizard, separate
-// from the generic minGuests/maxGuests pair — prefer it when present since
-// it's the number actually shown to guests as the listing's capacity.
-const effectiveMaxGuests = computed(() => {
-  const attr = listing.value?.attributes?.find((a) => a.key === 'kapacitet_ljudi')
-  const attrValue = attr?.value?.valueNumber
-  if (attrValue != null) return Number(attrValue)
-  return listing.value?.maxGuests ?? null
-})
+// Mirrors the backend's cap (bookings.service.ts createRequest). Dizajn 23:
+// "Maks. broj gostiju" and the capacity from step Detalji ("Kapacitet ljudi" or
+// "Kapacitet dece") both apply, so the lower one does.
+const effectiveMaxGuests = computed(() => (listing.value ? getGuestCap(listing.value) : null))
+const minGuests = computed(() => listing.value?.minGuests || 1)
+const guestCountOutOfRange = computed(
+  () => form.guestCount < minGuests.value || (!!effectiveMaxGuests.value && form.guestCount > effectiveMaxGuests.value),
+)
 
 const slots = ref([])
+// Dizajn 11 — the listing page's booking card hands its selection over in the
+// query string; the guest should not have to pick the same term twice.
 const form = reactive({
-  startsAt: '',
-  endsAt: '',
-  monthStart: '',
-  monthCount: 1,
-  definedSlotId: null,
-  guestCount: 1,
+  startsAt: route.query.startsAt || '',
+  endsAt: route.query.endsAt || '',
+  monthStart: route.query.monthStart || '',
+  monthCount: Number(route.query.monthCount) || 1,
+  definedSlotId: route.query.definedSlotId || null,
+  guestCount: Math.max(Number(route.query.guests) || 1, listing.value?.minGuests || 1),
   guestMessage: '',
   extraServices: [],
   paymentMethod: '',
@@ -242,8 +252,13 @@ const submitting = ref(false)
 // times are actually offered, straight from the owner's configured hours,
 // so a guest can't submit a time that was never open to begin with.
 const workingHours = ref([])
-const slotStartTime = ref('')
-const slotDurationHours = ref(1)
+const slotStartTime = ref(route.query.startTime || '')
+// Dizajn 23: whole hours between the listing's minimum and maximum, starting from
+// the length the listing page's booking card priced.
+const durationOptions = computed(() => getHourlyDurationOptions(listing.value))
+const slotDurationHours = ref(
+  durationOptions.value.includes(Number(route.query.hours)) ? Number(route.query.hours) : durationOptions.value[0],
+)
 // T74 — already-booked/blocked terms for this listing, used to keep the
 // calendar and "Vreme početka" list from offering what the server would
 // reject anyway (BlockedTerm rows carry exact start/end instants, not whole
@@ -285,9 +300,11 @@ function onMonthRangeUpdate({ monthStart, monthCount }) {
   form.monthCount = monthCount || 1
   error.value = ''
 }
+// Dizajn 23: the calendar reports the date the booking card handed over as soon as
+// it mounts, so only a different date clears the start time picked with it.
 function onSingleDateUpdate({ startsAt }) {
+  if ((startsAt || '') !== form.startsAt) slotStartTime.value = ''
   form.startsAt = startsAt || ''
-  slotStartTime.value = ''
   error.value = ''
 }
 function selectSlot(slot) {
@@ -319,10 +336,11 @@ const dayTimeOptions = computed(() => {
   // T74 — an already-booked/pending slot must not appear in the list at all,
   // not just get rejected on submit; check against the currently-chosen
   // duration since that's what would actually be reserved.
+  // Dizajn 23: nor one inside the notice or past the horizon.
   return times.filter((time) => {
     const startsAt = slotInstant(form.startsAt, time)
     const endsAt = new Date(startsAt.getTime() + slotDurationHours.value * 3600_000)
-    return !overlapsBlocked(startsAt, endsAt)
+    return isStartWithinRules(listing.value, startsAt) && !overlapsBlocked(startsAt, endsAt)
   })
 })
 // T74 — a duration change (or the list itself refreshing) can invalidate an
@@ -436,8 +454,11 @@ onMounted(async () => {
     // T74 — a defined slot with a pending or confirmed booking on it must
     // not be offered again; the server already refuses the double-booking,
     // this just stops the guest from picking it in the first place.
+    // Dizajn 23: nor one inside the notice or past the horizon.
     slots.value = (availability.definedSlots || []).filter(
-      (s) => !blockedTerms.some((b) => new Date(b.startsAt).getTime() < new Date(s.endsAt).getTime() && new Date(b.endsAt).getTime() > new Date(s.startsAt).getTime()),
+      (s) =>
+        isStartWithinRules(listing.value, s.startsAt) &&
+        !blockedTerms.some((b) => new Date(b.startsAt).getTime() < new Date(s.endsAt).getTime() && new Date(b.endsAt).getTime() > new Date(s.startsAt).getTime()),
     )
   } else if (listing.value?.bookingModel === 'PER_SLOT' && listing.value?.slotSubmode === 'WORKING_HOURS') {
     const availability = await api.get(`/listings/${listing.value.id}/availability`)

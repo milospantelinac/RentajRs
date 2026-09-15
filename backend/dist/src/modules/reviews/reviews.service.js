@@ -116,7 +116,7 @@ let ReviewsService = class ReviewsService {
             where: { listingId, published: true, hiddenByAdmin: false, direction: 'GUEST_TO_OWNER' },
             orderBy: { publishedAt: 'desc' },
             include: {
-                author: { select: { id: true, firstName: true, avatarUrl: true } },
+                author: { select: { id: true, firstName: true, lastName: true, avatarUrl: true } },
                 tags: true,
                 reply: true,
             },

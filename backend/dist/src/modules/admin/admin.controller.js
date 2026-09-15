@@ -14,6 +14,7 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AdminController = void 0;
 const common_1 = require("@nestjs/common");
+const platform_express_1 = require("@nestjs/platform-express");
 const swagger_1 = require("@nestjs/swagger");
 const client_1 = require("@prisma/client");
 const admin_service_1 = require("./admin.service");
@@ -60,6 +61,12 @@ let AdminController = class AdminController {
     }
     updateSetting(adminId, key, dto) {
         return this.adminService.updateSetting(adminId, key, dto);
+    }
+    setHomepageVideoThumbnail(adminId, file) {
+        return this.adminService.setHomepageVideoThumbnail(adminId, file);
+    }
+    removeHomepageVideoThumbnail(adminId) {
+        return this.adminService.removeHomepageVideoThumbnail(adminId);
     }
     getPaymentSettings() {
         return this.adminService.getPaymentSettings();
@@ -209,6 +216,24 @@ __decorate([
     __metadata("design:paramtypes", [String, String, admin_dto_1.UpdateSettingDto]),
     __metadata("design:returntype", void 0)
 ], AdminController.prototype, "updateSetting", null);
+__decorate([
+    (0, require_permissions_decorator_1.RequirePermissions)('manage_settings'),
+    (0, common_1.Post)('admin/homepage-video-thumbnail'),
+    (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('file')),
+    __param(0, (0, current_user_decorator_1.CurrentUser)('id')),
+    __param(1, (0, common_1.UploadedFile)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", void 0)
+], AdminController.prototype, "setHomepageVideoThumbnail", null);
+__decorate([
+    (0, require_permissions_decorator_1.RequirePermissions)('manage_settings'),
+    (0, common_1.Delete)('admin/homepage-video-thumbnail'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], AdminController.prototype, "removeHomepageVideoThumbnail", null);
 __decorate([
     (0, require_permissions_decorator_1.RequirePermissions)('manage_settings'),
     (0, common_1.Get)('admin/payment-settings'),

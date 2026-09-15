@@ -7,7 +7,7 @@ import {
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { I18nService } from 'nestjs-i18n';
-import { ListingStatus, ModerationDecision, Prisma } from '@prisma/client';
+import { Category, Listing, ListingStatus, ModerationDecision, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CacheService } from '../../common/cache/cache.service';
 import { UploadsService } from '../../common/uploads/uploads.service';
@@ -148,6 +148,31 @@ export class ListingsService {
       }
     }
 
+    // Dizajn 23: a minimum above its maximum would turn every request away. Only a
+    // change to the pair is checked, so the wizard steps that send the whole form
+    // still save; a field left out keeps its saved value and null clears it.
+    const rulePairs = [
+      ['minDuration', 'maxDuration', 'errors.DURATION_MIN_ABOVE_MAX'],
+      ['minGuests', 'maxGuests', 'errors.GUESTS_MIN_ABOVE_MAX'],
+    ] as const;
+    for (const [minField, maxField, message] of rulePairs) {
+      const changed = [minField, maxField].some((field) => dto[field] !== undefined && dto[field] !== listing[field]);
+      const min = dto[minField] !== undefined ? dto[minField] : listing[minField];
+      const max = dto[maxField] !== undefined ? dto[maxField] : listing[maxField];
+      if (changed && min != null && max != null && min > max) throw new BadRequestException(this.i18n.t(message));
+    }
+
+    // Dizajn 24: free cancellation without its number of days or hours shows the guest no
+    // terms at all. Checked the same way, only when the policy or the number changes.
+    const cancellationChanged = (['cancellationPolicyType', 'cancellationThreshold'] as const).some(
+      (field) => dto[field] !== undefined && dto[field] !== listing[field],
+    );
+    const policy = dto.cancellationPolicyType !== undefined ? dto.cancellationPolicyType : listing.cancellationPolicyType;
+    const threshold = dto.cancellationThreshold !== undefined ? dto.cancellationThreshold : listing.cancellationThreshold;
+    if (cancellationChanged && (policy === 'FREE_UNTIL_DAYS' || policy === 'FREE_UNTIL_HOURS') && threshold == null) {
+      throw new BadRequestException(this.i18n.t('errors.CANCELLATION_THRESHOLD_REQUIRED'));
+    }
+
     const priceFields: Record<string, bigint> = {};
     if (dto.price !== undefined) priceFields.price = rsdToPara(dto.price);
     if (dto.weekendPrice !== undefined) priceFields.weekendPrice = rsdToPara(dto.weekendPrice);
@@ -216,8 +241,9 @@ export class ListingsService {
     // whether the owner actually filled it in, so a naive upsert would
     // create a "value" row for an untouched required field and the review
     // checklist (which only checks "does a row exist") would call it done.
-    // A BOOLEAN has no empty state (false is a real answer), so it always
-    // counts as filled; every other type needs its value present.
+    // A BOOLEAN's false is a real answer, so only a missing value (null) is
+    // empty: that is how the wizard clears a field another field's choice
+    // hides (Dizajn 25). Every other type needs its value present.
     // AttributeType has 7 members (NUMBER/TEXT/TEXTAREA/YEAR/LIST/
     // MULTISELECT/CHECKBOX_GROUP) but this used to only recognize 5 of
     // them — YEAR and TEXTAREA fell through to the LIST/MULTISELECT branch,
@@ -229,7 +255,7 @@ export class ListingsService {
       const type = attributesById.get(v.attributeId)!.type;
       if (type === 'NUMBER' || type === 'YEAR') return v.valueNumber !== null && v.valueNumber !== undefined;
       if (type === 'TEXT' || type === 'TEXTAREA') return !!v.valueText;
-      if (type === 'BOOLEAN') return true;
+      if (type === 'BOOLEAN') return v.valueBoolean !== null && v.valueBoolean !== undefined;
       return (v.valueOptionIds ?? []).length > 0; // LIST / MULTISELECT / CHECKBOX_GROUP
     });
     const toClear = submitted.filter((v) => !toWrite.includes(v)).map((v) => v.attributeId);
@@ -557,6 +583,13 @@ export class ListingsService {
     const canMessage = listing.subscription?.package?.hasMessaging ?? false;
     const { phone, ...ownerRest } = listing.user;
 
+    // Dizajn 11 — the owner block reads "Član od 2024. · 3 oglasa na
+    // Rentaj.rs"; the second half is a live count of that owner's other
+    // public listings, not a stored column.
+    const ownerListingCount = await this.prisma.listing.count({
+      where: { userId: listing.userId, status: ListingStatus.ACTIVE },
+    });
+
     return {
       ...this.serialize(listing),
       photos: listing.photos,
@@ -566,7 +599,7 @@ export class ListingsService {
       region: listing.region,
       city: listing.city,
       cityArea: listing.cityArea,
-      owner: { ...ownerRest, phone: canMessage ? undefined : phone },
+      owner: { ...ownerRest, phone: canMessage ? undefined : phone, listingCount: ownerListingCount },
       attributes: attributes.map((a: any) => ({ ...a, value: valueMap.get(a.id) ?? null })),
       canBook,
       canMessage,
@@ -665,9 +698,8 @@ export class ListingsService {
   /**
    * "Otključaj svoju kategoriju" resolution — admin reviews an owner's
    * self-described listing (parked under Ostalo, pendingCategoryAssignment)
-   * and assigns the real category. bookingModel/priceUnit are left as the
-   * owner already set them; the category only changes which attributes the
-   * wizard now resolves for this listing going forward.
+   * and assigns the real category, which also decides which attributes the
+   * wizard resolves for this listing going forward.
    */
   async adminListPendingCategoryAssignment() {
     const listings = await this.prisma.listing.findMany({
@@ -678,13 +710,87 @@ export class ListingsService {
     return listings.map((l) => this.serialize(l));
   }
 
+  /**
+   * Dizajn 19: "Promeni kategoriju" in the wizard. Only a draft can move, since a
+   * submitted listing was reviewed under its category. Values for detail fields
+   * the new category doesn't have are dropped, and the booking fields follow the
+   * new category the same way an admin assignment does.
+   */
+  async changeCategory(userId: string, listingId: string, categoryId: string) {
+    const listing = await this.assertOwnership(userId, listingId);
+    if (listing.status !== ListingStatus.DRAFT || listing.pendingCategoryAssignment) {
+      throw new BadRequestException(this.i18n.t('errors.LISTING_CATEGORY_CHANGE_NOT_ALLOWED'));
+    }
+    // Only what the category picker offers: an active category without active
+    // subcategories, never the hidden Ostalo fallback.
+    const category = await this.prisma.category.findUnique({
+      where: { id: categoryId },
+      include: { children: { where: { status: 'ACTIVE' }, select: { id: true } } },
+    });
+    if (!category || category.status !== 'ACTIVE' || category.children.length || category.slug === FALLBACK_CATEGORY_SLUG) {
+      throw new BadRequestException(this.i18n.t('errors.CATEGORY_NOT_SELECTABLE'));
+    }
+    if (category.id === listing.categoryId) return this.serialize(listing);
+
+    const attributeIds = (await this.taxonomy.resolveAttributesForCategory(category.id)).map((attr) => attr.id);
+    const [, updated] = await this.prisma.$transaction([
+      this.prisma.listingAttribute.deleteMany({ where: { listingId, attributeId: { notIn: attributeIds } } }),
+      this.prisma.listing.update({
+        where: { id: listingId },
+        data: {
+          categoryId: category.id,
+          ...this.bookingFieldsForCategory(listing, category),
+          // A slot submode only means something under a slot category.
+          slotSubmode: category.defaultBookingModel === 'PER_SLOT' ? listing.slotSubmode : null,
+        },
+      }),
+    ]);
+    return this.serialize(updated);
+  }
+
   async adminAssignCategory(listingId: string, categoryId: string) {
+    const listing = await this.prisma.listing.findUnique({ where: { id: listingId } });
+    if (!listing) throw new NotFoundException(this.i18n.t('errors.LISTING_NOT_FOUND'));
     const category = await this.prisma.category.findUniqueOrThrow({ where: { id: categoryId } });
+    // Dizajn 18: what the owner picked on the proposal form is a first guess
+    // ("biramo zajedno sa vama kad otvorimo kategoriju"), so the booking fields
+    // follow the category. The owner can still pick another allowed unit in
+    // the wizard.
     const updated = await this.prisma.listing.update({
       where: { id: listingId },
-      data: { categoryId: category.id, pendingCategoryAssignment: false },
+      data: {
+        categoryId: category.id,
+        pendingCategoryAssignment: false,
+        ...this.bookingFieldsForCategory(listing, category),
+      },
     });
+    // Dizajn 18 — the "Otključaj svoju kategoriju" form tells the owner we'll
+    // email them once the category is open. Only when the listing was still
+    // waiting for one, so moving it again later doesn't repeat the email.
+    if (listing.pendingCategoryAssignment) {
+      this.events.emit('listing.category_assigned', { listingId, userId: listing.userId });
+    }
     return this.serialize(updated);
+  }
+
+  /**
+   * The booking fields that follow a listing's category (Dizajn 18 and 19).
+   * Online booking takes the category's own stay or slot model, the way the
+   * wizard sets it, while "Bez rezervacije" stays as chosen. A unit the category
+   * doesn't allow becomes its default (R25: a DB trigger rejects the update
+   * otherwise), and a stay listing gets the iCal export link createDraft gives
+   * every new one.
+   */
+  private bookingFieldsForCategory(
+    listing: Pick<Listing, 'bookingModel' | 'priceUnit' | 'icalExportToken'>,
+    category: Pick<Category, 'defaultBookingModel' | 'allowedPriceUnits' | 'defaultPriceUnit'>,
+  ) {
+    const bookingModel = listing.bookingModel === 'NO_BOOKING' ? listing.bookingModel : category.defaultBookingModel;
+    return {
+      bookingModel,
+      priceUnit: category.allowedPriceUnits.includes(listing.priceUnit) ? listing.priceUnit : category.defaultPriceUnit,
+      icalExportToken: listing.icalExportToken ?? (bookingModel === 'PER_STAY' ? crypto.randomUUID() : undefined),
+    };
   }
 
   /** Ch.22.4 "Pad cene sačuvanog oglasa" — notifies once per drop episode, never spams on every re-check. */

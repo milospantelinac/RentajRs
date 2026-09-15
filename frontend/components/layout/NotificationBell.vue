@@ -5,7 +5,7 @@
         <path d="M6 10a6 6 0 1112 0c0 3.2 1 5 1.6 5.8.3.4 0 1-.5 1H4.9c-.5 0-.8-.6-.5-1C5 15 6 13.2 6 10Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" />
         <path d="M10 20a2 2 0 004 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
       </svg>
-      <span v-if="unreadCount > 0" class="notif-bell-dot" />
+      <span v-if="unreadCount > 0" class="notif-bell-badge">{{ unreadCount > 9 ? '9+' : unreadCount }}</span>
     </button>
 
     <div v-if="open" class="notif-dropdown card">
@@ -124,16 +124,24 @@ onUnmounted(() => {
   background: $color-border;
 }
 
-.notif-bell-dot {
+// Dizajn 5 — "zvonce sa crvenim brojačem", not just a dot.
+.notif-bell-badge {
   position: absolute;
-  top: 8px;
-  right: 9px;
-  width: 9px;
-  height: 9px;
+  top: 2px;
+  right: 2px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
   border-radius: $radius-pill;
   background: $color-error;
   border: 2px solid $color-surface;
-  box-shadow: 0 0 0 1px rgba(229, 72, 77, 0.35);
+  color: $color-surface;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .notif-dropdown {

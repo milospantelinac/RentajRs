@@ -1,14 +1,26 @@
 @use 'tokens' as *;
 
-// Card: 14px radius, thin border, subtle shadow (Ch.18.4). Used for listing
+// Card: 16px radius, no border, subtle shadow (Dizajn 1). Used for listing
 // cards, dashboard tiles, admin panels — one shape for every "boxed content"
-// surface on the platform.
-
+// surface on the platform. Shadows are reserved for cards/tables/panels —
+// never buttons or fields — and a shadowed card carries no border, per spec.
 .card {
   background: $color-surface;
-  border: 1px solid $color-border;
   border-radius: $radius-card;
   box-shadow: $shadow-card;
+}
+
+// 900px-and-wider elements (wizard step card, filter drawer, ...) use a
+// softer, longer-throw shadow instead of the standard one.
+.card-wide {
+  box-shadow: $shadow-card-wide;
+}
+
+// Large panels (24px radius) — filter drawer, wizard step container.
+.panel {
+  background: $color-surface;
+  border-radius: $radius-panel;
+  box-shadow: $shadow-card-wide;
 }
 
 .card-body {
@@ -64,17 +76,17 @@
 }
 
 .badge-info {
-  background: rgba(27, 79, 216, 0.1);
+  background: $color-accent-tint;
   color: $color-primary;
 }
 
 .badge-warning {
-  background: rgba(245, 158, 11, 0.12);
-  color: #92650a;
+  background: $color-warning-bg;
+  color: $color-warning;
 }
 
 .badge-critical {
-  background: rgba(229, 72, 77, 0.1);
+  background: rgba(209, 41, 61, 0.1);
   color: $color-error;
 }
 

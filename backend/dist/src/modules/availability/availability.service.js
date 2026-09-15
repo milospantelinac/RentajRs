@@ -128,7 +128,7 @@ let AvailabilityService = AvailabilityService_1 = class AvailabilityService {
                 listingId,
                 startsAt,
                 endsAt,
-                price: dto.price ? (0, money_1.rsdToPara)(dto.price) : undefined,
+                price: (0, money_1.rsdToPara)(dto.price),
                 maxBookings: dto.maxBookings ?? 1,
             },
         });
@@ -211,7 +211,7 @@ let AvailabilityService = AvailabilityService_1 = class AvailabilityService {
         await this.prisma.slotPriceOverride.deleteMany({ where: { id: overrideId, listingId } });
         return { message: 'ok' };
     }
-    async resolveHourlyPrice(listingId, date, startTime, basePrice) {
+    async resolveHourlyPrice(listingId, date, startTime, basePrice, weekendPrice = null) {
         const dateOnly = (0, timezone_1.toBelgradeDateOnly)(date);
         const override = await this.prisma.slotPriceOverride.findFirst({
             where: { listingId, date: dateOnly, startTime: { lte: startTime }, endTime: { gt: startTime } },
@@ -224,7 +224,10 @@ let AvailabilityService = AvailabilityService_1 = class AvailabilityService {
         if (daySpecific)
             return daySpecific.price;
         const shared = ranges.find((r) => r.dayOfWeek === null && r.startTime <= startTime && r.endTime > startTime);
-        return shared?.price ?? basePrice;
+        if (shared)
+            return shared.price;
+        const isWeekend = dayOfWeek === 5 || dayOfWeek === 6;
+        return isWeekend && weekendPrice ? weekendPrice : basePrice;
     }
     async getNightlyPrices(listingId, startsAt, endsAt, basePrice, weekendPrice) {
         const overrides = await this.prisma.datePriceOverride.findMany({
@@ -236,6 +239,21 @@ let AvailabilityService = AvailabilityService_1 = class AvailabilityService {
             const key = d.toISOString().slice(0, 10);
             const isWeekend = d.getUTCDay() === 5 || d.getUTCDay() === 6;
             prices.push(overrideByDate.get(key) ?? (isWeekend && weekendPrice ? weekendPrice : basePrice));
+        }
+        return prices;
+    }
+    async getHourlyStayPrices(listingId, startsAt, endsAt, basePrice, weekendPrice) {
+        const firstDate = new Date(startsAt);
+        firstDate.setUTCHours(0, 0, 0, 0);
+        const overrides = await this.prisma.datePriceOverride.findMany({
+            where: { listingId, date: { gte: firstDate, lt: endsAt } },
+        });
+        const overrideByDate = new Map(overrides.map((o) => [o.date.toISOString().slice(0, 10), o.price]));
+        const prices = [];
+        for (let time = startsAt.getTime(); time < endsAt.getTime(); time += 3600_000) {
+            const hour = new Date(time);
+            const isWeekend = hour.getUTCDay() === 5 || hour.getUTCDay() === 6;
+            prices.push(overrideByDate.get(hour.toISOString().slice(0, 10)) ?? (isWeekend && weekendPrice ? weekendPrice : basePrice));
         }
         return prices;
     }

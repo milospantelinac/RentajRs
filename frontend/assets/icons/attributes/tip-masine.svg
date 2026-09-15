@@ -1,0 +1,7 @@
+<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="tip-masine">
+<path id="Vector" d="M11 11.75H4C3.17157 11.75 2.5 12.4216 2.5 13.25V16.25C2.5 17.0784 3.17157 17.75 4 17.75H11C11.8284 17.75 12.5 17.0784 12.5 16.25V13.25C12.5 12.4216 11.8284 11.75 11 11.75Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+<path id="Vector_2" d="M12.5 12.75L17 3.75L20.5 5.25L17.5 13.75" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+<path id="Vector_3" d="M15 17.75H21.5V20.25H15V17.75Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+</svg>

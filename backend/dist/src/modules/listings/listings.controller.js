@@ -25,6 +25,7 @@ const upsert_faqs_dto_1 = require("./dto/upsert-faqs.dto");
 const upsert_extra_services_dto_1 = require("./dto/upsert-extra-services.dto");
 const reject_listing_dto_1 = require("./dto/reject-listing.dto");
 const create_uncategorized_listing_dto_1 = require("./dto/create-uncategorized-listing.dto");
+const change_listing_category_dto_1 = require("./dto/change-listing-category.dto");
 const current_user_decorator_1 = require("../../common/decorators/current-user.decorator");
 const public_decorator_1 = require("../../common/decorators/public.decorator");
 const require_permissions_decorator_1 = require("../../common/decorators/require-permissions.decorator");
@@ -52,6 +53,9 @@ let ListingsController = class ListingsController {
     }
     updateLocation(userId, id, dto) {
         return this.listingsService.updateLocation(userId, id, dto);
+    }
+    changeCategory(userId, id, dto) {
+        return this.listingsService.changeCategory(userId, id, dto.categoryId);
     }
     upsertAttributes(userId, id, dto) {
         return this.listingsService.upsertAttributes(userId, id, dto);
@@ -154,6 +158,15 @@ __decorate([
     __metadata("design:paramtypes", [String, String, update_location_dto_1.UpdateLocationDto]),
     __metadata("design:returntype", void 0)
 ], ListingsController.prototype, "updateLocation", null);
+__decorate([
+    (0, common_1.Patch)('listings/:id/category'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)('id')),
+    __param(1, (0, common_1.Param)('id')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, change_listing_category_dto_1.ChangeListingCategoryDto]),
+    __metadata("design:returntype", void 0)
+], ListingsController.prototype, "changeCategory", null);
 __decorate([
     (0, common_1.Post)('listings/:id/attributes'),
     __param(0, (0, current_user_decorator_1.CurrentUser)('id')),

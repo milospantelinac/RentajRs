@@ -1,6 +1,7 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsEmail, IsNotEmpty, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
 import { NotCommonPassword } from '../../../common/validators/not-common-password.validator';
+import { undefinedIfBlank } from '../../../common/validators/undefined-if-blank.transform';
 
 /** §6.1 — registration never asks for a role; account starts as GUEST (R13/R14). */
 export class RegisterDto {
@@ -19,6 +20,12 @@ export class RegisterDto {
   @ApiProperty()
   @IsEmail()
   email: string;
+
+  @ApiPropertyOptional({ description: 'Optional at sign-up (Dizajn 16); same format rule as the profile form.' })
+  @IsOptional()
+  @undefinedIfBlank
+  @Matches(/^\+?[0-9\s()-]{6,20}$/, { message: 'validation.PHONE_INVALID' })
+  phone?: string;
 
   @ApiProperty()
   @NotCommonPassword()

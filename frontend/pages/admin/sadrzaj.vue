@@ -112,9 +112,28 @@
             <input v-model="videoUrlForm" type="url" class="form-control" placeholder="https://www.youtube.com/watch?v=..." />
           </div>
           <p v-if="savedVideo" class="text-success mb-2">{{ t('dashboard.changesSaved') }}</p>
-          <div class="form-row-inline">
+          <div class="form-row-inline mb-4">
             <button class="btn btn-primary-flat btn-sm" @click="saveVideoUrl">{{ t('common.save') }}</button>
             <button class="btn btn-tertiary btn-sm" :disabled="!videoUrlForm" @click="clearVideoUrl">{{ t('admin.clearVideoUrl') }}</button>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">{{ t('admin.videoThumbnail') }}</label>
+            <p class="text-muted mb-3">{{ t('admin.videoThumbnailHint') }}</p>
+
+            <img v-if="thumbnailUrl" :src="thumbnailUrl" alt="" class="video-thumb-preview mb-3" />
+
+            <p v-if="thumbnailError" class="form-error mb-2">{{ thumbnailError }}</p>
+
+            <div class="form-row-inline">
+              <label class="btn btn-tertiary btn-sm">
+                {{ uploadingThumbnail ? t('common.loading') : t('admin.videoThumbnailUpload') }}
+                <input type="file" accept="image/*" class="visually-hidden" :disabled="uploadingThumbnail" @change="uploadThumbnail" />
+              </label>
+              <button v-if="thumbnailUrl" class="btn btn-text btn-sm" :disabled="uploadingThumbnail" @click="removeThumbnail">
+                {{ t('common.delete') }}
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -224,6 +243,46 @@ function clearVideoUrl() {
   saveVideoUrl()
 }
 
+// -- Homepage video poster --------------------------------------------------
+// Stored as the homepage_video_thumbnail setting; the upload endpoint writes
+// the setting itself, so this screen only needs to hold the resulting URL.
+const thumbSetting = (settings.value || []).find((s) => s.key === 'homepage_video_thumbnail')
+const thumbnailUrl = ref(typeof thumbSetting?.value === 'string' ? thumbSetting.value : '')
+const uploadingThumbnail = ref(false)
+const thumbnailError = ref('')
+
+async function uploadThumbnail(event) {
+  const file = event.target.files?.[0]
+  event.target.value = ''
+  if (!file) return
+
+  thumbnailError.value = ''
+  uploadingThumbnail.value = true
+  try {
+    const body = new FormData()
+    body.append('file', file)
+    const res = await api.post('/admin/homepage-video-thumbnail', body)
+    thumbnailUrl.value = res.thumbnailUrl || ''
+  } catch (e) {
+    thumbnailError.value = extractErrorMessage(e, t('auth.genericError'))
+  } finally {
+    uploadingThumbnail.value = false
+  }
+}
+
+async function removeThumbnail() {
+  thumbnailError.value = ''
+  uploadingThumbnail.value = true
+  try {
+    await api.delete('/admin/homepage-video-thumbnail')
+    thumbnailUrl.value = ''
+  } catch (e) {
+    thumbnailError.value = extractErrorMessage(e, t('auth.genericError'))
+  } finally {
+    uploadingThumbnail.value = false
+  }
+}
+
 useSeoMeta({ title: t('admin.content') })
 </script>
 
@@ -238,5 +297,16 @@ useSeoMeta({ title: t('admin.content') })
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+// Same 1293:653 crop the homepage frame uses, so the admin sees exactly how
+// the poster will sit behind the play button.
+.video-thumb-preview {
+  display: block;
+  width: 100%;
+  max-width: 420px;
+  aspect-ratio: 1293 / 653;
+  object-fit: cover;
+  border-radius: $radius-card;
 }
 </style>

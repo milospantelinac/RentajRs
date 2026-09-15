@@ -66,6 +66,22 @@ export class ListingEmailListener {
     });
   }
 
+  // Dizajn 18 — an "Otključaj svoju kategoriju" draft got its real category,
+  // so the owner can finish it in the wizard.
+  @OnEvent('listing.category_assigned')
+  async onCategoryAssigned({ listingId }: { listingId: string }) {
+    const data = await this.loadListingAndOwner(listingId);
+    if (!data) return;
+    await this.email.send({
+      key: 'listing_category_assigned',
+      to: data.owner.email,
+      language: data.owner.language,
+      userId: data.owner.id,
+      context: { oglas: data.listing.title },
+      buttonUrl: `${this.frontendUrl}/oglasi/${data.listing.id}/uredi`,
+    });
+  }
+
   @OnEvent('listing.favorite_price_dropped')
   async onFavoritePriceDropped({ userId, listingId }: { userId: string; listingId: string }) {
     const [user, listing] = await Promise.all([

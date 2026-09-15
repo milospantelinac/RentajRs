@@ -16,7 +16,10 @@ describe('BookingsService#assertTermRules (min/max guests, R30-ish term rules)',
       minGuests: number | null;
       maxGuests: number | null;
       earliestBookingHours: number | null;
+      maxAdvanceBookingDays: number | null;
       priceUnit: string;
+      bookingModel: string;
+      slotSubmode: string | null;
     }>,
     startsAt: Date,
     endsAt: Date,
@@ -28,7 +31,10 @@ describe('BookingsService#assertTermRules (min/max guests, R30-ish term rules)',
       minGuests: null,
       maxGuests: null,
       earliestBookingHours: null,
+      maxAdvanceBookingDays: null,
       priceUnit: 'DAY',
+      bookingModel: 'PER_STAY',
+      slotSubmode: null,
       ...listing,
     };
     return (service as any).assertTermRules(fullListing, startsAt, endsAt, guestCount);
@@ -103,5 +109,22 @@ describe('BookingsService#assertTermRules (min/max guests, R30-ish term rules)',
     expect(() =>
       callAssertTermRules(service, { maxDuration: 5 }, start, tenNights),
     ).toThrow(BadRequestException);
+  });
+
+  it('counts working hours in hours, also when the price is per guest (Dizajn 23)', () => {
+    const service = makeService();
+    const start = new Date('2026-09-01T10:00:00Z');
+    const listing = { bookingModel: 'PER_SLOT', slotSubmode: 'WORKING_HOURS', priceUnit: 'GUEST', minDuration: 2, maxDuration: 4 };
+    expect(() => callAssertTermRules(service, listing, start, new Date('2026-09-01T11:00:00Z'))).toThrow(BadRequestException);
+    expect(() => callAssertTermRules(service, listing, start, new Date('2026-09-01T13:00:00Z'))).not.toThrow();
+    expect(() => callAssertTermRules(service, listing, start, new Date('2026-09-01T15:00:00Z'))).toThrow(BadRequestException);
+  });
+
+  it('skips min/max duration for defined slots, which carry their own length (Dizajn 23)', () => {
+    const service = makeService();
+    const start = new Date('2026-09-01T10:00:00Z');
+    const end = new Date('2026-09-01T12:00:00Z');
+    const listing = { bookingModel: 'PER_SLOT', slotSubmode: 'DEFINED_SLOTS', priceUnit: 'SLOT', minDuration: 3, maxDuration: 1 };
+    expect(() => callAssertTermRules(service, listing, start, end)).not.toThrow();
   });
 });

@@ -63,7 +63,8 @@ export function NotCommonPassword(validationOptions?: ValidationOptions) {
       options: validationOptions ?? { message: 'Password is too weak' },
       validator: {
         validate(value: unknown) {
-          return typeof value === 'string' && value.length >= 8 && !isCommonPassword(value);
+          // §13.2 plus Dizajn 16's "bar jedan broj" (at least one digit).
+          return typeof value === 'string' && value.length >= 8 && /\d/.test(value) && !isCommonPassword(value);
         },
       },
     });

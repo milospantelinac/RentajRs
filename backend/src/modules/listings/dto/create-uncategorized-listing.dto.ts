@@ -14,10 +14,12 @@ const SLOT_UNITS = ['HOUR', 'SLOT'] as const;
  * in the moderation queue for manual reassignment.
  */
 export class CreateUncategorizedListingDto {
-  @ApiProperty()
+  // These become the listing's title and description, so the wizard's limits
+  // apply here too (Dizajn 20).
+  @ApiProperty({ maxLength: 70 })
   @IsString()
   @IsNotEmpty()
-  @MaxLength(200)
+  @MaxLength(70)
   title: string;
 
   @ApiProperty({ enum: BOOKING_CHOICES })
@@ -32,6 +34,6 @@ export class CreateUncategorizedListingDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  @MaxLength(2000)
+  @MaxLength(1200)
   description?: string;
 }

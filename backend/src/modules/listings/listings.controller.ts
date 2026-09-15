@@ -20,6 +20,7 @@ import { UpsertFaqsDto } from './dto/upsert-faqs.dto';
 import { UpsertExtraServicesDto } from './dto/upsert-extra-services.dto';
 import { RejectListingDto } from './dto/reject-listing.dto';
 import { CreateUncategorizedListingDto } from './dto/create-uncategorized-listing.dto';
+import { ChangeListingCategoryDto } from './dto/change-listing-category.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
@@ -62,6 +63,11 @@ export class ListingsController {
   @Patch('listings/:id/location')
   updateLocation(@CurrentUser('id') userId: string, @Param('id') id: string, @Body() dto: UpdateLocationDto) {
     return this.listingsService.updateLocation(userId, id, dto);
+  }
+
+  @Patch('listings/:id/category')
+  changeCategory(@CurrentUser('id') userId: string, @Param('id') id: string, @Body() dto: ChangeListingCategoryDto) {
+    return this.listingsService.changeCategory(userId, id, dto.categoryId);
   }
 
   @Post('listings/:id/attributes')

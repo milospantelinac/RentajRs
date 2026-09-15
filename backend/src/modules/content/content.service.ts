@@ -24,9 +24,19 @@ export class ContentService {
     });
   }
 
+  /**
+   * The homepage "how it works" block: the video itself plus the poster the
+   * admin uploaded for it. Without a poster the frontend falls back to
+   * YouTube's own thumbnail, so the block still renders.
+   */
   async getHomepageVideoUrl() {
-    const setting = await this.prisma.setting.findUnique({ where: { key: 'homepage_video_url' } });
-    const url = setting?.value;
-    return { url: typeof url === 'string' && url.trim() ? url.trim() : null };
+    const settings = await this.prisma.setting.findMany({
+      where: { key: { in: ['homepage_video_url', 'homepage_video_thumbnail'] } },
+    });
+    const read = (key: string) => {
+      const value = settings.find((s) => s.key === key)?.value;
+      return typeof value === 'string' && value.trim() ? value.trim() : null;
+    };
+    return { url: read('homepage_video_url'), thumbnailUrl: read('homepage_video_thumbnail') };
   }
 }

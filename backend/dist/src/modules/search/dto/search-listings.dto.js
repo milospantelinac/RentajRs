@@ -74,6 +74,13 @@ __decorate([
     __metadata("design:type", String)
 ], SearchListingsDto.prototype, "cityAreaId", void 0);
 __decorate([
+    (0, swagger_1.ApiPropertyOptional)({ type: [String], description: 'Dizajn 9 — several city areas at once; OR-ed with cityAreaId' }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsArray)(),
+    (0, class_validator_1.IsUUID)('4', { each: true }),
+    __metadata("design:type", Array)
+], SearchListingsDto.prototype, "cityAreaIds", void 0);
+__decorate([
     (0, swagger_1.ApiPropertyOptional)(),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsNumber)(),

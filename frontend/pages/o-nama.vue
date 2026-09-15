@@ -51,7 +51,7 @@ useSeoMeta({ title: () => page.value?.title || t('legalPages.aboutTitle'), descr
 }
 
 .legal-content :deep(.lead-paragraph) {
-  font-size: $font-size-page-title;
+  font-size: 18px;
   font-weight: 600;
   line-height: 1.5;
   margin-bottom: 32px;

@@ -1,0 +1,924 @@
+// Dizajn 22: the availability step's slot editors, read off 239:345 (Radno
+// vreme, Igraonice) and 532:576 (Definisani termini). WorkingHoursEditor and
+// DefinedSlotsEditor both @use this inside their scoped styles.
+@use 'tokens' as *;
+@use 'breakpoints' as *;
+
+// 239:345 puts its sections 30 apart, 532:576 28.
+.avail {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+}
+
+.avail-ds {
+  gap: 28px;
+}
+
+// 252:287, 252:394: 12 under the label; 252:324 and 252:349 use 10.
+.avail-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.avail-section-tight {
+  gap: 10px;
+}
+
+// 252:289: Medium 14, the asterisk blue after a space.
+.avail-label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: normal;
+  color: $color-text;
+}
+
+.avail-required {
+  margin-left: -4px;
+  color: $color-primary;
+}
+
+// 252:352, 252:397: Light 13, 8 after the label.
+.avail-label-note {
+  font-size: 13px;
+  font-weight: 300;
+  color: $color-text-muted;
+}
+
+// 252:353: Light 12.
+.avail-hint {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 300;
+  line-height: normal;
+  color: $color-text-muted;
+}
+
+// 214:438 (Dizajn 6).
+.avail-error {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: normal;
+  color: $color-error;
+}
+
+.avail-error img {
+  flex-shrink: 0;
+  width: 15px;
+  height: 15px;
+}
+
+.avail-success {
+  margin: 0;
+  font-size: 13px;
+  line-height: normal;
+  color: #178c24;
+}
+
+// 252:290: chips 8 apart.
+.avail-days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+// 252:291: 38 tall, 14 before the box and 16 after the name. An unselected day
+// (252:321) is white with a 1px stroke, drawn inside so both are the same size.
+.avail-day {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 16px 10px 14px;
+  border-radius: $radius-pill;
+  background: $color-surface;
+  box-shadow: inset 0 0 0 1px $color-border;
+  color: $color-text-muted;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: normal;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.avail-day:hover {
+  box-shadow: inset 0 0 0 1px $color-primary;
+}
+
+.avail-day.is-on {
+  background: $color-accent-tint;
+  box-shadow: none;
+  color: $color-text;
+}
+
+.avail-day.is-on:hover {
+  box-shadow: inset 0 0 0 1px $color-primary;
+}
+
+.avail-day:has(:focus-visible) {
+  outline: 2px solid rgba($color-primary, 0.35);
+  outline-offset: 2px;
+}
+
+// 252:292: a blue circle with the white check; 252:322 a 1.5 grey ring.
+.avail-day-box {
+  display: block;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px $color-border;
+}
+
+.avail-day.is-on .avail-day-box {
+  background: $color-primary;
+  box-shadow: none;
+}
+
+.avail-day-box img {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
+// 252:327: two columns 16 apart, each label 6 above its field.
+.avail-hours {
+  display: flex;
+  gap: 16px;
+}
+
+.avail-hours-field {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+// 252:329: Medium 12.
+.avail-sublabel {
+  display: block;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: normal;
+  color: $color-text-muted;
+}
+
+// 252:340: 14/18 padding, the toggle 12 before the text.
+.avail-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  padding: 14px 18px;
+  border-radius: $radius-input;
+  background: $color-background;
+  cursor: pointer;
+}
+
+.avail-toggle-row:has(:focus-visible) {
+  outline: 2px solid rgba($color-primary, 0.35);
+  outline-offset: 2px;
+}
+
+// 252:341: a 40 by 22 track with an 8 radius knob 3 in.
+.avail-toggle {
+  position: relative;
+  flex-shrink: 0;
+  width: 40px;
+  height: 22px;
+  border-radius: 11px;
+  background: $color-border;
+  transition: background-color 0.15s ease;
+}
+
+.avail-toggle::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: $color-surface;
+  transition: transform 0.15s ease;
+}
+
+.avail-toggle.is-on {
+  background: $color-primary;
+}
+
+.avail-toggle.is-on::after {
+  transform: translateX(18px);
+}
+
+// 252:343
+.avail-toggle-text {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+// 252:344: the info icon 8 after the title.
+.avail-toggle-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: normal;
+  color: $color-text;
+}
+
+.avail-toggle-title img {
+  display: block;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+}
+
+// 252:348
+.avail-toggle-caption {
+  font-size: 12px;
+  font-weight: 300;
+  line-height: normal;
+  color: $color-text-muted;
+}
+
+// Per-day mode has no frame; each day reuses the frame's own parts.
+.avail-day-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.avail-day-block + .avail-day-block {
+  margin-top: 10px;
+}
+
+.avail-day-name {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: normal;
+  color: $color-text;
+}
+
+// 252:354: a white card, the rows 12/20 in with a 1px line between them.
+.avail-ranges {
+  display: flex;
+  flex-direction: column;
+  border-radius: $radius-input;
+  background: $color-surface;
+  box-shadow: inset 0 0 0 1px $color-border;
+}
+
+// 252:355: 12 between the parts.
+.avail-range {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+}
+
+// 252:370: the line sits inside the row's 68.
+.avail-range + .avail-range {
+  padding-top: 11px;
+  border-top: 1px solid $color-border;
+}
+
+.avail-range-time {
+  flex: 0 0 104px;
+}
+
+// 252:360: as wide as the frame's dash.
+.avail-range-dash {
+  flex-shrink: 0;
+  width: 7px;
+  text-align: center;
+  font-size: 14px;
+  line-height: normal;
+  color: $color-text-muted;
+}
+
+// 252:365: 44 tall, the amount 16 in and the unit at the right edge.
+.avail-price {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  height: 44px;
+  padding: 0 16px;
+  border-radius: $radius-input;
+  background: $color-background;
+  transition:
+    background-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.avail-price:focus-within {
+  background: $color-surface;
+  box-shadow: inset 0 0 0 1.5px $color-primary;
+}
+
+.avail-price-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: $color-text;
+  font-family: $font-family-base;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: normal;
+}
+
+// 252:367
+.avail-price-suffix {
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 300;
+  line-height: normal;
+  color: $color-text-muted;
+  white-space: nowrap;
+}
+
+// 252:368, 532:796
+.avail-icon-btn {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.avail-icon-btn img {
+  display: block;
+  width: 18px;
+  height: 18px;
+}
+
+.avail-icon-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+// 252:385: the buttons 12 apart.
+.avail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+// 252:386: white with a 1px stroke, 38 tall. 252:404 and 252:422 are the same
+// button 36 tall inside the exception rows.
+.avail-btn {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  height: 38px;
+  margin: 0;
+  padding: 0 16px;
+  border: 0;
+  border-radius: $radius-input;
+  background: $color-surface;
+  box-shadow: inset 0 0 0 1px $color-border;
+  color: $color-text;
+  font-family: $font-family-base;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: normal;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: box-shadow 0.15s ease;
+}
+
+.avail-btn:hover:not(:disabled),
+.avail-btn.is-active {
+  box-shadow: inset 0 0 0 1px $color-primary;
+}
+
+.avail-btn.is-active {
+  color: $color-primary;
+}
+
+.avail-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.avail-exception-row .avail-btn {
+  height: 36px;
+}
+
+// 252:388: brand tint, 18 side padding.
+.avail-btn-soft {
+  padding: 0 18px;
+  background: $color-accent-tint;
+  box-shadow: none;
+  color: $color-primary;
+}
+
+.avail-btn-soft:hover:not(:disabled) {
+  box-shadow: inset 0 0 0 1px $color-primary;
+}
+
+// 532:855: 44 tall, a 1px blue stroke, Medium 14.
+.avail-btn-outline {
+  align-self: flex-start;
+  height: 44px;
+  padding: 0 18px;
+  box-shadow: inset 0 0 0 1px $color-primary;
+  color: $color-primary;
+  font-size: 14px;
+}
+
+.avail-btn-outline:hover:not(:disabled) {
+  background: $color-accent-tint;
+}
+
+.avail-btn:focus-visible,
+.avail-icon-btn:focus-visible,
+.avail-link:focus-visible {
+  outline: 2px solid rgba($color-primary, 0.35);
+  outline-offset: 2px;
+}
+
+// 252:398: a grey row, 14/18 padding and 12 between the parts.
+.avail-exception-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  border-radius: $radius-input;
+  background: $color-background;
+}
+
+// 252:399
+.avail-exception-label {
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: normal;
+  color: $color-text;
+  white-space: nowrap;
+}
+
+// 252:400, 252:408, 252:412
+.avail-exception-date {
+  flex: 0 0 180px;
+}
+
+.avail-exception-date-sm {
+  flex: 0 0 150px;
+}
+
+.avail-exception-time {
+  flex: 0 0 92px;
+}
+
+// 252:420: white with a 1px stroke, 40 tall, the unit as its placeholder.
+.avail-exception-price {
+  flex: 1 1 120px;
+  min-width: 0;
+  height: 40px;
+  margin: 0;
+  padding: 0 14px;
+  border: 0;
+  border-radius: $radius-input;
+  background: $color-surface;
+  box-shadow: inset 0 0 0 1px $color-border;
+  color: $color-text;
+  font-family: $font-family-base;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: normal;
+}
+
+.avail-exception-price::placeholder {
+  color: $color-text-muted;
+  font-size: 13px;
+  font-weight: 300;
+  opacity: 1;
+}
+
+.avail-exception-price:focus {
+  outline: none;
+  box-shadow: inset 0 0 0 1.5px $color-primary;
+}
+
+// 252:424: a white card with a grey head row.
+.avail-list {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid $color-border;
+  border-radius: $radius-input;
+  background: $color-surface;
+}
+
+// 252:425
+.avail-list-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 11px 19px 12px;
+  background: $color-background;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: normal;
+  color: $color-text;
+}
+
+.avail-list-head img {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
+// 252:429
+.avail-list-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 19px 13px;
+  border-top: 1px solid $color-border;
+}
+
+.avail-list-row:last-child {
+  padding-bottom: 12px;
+}
+
+.avail-list-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+// 252:431
+.avail-list-title {
+  font-size: 13px;
+  font-weight: 400;
+  line-height: normal;
+  color: $color-text;
+}
+
+// 252:432
+.avail-list-sub {
+  font-size: 12px;
+  font-weight: 300;
+  line-height: normal;
+  color: $color-text-muted;
+}
+
+// 252:433
+.avail-link {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: $color-primary;
+  font-family: $font-family-base;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: normal;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.avail-link:hover {
+  text-decoration: underline;
+}
+
+// 532:790: Medium 11, tracked, capitals.
+.avail-eyebrow {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: normal;
+  letter-spacing: 0.88px;
+  text-transform: uppercase;
+  color: $color-text-muted;
+}
+
+// 532:791: radius 14, rows 46 tall with a 1px line between them.
+.avail-slots {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid $color-border;
+  border-radius: 14px;
+  background: $color-surface;
+}
+
+// 532:792: 14/18 padding, 16 between the columns.
+.avail-slot {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 13px 17px 14px;
+  font-size: 14px;
+  line-height: normal;
+  color: $color-text;
+}
+
+.avail-slot + .avail-slot,
+.avail-copy + .avail-slot {
+  padding-top: 13px;
+  border-top: 1px solid $color-border;
+}
+
+.avail-slot:last-child {
+  padding-bottom: 13px;
+}
+
+// 532:793
+.avail-slot-date {
+  flex: 0 0 110px;
+  font-weight: 500;
+}
+
+// 532:794
+.avail-slot-time {
+  flex: 0 0 140px;
+  font-weight: 400;
+}
+
+// 532:795
+.avail-slot-price {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 500;
+}
+
+.avail-slot .avail-icon-btn img {
+  width: 16px;
+  height: 16px;
+}
+
+.avail-slots-empty {
+  margin: 0;
+  padding: 13px 17px;
+  font-size: 14px;
+  line-height: normal;
+  color: $color-text-muted;
+}
+
+// T105's copy panel has no frame; it sits under its slot in the list's own grey.
+.avail-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 17px 16px;
+  border-top: 1px solid $color-border;
+  background: $color-background;
+  font-size: 13px;
+  color: $color-text;
+}
+
+.avail-copy-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+}
+
+.avail-copy-row input[type='radio'] {
+  margin: 0;
+  accent-color: $color-primary;
+}
+
+.avail-copy-date {
+  flex: 0 0 190px;
+}
+
+.avail-copy .avail-copy-count {
+  width: 90px;
+}
+
+.avail-copy-select {
+  flex: 0 0 190px;
+}
+
+.avail-copy-list {
+  margin: 0;
+  padding-left: 18px;
+  color: $color-error;
+}
+
+// 532:824: the fields 12 apart, bottom aligned.
+.avail-add {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+// 532:825: the label 8 above its field.
+.avail-add-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.avail-add-date {
+  flex: 0 0 190px;
+}
+
+.avail-add-time {
+  flex: 0 0 150px;
+}
+
+.avail-add-price {
+  flex: 1 1 auto;
+}
+
+// 532:826: Medium 13, the asterisk red 3 after.
+.avail-add-label {
+  display: flex;
+  gap: 3px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: normal;
+  color: $color-text;
+  white-space: nowrap;
+}
+
+.avail-add-required {
+  color: $color-error;
+}
+
+// 532:853: 44 tall with a 1px stroke, the text 14 in.
+.avail-add-input {
+  display: block;
+  width: 100%;
+  height: 44px;
+  margin: 0;
+  padding: 0 14px;
+  border: 0;
+  border-radius: $radius-input;
+  background: $color-background;
+  box-shadow: inset 0 0 0 1px $color-border;
+  color: $color-text;
+  font-family: $font-family-base;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: normal;
+}
+
+.avail-add-input:focus {
+  outline: none;
+  background: $color-surface;
+  box-shadow: inset 0 0 0 1.5px $color-primary;
+}
+
+.avail-add-input.is-invalid {
+  background: #fcd8e0;
+  box-shadow: inset 0 0 0 1.5px #f43f5e;
+}
+
+.avail-add-input:disabled {
+  opacity: 0.55;
+}
+
+// 532:804's generic select, for the copy panel's weekday.
+.avail-select {
+  position: relative;
+  display: block;
+}
+
+.avail-select-control {
+  display: block;
+  width: 100%;
+  height: 44px;
+  margin: 0;
+  padding: 0 34px 0 14px;
+  border: 0;
+  border-radius: $radius-input;
+  background: $color-surface;
+  box-shadow: inset 0 0 0 1px $color-border;
+  color: $color-text;
+  font-family: $font-family-base;
+  font-size: 14px;
+  line-height: normal;
+  appearance: none;
+  cursor: pointer;
+}
+
+.avail-select-control:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1.5px $color-primary;
+}
+
+.avail-select img {
+  position: absolute;
+  top: 15px;
+  right: 14px;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+}
+
+// 532:857: brand tint, 14/16 padding, 13 on 20px lines.
+.avail-note {
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: $radius-input;
+  background: $color-accent-tint;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 20px;
+  color: $color-primary;
+}
+
+@include respond-below(sm) {
+  .avail-hours,
+  .avail-add {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .avail-add-date,
+  .avail-add-time,
+  .avail-add-price {
+    flex-basis: auto;
+  }
+
+  .avail-range {
+    flex-wrap: wrap;
+    padding: 12px 14px;
+  }
+
+  .avail-range-time {
+    flex: 1 1 90px;
+  }
+
+  .avail-price {
+    flex-basis: calc(100% - 30px);
+  }
+
+  .avail-exception-date,
+  .avail-exception-date-sm,
+  .avail-exception-price {
+    flex: 1 1 100%;
+  }
+
+  .avail-exception-time {
+    flex: 1 1 0;
+  }
+
+  .avail-slot {
+    flex-wrap: wrap;
+    gap: 4px 12px;
+  }
+
+  .avail-slot-date,
+  .avail-slot-time {
+    flex-basis: auto;
+  }
+
+  .avail-slot-price {
+    flex-basis: 100%;
+    order: 3;
+  }
+
+  .avail-slot .avail-link {
+    margin-left: auto;
+  }
+}

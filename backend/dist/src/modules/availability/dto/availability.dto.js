@@ -57,8 +57,9 @@ __decorate([
     __metadata("design:type", String)
 ], CreateDefinedSlotDto.prototype, "endsAt", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ required: false, description: 'RSD, overrides the listing base price for this slot' }),
-    (0, class_validator_1.IsOptional)(),
+    (0, swagger_1.ApiProperty)({ description: 'RSD for this slot' }),
+    (0, class_validator_1.IsInt)(),
+    (0, class_validator_1.IsPositive)(),
     __metadata("design:type", Number)
 ], CreateDefinedSlotDto.prototype, "price", void 0);
 __decorate([

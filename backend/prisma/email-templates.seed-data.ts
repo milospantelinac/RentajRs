@@ -172,6 +172,23 @@ export const emailTemplates: EmailTemplateSeed[] = [
     },
   },
   {
+    // Not in the source doc — Dizajn 18's "Otključaj svoju kategoriju" form
+    // promises this email once an admin assigns the listing's category.
+    key: 'listing_category_assigned',
+    sr: {
+      subject: 'Kategorija za vaš oglas je otvorena',
+      heading: 'Oglas "{oglas}" sada ima svoju kategoriju',
+      bodyText: 'Otvorili smo kategoriju za vaš oglas. Nastavite sa unosom podataka i pošaljite oglas na odobrenje kada bude spreman.',
+      buttonLabel: 'Nastavi oglas',
+    },
+    en: {
+      subject: 'Your listing’s category is open',
+      heading: '"{oglas}" now has its category',
+      bodyText: 'We’ve opened a category for your listing. Carry on filling it in and send it for approval when it’s ready.',
+      buttonLabel: 'Continue listing',
+    },
+  },
+  {
     key: 'listing_edit_approved',
     sr: {
       subject: 'Izmene su objavljene',

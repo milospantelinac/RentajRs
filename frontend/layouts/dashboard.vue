@@ -25,7 +25,8 @@
   width: 220px;
   flex-shrink: 0;
   position: sticky;
-  top: 84px;
+  // Dizajn 5 — header grew 68px -> 104px; same 16px breathing room below it.
+  top: 120px;
 }
 
 .dashboard-content {
