@@ -10,6 +10,7 @@
   "GOOGLE_ACCOUNT_EXISTS": "Ovaj nalog je registrovan preko Google prijave. Prijavite se preko Google dugmeta",
   "CANNOT_BOOK_OWN_LISTING": "Ne možete rezervisati sopstveni oglas",
   "LISTING_NOT_FOUND": "Oglas nije pronađen",
+  "LISTING_HAS_ACTIVE_BOOKINGS": "Oglas ne može da se obriše dok ima zahteve ili rezervacije u toku",
   "PAGE_NOT_FOUND": "Stranica nije pronađena",
   "LISTING_NOT_BOOKABLE": "Ovaj oglas ne prima rezervacije",
   "TERM_NOT_AVAILABLE": "Izabrani termin više nije dostupan",

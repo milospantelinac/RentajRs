@@ -727,15 +727,12 @@
       "requiredAttributesFilled": "Sva obavezna polja kategorije"
     },
     "myListings": "Moji oglasi",
-    "noListingsYet": "Još nemate oglasa. Napravite prvi - potrebno je manje od 2 minuta.",
-    "draftHint": "Nacrt - nije objavljen. Završite ga da bi bio vidljiv gostima.",
     "statusDraft": "Nacrt",
     "statusPendingApproval": "Čeka odobrenje",
     "statusRejected": "Odbijen",
     "statusActive": "Aktivan",
     "statusExpired": "Istekao",
     "editListing": "Izmeni",
-    "viewListing": "Pogledaj",
     "deleteListing": "Obriši",
     "confirmDelete": "Da li ste sigurni da želite da obrišete ovaj oglas? Ova radnja je trajna.",
     "contactOwner": "Kontaktiraj vlasnika",
@@ -1778,5 +1775,93 @@
     "hoursAccOne": "{n} čas",
     "hoursAccFew": "{n} časa",
     "hoursAccMany": "{n} časova"
+  },
+  "myListings": {
+    "summaryLine": "{total} · {parts}",
+    "summary": {
+      "totalOne": "{count} oglas",
+      "totalFew": "{count} oglasa",
+      "totalMany": "{count} oglasa",
+      "ACTIVEOne": "{count} aktivan",
+      "ACTIVEFew": "{count} aktivna",
+      "ACTIVEMany": "{count} aktivnih",
+      "EXPIREDOne": "{count} istekao",
+      "EXPIREDFew": "{count} istekla",
+      "EXPIREDMany": "{count} isteklih",
+      "PENDING_APPROVALOne": "{count} čeka odobrenje",
+      "PENDING_APPROVALFew": "{count} čekaju odobrenje",
+      "PENDING_APPROVALMany": "{count} čeka odobrenje",
+      "REJECTEDOne": "{count} odbijen",
+      "REJECTEDFew": "{count} odbijena",
+      "REJECTEDMany": "{count} odbijenih",
+      "DRAFTOne": "{count} nacrt",
+      "DRAFTFew": "{count} nacrta",
+      "DRAFTMany": "{count} nacrta"
+    },
+    "tabsLabel": "Oglasi po statusu",
+    "tabs": {
+      "ALL": "Svi",
+      "ACTIVE": "Aktivni",
+      "PENDING_APPROVAL": "Čeka odobrenje",
+      "DRAFT": "Nacrti",
+      "EXPIRED": "Istekli",
+      "REJECTED": "Odbijeni"
+    },
+    "columns": {
+      "listing": "Oglas",
+      "status": "Status",
+      "package": "Paket i važenje",
+      "bookings": "Rezervacije",
+      "actions": "Akcije"
+    },
+    "untitled": "Bez naziva",
+    "noCategory": "Kategorija nije izabrana",
+    "draftStep": "korak {current} od {total}",
+    "submittedOn": "Poslato na odobrenje {date}",
+    "rejectedReason": "Razlog: {reason}",
+    "rejectedLink": "Pogledajte zašto oglas nije odobren",
+    "notPublished": "Nije objavljen",
+    "expiresOn": "Ističe {date}",
+    "expiresToday": "Ističe danas · {date}",
+    "expiresTomorrow": "Ističe sutra · {date}",
+    "expiresInDaysOne": "Ističe za {count} dan · {date}",
+    "expiresInDaysFew": "Ističe za {count} dana · {date}",
+    "expiresInDaysMany": "Ističe za {count} dana · {date}",
+    "expiredOn": "Istekao {date}",
+    "requestedOne": "{count} čeka odgovor",
+    "requestedFew": "{count} čekaju odgovor",
+    "requestedMany": "{count} čeka odgovor",
+    "awaitingPaymentOne": "{count} čeka uplatu",
+    "awaitingPaymentFew": "{count} čekaju uplatu",
+    "awaitingPaymentMany": "{count} čeka uplatu",
+    "moreActions": "Više opcija za oglas {title}",
+    "view": "Pogledaj oglas",
+    "emptyTitle": "Još nemate oglasa",
+    "emptyText": "Napravite prvi, potrebno je manje od 2 minuta.",
+    "emptyTab": {
+      "ACTIVE": {
+        "title": "Nemate aktivnih oglasa",
+        "text": "Oglas postaje aktivan kad ga administrator odobri."
+      },
+      "PENDING_APPROVAL": {
+        "title": "Nijedan oglas ne čeka odobrenje",
+        "text": "Ovde je oglas koji ste poslali na proveru, dok administrator ne odluči."
+      },
+      "DRAFT": {
+        "title": "Nemate nacrta",
+        "text": "Ovde se čuva oglas koji ste počeli, a još niste poslali na odobrenje."
+      },
+      "EXPIRED": {
+        "title": "Nemate isteklih oglasa",
+        "text": "Oglas prelazi ovde kad mu paket istekne."
+      },
+      "REJECTED": {
+        "title": "Nemate odbijenih oglasa",
+        "text": "Ovde je oglas koji je administrator vratio na doradu."
+      }
+    },
+    "showAll": "Prikaži sve oglase",
+    "loadErrorTitle": "Oglasi nisu učitani",
+    "loadErrorText": "Proverite internet vezu i pokušajte ponovo."
   }
 }

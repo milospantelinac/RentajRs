@@ -134,9 +134,10 @@ export class DashboardService {
       items.push({ urgency: 'decision', title: 'subscription_expiring', actionUrl: '/kontrolna-tabla/pretplate', count: expiringSoon });
     }
 
+    // Dizajn 32: straight to the "Odbijeni" tab of Moji oglasi.
     const rejectedListings = await this.prisma.listing.count({ where: { userId, status: 'REJECTED' } });
     if (rejectedListings) {
-      items.push({ urgency: 'decision', title: 'rejected_listings', actionUrl: '/kontrolna-tabla/oglasi', count: rejectedListings });
+      items.push({ urgency: 'decision', title: 'rejected_listings', actionUrl: `${MY_LISTINGS_URL}?status=REJECTED`, count: rejectedListings });
     }
 
     const unreadAsOwner = await this.prisma.conversation.count({ where: { ownerId: userId, unreadOwnerCount: { gt: 0 } } });

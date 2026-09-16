@@ -26,6 +26,12 @@ const money_1 = require("../../common/utils/money");
 const taxonomy_service_2 = require("../taxonomy/taxonomy.service");
 const MAX_PHOTOS = 20;
 const MODERATION_SLA_HOURS = 24;
+const MY_LISTINGS_BOOKING_STATUSES = [
+    client_1.BookingStatus.REQUESTED,
+    client_1.BookingStatus.AWAITING_PAYMENT,
+    client_1.BookingStatus.CONFIRMED,
+    client_1.BookingStatus.COMPLETED,
+];
 let ListingsService = class ListingsService {
     constructor(prisma, cache, uploads, geocoding, taxonomy, users, i18n, events) {
         this.prisma = prisma;
@@ -90,12 +96,52 @@ let ListingsService = class ListingsService {
             where: { userId, status: { not: client_1.ListingStatus.DELETED } },
             orderBy: { createdAt: 'desc' },
             include: {
-                photos: { where: { isCover: true }, take: 1 },
+                photos: {
+                    where: { pendingRemoval: false, versionId: null },
+                    orderBy: [{ isCover: 'desc' }, { displayOrder: 'asc' }],
+                    take: 1,
+                },
                 category: true,
+                city: { select: { name: true } },
+                cityArea: { select: { name: true } },
                 subscription: { select: { package: { select: { key: true } }, status: true, expiresAt: true } },
+                moderations: { orderBy: { createdAt: 'desc' }, take: 1, select: { createdAt: true, rejectionReason: true, note: true } },
+                bankedDays: { where: { validUntil: { not: null } }, select: { validUntil: true } },
             },
         });
-        return listings.map((l) => this.serialize(l));
+        const listingIds = listings.map((l) => l.id);
+        const categoryNames = await this.taxonomy.getCategoryNames([...new Set(listings.map((l) => l.categoryId))]);
+        const bookingCounts = listingIds.length
+            ? await this.prisma.booking.groupBy({
+                by: ['listingId', 'status'],
+                where: { listingId: { in: listingIds }, status: { in: MY_LISTINGS_BOOKING_STATUSES } },
+                _count: { _all: true },
+            })
+            : [];
+        const countBookings = (listingId, statuses) => bookingCounts
+            .filter((row) => row.listingId === listingId && statuses.includes(row.status))
+            .reduce((sum, row) => sum + row._count._all, 0);
+        return listings.map(({ moderations, bankedDays, city, cityArea, ...listing }) => {
+            const moderation = moderations[0];
+            const validUntil = [listing.subscription?.expiresAt, ...bankedDays.map((b) => b.validUntil)].reduce((latest, date) => (date && (!latest || date > latest) ? date : latest), null);
+            return {
+                ...this.serialize(listing),
+                categoryName: categoryNames.get(listing.categoryId) ?? null,
+                cityName: city?.name ?? null,
+                cityAreaName: cityArea?.name ?? null,
+                coverPhotoUrl: listing.photos[0]?.url ?? null,
+                submittedAt: listing.status === client_1.ListingStatus.PENDING_APPROVAL ? (moderation?.createdAt ?? null) : null,
+                rejection: listing.status === client_1.ListingStatus.REJECTED && moderation
+                    ? { reason: moderation.rejectionReason, note: moderation.note }
+                    : null,
+                validUntil,
+                bookings: {
+                    confirmed: countBookings(listing.id, [client_1.BookingStatus.CONFIRMED, client_1.BookingStatus.COMPLETED]),
+                    requested: countBookings(listing.id, [client_1.BookingStatus.REQUESTED]),
+                    awaitingPayment: countBookings(listing.id, [client_1.BookingStatus.AWAITING_PAYMENT]),
+                },
+            };
+        });
     }
     async getOwned(userId, listingId) {
         const listing = await this.getFullListing(listingId);
@@ -366,7 +412,7 @@ let ListingsService = class ListingsService {
             where: { listingId: listing.id, status: { in: ['REQUESTED', 'AWAITING_PAYMENT', 'CONFIRMED'] } },
         });
         if (activeBookings > 0 && listing.paymentMethod) {
-            throw new common_1.BadRequestException('This listing has active bookings — change its payment method to stop accepting new ones first, or wait until they complete');
+            throw new common_1.BadRequestException(this.i18n.t('errors.LISTING_HAS_ACTIVE_BOOKINGS'));
         }
         await this.prisma.listing.update({
             where: { id: listing.id },

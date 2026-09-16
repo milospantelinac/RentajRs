@@ -1269,22 +1269,8 @@ const form = reactive({
   cancellationThreshold: null,
 })
 
-// Dodavanje Oglasa spec's KONAČNI FLOW — a fixed 9-step order (basics
-// first, then price+booking-method combined, then availability/rules/
-// payment, which are the only steps "Bez rezervacije" ever skips), rather
-// than the old free-choice bookingModel step 0 + a separate pricing step 5.
-const ALL_STEPS = [
-  { key: 'basics', labelKey: 'listing.stepBasics', descKey: 'listing.stepBasicsDesc' },
-  { key: 'pricing', labelKey: 'listing.stepPricing', descKey: 'listing.stepPricingDesc' },
-  { key: 'availability', labelKey: 'listing.stepAvailability', descKey: 'listing.stepAvailabilityDesc', skipIfNoBooking: true },
-  { key: 'rules', labelKey: 'listing.stepRules', descKey: 'listing.stepRulesDesc', skipIfNoBooking: true },
-  { key: 'payment', labelKey: 'listing.stepPayment', descKey: 'listing.stepPaymentDesc', skipIfNoBooking: true },
-  { key: 'attributes', labelKey: 'listing.stepAttributes', descKey: 'listing.stepAttributesDesc' },
-  { key: 'location', labelKey: 'listing.stepLocation', descKey: 'listing.stepLocationDesc' },
-  { key: 'photos', labelKey: 'listing.stepPhotos', descKey: 'listing.stepPhotosDesc' },
-  { key: 'review', labelKey: 'listing.stepReview', descKey: 'listing.stepReviewDesc' },
-]
-const steps = computed(() => ALL_STEPS.filter((s) => !s.skipIfNoBooking || form.bookingModel !== 'NO_BOOKING'))
+// The fixed step order lives in utils/wizardSteps.js, where Moji oglasi counts it too.
+const steps = computed(() => getWizardSteps(form.bookingModel))
 
 // Toggling "bez rezervacije" removes 3 steps from the array — keep the user
 // on a valid index instead of landing on whatever step now shares that slot.

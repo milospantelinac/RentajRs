@@ -132,6 +132,20 @@ describe('DashboardService attention items (Dizajn 31)', () => {
     const [item] = await (several as any).getOwnerAttention('user1');
     expect(item.actionUrl).toBe('/kontrolna-tabla/oglasi');
   });
+
+  it('opens the rejected tab of Moji oglasi for rejected listings (Dizajn 32)', async () => {
+    const prisma = {
+      booking: { count: jest.fn().mockResolvedValue(0) },
+      dispute: { findMany: jest.fn().mockResolvedValue([]) },
+      subscription: { count: jest.fn().mockResolvedValue(0) },
+      listing: { count: jest.fn().mockResolvedValue(2) },
+      conversation: { count: jest.fn().mockResolvedValue(0) },
+    };
+    const service = new DashboardService(prisma as any, {} as any, {} as any, {} as any);
+    await expect((service as any).getOwnerAttention('user1')).resolves.toEqual([
+      { urgency: 'decision', title: 'rejected_listings', actionUrl: '/kontrolna-tabla/oglasi?status=REJECTED', count: 2 },
+    ]);
+  });
 });
 
 describe('DashboardService#getStats', () => {

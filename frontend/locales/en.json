@@ -727,15 +727,12 @@
       "requiredAttributesFilled": "All required category fields"
     },
     "myListings": "My listings",
-    "noListingsYet": "You don't have any listings yet. Create your first one - it takes less than 2 minutes.",
-    "draftHint": "Draft - not published. Finish it so guests can see it.",
     "statusDraft": "Draft",
     "statusPendingApproval": "Pending approval",
     "statusRejected": "Rejected",
     "statusActive": "Active",
     "statusExpired": "Expired",
     "editListing": "Edit",
-    "viewListing": "View",
     "deleteListing": "Delete",
     "confirmDelete": "Are you sure you want to delete this listing? This action is permanent.",
     "contactOwner": "Contact owner",
@@ -1778,5 +1775,93 @@
     "hoursAccOne": "{n} hour",
     "hoursAccFew": "{n} hours",
     "hoursAccMany": "{n} hours"
+  },
+  "myListings": {
+    "summaryLine": "{total} · {parts}",
+    "summary": {
+      "totalOne": "{count} listing",
+      "totalFew": "{count} listings",
+      "totalMany": "{count} listings",
+      "ACTIVEOne": "{count} active",
+      "ACTIVEFew": "{count} active",
+      "ACTIVEMany": "{count} active",
+      "EXPIREDOne": "{count} expired",
+      "EXPIREDFew": "{count} expired",
+      "EXPIREDMany": "{count} expired",
+      "PENDING_APPROVALOne": "{count} awaiting approval",
+      "PENDING_APPROVALFew": "{count} awaiting approval",
+      "PENDING_APPROVALMany": "{count} awaiting approval",
+      "REJECTEDOne": "{count} rejected",
+      "REJECTEDFew": "{count} rejected",
+      "REJECTEDMany": "{count} rejected",
+      "DRAFTOne": "{count} draft",
+      "DRAFTFew": "{count} drafts",
+      "DRAFTMany": "{count} drafts"
+    },
+    "tabsLabel": "Listings by status",
+    "tabs": {
+      "ALL": "All",
+      "ACTIVE": "Active",
+      "PENDING_APPROVAL": "Awaiting approval",
+      "DRAFT": "Drafts",
+      "EXPIRED": "Expired",
+      "REJECTED": "Rejected"
+    },
+    "columns": {
+      "listing": "Listing",
+      "status": "Status",
+      "package": "Package and validity",
+      "bookings": "Bookings",
+      "actions": "Actions"
+    },
+    "untitled": "Untitled",
+    "noCategory": "No category chosen",
+    "draftStep": "step {current} of {total}",
+    "submittedOn": "Sent for approval {date}",
+    "rejectedReason": "Reason: {reason}",
+    "rejectedLink": "See why the listing was not approved",
+    "notPublished": "Not published",
+    "expiresOn": "Expires {date}",
+    "expiresToday": "Expires today · {date}",
+    "expiresTomorrow": "Expires tomorrow · {date}",
+    "expiresInDaysOne": "Expires in {count} day · {date}",
+    "expiresInDaysFew": "Expires in {count} days · {date}",
+    "expiresInDaysMany": "Expires in {count} days · {date}",
+    "expiredOn": "Expired {date}",
+    "requestedOne": "{count} awaiting reply",
+    "requestedFew": "{count} awaiting reply",
+    "requestedMany": "{count} awaiting reply",
+    "awaitingPaymentOne": "{count} awaiting payment",
+    "awaitingPaymentFew": "{count} awaiting payment",
+    "awaitingPaymentMany": "{count} awaiting payment",
+    "moreActions": "More options for {title}",
+    "view": "View listing",
+    "emptyTitle": "You have no listings yet",
+    "emptyText": "Create your first one, it takes less than 2 minutes.",
+    "emptyTab": {
+      "ACTIVE": {
+        "title": "No active listings",
+        "text": "A listing becomes active once an administrator approves it."
+      },
+      "PENDING_APPROVAL": {
+        "title": "No listings awaiting approval",
+        "text": "A listing you sent for review stays here until an administrator decides."
+      },
+      "DRAFT": {
+        "title": "No drafts",
+        "text": "A listing you started but have not sent for approval is kept here."
+      },
+      "EXPIRED": {
+        "title": "No expired listings",
+        "text": "A listing moves here when its package expires."
+      },
+      "REJECTED": {
+        "title": "No rejected listings",
+        "text": "A listing an administrator sent back for changes shows up here."
+      }
+    },
+    "showAll": "Show all listings",
+    "loadErrorTitle": "Listings could not be loaded",
+    "loadErrorText": "Check your internet connection and try again."
   }
 }

@@ -7,7 +7,7 @@ import {
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { I18nService } from 'nestjs-i18n';
-import { Category, Listing, ListingStatus, ModerationDecision, Prisma } from '@prisma/client';
+import { BookingStatus, Category, Listing, ListingStatus, ModerationDecision, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CacheService } from '../../common/cache/cache.service';
 import { UploadsService } from '../../common/uploads/uploads.service';
@@ -33,6 +33,12 @@ import { FALLBACK_CATEGORY_SLUG } from '../taxonomy/taxonomy.service';
 
 const MAX_PHOTOS = 20;
 const MODERATION_SLA_HOURS = 24;
+const MY_LISTINGS_BOOKING_STATUSES: BookingStatus[] = [
+  BookingStatus.REQUESTED,
+  BookingStatus.AWAITING_PAYMENT,
+  BookingStatus.CONFIRMED,
+  BookingStatus.COMPLETED,
+];
 
 @Injectable()
 export class ListingsService {
@@ -109,19 +115,74 @@ export class ListingsService {
     return this.serialize(listing);
   }
 
+  /**
+   * Dizajn 32: a row of "Moji oglasi" per listing. Next to the listing and its
+   * package it carries the category and place, when the listing went to review
+   * and why it came back, the day its package keeps it online until, and its
+   * bookings: the confirmed and completed ones the home page counts, plus the
+   * requests and payments still open.
+   */
   async getMine(userId: string) {
     const listings = await this.prisma.listing.findMany({
       where: { userId, status: { not: ListingStatus.DELETED } },
       orderBy: { createdAt: 'desc' },
       include: {
-        photos: { where: { isCover: true }, take: 1 },
+        photos: {
+          where: { pendingRemoval: false, versionId: null },
+          orderBy: [{ isCover: 'desc' }, { displayOrder: 'asc' }],
+          take: 1,
+        },
         category: true,
+        city: { select: { name: true } },
+        cityArea: { select: { name: true } },
         // RNT-060 — "Moji oglasi" is where an owner sees what their
         // subscription paid for, per listing, not just the listing itself.
         subscription: { select: { package: { select: { key: true } }, status: true, expiresAt: true } },
+        // Each submission opens a moderation row, and a rejection is written onto it.
+        moderations: { orderBy: { createdAt: 'desc' }, take: 1, select: { createdAt: true, rejectionReason: true, note: true } },
+        bankedDays: { where: { validUntil: { not: null } }, select: { validUntil: true } },
       },
     });
-    return listings.map((l) => this.serialize(l));
+    const listingIds = listings.map((l) => l.id);
+    const categoryNames = await this.taxonomy.getCategoryNames([...new Set(listings.map((l) => l.categoryId))]);
+    const bookingCounts = listingIds.length
+      ? await this.prisma.booking.groupBy({
+          by: ['listingId', 'status'],
+          where: { listingId: { in: listingIds }, status: { in: MY_LISTINGS_BOOKING_STATUSES } },
+          _count: { _all: true },
+        })
+      : [];
+    const countBookings = (listingId: string, statuses: BookingStatus[]) =>
+      bookingCounts
+        .filter((row) => row.listingId === listingId && statuses.includes(row.status))
+        .reduce((sum, row) => sum + row._count._all, 0);
+
+    return listings.map(({ moderations, bankedDays, city, cityArea, ...listing }) => {
+      const moderation = moderations[0];
+      // A listing that outlives its package on banked days (ADR-005) stays online until the last of them ends.
+      const validUntil = [listing.subscription?.expiresAt, ...bankedDays.map((b) => b.validUntil)].reduce<Date | null>(
+        (latest, date) => (date && (!latest || date > latest) ? date : latest),
+        null,
+      );
+      return {
+        ...this.serialize(listing),
+        categoryName: categoryNames.get(listing.categoryId) ?? null,
+        cityName: city?.name ?? null,
+        cityAreaName: cityArea?.name ?? null,
+        coverPhotoUrl: listing.photos[0]?.url ?? null,
+        submittedAt: listing.status === ListingStatus.PENDING_APPROVAL ? (moderation?.createdAt ?? null) : null,
+        rejection:
+          listing.status === ListingStatus.REJECTED && moderation
+            ? { reason: moderation.rejectionReason, note: moderation.note }
+            : null,
+        validUntil,
+        bookings: {
+          confirmed: countBookings(listing.id, [BookingStatus.CONFIRMED, BookingStatus.COMPLETED]),
+          requested: countBookings(listing.id, [BookingStatus.REQUESTED]),
+          awaitingPayment: countBookings(listing.id, [BookingStatus.AWAITING_PAYMENT]),
+        },
+      };
+    });
   }
 
   async getOwned(userId: string, listingId: string) {
@@ -510,9 +571,7 @@ export class ListingsService {
       where: { listingId: listing.id, status: { in: ['REQUESTED', 'AWAITING_PAYMENT', 'CONFIRMED'] } },
     });
     if (activeBookings > 0 && listing.paymentMethod) {
-      throw new BadRequestException(
-        'This listing has active bookings — change its payment method to stop accepting new ones first, or wait until they complete',
-      );
+      throw new BadRequestException(this.i18n.t('errors.LISTING_HAS_ACTIVE_BOOKINGS'));
     }
     await this.prisma.listing.update({
       where: { id: listing.id },
