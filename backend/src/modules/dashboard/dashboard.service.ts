@@ -6,6 +6,8 @@ import { UsersService } from '../users/users.service';
 import { TaxonomyService } from '../taxonomy/taxonomy.service';
 import { paraToRsd } from '../../common/utils/money';
 import { ICAL_FAILURE_ALERT_THRESHOLD } from '../../common/utils/ical-availability';
+import { getGuestUnits } from '../../common/utils/guest-capacity';
+import { shortName } from '../../common/utils/short-name';
 
 interface AttentionItem {
   urgency: 'critical' | 'decision' | 'info';
@@ -41,13 +43,6 @@ function availabilityUrl(listingIds: string[], emptyUrl = NEW_LISTING_URL): stri
 function icalUrl(listingIds: string[], emptyUrl = NEW_LISTING_URL): string {
   if (!listingIds.length) return emptyUrl;
   return listingIds.length === 1 ? `${MY_LISTINGS_URL}/${listingIds[0]}/ical` : MY_LISTINGS_URL;
-}
-
-/** "Milica J.": a row names the other side by first name and initial only. */
-function shortName(person: { firstName: string; lastName: string } | null): string | null {
-  if (!person) return null;
-  const initial = person.lastName?.trim().charAt(0);
-  return initial ? `${person.firstName} ${initial}.` : person.firstName;
 }
 
 /**
@@ -313,15 +308,7 @@ export class DashboardService {
       take: 10,
     });
 
-    const categoryIds = [...new Set(bookings.map((b) => b.listing.categoryId))];
-    const countsChildren = new Map(
-      await Promise.all(
-        categoryIds.map(async (id) => {
-          const attributes = await this.taxonomy.resolveAttributesForCategory(id);
-          return [id, attributes.some((a) => a.key === 'kapacitet_dece')] as const;
-        }),
-      ),
-    );
+    const guestUnits = await getGuestUnits(this.taxonomy, bookings.map((b) => b.listing.categoryId));
 
     return bookings.map((b) => {
       const asGuest = b.guestId === userId;
@@ -332,7 +319,7 @@ export class DashboardService {
         endsAt: b.endsAt,
         priceUnit: b.priceUnit,
         guestCount: b.guestCount,
-        guestUnit: countsChildren.get(b.listing.categoryId) ? 'children' : 'guests',
+        guestUnit: guestUnits.get(b.listing.categoryId),
         role: asGuest ? 'guest' : 'owner',
         listing: {
           title: b.listing.title,

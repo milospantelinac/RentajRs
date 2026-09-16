@@ -203,7 +203,10 @@ let AvailabilityService = AvailabilityService_1 = class AvailabilityService {
             where: { listingId, date: { in: monthStarts } },
         });
         const overrideByMonth = new Map(overrides.map((o) => [o.date.toISOString().slice(0, 10), o.price]));
-        return monthStarts.map((m) => overrideByMonth.get(m.toISOString().slice(0, 10)) ?? basePrice);
+        return monthStarts.map((m) => {
+            const override = overrideByMonth.get(m.toISOString().slice(0, 10));
+            return override !== undefined ? { price: override, kind: 'SPECIAL' } : { price: basePrice, kind: 'BASE' };
+        });
     }
     async setHourlyPriceRanges(userId, listingId, dto) {
         await this.assertOwnership(userId, listingId);
@@ -245,17 +248,17 @@ let AvailabilityService = AvailabilityService_1 = class AvailabilityService {
             where: { listingId, date: dateOnly, startTime: { lte: startTime }, endTime: { gt: startTime } },
         });
         if (override)
-            return override.price;
+            return { price: override.price, kind: 'SPECIAL' };
         const dayOfWeek = (0, timezone_1.toBelgradeISODayOfWeek)(date);
         const ranges = await this.prisma.hourlyPriceRange.findMany({ where: { listingId } });
         const daySpecific = ranges.find((r) => r.dayOfWeek === dayOfWeek && r.startTime <= startTime && r.endTime > startTime);
         if (daySpecific)
-            return daySpecific.price;
+            return { price: daySpecific.price, kind: 'RANGE' };
         const shared = ranges.find((r) => r.dayOfWeek === null && r.startTime <= startTime && r.endTime > startTime);
         if (shared)
-            return shared.price;
+            return { price: shared.price, kind: 'RANGE' };
         const isWeekend = dayOfWeek === 5 || dayOfWeek === 6;
-        return isWeekend && weekendPrice ? weekendPrice : basePrice;
+        return isWeekend && weekendPrice ? { price: weekendPrice, kind: 'WEEKEND' } : { price: basePrice, kind: 'BASE' };
     }
     async getNightlyPrices(listingId, startsAt, endsAt, basePrice, weekendPrice) {
         const overrides = await this.prisma.datePriceOverride.findMany({
@@ -264,9 +267,8 @@ let AvailabilityService = AvailabilityService_1 = class AvailabilityService {
         const overrideByDate = new Map(overrides.map((o) => [o.date.toISOString().slice(0, 10), o.price]));
         const prices = [];
         for (let d = new Date(startsAt); d < endsAt; d.setUTCDate(d.getUTCDate() + 1)) {
-            const key = d.toISOString().slice(0, 10);
             const isWeekend = d.getUTCDay() === 5 || d.getUTCDay() === 6;
-            prices.push(overrideByDate.get(key) ?? (isWeekend && weekendPrice ? weekendPrice : basePrice));
+            prices.push(datePricedUnit(overrideByDate.get(d.toISOString().slice(0, 10)), isWeekend, basePrice, weekendPrice));
         }
         return prices;
     }
@@ -281,7 +283,7 @@ let AvailabilityService = AvailabilityService_1 = class AvailabilityService {
         for (let time = startsAt.getTime(); time < endsAt.getTime(); time += 3600_000) {
             const hour = new Date(time);
             const isWeekend = hour.getUTCDay() === 5 || hour.getUTCDay() === 6;
-            prices.push(overrideByDate.get(hour.toISOString().slice(0, 10)) ?? (isWeekend && weekendPrice ? weekendPrice : basePrice));
+            prices.push(datePricedUnit(overrideByDate.get(hour.toISOString().slice(0, 10)), isWeekend, basePrice, weekendPrice));
         }
         return prices;
     }
@@ -471,6 +473,11 @@ exports.AvailabilityService = AvailabilityService = AvailabilityService_1 = __de
         nestjs_i18n_1.I18nService,
         config_1.ConfigService])
 ], AvailabilityService);
+function datePricedUnit(override, isWeekend, basePrice, weekendPrice) {
+    if (override !== undefined)
+        return { price: override, kind: 'SPECIAL' };
+    return isWeekend && weekendPrice ? { price: weekendPrice, kind: 'WEEKEND' } : { price: basePrice, kind: 'BASE' };
+}
 function isExclusionViolation(err) {
     const message = err?.message ?? '';
     const meta = err?.meta?.message ?? '';

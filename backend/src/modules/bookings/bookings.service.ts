@@ -5,13 +5,47 @@ import { I18nContext, I18nService } from 'nestjs-i18n';
 import { Booking, BookingStatus, Prisma, PriceUnit } from '@prisma/client';
 import * as QRCode from 'qrcode';
 import { PrismaService } from '../../prisma/prisma.service';
-import { AvailabilityService } from '../availability/availability.service';
+import { AvailabilityService, PriceKind, PricedUnit } from '../availability/availability.service';
+import { TaxonomyService } from '../taxonomy/taxonomy.service';
 import { buildIpsQrPayload } from '../../common/utils/ips-qr';
 import { paraToRsd, rsdToPara } from '../../common/utils/money';
 import { toBelgradeHHMM } from '../../common/utils/timezone';
-import { GUEST_CAPACITY_ATTRIBUTE_KEYS } from '../../common/utils/guest-capacity';
+import { GUEST_CAPACITY_ATTRIBUTE_KEYS, getGuestUnits } from '../../common/utils/guest-capacity';
+import { shortName } from '../../common/utils/short-name';
 import { CreateBookingRequestDto } from './dto/create-booking-request.dto';
 import { CancelBookingDto, DisputeNoShowDto, RejectBookingDto } from './dto/booking-actions.dto';
+
+/** Dizajn 34: "2 sata × 4.200 RSD (vikend cena)", one line per price and rule. */
+interface PriceLine extends PricedUnit {
+  count: number;
+}
+
+/** The listing fields a term is priced with. */
+interface PricingListing {
+  id: string;
+  priceUnit: PriceUnit;
+  price: bigint;
+  weekendPrice: bigint | null;
+  pricePerGuest: bigint | null;
+  mandatoryFees: unknown;
+  bookingModel: string;
+  slotSubmode: string | null;
+  advancePercent: number | null;
+}
+
+/** What createRequest keeps in Booking.fees; the last two keys since Dizajn 34. */
+interface StoredFees {
+  mandatory?: string;
+  guestFee?: string;
+  extraServices?: unknown[];
+  extraServicesTotal?: string;
+  priceLines?: Array<{ count: number; price: string; kind: PriceKind }>;
+}
+
+// Dizajn 34: requests the owner still has to answer come first, then the ones
+// waiting for payment, then confirmed stays, each soonest first; everything
+// else follows, the latest term first.
+const OPEN_STATUS_ORDER: BookingStatus[] = ['REQUESTED', 'AWAITING_PAYMENT', 'CONFIRMED'];
 
 @Injectable()
 export class BookingsService {
@@ -20,6 +54,7 @@ export class BookingsService {
     private availability: AvailabilityService,
     private i18n: I18nService,
     private events: EventEmitter2,
+    private taxonomy: TaxonomyService,
   ) {}
 
   // -- Guest: create request -----------------------------------------
@@ -50,22 +85,12 @@ export class BookingsService {
     }
 
     const { startsAt, endsAt, slotPrice } = await this.resolveRequestedTerm(listing, dto);
-    // "Kapacitet ljudi" (Nekretnine, Prostori za proslave) and "Kapacitet dece"
-    // (Igraonice) from wizard step 6 are CategoryAttributes separate from the
-    // maxGuests set in step 4. Dizajn 23: both cap the guests, so the lower applies.
-    const capacityAttrs = await this.prisma.listingAttribute.findMany({
-      where: { listingId, attribute: { key: { in: GUEST_CAPACITY_ATTRIBUTE_KEYS } }, valueNumber: { not: null } },
-      select: { valueNumber: true },
-    });
-    const guestCaps = [listing.maxGuests, ...capacityAttrs.map((attr) => Number(attr.valueNumber))].filter(
-      (cap): cap is number => cap != null && cap > 0,
-    );
-    const effectiveMaxGuests = guestCaps.length ? Math.min(...guestCaps) : null;
+    const effectiveMaxGuests = await this.getGuestCapacity(listingId, listing.maxGuests);
     this.assertTermRules({ ...listing, maxGuests: effectiveMaxGuests }, startsAt, endsAt, dto.guestCount);
 
     const pricePerUnit = slotPrice ?? listing.price;
     const unitCount = resolvePricingUnitCount(listing.priceUnit, startsAt, endsAt, dto);
-    const { unitPriceTotal, guestFee, mandatoryFeesTotal, extraServicesTotal, totalAmount, amountDue } =
+    const { priceLines, guestFee, mandatoryFeesTotal, extraServicesTotal, totalAmount, amountDue } =
       await this.computeTotals(listing, startsAt, endsAt, pricePerUnit, unitCount, slotPrice, dto);
 
     // T76 — a listing set to "Oba" never actually asked the guest which
@@ -94,10 +119,14 @@ export class BookingsService {
         priceUnit: listing.priceUnit,
         pricePerUnit,
         unitCount,
+        // Dizajn 34: the priced lines and the extras total let the owner's
+        // request card explain the total later, whatever the prices are by then.
         fees: {
           mandatory: mandatoryFeesTotal.toString(),
           extraServices: dto.extraServices ?? [],
+          extraServicesTotal: extraServicesTotal.toString(),
           guestFee: guestFee.toString(),
+          priceLines: priceLines.map((line) => ({ count: line.count, price: line.price.toString(), kind: line.kind })),
         } as unknown as Prisma.InputJsonValue,
         totalAmount,
         amountDue,
@@ -239,17 +268,7 @@ export class BookingsService {
    * Every other combination keeps the flat unitPrice x unitCount calculation.
    */
   private async computeTotals(
-    listing: {
-      id: string;
-      priceUnit: PriceUnit;
-      price: bigint;
-      weekendPrice: bigint | null;
-      pricePerGuest: bigint | null;
-      mandatoryFees: unknown;
-      bookingModel: string;
-      slotSubmode: string | null;
-      advancePercent: number | null;
-    },
+    listing: PricingListing,
     startsAt: Date,
     endsAt: Date,
     pricePerUnit: bigint,
@@ -261,46 +280,77 @@ export class BookingsService {
     const mandatoryFeesTotal = sumMandatoryFees(listing.mandatoryFees);
     const guestFee = listing.pricePerGuest && dto.guestCount ? listing.pricePerGuest * BigInt(dto.guestCount) : 0n;
 
-    const unitPriceTotal =
-      !slotPrice && (listing.priceUnit === 'NIGHT' || listing.priceUnit === 'DAY')
-        ? (await this.availability.getNightlyPrices(listing.id, startsAt, endsAt, listing.price, listing.weekendPrice)).reduce(
-            (sum, p) => sum + p,
-            0n,
-          )
-        : !slotPrice && listing.priceUnit === 'MONTH' && dto.monthCount
-          ? (await this.availability.getMonthlyPrices(listing.id, startsAt, dto.monthCount, listing.price)).reduce(
-              (sum, p) => sum + p,
-              0n,
-            )
-          : // T111 — GUEST-priced WORKING_HOURS listings still resolve the
-            // owner's hourly rate windows/exceptions for the per-unit price
-            // (per the decision: those apply to the per-guest rate exactly
-            // like they apply to the per-hour rate) — only unitCount (guests,
-            // not hours, via resolvePricingUnitCount) differs from HOUR.
-            !slotPrice &&
-              listing.bookingModel === 'PER_SLOT' &&
-              listing.slotSubmode === 'WORKING_HOURS' &&
-              (listing.priceUnit === 'HOUR' || listing.priceUnit === 'GUEST')
-            ? (await this.availability.resolveHourlyPrice(
-                listing.id,
-                startsAt,
-                toBelgradeHHMM(startsAt),
-                listing.price,
-                // Dizajn 21: the wizard offers a weekend price for the hourly rate, not the per-guest one.
-                listing.priceUnit === 'HOUR' ? listing.weekendPrice : null,
-              )) * BigInt(unitCount)
-            : // Dizajn 21: a stay billed by the hour prices each hour the way a night is priced.
-              !slotPrice && listing.bookingModel === 'PER_STAY' && listing.priceUnit === 'HOUR'
-              ? (await this.availability.getHourlyStayPrices(listing.id, startsAt, endsAt, listing.price, listing.weekendPrice)).reduce(
-                  (sum, p) => sum + p,
-                  0n,
-                )
-              : pricePerUnit * BigInt(unitCount);
+    const priceLines = await this.resolvePriceLines(listing, startsAt, endsAt, pricePerUnit, unitCount, slotPrice, dto.monthCount);
+    const unitPriceTotal = priceLines.reduce((sum, line) => sum + line.price * BigInt(line.count), 0n);
 
     const totalAmount = unitPriceTotal + guestFee + mandatoryFeesTotal + extraServicesTotal;
     const amountDue = listing.advancePercent ? (totalAmount * BigInt(listing.advancePercent)) / 100n : totalAmount;
 
-    return { unitPriceTotal, guestFee, mandatoryFeesTotal, extraServicesTotal, totalAmount, amountDue };
+    return { unitPriceTotal, priceLines, guestFee, mandatoryFeesTotal, extraServicesTotal, totalAmount, amountDue };
+  }
+
+  /**
+   * The price of each unit the booking covers and the rule that set it,
+   * grouped into "count × price" lines (Dizajn 34). Summed, they are what
+   * computeTotals charges for the term itself.
+   */
+  private async resolvePriceLines(
+    listing: PricingListing,
+    startsAt: Date,
+    endsAt: Date,
+    pricePerUnit: bigint,
+    unitCount: number,
+    slotPrice: bigint | undefined,
+    monthCount: number | undefined,
+  ): Promise<PriceLine[]> {
+    if (slotPrice) return [{ count: unitCount, price: pricePerUnit, kind: 'BASE' }];
+    if (listing.priceUnit === 'NIGHT' || listing.priceUnit === 'DAY') {
+      return groupPriceLines(await this.availability.getNightlyPrices(listing.id, startsAt, endsAt, listing.price, listing.weekendPrice));
+    }
+    if (listing.priceUnit === 'MONTH' && monthCount) {
+      return groupPriceLines(await this.availability.getMonthlyPrices(listing.id, startsAt, monthCount, listing.price));
+    }
+    // T111: GUEST-priced WORKING_HOURS listings still resolve the owner's
+    // hourly rate windows/exceptions for the per-unit price (per the
+    // decision: those apply to the per-guest rate exactly like they apply to
+    // the per-hour rate); only unitCount (guests, not hours, via
+    // resolvePricingUnitCount) differs from HOUR.
+    if (
+      listing.bookingModel === 'PER_SLOT' &&
+      listing.slotSubmode === 'WORKING_HOURS' &&
+      (listing.priceUnit === 'HOUR' || listing.priceUnit === 'GUEST')
+    ) {
+      const unit = await this.availability.resolveHourlyPrice(
+        listing.id,
+        startsAt,
+        toBelgradeHHMM(startsAt),
+        listing.price,
+        // Dizajn 21: the wizard offers a weekend price for the hourly rate, not the per-guest one.
+        listing.priceUnit === 'HOUR' ? listing.weekendPrice : null,
+      );
+      return [{ count: unitCount, ...unit }];
+    }
+    // Dizajn 21: a stay billed by the hour prices each hour the way a night is priced.
+    if (listing.bookingModel === 'PER_STAY' && listing.priceUnit === 'HOUR') {
+      return groupPriceLines(await this.availability.getHourlyStayPrices(listing.id, startsAt, endsAt, listing.price, listing.weekendPrice));
+    }
+    return [{ count: unitCount, price: pricePerUnit, kind: 'BASE' }];
+  }
+
+  /**
+   * "Kapacitet ljudi" (Nekretnine, Prostori za proslave) and "Kapacitet dece"
+   * (Igraonice) from wizard step 6 are CategoryAttributes separate from the
+   * maxGuests set in step 4. Dizajn 23: both cap the guests, so the lower applies.
+   */
+  private async getGuestCapacity(listingId: string, maxGuests: number | null): Promise<number | null> {
+    const capacityAttrs = await this.prisma.listingAttribute.findMany({
+      where: { listingId, attribute: { key: { in: GUEST_CAPACITY_ATTRIBUTE_KEYS } }, valueNumber: { not: null } },
+      select: { valueNumber: true },
+    });
+    const guestCaps = [maxGuests, ...capacityAttrs.map((attr) => Number(attr.valueNumber))].filter(
+      (cap): cap is number => cap != null && cap > 0,
+    );
+    return guestCaps.length ? Math.min(...guestCaps) : null;
   }
 
   /** T83 — live total for whatever the guest currently has selected, before they submit. Reads only, nothing persisted. */
@@ -516,7 +566,18 @@ export class BookingsService {
     const booking = await this.prisma.booking.findUnique({
       where: { id: bookingId },
       include: {
-        listing: { select: { title: true, slug: true, address: true } },
+        listing: {
+          select: {
+            title: true,
+            slug: true,
+            address: true,
+            paymentMethod: true,
+            maxGuests: true,
+            categoryId: true,
+            city: { select: { name: true } },
+            cityArea: { select: { name: true } },
+          },
+        },
         guest: { select: { firstName: true, lastName: true, phone: true } },
         owner: { select: { firstName: true, lastName: true, phone: true, bankAccount: true } },
       },
@@ -527,18 +588,23 @@ export class BookingsService {
     // T79 — "ko je otkazao i kada", for both CANCELLED and REJECTED: the
     // BookingHistory row for the transition into the current status already
     // has changedByUserId/changedAt, it just was never surfaced to the client.
+    // Dizajn 34: the same row dates every state on the owner's card
+    // ("Potvrđena 9. 9. 2026.").
+    const statusEntry = await this.prisma.bookingHistory.findFirst({
+      where: { bookingId: booking.id, newStatus: booking.status },
+      orderBy: { changedAt: 'desc' },
+    });
     let cancellation: { by: 'GUEST' | 'OWNER' | null; at: Date } | null = null;
-    if (booking.status === 'CANCELLED' || booking.status === 'REJECTED') {
-      const entry = await this.prisma.bookingHistory.findFirst({
-        where: { bookingId: booking.id, newStatus: booking.status },
-        orderBy: { changedAt: 'desc' },
-      });
-      if (entry) {
-        cancellation = {
-          by: entry.changedByUserId === booking.guestId ? 'GUEST' : entry.changedByUserId === booking.ownerId ? 'OWNER' : null,
-          at: entry.changedAt,
-        };
-      }
+    if ((booking.status === 'CANCELLED' || booking.status === 'REJECTED') && statusEntry) {
+      cancellation = {
+        by:
+          statusEntry.changedByUserId === booking.guestId
+            ? 'GUEST'
+            : statusEntry.changedByUserId === booking.ownerId
+              ? 'OWNER'
+              : null,
+        at: statusEntry.changedAt,
+      };
     }
 
     // T91 — the QR already encodes these exact fields (see moveToAwaitingPayment);
@@ -559,15 +625,30 @@ export class BookingsService {
           referenceNumber: booking.id.replace(/-/g, '').slice(0, 20),
         };
       }
-      const entry = await this.prisma.bookingHistory.findFirst({
-        where: { bookingId: booking.id, newStatus: 'AWAITING_PAYMENT' },
-        orderBy: { changedAt: 'desc' },
-      });
-      awaitingPaymentSince = entry?.changedAt ?? null;
+      awaitingPaymentSince = statusEntry?.changedAt ?? null;
     }
 
+    const { listing } = booking;
+    const isOwnerViewing = booking.ownerId === userId;
+    const [guestUnits, guestCapacity] = await Promise.all([
+      getGuestUnits(this.taxonomy, [listing.categoryId]),
+      this.getGuestCapacity(booking.listingId, listing.maxGuests),
+    ]);
+    const serialized = this.serialize(booking, userId);
+
     return {
-      ...this.serialize(booking, userId),
+      ...serialized,
+      // Dizajn 34: the card's title reads "Igraonica Balončići - Vračar", and
+      // "gost je izabrao keš" only when the listing offered both methods.
+      listing: {
+        ...serialized.listing,
+        place: listing.cityArea?.name ?? listing.city?.name ?? null,
+        acceptsBothPaymentMethods: listing.paymentMethod === 'BOTH',
+      },
+      guestUnit: guestUnits.get(listing.categoryId),
+      guestCapacity,
+      statusChangedAt: statusEntry?.changedAt ?? booking.createdAt,
+      ...(isOwnerViewing ? { guestShortName: shortName(booking.guest) } : {}),
       ...(cancellation ? { cancellation } : {}),
       ...(bankTransferDetails ? { bankTransferDetails } : {}),
       ...(awaitingPaymentSince ? { awaitingPaymentSince } : {}),
@@ -580,10 +661,29 @@ export class BookingsService {
         ...(role === 'guest' ? { guestId: userId } : { ownerId: userId }),
         ...(status ? { status } : {}),
       },
-      orderBy: { createdAt: 'desc' },
-      include: { listing: { select: { title: true, slug: true } } },
+      include: {
+        listing: {
+          select: {
+            title: true,
+            slug: true,
+            categoryId: true,
+            city: { select: { name: true } },
+            cityArea: { select: { name: true } },
+          },
+        },
+        guest: { select: { firstName: true, lastName: true } },
+      },
     });
-    return bookings.map((b) => this.serialize(b));
+    const guestUnits = await getGuestUnits(this.taxonomy, bookings.map((b) => b.listing.categoryId));
+
+    // Dizajn 34: a row names the listing with its area and, for the owner,
+    // the guest ("Milica J. · 18 dece"); the guest's side is Dizajn 39.
+    return bookings.sort(compareForList).map(({ guest, listing, ...booking }) => ({
+      ...this.serialize(booking),
+      listing: { title: listing.title, slug: listing.slug, place: listing.cityArea?.name ?? listing.city?.name ?? null },
+      guestUnit: guestUnits.get(listing.categoryId),
+      ...(role === 'owner' ? { guestShortName: shortName(guest) } : {}),
+    }));
   }
 
   // -- Scheduled jobs --------------------------------------------------
@@ -755,6 +855,7 @@ export class BookingsService {
       pricePerUnit: paraToRsd(booking.pricePerUnit),
       totalAmount: paraToRsd(booking.totalAmount),
       amountDue: paraToRsd(booking.amountDue),
+      priceBreakdown: readPriceBreakdown(booking),
       ...(isOwnerViewing ? { guestName: `${guest!.firstName} ${guest!.lastName}` } : {}),
       ...(showGuestPhone ? { guestPhone: guest!.phone } : {}),
       ...(showOwnerContact ? { ownerName: `${owner!.firstName} ${owner!.lastName}`, ownerPhone: owner!.phone } : {}),
@@ -780,6 +881,61 @@ function resolvePricingUnitCount(
   if (dto.monthCount) return dto.monthCount;
   if (priceUnit === 'GUEST') return Math.max(1, dto.guestCount || 1);
   return computeUnitCount(priceUnit, startsAt, endsAt);
+}
+
+/** Dizajn 34: units with the same price and rule become one line, in the order they first appear. */
+function groupPriceLines(units: PricedUnit[]): PriceLine[] {
+  const lines: PriceLine[] = [];
+  for (const unit of units) {
+    const line = lines.find((l) => l.price === unit.price && l.kind === unit.kind);
+    if (line) line.count += 1;
+    else lines.push({ ...unit, count: 1 });
+  }
+  return lines;
+}
+
+/**
+ * Dizajn 34: the lines under a booking's total and what fees and extra
+ * services added to them, in RSD. A booking made before the lines were kept
+ * gets one line only when its unit price times the count is exactly what its
+ * units cost; otherwise `lines` is null and the card names the units alone.
+ * `extras` is null when extra services were chosen and their total wasn't kept.
+ */
+function readPriceBreakdown(booking: Pick<Booking, 'fees' | 'totalAmount' | 'pricePerUnit' | 'unitCount'>) {
+  const fees = (booking.fees ?? {}) as StoredFees;
+  const extras = toPara(fees.mandatory) + toPara(fees.guestFee) + toPara(fees.extraServicesTotal);
+  if (fees.priceLines) {
+    return {
+      lines: fees.priceLines.map((line) => ({ count: line.count, price: paraToRsd(BigInt(line.price)), kind: line.kind })),
+      extras: paraToRsd(extras),
+    };
+  }
+  if (fees.extraServicesTotal === undefined && fees.extraServices?.length) return { lines: null, extras: null };
+  const exact = booking.pricePerUnit * BigInt(booking.unitCount) + extras === booking.totalAmount;
+  return {
+    lines: exact ? [{ count: booking.unitCount, price: paraToRsd(booking.pricePerUnit), kind: 'BASE' as PriceKind }] : null,
+    extras: paraToRsd(extras),
+  };
+}
+
+function toPara(value: string | undefined): bigint {
+  return value ? BigInt(value) : 0n;
+}
+
+/** OPEN_STATUS_ORDER first, soonest term first; the rest after them, latest term first. */
+function compareForList(
+  a: Pick<Booking, 'status' | 'startsAt' | 'createdAt'>,
+  b: Pick<Booking, 'status' | 'startsAt' | 'createdAt'>,
+): number {
+  const rank = (status: BookingStatus) => {
+    const index = OPEN_STATUS_ORDER.indexOf(status);
+    return index === -1 ? OPEN_STATUS_ORDER.length : index;
+  };
+  const byStatus = rank(a.status) - rank(b.status);
+  if (byStatus) return byStatus;
+  const soonestFirst = a.startsAt.getTime() - b.startsAt.getTime();
+  const byTerm = rank(a.status) < OPEN_STATUS_ORDER.length ? soonestFirst : -soonestFirst;
+  return byTerm || b.createdAt.getTime() - a.createdAt.getTime();
 }
 
 /** Dizajn 23: a defined slot carries its own length, so the duration and gap rules skip it. */

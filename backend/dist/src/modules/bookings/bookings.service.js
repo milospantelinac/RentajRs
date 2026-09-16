@@ -50,16 +50,20 @@ const nestjs_i18n_1 = require("nestjs-i18n");
 const QRCode = __importStar(require("qrcode"));
 const prisma_service_1 = require("../../prisma/prisma.service");
 const availability_service_1 = require("../availability/availability.service");
+const taxonomy_service_1 = require("../taxonomy/taxonomy.service");
 const ips_qr_1 = require("../../common/utils/ips-qr");
 const money_1 = require("../../common/utils/money");
 const timezone_1 = require("../../common/utils/timezone");
 const guest_capacity_1 = require("../../common/utils/guest-capacity");
+const short_name_1 = require("../../common/utils/short-name");
+const OPEN_STATUS_ORDER = ['REQUESTED', 'AWAITING_PAYMENT', 'CONFIRMED'];
 let BookingsService = class BookingsService {
-    constructor(prisma, availability, i18n, events) {
+    constructor(prisma, availability, i18n, events, taxonomy) {
         this.prisma = prisma;
         this.availability = availability;
         this.i18n = i18n;
         this.events = events;
+        this.taxonomy = taxonomy;
     }
     async createRequest(guestId, listingId, dto) {
         const listing = await this.prisma.listing.findUniqueOrThrow({
@@ -80,16 +84,11 @@ let BookingsService = class BookingsService {
             throw new common_1.ForbiddenException(this.i18n.t('errors.PACKAGE_FEATURE_NOT_INCLUDED'));
         }
         const { startsAt, endsAt, slotPrice } = await this.resolveRequestedTerm(listing, dto);
-        const capacityAttrs = await this.prisma.listingAttribute.findMany({
-            where: { listingId, attribute: { key: { in: guest_capacity_1.GUEST_CAPACITY_ATTRIBUTE_KEYS } }, valueNumber: { not: null } },
-            select: { valueNumber: true },
-        });
-        const guestCaps = [listing.maxGuests, ...capacityAttrs.map((attr) => Number(attr.valueNumber))].filter((cap) => cap != null && cap > 0);
-        const effectiveMaxGuests = guestCaps.length ? Math.min(...guestCaps) : null;
+        const effectiveMaxGuests = await this.getGuestCapacity(listingId, listing.maxGuests);
         this.assertTermRules({ ...listing, maxGuests: effectiveMaxGuests }, startsAt, endsAt, dto.guestCount);
         const pricePerUnit = slotPrice ?? listing.price;
         const unitCount = resolvePricingUnitCount(listing.priceUnit, startsAt, endsAt, dto);
-        const { unitPriceTotal, guestFee, mandatoryFeesTotal, extraServicesTotal, totalAmount, amountDue } = await this.computeTotals(listing, startsAt, endsAt, pricePerUnit, unitCount, slotPrice, dto);
+        const { priceLines, guestFee, mandatoryFeesTotal, extraServicesTotal, totalAmount, amountDue } = await this.computeTotals(listing, startsAt, endsAt, pricePerUnit, unitCount, slotPrice, dto);
         let resolvedPaymentMethod;
         if (listing.paymentMethod === 'BOTH') {
             if (dto.paymentMethod !== 'CASH' && dto.paymentMethod !== 'BANK_TRANSFER') {
@@ -116,7 +115,9 @@ let BookingsService = class BookingsService {
                 fees: {
                     mandatory: mandatoryFeesTotal.toString(),
                     extraServices: dto.extraServices ?? [],
+                    extraServicesTotal: extraServicesTotal.toString(),
                     guestFee: guestFee.toString(),
+                    priceLines: priceLines.map((line) => ({ count: line.count, price: line.price.toString(), kind: line.kind })),
                 },
                 totalAmount,
                 amountDue,
@@ -202,23 +203,39 @@ let BookingsService = class BookingsService {
         const extraServicesTotal = await this.resolveExtraServicesTotal(listing.id, dto.extraServices);
         const mandatoryFeesTotal = sumMandatoryFees(listing.mandatoryFees);
         const guestFee = listing.pricePerGuest && dto.guestCount ? listing.pricePerGuest * BigInt(dto.guestCount) : 0n;
-        const unitPriceTotal = !slotPrice && (listing.priceUnit === 'NIGHT' || listing.priceUnit === 'DAY')
-            ? (await this.availability.getNightlyPrices(listing.id, startsAt, endsAt, listing.price, listing.weekendPrice)).reduce((sum, p) => sum + p, 0n)
-            : !slotPrice && listing.priceUnit === 'MONTH' && dto.monthCount
-                ? (await this.availability.getMonthlyPrices(listing.id, startsAt, dto.monthCount, listing.price)).reduce((sum, p) => sum + p, 0n)
-                :
-                    !slotPrice &&
-                        listing.bookingModel === 'PER_SLOT' &&
-                        listing.slotSubmode === 'WORKING_HOURS' &&
-                        (listing.priceUnit === 'HOUR' || listing.priceUnit === 'GUEST')
-                        ? (await this.availability.resolveHourlyPrice(listing.id, startsAt, (0, timezone_1.toBelgradeHHMM)(startsAt), listing.price, listing.priceUnit === 'HOUR' ? listing.weekendPrice : null)) * BigInt(unitCount)
-                        :
-                            !slotPrice && listing.bookingModel === 'PER_STAY' && listing.priceUnit === 'HOUR'
-                                ? (await this.availability.getHourlyStayPrices(listing.id, startsAt, endsAt, listing.price, listing.weekendPrice)).reduce((sum, p) => sum + p, 0n)
-                                : pricePerUnit * BigInt(unitCount);
+        const priceLines = await this.resolvePriceLines(listing, startsAt, endsAt, pricePerUnit, unitCount, slotPrice, dto.monthCount);
+        const unitPriceTotal = priceLines.reduce((sum, line) => sum + line.price * BigInt(line.count), 0n);
         const totalAmount = unitPriceTotal + guestFee + mandatoryFeesTotal + extraServicesTotal;
         const amountDue = listing.advancePercent ? (totalAmount * BigInt(listing.advancePercent)) / 100n : totalAmount;
-        return { unitPriceTotal, guestFee, mandatoryFeesTotal, extraServicesTotal, totalAmount, amountDue };
+        return { unitPriceTotal, priceLines, guestFee, mandatoryFeesTotal, extraServicesTotal, totalAmount, amountDue };
+    }
+    async resolvePriceLines(listing, startsAt, endsAt, pricePerUnit, unitCount, slotPrice, monthCount) {
+        if (slotPrice)
+            return [{ count: unitCount, price: pricePerUnit, kind: 'BASE' }];
+        if (listing.priceUnit === 'NIGHT' || listing.priceUnit === 'DAY') {
+            return groupPriceLines(await this.availability.getNightlyPrices(listing.id, startsAt, endsAt, listing.price, listing.weekendPrice));
+        }
+        if (listing.priceUnit === 'MONTH' && monthCount) {
+            return groupPriceLines(await this.availability.getMonthlyPrices(listing.id, startsAt, monthCount, listing.price));
+        }
+        if (listing.bookingModel === 'PER_SLOT' &&
+            listing.slotSubmode === 'WORKING_HOURS' &&
+            (listing.priceUnit === 'HOUR' || listing.priceUnit === 'GUEST')) {
+            const unit = await this.availability.resolveHourlyPrice(listing.id, startsAt, (0, timezone_1.toBelgradeHHMM)(startsAt), listing.price, listing.priceUnit === 'HOUR' ? listing.weekendPrice : null);
+            return [{ count: unitCount, ...unit }];
+        }
+        if (listing.bookingModel === 'PER_STAY' && listing.priceUnit === 'HOUR') {
+            return groupPriceLines(await this.availability.getHourlyStayPrices(listing.id, startsAt, endsAt, listing.price, listing.weekendPrice));
+        }
+        return [{ count: unitCount, price: pricePerUnit, kind: 'BASE' }];
+    }
+    async getGuestCapacity(listingId, maxGuests) {
+        const capacityAttrs = await this.prisma.listingAttribute.findMany({
+            where: { listingId, attribute: { key: { in: guest_capacity_1.GUEST_CAPACITY_ATTRIBUTE_KEYS } }, valueNumber: { not: null } },
+            select: { valueNumber: true },
+        });
+        const guestCaps = [maxGuests, ...capacityAttrs.map((attr) => Number(attr.valueNumber))].filter((cap) => cap != null && cap > 0);
+        return guestCaps.length ? Math.min(...guestCaps) : null;
     }
     async quotePrice(listingId, dto) {
         const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: listingId } });
@@ -388,7 +405,18 @@ let BookingsService = class BookingsService {
         const booking = await this.prisma.booking.findUnique({
             where: { id: bookingId },
             include: {
-                listing: { select: { title: true, slug: true, address: true } },
+                listing: {
+                    select: {
+                        title: true,
+                        slug: true,
+                        address: true,
+                        paymentMethod: true,
+                        maxGuests: true,
+                        categoryId: true,
+                        city: { select: { name: true } },
+                        cityArea: { select: { name: true } },
+                    },
+                },
                 guest: { select: { firstName: true, lastName: true, phone: true } },
                 owner: { select: { firstName: true, lastName: true, phone: true, bankAccount: true } },
             },
@@ -397,18 +425,20 @@ let BookingsService = class BookingsService {
             throw new common_1.NotFoundException();
         if (booking.guestId !== userId && booking.ownerId !== userId)
             throw new common_1.ForbiddenException();
+        const statusEntry = await this.prisma.bookingHistory.findFirst({
+            where: { bookingId: booking.id, newStatus: booking.status },
+            orderBy: { changedAt: 'desc' },
+        });
         let cancellation = null;
-        if (booking.status === 'CANCELLED' || booking.status === 'REJECTED') {
-            const entry = await this.prisma.bookingHistory.findFirst({
-                where: { bookingId: booking.id, newStatus: booking.status },
-                orderBy: { changedAt: 'desc' },
-            });
-            if (entry) {
-                cancellation = {
-                    by: entry.changedByUserId === booking.guestId ? 'GUEST' : entry.changedByUserId === booking.ownerId ? 'OWNER' : null,
-                    at: entry.changedAt,
-                };
-            }
+        if ((booking.status === 'CANCELLED' || booking.status === 'REJECTED') && statusEntry) {
+            cancellation = {
+                by: statusEntry.changedByUserId === booking.guestId
+                    ? 'GUEST'
+                    : statusEntry.changedByUserId === booking.ownerId
+                        ? 'OWNER'
+                        : null,
+                at: statusEntry.changedAt,
+            };
         }
         let bankTransferDetails = null;
         let awaitingPaymentSince = null;
@@ -422,14 +452,26 @@ let BookingsService = class BookingsService {
                     referenceNumber: booking.id.replace(/-/g, '').slice(0, 20),
                 };
             }
-            const entry = await this.prisma.bookingHistory.findFirst({
-                where: { bookingId: booking.id, newStatus: 'AWAITING_PAYMENT' },
-                orderBy: { changedAt: 'desc' },
-            });
-            awaitingPaymentSince = entry?.changedAt ?? null;
+            awaitingPaymentSince = statusEntry?.changedAt ?? null;
         }
+        const { listing } = booking;
+        const isOwnerViewing = booking.ownerId === userId;
+        const [guestUnits, guestCapacity] = await Promise.all([
+            (0, guest_capacity_1.getGuestUnits)(this.taxonomy, [listing.categoryId]),
+            this.getGuestCapacity(booking.listingId, listing.maxGuests),
+        ]);
+        const serialized = this.serialize(booking, userId);
         return {
-            ...this.serialize(booking, userId),
+            ...serialized,
+            listing: {
+                ...serialized.listing,
+                place: listing.cityArea?.name ?? listing.city?.name ?? null,
+                acceptsBothPaymentMethods: listing.paymentMethod === 'BOTH',
+            },
+            guestUnit: guestUnits.get(listing.categoryId),
+            guestCapacity,
+            statusChangedAt: statusEntry?.changedAt ?? booking.createdAt,
+            ...(isOwnerViewing ? { guestShortName: (0, short_name_1.shortName)(booking.guest) } : {}),
             ...(cancellation ? { cancellation } : {}),
             ...(bankTransferDetails ? { bankTransferDetails } : {}),
             ...(awaitingPaymentSince ? { awaitingPaymentSince } : {}),
@@ -441,10 +483,26 @@ let BookingsService = class BookingsService {
                 ...(role === 'guest' ? { guestId: userId } : { ownerId: userId }),
                 ...(status ? { status } : {}),
             },
-            orderBy: { createdAt: 'desc' },
-            include: { listing: { select: { title: true, slug: true } } },
+            include: {
+                listing: {
+                    select: {
+                        title: true,
+                        slug: true,
+                        categoryId: true,
+                        city: { select: { name: true } },
+                        cityArea: { select: { name: true } },
+                    },
+                },
+                guest: { select: { firstName: true, lastName: true } },
+            },
         });
-        return bookings.map((b) => this.serialize(b));
+        const guestUnits = await (0, guest_capacity_1.getGuestUnits)(this.taxonomy, bookings.map((b) => b.listing.categoryId));
+        return bookings.sort(compareForList).map(({ guest, listing, ...booking }) => ({
+            ...this.serialize(booking),
+            listing: { title: listing.title, slug: listing.slug, place: listing.cityArea?.name ?? listing.city?.name ?? null },
+            guestUnit: guestUnits.get(listing.categoryId),
+            ...(role === 'owner' ? { guestShortName: (0, short_name_1.shortName)(guest) } : {}),
+        }));
     }
     async expireUnpaidBookings() {
         const expired = await this.prisma.booking.findMany({
@@ -566,6 +624,7 @@ let BookingsService = class BookingsService {
             pricePerUnit: (0, money_1.paraToRsd)(booking.pricePerUnit),
             totalAmount: (0, money_1.paraToRsd)(booking.totalAmount),
             amountDue: (0, money_1.paraToRsd)(booking.amountDue),
+            priceBreakdown: readPriceBreakdown(booking),
             ...(isOwnerViewing ? { guestName: `${guest.firstName} ${guest.lastName}` } : {}),
             ...(showGuestPhone ? { guestPhone: guest.phone } : {}),
             ...(showOwnerContact ? { ownerName: `${owner.firstName} ${owner.lastName}`, ownerPhone: owner.phone } : {}),
@@ -608,7 +667,8 @@ exports.BookingsService = BookingsService = __decorate([
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
         availability_service_1.AvailabilityService,
         nestjs_i18n_1.I18nService,
-        event_emitter_1.EventEmitter2])
+        event_emitter_1.EventEmitter2,
+        taxonomy_service_1.TaxonomyService])
 ], BookingsService);
 function resolvePricingUnitCount(priceUnit, startsAt, endsAt, dto) {
     if (dto.monthCount)
@@ -616,6 +676,49 @@ function resolvePricingUnitCount(priceUnit, startsAt, endsAt, dto) {
     if (priceUnit === 'GUEST')
         return Math.max(1, dto.guestCount || 1);
     return computeUnitCount(priceUnit, startsAt, endsAt);
+}
+function groupPriceLines(units) {
+    const lines = [];
+    for (const unit of units) {
+        const line = lines.find((l) => l.price === unit.price && l.kind === unit.kind);
+        if (line)
+            line.count += 1;
+        else
+            lines.push({ ...unit, count: 1 });
+    }
+    return lines;
+}
+function readPriceBreakdown(booking) {
+    const fees = (booking.fees ?? {});
+    const extras = toPara(fees.mandatory) + toPara(fees.guestFee) + toPara(fees.extraServicesTotal);
+    if (fees.priceLines) {
+        return {
+            lines: fees.priceLines.map((line) => ({ count: line.count, price: (0, money_1.paraToRsd)(BigInt(line.price)), kind: line.kind })),
+            extras: (0, money_1.paraToRsd)(extras),
+        };
+    }
+    if (fees.extraServicesTotal === undefined && fees.extraServices?.length)
+        return { lines: null, extras: null };
+    const exact = booking.pricePerUnit * BigInt(booking.unitCount) + extras === booking.totalAmount;
+    return {
+        lines: exact ? [{ count: booking.unitCount, price: (0, money_1.paraToRsd)(booking.pricePerUnit), kind: 'BASE' }] : null,
+        extras: (0, money_1.paraToRsd)(extras),
+    };
+}
+function toPara(value) {
+    return value ? BigInt(value) : 0n;
+}
+function compareForList(a, b) {
+    const rank = (status) => {
+        const index = OPEN_STATUS_ORDER.indexOf(status);
+        return index === -1 ? OPEN_STATUS_ORDER.length : index;
+    };
+    const byStatus = rank(a.status) - rank(b.status);
+    if (byStatus)
+        return byStatus;
+    const soonestFirst = a.startsAt.getTime() - b.startsAt.getTime();
+    const byTerm = rank(a.status) < OPEN_STATUS_ORDER.length ? soonestFirst : -soonestFirst;
+    return byTerm || b.createdAt.getTime() - a.createdAt.getTime();
 }
 function isDefinedSlots(listing) {
     return listing.bookingModel === 'PER_SLOT' && listing.slotSubmode === 'DEFINED_SLOTS';

@@ -125,11 +125,9 @@ const moreItems = computed(() => {
 
 // "Zahtevi" (?role=owner) and "Moje rezervacije" in the sheet (?role=guest)
 // share a path; utils/dashboardNav.js tells them apart, the same rule the
-// sidebar uses. aria-current is set from it too, since Vue Router's own
-// ignores the query as well.
-function isActive(to) {
-  return isDashboardLinkActive(route, to)
-}
+// sidebar uses (with a booking's own page naming its entry, Dizajn 34).
+// aria-current is set from it too, since Vue Router's own ignores the query as well.
+const { isLinkActive: isActive } = useDashboardActiveLink()
 
 // The "Više" tab itself has no route of its own — mark it by hand whenever
 // the current page is one of the sheet's own destinations.

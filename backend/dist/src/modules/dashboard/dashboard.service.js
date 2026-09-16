@@ -17,6 +17,8 @@ const users_service_1 = require("../users/users.service");
 const taxonomy_service_1 = require("../taxonomy/taxonomy.service");
 const money_1 = require("../../common/utils/money");
 const ical_availability_1 = require("../../common/utils/ical-availability");
+const guest_capacity_1 = require("../../common/utils/guest-capacity");
+const short_name_1 = require("../../common/utils/short-name");
 const NEW_LISTING_URL = '/oglasi/novi';
 const MY_LISTINGS_URL = '/kontrolna-tabla/oglasi';
 const UPCOMING_STATUSES = ['REQUESTED', 'AWAITING_PAYMENT', 'CONFIRMED'];
@@ -29,12 +31,6 @@ function icalUrl(listingIds, emptyUrl = NEW_LISTING_URL) {
     if (!listingIds.length)
         return emptyUrl;
     return listingIds.length === 1 ? `${MY_LISTINGS_URL}/${listingIds[0]}/ical` : MY_LISTINGS_URL;
-}
-function shortName(person) {
-    if (!person)
-        return null;
-    const initial = person.lastName?.trim().charAt(0);
-    return initial ? `${person.firstName} ${initial}.` : person.firstName;
 }
 let DashboardService = class DashboardService {
     constructor(prisma, reviews, users, taxonomy) {
@@ -217,11 +213,7 @@ let DashboardService = class DashboardService {
             },
             take: 10,
         });
-        const categoryIds = [...new Set(bookings.map((b) => b.listing.categoryId))];
-        const countsChildren = new Map(await Promise.all(categoryIds.map(async (id) => {
-            const attributes = await this.taxonomy.resolveAttributesForCategory(id);
-            return [id, attributes.some((a) => a.key === 'kapacitet_dece')];
-        })));
+        const guestUnits = await (0, guest_capacity_1.getGuestUnits)(this.taxonomy, bookings.map((b) => b.listing.categoryId));
         return bookings.map((b) => {
             const asGuest = b.guestId === userId;
             return {
@@ -231,14 +223,14 @@ let DashboardService = class DashboardService {
                 endsAt: b.endsAt,
                 priceUnit: b.priceUnit,
                 guestCount: b.guestCount,
-                guestUnit: countsChildren.get(b.listing.categoryId) ? 'children' : 'guests',
+                guestUnit: guestUnits.get(b.listing.categoryId),
                 role: asGuest ? 'guest' : 'owner',
                 listing: {
                     title: b.listing.title,
                     slug: b.listing.slug,
                     place: b.listing.cityArea?.name ?? b.listing.city?.name ?? null,
                 },
-                counterpartName: shortName(asGuest ? b.owner : b.guest),
+                counterpartName: (0, short_name_1.shortName)(asGuest ? b.owner : b.guest),
             };
         });
     }

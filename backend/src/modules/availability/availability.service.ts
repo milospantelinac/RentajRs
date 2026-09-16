@@ -26,6 +26,19 @@ const ICAL_FETCH_TIMEOUT_MS = 15_000;
 const ICAL_NOT_CALENDAR = 'NOT_CALENDAR';
 
 /**
+ * Dizajn 34: which rule priced a unit (an hour, a night, a month). A booking
+ * keeps this with its total so the owner's request card can say
+ * "2 sata × 4.200 RSD (vikend cena)". RANGE is a price for part of the
+ * working hours, SPECIAL a price set for one date or one time slot.
+ */
+export type PriceKind = 'BASE' | 'WEEKEND' | 'RANGE' | 'SPECIAL';
+
+export interface PricedUnit {
+  price: bigint;
+  kind: PriceKind;
+}
+
+/**
  * Dizajn 33: one fetch for adding a feed and for the hourly sync. A hanging
  * host no longer holds up the sync of every other feed, and a response that
  * isn't a calendar fails the same way an unreachable one does. The address is
@@ -260,7 +273,7 @@ export class AvailabilityService {
    * date). getNightlyPrices doesn't apply here since a monthly rate isn't
    * per-night; this is its month-count equivalent for booking creation.
    */
-  async getMonthlyPrices(listingId: string, startMonth: Date, monthCount: number, basePrice: bigint) {
+  async getMonthlyPrices(listingId: string, startMonth: Date, monthCount: number, basePrice: bigint): Promise<PricedUnit[]> {
     const monthStarts: Date[] = [];
     for (let i = 0; i < monthCount; i++) {
       monthStarts.push(new Date(Date.UTC(startMonth.getUTCFullYear(), startMonth.getUTCMonth() + i, 1)));
@@ -269,7 +282,10 @@ export class AvailabilityService {
       where: { listingId, date: { in: monthStarts } },
     });
     const overrideByMonth = new Map(overrides.map((o) => [o.date.toISOString().slice(0, 10), o.price]));
-    return monthStarts.map((m) => overrideByMonth.get(m.toISOString().slice(0, 10)) ?? basePrice);
+    return monthStarts.map((m) => {
+      const override = overrideByMonth.get(m.toISOString().slice(0, 10));
+      return override !== undefined ? { price: override, kind: 'SPECIAL' } : { price: basePrice, kind: 'BASE' };
+    });
   }
 
   // -- PER_SLOT + WORKING_HOURS pricing ------------------------------------
@@ -327,7 +343,7 @@ export class AvailabilityService {
     startTime: string,
     basePrice: bigint,
     weekendPrice: bigint | null = null,
-  ): Promise<bigint> {
+  ): Promise<PricedUnit> {
     // T72 — raw UTC getters read a booking's calendar day back shifted by
     // the Belgrade offset (e.g. a late-evening booking rolling into the next
     // UTC day), missing a same-day SlotPriceOverride; SlotPriceOverride.date
@@ -336,7 +352,7 @@ export class AvailabilityService {
     const override = await this.prisma.slotPriceOverride.findFirst({
       where: { listingId, date: dateOnly, startTime: { lte: startTime }, endTime: { gt: startTime } },
     });
-    if (override) return override.price;
+    if (override) return { price: override.price, kind: 'SPECIAL' };
 
     // T104 — per-day mode stores each range with its own dayOfWeek; a
     // day-specific match wins over a shared (dayOfWeek: null) one covering
@@ -345,28 +361,33 @@ export class AvailabilityService {
     const dayOfWeek = toBelgradeISODayOfWeek(date);
     const ranges = await this.prisma.hourlyPriceRange.findMany({ where: { listingId } });
     const daySpecific = ranges.find((r) => r.dayOfWeek === dayOfWeek && r.startTime <= startTime && r.endTime > startTime);
-    if (daySpecific) return daySpecific.price;
+    if (daySpecific) return { price: daySpecific.price, kind: 'RANGE' };
     const shared = ranges.find((r) => r.dayOfWeek === null && r.startTime <= startTime && r.endTime > startTime);
-    if (shared) return shared.price;
+    if (shared) return { price: shared.price, kind: 'RANGE' };
 
     // Dizajn 21: the wizard's "Cena za vikend" covers hourly listings too, on
     // the same Friday and Saturday as a stay's weekend nights (ISO 5 and 6).
     const isWeekend = dayOfWeek === 5 || dayOfWeek === 6;
-    return isWeekend && weekendPrice ? weekendPrice : basePrice;
+    return isWeekend && weekendPrice ? { price: weekendPrice, kind: 'WEEKEND' } : { price: basePrice, kind: 'BASE' };
   }
 
   /** Per-night price for a PER_STAY booking spanning [startsAt, endsAt) — override where set, weekend/base price otherwise. */
-  async getNightlyPrices(listingId: string, startsAt: Date, endsAt: Date, basePrice: bigint, weekendPrice: bigint | null) {
+  async getNightlyPrices(
+    listingId: string,
+    startsAt: Date,
+    endsAt: Date,
+    basePrice: bigint,
+    weekendPrice: bigint | null,
+  ): Promise<PricedUnit[]> {
     const overrides = await this.prisma.datePriceOverride.findMany({
       where: { listingId, date: { gte: startsAt, lt: endsAt } },
     });
     const overrideByDate = new Map(overrides.map((o) => [o.date.toISOString().slice(0, 10), o.price]));
 
-    const prices: bigint[] = [];
+    const prices: PricedUnit[] = [];
     for (let d = new Date(startsAt); d < endsAt; d.setUTCDate(d.getUTCDate() + 1)) {
-      const key = d.toISOString().slice(0, 10);
       const isWeekend = d.getUTCDay() === 5 || d.getUTCDay() === 6; // Fri/Sat night
-      prices.push(overrideByDate.get(key) ?? (isWeekend && weekendPrice ? weekendPrice : basePrice));
+      prices.push(datePricedUnit(overrideByDate.get(d.toISOString().slice(0, 10)), isWeekend, basePrice, weekendPrice));
     }
     return prices;
   }
@@ -377,7 +398,13 @@ export class AvailabilityService {
    * price on a Friday or Saturday, else the base price: the rule
    * getNightlyPrices applies to a night, on the same UTC calendar dates.
    */
-  async getHourlyStayPrices(listingId: string, startsAt: Date, endsAt: Date, basePrice: bigint, weekendPrice: bigint | null) {
+  async getHourlyStayPrices(
+    listingId: string,
+    startsAt: Date,
+    endsAt: Date,
+    basePrice: bigint,
+    weekendPrice: bigint | null,
+  ): Promise<PricedUnit[]> {
     const firstDate = new Date(startsAt);
     firstDate.setUTCHours(0, 0, 0, 0);
     const overrides = await this.prisma.datePriceOverride.findMany({
@@ -385,11 +412,11 @@ export class AvailabilityService {
     });
     const overrideByDate = new Map(overrides.map((o) => [o.date.toISOString().slice(0, 10), o.price]));
 
-    const prices: bigint[] = [];
+    const prices: PricedUnit[] = [];
     for (let time = startsAt.getTime(); time < endsAt.getTime(); time += 3600_000) {
       const hour = new Date(time);
       const isWeekend = hour.getUTCDay() === 5 || hour.getUTCDay() === 6;
-      prices.push(overrideByDate.get(hour.toISOString().slice(0, 10)) ?? (isWeekend && weekendPrice ? weekendPrice : basePrice));
+      prices.push(datePricedUnit(overrideByDate.get(hour.toISOString().slice(0, 10)), isWeekend, basePrice, weekendPrice));
     }
     return prices;
   }
@@ -610,6 +637,12 @@ export class AvailabilityService {
     if (listing.userId !== userId) throw new ForbiddenException();
     return listing;
   }
+}
+
+/** A date's own price first, then the weekend price on a Friday or Saturday, then the base price. */
+function datePricedUnit(override: bigint | undefined, isWeekend: boolean, basePrice: bigint, weekendPrice: bigint | null): PricedUnit {
+  if (override !== undefined) return { price: override, kind: 'SPECIAL' };
+  return isWeekend && weekendPrice ? { price: weekendPrice, kind: 'WEEKEND' } : { price: basePrice, kind: 'BASE' };
 }
 
 function isExclusionViolation(err: unknown): boolean {

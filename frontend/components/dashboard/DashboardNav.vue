@@ -9,8 +9,8 @@
           <a
             :href="href"
             class="dash-nav-link"
-            :class="{ 'dash-nav-link-active': isDashboardLinkActive(route, item.to) }"
-            :aria-current="isDashboardLinkActive(route, item.to) ? 'page' : undefined"
+            :class="{ 'dash-nav-link-active': isLinkActive(item.to) }"
+            :aria-current="isLinkActive(item.to) ? 'page' : undefined"
             @click="navigate"
           >
             <DashboardNavIcon :name="item.icon" class="dash-nav-icon" />
@@ -26,7 +26,7 @@
 <script setup>
 const { t } = useI18n()
 const auth = useAuthStore()
-const route = useRoute()
+const { isLinkActive } = useDashboardActiveLink()
 const counts = useDashboardCountsStore()
 
 // Dizajn 30 keeps who sees what: the renting group is for owners and the

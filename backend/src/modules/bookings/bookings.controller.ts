@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseEnumPipe, Post, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { BookingStatus } from '@prisma/client';
 import { BookingsService } from './bookings.service';
@@ -31,7 +31,8 @@ export class BookingsController {
   listMine(
     @CurrentUser('id') userId: string,
     @Query('role') role: 'guest' | 'owner' = 'guest',
-    @Query('status') status?: BookingStatus,
+    // Dizajn 34: an unknown ?status= used to reach Prisma and come back as a 500.
+    @Query('status', new ParseEnumPipe(BookingStatus, { optional: true })) status?: BookingStatus,
   ) {
     return this.bookingsService.listMine(userId, role, status);
   }

@@ -1113,10 +1113,7 @@
     "ownerPhoneLabel": "Phone",
     "listingAddressLabel": "Address",
     "viewListing": "View listing",
-    "ownerPendingNotice": "The dates are blocked until you respond. Please respond soon — if you decline, they're freed up immediately.",
-    "requestReceivedAt": "Request received",
     "withdrawRequest": "Withdraw request",
-    "cashPaymentNoticeOwner": "The guest pays in cash on arrival.",
     "payDeadline": "Payment deadline",
     "manualPayTitle": "Manual payment details",
     "bankAccountLabel": "Account number",
@@ -1158,7 +1155,6 @@
     "listingTitle": "Listing name",
     "term": "Date/time",
     "guestMessage": "Guest message",
-    "ownerAwaitingPaymentNotice": "The request has been received. The guest got payment instructions — waiting for them to pay.",
     "cancellationTerms": "Cancellation terms",
     "cashPaymentNotice": "This booking is paid in cash on arrival. The booking details have been sent to your email.",
     "notMediating": "Rentaj does not mediate payment — it goes directly to the owner",
@@ -1303,8 +1299,6 @@
     "onboardingBankAccount": "Add a bank account for payments",
     "upcoming": "Next 7 days",
     "noUpcoming": "No upcoming bookings",
-    "noBookingsAll": "No bookings",
-    "noBookingsFiltered": "No bookings with this status",
     "bookingsAsGuest": "As guest",
     "bookingsAsOwner": "As owner",
     "conversations": "Conversations",
@@ -1921,5 +1915,85 @@
       },
       "continueListing": "Continue the listing"
     }
+  },
+  "bookingRequests": {
+    "weekdays": "Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday",
+    "units": {
+      "HOUROne": "{count} hour",
+      "HOURFew": "{count} hours",
+      "HOURMany": "{count} hours",
+      "NIGHTOne": "{count} night",
+      "NIGHTFew": "{count} nights",
+      "NIGHTMany": "{count} nights",
+      "DAYOne": "{count} day",
+      "DAYFew": "{count} days",
+      "DAYMany": "{count} days",
+      "MONTHOne": "{count} month",
+      "MONTHFew": "{count} months",
+      "MONTHMany": "{count} months",
+      "YEAROne": "{count} year",
+      "YEARFew": "{count} years",
+      "YEARMany": "{count} years",
+      "SLOTOne": "{count} slot",
+      "SLOTFew": "{count} slots",
+      "SLOTMany": "{count} slots"
+    },
+    "durationHoursMinutes": "{hours} h {minutes} min",
+    "durationMinutes": "{minutes} min",
+    "priceKind": {
+      "weekend": "(weekend price)",
+      "range": "(price for part of the working hours)",
+      "special": "(special price)"
+    },
+    "priceExtras": "fees and services {amount}",
+    "subtitle": {
+      "received": "Request received on {date} at {time}",
+      "CONFIRMED": "Confirmed on {date}",
+      "COMPLETED": "Completed on {date}",
+      "REJECTED": "Declined on {date}",
+      "CANCELLED": "Cancelled on {date}",
+      "EXPIRED": "Expired on {date}",
+      "NO_SHOW": "No-show marked on {date}"
+    },
+    "contactAfterApproval": "contact available after approval",
+    "contactAfterPayment": "contact available after payment",
+    "capacity": "capacity: {guests}",
+    "guestChoseCash": "the guest chose cash",
+    "guestChoseTransfer": "the guest chose QR payment",
+    "phoneUnlocked": "unlocked by confirmation",
+    "payBy": "payment due by {date} at {time}",
+    "paidInCash": "paid in cash on arrival",
+    "paidOn": "you confirmed receipt on {date}",
+    "paidAdvanceOn": "advance, you confirmed receipt on {date}; the remaining {rest} on arrival",
+    "guestNotified": "the guest was notified by email",
+    "youWereNotified": "you were notified by email",
+    "expiredUnpaid": "The payment did not arrive in time",
+    "termReleased": "the term was released",
+    "noShowMarked": "You marked a no-show",
+    "noShowDisputable": "the guest can dispute the mark",
+    "noShowDisputed": "the guest disputed the mark, an administrator decides",
+    "noteRequested": "The term is blocked until you respond. Respond as soon as possible; if you decline, the term is released right away.",
+    "noteAwaitingPayment": "The guest received the payment instructions. When the money arrives, confirm receipt; if the deadline passes, the term is released.",
+    "roleLabel": "Whose bookings",
+    "statusLabel": "Booking status",
+    "empty": {
+      "owner": {
+        "title": "No booking requests yet",
+        "text": "When a guest sends a request for one of your listings, it shows up here."
+      },
+      "guest": {
+        "title": "You have no bookings yet",
+        "text": "When you send a booking request, it shows up here."
+      },
+      "filtered": {
+        "title": "No bookings with this status",
+        "text": "Pick another status or show them all."
+      }
+    },
+    "showAll": "Show all",
+    "loadErrorTitle": "Bookings could not be loaded",
+    "loadErrorText": "Check your internet connection and try again.",
+    "detailLoadErrorTitle": "The booking could not be loaded",
+    "notFoundTitle": "Booking not found"
   }
 }

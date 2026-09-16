@@ -5,7 +5,7 @@ describe('BookingsService#assertTermRules (min/max guests, R30-ish term rules)',
   const i18n = { t: jest.fn((key: string) => key) };
 
   function makeService() {
-    return new BookingsService({} as any, {} as any, i18n as any, {} as any);
+    return new BookingsService({} as any, {} as any, i18n as any, {} as any, {} as any);
   }
 
   function callAssertTermRules(
@@ -126,5 +126,193 @@ describe('BookingsService#assertTermRules (min/max guests, R30-ish term rules)',
     const end = new Date('2026-09-01T12:00:00Z');
     const listing = { bookingModel: 'PER_SLOT', slotSubmode: 'DEFINED_SLOTS', priceUnit: 'SLOT', minDuration: 3, maxDuration: 1 };
     expect(() => callAssertTermRules(service, listing, start, end)).not.toThrow();
+  });
+});
+
+describe('BookingsService price lines (Dizajn 34)', () => {
+  const i18n = { t: jest.fn((key: string) => key) };
+  const prisma = { listingExtraService: { findMany: jest.fn().mockResolvedValue([]) } };
+
+  function pricingListing(overrides: Record<string, unknown> = {}) {
+    return {
+      id: 'l1',
+      priceUnit: 'HOUR',
+      price: 350000n,
+      weekendPrice: 420000n,
+      pricePerGuest: null,
+      mandatoryFees: [{ amount: 500 }],
+      bookingModel: 'PER_SLOT',
+      slotSubmode: 'WORKING_HOURS',
+      advancePercent: null,
+      ...overrides,
+    };
+  }
+
+  function totals(availability: Record<string, jest.Mock>, listing: Record<string, unknown>, unitCount: number, slotPrice?: bigint, dto = {}) {
+    const service = new BookingsService(prisma as any, availability as any, i18n as any, {} as any, {} as any);
+    const start = new Date('2026-10-08T00:00:00Z');
+    const end = new Date('2026-10-11T00:00:00Z');
+    const pricePerUnit = slotPrice ?? (listing.price as bigint);
+    return (service as any).computeTotals(listing, start, end, pricePerUnit, unitCount, slotPrice, dto);
+  }
+
+  it('groups the nights of a stay by price and rule, in the order they come', async () => {
+    const availability = {
+      getNightlyPrices: jest.fn().mockResolvedValue([
+        { price: 650000n, kind: 'BASE' },
+        { price: 800000n, kind: 'WEEKEND' },
+        { price: 800000n, kind: 'WEEKEND' },
+        { price: 650000n, kind: 'BASE' },
+      ]),
+    };
+    const result = await totals(availability, pricingListing({ bookingModel: 'PER_STAY', slotSubmode: null, priceUnit: 'NIGHT' }), 4);
+    expect(result.priceLines).toEqual([
+      { price: 650000n, kind: 'BASE', count: 2 },
+      { price: 800000n, kind: 'WEEKEND', count: 2 },
+    ]);
+    expect(result.unitPriceTotal).toBe(2900000n);
+    expect(result.totalAmount).toBe(2950000n);
+  });
+
+  it('prices every hour of a working-hours booking at the rule its start time falls under', async () => {
+    const availability = { resolveHourlyPrice: jest.fn().mockResolvedValue({ price: 420000n, kind: 'WEEKEND' }) };
+    const result = await totals(availability, pricingListing(), 2);
+    expect(result.priceLines).toEqual([{ price: 420000n, kind: 'WEEKEND', count: 2 }]);
+    expect(result.unitPriceTotal).toBe(840000n);
+    expect(availability.resolveHourlyPrice.mock.calls[0][4]).toBe(420000n);
+  });
+
+  it('keeps a defined slot at its own price', async () => {
+    const availability = { resolveHourlyPrice: jest.fn() };
+    const result = await totals(availability, pricingListing(), 1, 700000n);
+    expect(result.priceLines).toEqual([{ count: 1, price: 700000n, kind: 'BASE' }]);
+    expect(availability.resolveHourlyPrice).not.toHaveBeenCalled();
+  });
+
+  it('prices each month of a monthly stay on its own', async () => {
+    const availability = {
+      getMonthlyPrices: jest.fn().mockResolvedValue([
+        { price: 9000000n, kind: 'BASE' },
+        { price: 8000000n, kind: 'SPECIAL' },
+      ]),
+    };
+    const listing = pricingListing({ bookingModel: 'PER_STAY', slotSubmode: null, priceUnit: 'MONTH', price: 9000000n });
+    const result = await totals(availability, listing, 2, undefined, { monthCount: 2 });
+    expect(result.priceLines).toEqual([
+      { price: 9000000n, kind: 'BASE', count: 1 },
+      { price: 8000000n, kind: 'SPECIAL', count: 1 },
+    ]);
+  });
+});
+
+describe('BookingsService#serialize priceBreakdown (Dizajn 34)', () => {
+  const service = new BookingsService({} as any, {} as any, { t: (key: string) => key } as any, {} as any, {} as any);
+
+  function booking(overrides: Record<string, unknown>) {
+    return {
+      id: 'b1',
+      guestId: 'g1',
+      ownerId: 'o1',
+      pricePerUnit: 350000n,
+      unitCount: 2,
+      totalAmount: 750000n,
+      amountDue: 750000n,
+      fees: null,
+      ...overrides,
+    };
+  }
+
+  it('reads the kept lines and the fees in RSD', () => {
+    const fees = {
+      mandatory: '50000',
+      guestFee: '0',
+      extraServices: [{ serviceId: 's1', quantity: 1 }],
+      extraServicesTotal: '20000',
+      priceLines: [{ count: 2, price: '420000', kind: 'WEEKEND' }],
+    };
+    expect((service as any).serialize(booking({ fees, totalAmount: 910000n })).priceBreakdown).toEqual({
+      lines: [{ count: 2, price: 4200, kind: 'WEEKEND' }],
+      extras: 700,
+    });
+  });
+
+  it('gives an older booking one line when its unit price explains the total', () => {
+    const fees = { mandatory: '50000', guestFee: '0', extraServices: [] };
+    expect((service as any).serialize(booking({ fees })).priceBreakdown).toEqual({
+      lines: [{ count: 2, price: 3500, kind: 'BASE' }],
+      extras: 500,
+    });
+  });
+
+  it('gives no lines when an older booking was priced by another rule', () => {
+    const fees = { mandatory: '0', guestFee: '0', extraServices: [] };
+    expect((service as any).serialize(booking({ fees, totalAmount: 840000n })).priceBreakdown).toEqual({ lines: null, extras: 0 });
+  });
+
+  it('knows nothing when an older booking had extra services it never totalled', () => {
+    const fees = { mandatory: '0', guestFee: '0', extraServices: [{ serviceId: 's1', quantity: 2 }] };
+    expect((service as any).serialize(booking({ fees })).priceBreakdown).toEqual({ lines: null, extras: null });
+  });
+});
+
+describe('BookingsService#listMine (Dizajn 34)', () => {
+  it('puts open requests first, soonest first, then the rest, latest first', async () => {
+    const at = (day: number) => new Date(Date.UTC(2026, 8, day, 14));
+    const row = (id: string, status: string, day: number, categoryId = 'kids') => ({
+      id,
+      status,
+      startsAt: at(day),
+      endsAt: at(day),
+      createdAt: at(1),
+      guestId: 'g1',
+      ownerId: 'o1',
+      pricePerUnit: 350000n,
+      unitCount: 2,
+      totalAmount: 700000n,
+      amountDue: 700000n,
+      fees: null,
+      guestCount: 12,
+      listing: { title: 'Igraonica', slug: 'igraonica', categoryId, city: { name: 'Beograd' }, cityArea: { name: 'Vračar' } },
+      guest: { firstName: 'Milica', lastName: 'Jovanović' },
+    });
+    const prisma = {
+      booking: {
+        findMany: jest.fn().mockResolvedValue([
+          row('cancelled', 'CANCELLED', 28),
+          row('confirmed', 'CONFIRMED', 16, 'hall'),
+          row('requested-late', 'REQUESTED', 18),
+          row('completed', 'COMPLETED', 5),
+          row('awaiting', 'AWAITING_PAYMENT', 13),
+          row('rejected', 'REJECTED', 30),
+          row('requested-soon', 'REQUESTED', 12),
+        ]),
+      },
+    };
+    const taxonomy = {
+      resolveAttributesForCategory: jest.fn(async (id: string) => (id === 'kids' ? [{ key: 'kapacitet_dece' }] : [])),
+    };
+    const service = new BookingsService(prisma as any, {} as any, {} as any, {} as any, taxonomy as any);
+
+    const rows = await service.listMine('o1', 'owner');
+    expect(rows.map((r) => r.id)).toEqual([
+      'requested-soon',
+      'requested-late',
+      'awaiting',
+      'confirmed',
+      'rejected',
+      'cancelled',
+      'completed',
+    ]);
+    expect(rows[0]).toMatchObject({
+      listing: { title: 'Igraonica', slug: 'igraonica', place: 'Vračar' },
+      guestUnit: 'children',
+      guestShortName: 'Milica J.',
+      totalAmount: 7000,
+    });
+    expect(rows[3].guestUnit).toBe('guests');
+    expect(rows[0]).not.toHaveProperty('guestName');
+
+    const asGuest = await service.listMine('g1', 'guest');
+    expect(asGuest[0]).not.toHaveProperty('guestShortName');
   });
 });
