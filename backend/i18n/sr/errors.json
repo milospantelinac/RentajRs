@@ -42,5 +42,11 @@
   "IMAGE_INVALID": "Otpremljeni fajl nije ispravna slika",
   "LISTING_RESUBMIT_NOT_ALLOWED": "Ponovo na odobrenje može da se pošalje samo odbijen oglas koji ima paket",
   "LISTING_RESUBMIT_PACKAGE_INACTIVE": "Paket ovog oglasa više ne važi, izaberite novi paket",
-  "LISTING_NOT_READY": "Oglas još nije spreman za slanje, dopunite ono što nedostaje"
+  "LISTING_NOT_READY": "Oglas još nije spreman za slanje, dopunite ono što nedostaje",
+  "ICAL_LISTING_NOT_ACTIVE": "Kalendare sa drugih platformi možete da povežete kada oglas bude objavljen",
+  "ICAL_SOURCE_OWN_FEED": "Ovo je adresa vašeg Rentaj kalendara. Nalepite adresu kalendara sa druge platforme",
+  "ICAL_SOURCE_DUPLICATE": "Ovaj kalendar je već povezan",
+  "ICAL_SOURCE_NOT_FOUND": "Kalendar nije pronađen",
+  "ICAL_URL_UNREACHABLE": "Adresa nije dostupna. Proverite da li ste je kopirali celu",
+  "ICAL_URL_NOT_CALENDAR": "Na ovoj adresi nije iCal kalendar. Kopirajte .ics adresu iz podešavanja kalendara na drugoj platformi"
 }

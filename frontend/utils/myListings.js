@@ -131,5 +131,7 @@ export function buildMyListingRow(t, listing, now = Date.now()) {
     viewUrl: listing.status === 'ACTIVE' ? `/oglasi/${listing.slug}` : `/oglasi/${listing.id}/pregled`,
     // Dizajn 29: the rejected pill opens the page with the reason.
     rejectedUrl: listing.status === 'REJECTED' ? `/oglasi/${listing.id}/odbijeno` : null,
+    // Dizajn 33: only listings that can connect calendars get the menu item.
+    icalUrl: listing.icalAvailable ? `/kontrolna-tabla/oglasi/${listing.id}/ical` : null,
   }
 }

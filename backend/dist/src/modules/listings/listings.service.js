@@ -22,6 +22,7 @@ const geocoding_service_1 = require("../../common/geocoding/geocoding.service");
 const taxonomy_service_1 = require("../taxonomy/taxonomy.service");
 const users_service_1 = require("../users/users.service");
 const contact_detector_1 = require("../../common/utils/contact-detector");
+const ical_availability_1 = require("../../common/utils/ical-availability");
 const money_1 = require("../../common/utils/money");
 const taxonomy_service_2 = require("../taxonomy/taxonomy.service");
 const MAX_PHOTOS = 20;
@@ -104,7 +105,7 @@ let ListingsService = class ListingsService {
                 category: true,
                 city: { select: { name: true } },
                 cityArea: { select: { name: true } },
-                subscription: { select: { package: { select: { key: true } }, status: true, expiresAt: true } },
+                subscription: { select: { package: { select: { key: true, hasIcal: true } }, status: true, expiresAt: true } },
                 moderations: { orderBy: { createdAt: 'desc' }, take: 1, select: { createdAt: true, rejectionReason: true, note: true } },
                 bankedDays: { where: { validUntil: { not: null } }, select: { validUntil: true } },
             },
@@ -135,6 +136,7 @@ let ListingsService = class ListingsService {
                     ? { reason: moderation.rejectionReason, note: moderation.note }
                     : null,
                 validUntil,
+                icalAvailable: (0, ical_availability_1.getIcalAvailability)(listing, !!listing.subscription?.package.hasIcal) === 'AVAILABLE',
                 bookings: {
                     confirmed: countBookings(listing.id, [client_1.BookingStatus.CONFIRMED, client_1.BookingStatus.COMPLETED]),
                     requested: countBookings(listing.id, [client_1.BookingStatus.REQUESTED]),

@@ -20,5 +20,6 @@
   "REGION_REQUIRED": "Please select a region",
   "CITY_REQUIRED": "Please select a city",
   "TERMS_NOT_ACCEPTED": "You must accept the terms of use and privacy policy",
-  "VIDEO_URL_YOUTUBE": "The video must be a YouTube link"
+  "VIDEO_URL_YOUTUBE": "The video must be a YouTube link",
+  "ICAL_URL_INVALID": "The calendar address is not valid. Paste the whole address, starting with https://"
 }

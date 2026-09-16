@@ -691,13 +691,9 @@
     "calendarCustomPrice": "Price for this date (RSD)",
     "calendarRemoveCustomPrice": "Remove custom price",
     "icalSectionTitle": "iCal sync",
+    "icalPageHint": "Your calendar address and the calendars from other platforms (Airbnb, Booking.com, Google Calendar) are set on a page of their own.",
+    "icalPageOpen": "Open calendar sync",
     "icalLockedHint": "iCal export and import unlock once the listing is published (Standard or Pro package).",
-    "icalExportLabel": "Calendar export",
-    "icalExportHint": "Paste this link into Airbnb, Booking.com or another platform so they know when this listing is taken.",
-    "icalImportLabel": "Calendar import",
-    "icalImportHint": "Add a link to a .ics calendar from another platform to avoid double bookings.",
-    "icalSourceName": "Name (e.g. Airbnb)",
-    "icalSyncError": "The last sync failed",
     "unitNight": "night",
     "unitDay": "day",
     "unitHour": "hour",
@@ -1387,6 +1383,9 @@
     "payment_confirmationFew": "{count} payments awaiting confirmation",
     "payment_confirmationMany": "{count} payments awaiting confirmation",
     "term_conflict": "Conflict with an external calendar",
+    "ical_sync_failedOne": "{count} calendar from another platform is not syncing",
+    "ical_sync_failedFew": "{count} calendars from other platforms are not syncing",
+    "ical_sync_failedMany": "{count} calendars from other platforms are not syncing",
     "new_requestsOne": "{count} new booking request",
     "new_requestsFew": "{count} new booking requests",
     "new_requestsMany": "{count} new booking requests",
@@ -1410,6 +1409,7 @@
     "hint": {
       "payment_confirmation": "Once the payment reaches your account, confirm it and the booking is confirmed.",
       "term_conflict": "A term imported from an external calendar overlaps a booking on Rentaj.",
+      "ical_sync_failed": "Busy dates from that platform are not carried over until the address is fixed or removed.",
       "new_requests": "The terms are held until you reply.",
       "subscription_expiring": "Renew your package to keep your listings visible in search.",
       "rejected_listings": "See the reason, edit the listing and send it for approval again.",
@@ -1862,6 +1862,64 @@
     },
     "showAll": "Show all listings",
     "loadErrorTitle": "Listings could not be loaded",
-    "loadErrorText": "Check your internet connection and try again."
+    "loadErrorText": "Check your internet connection and try again.",
+    "ical": "iCal sync"
+  },
+  "ical": {
+    "title": "Calendar sync (iCal)",
+    "subtitle": "Connect calendars from other platforms so terms are never booked twice. Included in the STANDARD and PRO packages.",
+    "exportTitle": "Your Rentaj calendar",
+    "exportText": "Paste this address into Airbnb, Booking or Google Calendar so they can see your Rentaj bookings.",
+    "exportLabel": "Address of your Rentaj calendar",
+    "sourcesTitle": "Connected calendars",
+    "lastSynced": "Last synced: {ago}",
+    "notSyncedYet": "Waiting for the first sync",
+    "agoJustNow": "just now",
+    "agoMinutesOne": "{count} minute ago",
+    "agoMinutesFew": "{count} minutes ago",
+    "agoMinutesMany": "{count} minutes ago",
+    "agoHoursOne": "{count} hour ago",
+    "agoHoursFew": "{count} hours ago",
+    "agoHoursMany": "{count} hours ago",
+    "agoDaysOne": "{count} day ago",
+    "agoDaysFew": "{count} days ago",
+    "agoDaysMany": "{count} days ago",
+    "statusActive": "Active",
+    "statusError": "Error",
+    "errors": {
+      "UNREACHABLE": "Error: the address cannot be reached",
+      "NOT_CALENDAR": "Error: the address no longer returns a calendar"
+    },
+    "remove": "Remove",
+    "removeLabel": "Remove calendar {name}",
+    "emptyTitle": "No connected calendars",
+    "emptyText": "Paste the .ics address from Airbnb, Booking.com or another platform below, so terms taken there are taken here as well.",
+    "addPlaceholder": "Paste the .ics address from another platform",
+    "addLabel": "Calendar address from another platform",
+    "add": "Add calendar",
+    "adding": "Checking...",
+    "urlRequired": "Paste the calendar address",
+    "note": "Sync works both ways and refreshes every hour. Terms pulled in from other platforms show as taken and cannot be changed in the Rentaj calendar.",
+    "loadErrorTitle": "Calendar sync did not load",
+    "loadErrorText": "Check your connection and try again.",
+    "locked": {
+      "NOT_STAY": {
+        "title": "Calendar sync is not available for this listing",
+        "text": "Calendars from other platforms can only be connected to a listing booked online by the night or by the day."
+      },
+      "NOT_PUBLISHED": {
+        "title": "The listing is not published yet",
+        "text": "You can connect calendars from other platforms once the listing is published with a STANDARD or PRO package."
+      },
+      "DRAFT": {
+        "title": "The listing is not published yet",
+        "text": "Finish the listing and publish it with a STANDARD or PRO package, then connect calendars from other platforms."
+      },
+      "NO_ICAL_PACKAGE": {
+        "title": "This listing’s package does not include iCal",
+        "text": "Calendar sync is part of the STANDARD and PRO packages. You can change the package under Packages & billing."
+      },
+      "continueListing": "Continue the listing"
+    }
   }
 }

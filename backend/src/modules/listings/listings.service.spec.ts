@@ -54,7 +54,9 @@ describe('ListingsService#getMine (Dizajn 32)', () => {
           }),
           listingRow({
             id: 'banked',
-            subscription: { package: { key: 'STANDARD' }, status: 'EXPIRED', expiresAt: new Date('2026-09-01T00:00:00Z') },
+            bookingModel: 'PER_STAY',
+            priceUnit: 'NIGHT',
+            subscription: { package: { key: 'STANDARD', hasIcal: true }, status: 'EXPIRED', expiresAt: new Date('2026-09-01T00:00:00Z') },
             bankedDays: [{ validUntil: new Date('2026-09-20T00:00:00Z') }, { validUntil: new Date('2026-08-01T00:00:00Z') }],
           }),
         ]),
@@ -88,6 +90,7 @@ describe('ListingsService#getMine (Dizajn 32)', () => {
       rejection: null,
       validUntil: new Date('2026-10-01T00:00:00Z'),
       bookings: { confirmed: 12, requested: 3, awaitingPayment: 0 },
+      icalAvailable: false,
     });
     expect(active).not.toHaveProperty('moderations');
     expect(active).not.toHaveProperty('bankedDays');
@@ -101,7 +104,10 @@ describe('ListingsService#getMine (Dizajn 32)', () => {
     expect(banked).toMatchObject({
       validUntil: new Date('2026-09-20T00:00:00Z'),
       bookings: { confirmed: 0, requested: 0, awaitingPayment: 1 },
+      // Dizajn 33: a published stay whose package includes iCal.
+      icalAvailable: true,
     });
+    expect(pending.icalAvailable).toBe(false);
   });
 
   it('skips the bookings query for an owner without listings', async () => {

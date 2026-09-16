@@ -16,6 +16,7 @@ const reviews_service_1 = require("../reviews/reviews.service");
 const users_service_1 = require("../users/users.service");
 const taxonomy_service_1 = require("../taxonomy/taxonomy.service");
 const money_1 = require("../../common/utils/money");
+const ical_availability_1 = require("../../common/utils/ical-availability");
 const NEW_LISTING_URL = '/oglasi/novi';
 const MY_LISTINGS_URL = '/kontrolna-tabla/oglasi';
 const UPCOMING_STATUSES = ['REQUESTED', 'AWAITING_PAYMENT', 'CONFIRMED'];
@@ -23,6 +24,11 @@ function availabilityUrl(listingIds, emptyUrl = NEW_LISTING_URL) {
     if (!listingIds.length)
         return emptyUrl;
     return listingIds.length === 1 ? `/oglasi/${listingIds[0]}/uredi?korak=availability` : MY_LISTINGS_URL;
+}
+function icalUrl(listingIds, emptyUrl = NEW_LISTING_URL) {
+    if (!listingIds.length)
+        return emptyUrl;
+    return listingIds.length === 1 ? `${MY_LISTINGS_URL}/${listingIds[0]}/ical` : MY_LISTINGS_URL;
 }
 function shortName(person) {
     if (!person)
@@ -83,6 +89,14 @@ let DashboardService = class DashboardService {
         if (termConflicts.length) {
             const listingIds = [...new Set(termConflicts.map((d) => d.listingId))];
             items.push({ urgency: 'critical', title: 'term_conflict', actionUrl: availabilityUrl(listingIds, MY_LISTINGS_URL), count: termConflicts.length });
+        }
+        const failingFeeds = await this.prisma.icalSource.findMany({
+            where: { active: true, failureCount: { gte: ical_availability_1.ICAL_FAILURE_ALERT_THRESHOLD }, listing: { userId, status: { not: 'DELETED' } } },
+            select: { listingId: true },
+        });
+        if (failingFeeds.length) {
+            const listingIds = [...new Set(failingFeeds.map((feed) => feed.listingId))];
+            items.push({ urgency: 'critical', title: 'ical_sync_failed', actionUrl: icalUrl(listingIds, MY_LISTINGS_URL), count: failingFeeds.length });
         }
         const newRequests = await this.prisma.booking.count({ where: { ownerId: userId, status: 'REQUESTED' } });
         if (newRequests) {
@@ -166,7 +180,7 @@ let DashboardService = class DashboardService {
             steps.push({ key: 'availability', done, actionUrl: availabilityUrl(bookable) });
         }
         if (noListing || icalCapable.length) {
-            steps.push({ key: 'ical', done: icalCount > 0, actionUrl: availabilityUrl(icalCapable) });
+            steps.push({ key: 'ical', done: icalCount > 0, actionUrl: icalUrl(icalCapable) });
         }
         steps.push({ key: 'bankAccount', done: !!user.bankAccount, actionUrl: '/kontrolna-tabla/podesavanja' });
         return { steps, allDone: steps.every((step) => step.done) };

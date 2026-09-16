@@ -15,6 +15,7 @@ import { GeocodingService } from '../../common/geocoding/geocoding.service';
 import { TaxonomyService } from '../taxonomy/taxonomy.service';
 import { UsersService } from '../users/users.service';
 import { containsContactInfo } from '../../common/utils/contact-detector';
+import { getIcalAvailability } from '../../common/utils/ical-availability';
 import { rsdToPara, paraToRsd } from '../../common/utils/money';
 import { CreateListingDto } from './dto/create-listing.dto';
 import { UpdateListingDto } from './dto/update-listing.dto';
@@ -137,7 +138,7 @@ export class ListingsService {
         cityArea: { select: { name: true } },
         // RNT-060 — "Moji oglasi" is where an owner sees what their
         // subscription paid for, per listing, not just the listing itself.
-        subscription: { select: { package: { select: { key: true } }, status: true, expiresAt: true } },
+        subscription: { select: { package: { select: { key: true, hasIcal: true } }, status: true, expiresAt: true } },
         // Each submission opens a moderation row, and a rejection is written onto it.
         moderations: { orderBy: { createdAt: 'desc' }, take: 1, select: { createdAt: true, rejectionReason: true, note: true } },
         bankedDays: { where: { validUntil: { not: null } }, select: { validUntil: true } },
@@ -176,6 +177,8 @@ export class ListingsService {
             ? { reason: moderation.rejectionReason, note: moderation.note }
             : null,
         validUntil,
+        // Dizajn 33: the row menu links to the listing's iCal page only when it can use it.
+        icalAvailable: getIcalAvailability(listing, !!listing.subscription?.package.hasIcal) === 'AVAILABLE',
         bookings: {
           confirmed: countBookings(listing.id, [BookingStatus.CONFIRMED, BookingStatus.COMPLETED]),
           requested: countBookings(listing.id, [BookingStatus.REQUESTED]),

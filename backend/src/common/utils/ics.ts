@@ -12,6 +12,38 @@ export interface ParsedIcsEvent {
   endsAt: Date;
 }
 
+/**
+ * Dizajn 33: an iCalendar object opens with BEGIN:VCALENDAR (RFC 5545 3.4).
+ * Anything else, such as a sign-in page served with 200, is not a feed, and
+ * reading it as an empty one would release every date it had imported.
+ */
+export function isIcsCalendar(text: string): boolean {
+  return text.replace(/^﻿/, '').trimStart().toUpperCase().startsWith('BEGIN:VCALENDAR');
+}
+
+/** Calendar apps hand out webcal:// links for the same https feed. */
+export function normalizeIcalUrl(url: string): string {
+  return url.trim().replace(/^webcal:\/\//i, 'https://');
+}
+
+// Dizajn 33: the platforms a connected calendar is named after; any other
+// address is named by its host.
+const ICAL_PLATFORM_NAMES: Array<[RegExp, string]> = [
+  [/(^|\.)airbnb(\.com?)?\.[a-z]{2,3}$/, 'Airbnb'],
+  [/(^|\.)booking\.com$/, 'Booking.com'],
+  [/(^|\.)google\.com$/, 'Google Calendar'],
+  [/(^|\.)(vrbo|homeaway)(\.com?)?\.[a-z]{2,3}$/, 'Vrbo'],
+  [/(^|\.)expedia(\.com?)?\.[a-z]{2,3}$/, 'Expedia'],
+  [/(^|\.)tripadvisor(\.com?)?\.[a-z]{2,3}$/, 'Tripadvisor'],
+  [/(^|\.)(outlook|live|office365)\.com$/, 'Outlook'],
+  [/(^|\.)icloud\.com$/, 'iCloud'],
+];
+
+export function icalSourceName(url: string): string {
+  const host = new URL(url).hostname.toLowerCase().replace(/^www\./, '');
+  return ICAL_PLATFORM_NAMES.find(([pattern]) => pattern.test(host))?.[1] ?? host;
+}
+
 export function parseIcs(icsText: string): ParsedIcsEvent[] {
   const events: ParsedIcsEvent[] = [];
   const lines = unfoldLines(icsText);

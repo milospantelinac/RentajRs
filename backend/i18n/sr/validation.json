@@ -20,5 +20,6 @@
   "REGION_REQUIRED": "Izaberite region",
   "CITY_REQUIRED": "Izaberite grad",
   "TERMS_NOT_ACCEPTED": "Morate prihvatiti uslove korišćenja i politiku privatnosti",
-  "VIDEO_URL_YOUTUBE": "Video mora biti YouTube link"
+  "VIDEO_URL_YOUTUBE": "Video mora biti YouTube link",
+  "ICAL_URL_INVALID": "Adresa kalendara nije ispravna. Nalepite celu adresu, sa https:// na početku"
 }

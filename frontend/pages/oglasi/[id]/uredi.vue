@@ -246,7 +246,13 @@
 
           <div v-if="form.priceUnit !== 'MONTH'" class="form-group mt-4">
             <label class="form-label">{{ t('listing.icalSectionTitle') }}</label>
-            <IcalSyncPanel v-if="listing?.status === 'ACTIVE'" :listing-id="listingId" :ical-export-token="listing?.icalExportToken" />
+            <!-- Dizajn 33: the feed and the connected calendars have their own page. -->
+            <div v-if="listing?.status === 'ACTIVE'" class="ical-open">
+              <p class="text-muted mb-0">{{ t('listing.icalPageHint') }}</p>
+              <NuxtLink :to="`/kontrolna-tabla/oglasi/${listingId}/ical`" class="btn btn-tertiary btn-sm">
+                {{ t('listing.icalPageOpen') }}
+              </NuxtLink>
+            </div>
             <div v-else class="ical-locked">
               <span class="ical-locked-icon" aria-hidden="true">🔒</span>
               <p class="text-muted mb-0">{{ t('listing.icalLockedHint') }}</p>
@@ -5887,6 +5893,18 @@ $review-ok-ink: #1db82b;
     height: auto;
     min-height: 20px;
   }
+}
+
+.ical-open {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  padding: 14px 16px;
+  border: 1px solid $color-border;
+  border-radius: $radius-input;
+  background: $color-background;
 }
 
 .ical-locked {

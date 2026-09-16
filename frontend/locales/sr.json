@@ -691,13 +691,9 @@
     "calendarCustomPrice": "Cena za ovaj datum (RSD)",
     "calendarRemoveCustomPrice": "Ukloni prilagođenu cenu",
     "icalSectionTitle": "iCal sinhronizacija",
+    "icalPageHint": "Adresa vašeg kalendara i kalendari sa drugih platformi (Airbnb, Booking.com, Google Calendar) podešavaju se na posebnoj strani.",
+    "icalPageOpen": "Otvori sinhronizaciju",
     "icalLockedHint": "Izvoz i uvoz iCal kalendara postaju dostupni nakon objavljivanja oglasa (Standard ili Pro paket).",
-    "icalExportLabel": "Izvoz kalendara",
-    "icalExportHint": "Nalepite ovaj link u Airbnb, Booking.com ili drugu platformu da bi videli kada je ovaj oglas zauzet.",
-    "icalImportLabel": "Uvoz kalendara",
-    "icalImportHint": "Dodajte link ka .ics kalendaru sa druge platforme da biste izbegli duple rezervacije.",
-    "icalSourceName": "Naziv (npr. Airbnb)",
-    "icalSyncError": "Poslednja sinhronizacija nije uspela",
     "unitNight": "noć",
     "unitDay": "dan",
     "unitHour": "sat",
@@ -1387,6 +1383,9 @@
     "payment_confirmationFew": "{count} uplate čekaju potvrdu",
     "payment_confirmationMany": "{count} uplata čeka potvrdu",
     "term_conflict": "Sukob termina sa spoljnim kalendarom",
+    "ical_sync_failedOne": "{count} kalendar sa druge platforme se ne sinhronizuje",
+    "ical_sync_failedFew": "{count} kalendara sa drugih platformi se ne sinhronizuju",
+    "ical_sync_failedMany": "{count} kalendara sa drugih platformi se ne sinhronizuje",
     "new_requestsOne": "{count} nov zahtev za rezervaciju",
     "new_requestsFew": "{count} nova zahteva za rezervaciju",
     "new_requestsMany": "{count} novih zahteva za rezervaciju",
@@ -1410,6 +1409,7 @@
     "hint": {
       "payment_confirmation": "Kada uplata stigne na račun, potvrdite je i rezervacija postaje potvrđena.",
       "term_conflict": "Termin uvezen iz spoljnog kalendara preklapa se sa rezervacijom na Rentaju.",
+      "ical_sync_failed": "Zauzeti termini sa te platforme se ne prenose dok se adresa ne popravi ili ne ukloni.",
       "new_requests": "Termini su privremeno blokirani dok ne odgovorite.",
       "subscription_expiring": "Obnovite paket da bi oglasi ostali vidljivi u pretrazi.",
       "rejected_listings": "Pogledajte razlog, izmenite oglas i pošaljite ga ponovo na odobrenje.",
@@ -1862,6 +1862,64 @@
     },
     "showAll": "Prikaži sve oglase",
     "loadErrorTitle": "Oglasi nisu učitani",
-    "loadErrorText": "Proverite internet vezu i pokušajte ponovo."
+    "loadErrorText": "Proverite internet vezu i pokušajte ponovo.",
+    "ical": "iCal sinhronizacija"
+  },
+  "ical": {
+    "title": "Sinhronizacija kalendara (iCal)",
+    "subtitle": "Povežite kalendar sa drugih platformi da se termini ne bi duplirali. Dostupno u STANDARD i PRO paketu.",
+    "exportTitle": "Vaš Rentaj kalendar",
+    "exportText": "Ovu adresu nalepite u Airbnb, Booking ili Google Calendar da bi oni videli vaše Rentaj rezervacije.",
+    "exportLabel": "Adresa vašeg Rentaj kalendara",
+    "sourcesTitle": "Povezani kalendari",
+    "lastSynced": "Poslednja sinhronizacija: {ago}",
+    "notSyncedYet": "Čeka prvu sinhronizaciju",
+    "agoJustNow": "upravo sada",
+    "agoMinutesOne": "pre {count} minut",
+    "agoMinutesFew": "pre {count} minuta",
+    "agoMinutesMany": "pre {count} minuta",
+    "agoHoursOne": "pre {count} sat",
+    "agoHoursFew": "pre {count} sata",
+    "agoHoursMany": "pre {count} sati",
+    "agoDaysOne": "pre {count} dan",
+    "agoDaysFew": "pre {count} dana",
+    "agoDaysMany": "pre {count} dana",
+    "statusActive": "Aktivan",
+    "statusError": "Greška",
+    "errors": {
+      "UNREACHABLE": "Greška: adresa nije dostupna",
+      "NOT_CALENDAR": "Greška: adresa ne vraća kalendar"
+    },
+    "remove": "Ukloni",
+    "removeLabel": "Ukloni kalendar {name}",
+    "emptyTitle": "Nema povezanih kalendara",
+    "emptyText": "Nalepite ispod .ics adresu sa Airbnb-a, Booking.com-a ili druge platforme da bi termini zauzeti tamo bili zauzeti i ovde.",
+    "addPlaceholder": "Nalepite .ics adresu druge platforme",
+    "addLabel": "Adresa kalendara sa druge platforme",
+    "add": "Dodaj kalendar",
+    "adding": "Proveravam...",
+    "urlRequired": "Nalepite adresu kalendara",
+    "note": "Sinhronizacija ide u oba smera i osvežava se na svakih sat vremena. Termini povučeni sa drugih platformi prikazuju se kao zauzeti, ali se ne mogu izmeniti u Rentaj kalendaru.",
+    "loadErrorTitle": "Sinhronizacija nije učitana",
+    "loadErrorText": "Proverite vezu i pokušajte ponovo.",
+    "locked": {
+      "NOT_STAY": {
+        "title": "Sinhronizacija nije dostupna za ovaj oglas",
+        "text": "Kalendar sa drugih platformi može da se poveže samo sa oglasom koji se rezerviše online po noćenju ili danu."
+      },
+      "NOT_PUBLISHED": {
+        "title": "Oglas još nije objavljen",
+        "text": "Kalendare sa drugih platformi možete da povežete kada oglas bude objavljen sa STANDARD ili PRO paketom."
+      },
+      "DRAFT": {
+        "title": "Oglas još nije objavljen",
+        "text": "Završite oglas i objavite ga sa STANDARD ili PRO paketom, pa povežite kalendare sa drugih platformi."
+      },
+      "NO_ICAL_PACKAGE": {
+        "title": "Paket ovog oglasa ne uključuje iCal",
+        "text": "Sinhronizacija kalendara je deo STANDARD i PRO paketa. Paket menjate u delu Paketi i naplata."
+      },
+      "continueListing": "Nastavi oglas"
+    }
   }
 }

@@ -42,5 +42,11 @@
   "IMAGE_INVALID": "The uploaded file is not a valid image",
   "LISTING_RESUBMIT_NOT_ALLOWED": "Only a rejected listing with a package can be sent for approval again",
   "LISTING_RESUBMIT_PACKAGE_INACTIVE": "This listing’s package is no longer valid, pick a new package",
-  "LISTING_NOT_READY": "The listing isn’t ready to send yet, fill in what is missing"
+  "LISTING_NOT_READY": "The listing isn’t ready to send yet, fill in what is missing",
+  "ICAL_LISTING_NOT_ACTIVE": "Calendars from other platforms can be connected once the listing is published",
+  "ICAL_SOURCE_OWN_FEED": "This is the address of your Rentaj calendar. Paste the calendar address from the other platform",
+  "ICAL_SOURCE_DUPLICATE": "This calendar is already connected",
+  "ICAL_SOURCE_NOT_FOUND": "Calendar not found",
+  "ICAL_URL_UNREACHABLE": "The address cannot be reached. Check that you copied all of it",
+  "ICAL_URL_NOT_CALENDAR": "There is no iCal calendar at this address. Copy the .ics address from the calendar settings on the other platform"
 }

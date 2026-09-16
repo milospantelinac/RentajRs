@@ -79,10 +79,14 @@ describe('DashboardService#getOnboarding (R106 new-owner checklist)', () => {
     }
   });
 
-  it("links a step to the listing's availability step, or to Moji oglasi when there are several", async () => {
+  it("links a step to the listing's own page, or to Moji oglasi when there are several", async () => {
     const one = await (makeService({ listings: [stay, playroom], bankAccount: null }) as any).getOnboarding('user1');
     expect(one.steps.find((s: any) => s.key === 'availability').actionUrl).toBe('/kontrolna-tabla/oglasi');
-    expect(one.steps.find((s: any) => s.key === 'ical').actionUrl).toBe('/oglasi/stay1/uredi?korak=availability');
+    // Dizajn 33: connected calendars have their own page.
+    expect(one.steps.find((s: any) => s.key === 'ical').actionUrl).toBe('/kontrolna-tabla/oglasi/stay1/ical');
+
+    const two = await (makeService({ listings: [stay, { ...stay, id: 'stay2' }], bankAccount: null }) as any).getOnboarding('user1');
+    expect(two.steps.find((s: any) => s.key === 'ical').actionUrl).toBe('/kontrolna-tabla/oglasi');
   });
 
   it('is not fooled by a single missing item (stays not-done)', async () => {
@@ -118,6 +122,7 @@ describe('DashboardService attention items (Dizajn 31)', () => {
     const makePrisma = (listingIds: string[]) => ({
       booking: { count: jest.fn().mockResolvedValue(0) },
       dispute: { findMany: jest.fn().mockResolvedValue(listingIds.map((listingId) => ({ listingId }))) },
+      icalSource: { findMany: jest.fn().mockResolvedValue([]) },
       subscription: { count: jest.fn().mockResolvedValue(0) },
       listing: { count: jest.fn().mockResolvedValue(0) },
       conversation: { count: jest.fn().mockResolvedValue(0) },
@@ -137,6 +142,7 @@ describe('DashboardService attention items (Dizajn 31)', () => {
     const prisma = {
       booking: { count: jest.fn().mockResolvedValue(0) },
       dispute: { findMany: jest.fn().mockResolvedValue([]) },
+      icalSource: { findMany: jest.fn().mockResolvedValue([]) },
       subscription: { count: jest.fn().mockResolvedValue(0) },
       listing: { count: jest.fn().mockResolvedValue(2) },
       conversation: { count: jest.fn().mockResolvedValue(0) },
@@ -145,6 +151,30 @@ describe('DashboardService attention items (Dizajn 31)', () => {
     await expect((service as any).getOwnerAttention('user1')).resolves.toEqual([
       { urgency: 'decision', title: 'rejected_listings', actionUrl: '/kontrolna-tabla/oglasi?status=REJECTED', count: 2 },
     ]);
+  });
+
+  it("warns about calendars that keep failing and opens the listing's iCal page (Dizajn 33)", async () => {
+    const makePrisma = (listingIds: string[]) => ({
+      booking: { count: jest.fn().mockResolvedValue(0) },
+      dispute: { findMany: jest.fn().mockResolvedValue([]) },
+      icalSource: { findMany: jest.fn().mockResolvedValue(listingIds.map((listingId) => ({ listingId }))) },
+      subscription: { count: jest.fn().mockResolvedValue(0) },
+      listing: { count: jest.fn().mockResolvedValue(0) },
+      conversation: { count: jest.fn().mockResolvedValue(0) },
+    });
+
+    const single = makePrisma(['l1', 'l1']);
+    await expect((new DashboardService(single as any, {} as any, {} as any, {} as any) as any).getOwnerAttention('user1')).resolves.toEqual([
+      { urgency: 'critical', title: 'ical_sync_failed', actionUrl: '/kontrolna-tabla/oglasi/l1/ical', count: 2 },
+    ]);
+    expect(single.icalSource.findMany).toHaveBeenCalledWith({
+      where: { active: true, failureCount: { gte: 3 }, listing: { userId: 'user1', status: { not: 'DELETED' } } },
+      select: { listingId: true },
+    });
+
+    const several = new DashboardService(makePrisma(['l1', 'l2']) as any, {} as any, {} as any, {} as any);
+    const [item] = await (several as any).getOwnerAttention('user1');
+    expect(item.actionUrl).toBe('/kontrolna-tabla/oglasi');
   });
 });
 

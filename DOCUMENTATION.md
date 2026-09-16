@@ -234,7 +234,7 @@ Never cached: bookings, messages, availability, anything user-specific or money-
 |---|---|
 | `NUXT_PUBLIC_API_BASE` | Backend URL reachable from the **visitor's browser** |
 | `NUXT_API_BASE_INTERNAL` | Backend URL reachable from **this process** (SSR fetches). Same host as above for non-Docker runs; `docker-compose.yml` overrides it to `http://backend:3001/api/v1` so the frontend container reaches the backend container by service name |
-| `NUXT_PUBLIC_SITE_URL` | Canonical URL, used in sitemap/structured data |
+| `NUXT_PUBLIC_SITE_URL` | Canonical URL, used in sitemap/structured data and as the address of each listing's iCal export feed (`/ical/<token>.ics`, which `frontend/server/routes/ical/[file].ts` passes on to the backend) |
 | `NUXT_PUBLIC_GOOGLE_MAPS_API_KEY` | Optional — only needed if `GEOCODING_PROVIDER=google` |
 
 ---

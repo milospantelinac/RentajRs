@@ -5,6 +5,7 @@ import { ReviewsService } from '../reviews/reviews.service';
 import { UsersService } from '../users/users.service';
 import { TaxonomyService } from '../taxonomy/taxonomy.service';
 import { paraToRsd } from '../../common/utils/money';
+import { ICAL_FAILURE_ALERT_THRESHOLD } from '../../common/utils/ical-availability';
 
 interface AttentionItem {
   urgency: 'critical' | 'decision' | 'info';
@@ -29,11 +30,17 @@ const UPCOMING_STATUSES: BookingStatus[] = ['REQUESTED', 'AWAITING_PAYMENT', 'CO
 /**
  * Dizajn 31: where a step or a card about some of the owner's listings leads.
  * There is no calendar page, so one listing opens its wizard at "Dostupnost i
- * termini" (its calendar, hours, slots and iCal feeds); several open Moji oglasi.
+ * termini" (its calendar, hours and slots); several open Moji oglasi.
  */
 function availabilityUrl(listingIds: string[], emptyUrl = NEW_LISTING_URL): string {
   if (!listingIds.length) return emptyUrl;
   return listingIds.length === 1 ? `/oglasi/${listingIds[0]}/uredi?korak=availability` : MY_LISTINGS_URL;
+}
+
+/** Dizajn 33: connected calendars have their own page per listing. */
+function icalUrl(listingIds: string[], emptyUrl = NEW_LISTING_URL): string {
+  if (!listingIds.length) return emptyUrl;
+  return listingIds.length === 1 ? `${MY_LISTINGS_URL}/${listingIds[0]}/ical` : MY_LISTINGS_URL;
 }
 
 /** "Milica J.": a row names the other side by first name and initial only. */
@@ -120,6 +127,17 @@ export class DashboardService {
     if (termConflicts.length) {
       const listingIds = [...new Set(termConflicts.map((d) => d.listingId as string))];
       items.push({ urgency: 'critical', title: 'term_conflict', actionUrl: availabilityUrl(listingIds, MY_LISTINGS_URL), count: termConflicts.length });
+    }
+
+    // Dizajn 33: a connected calendar that keeps failing (availability.ical_sync_failed)
+    // no longer brings the other platform's busy dates over.
+    const failingFeeds = await this.prisma.icalSource.findMany({
+      where: { active: true, failureCount: { gte: ICAL_FAILURE_ALERT_THRESHOLD }, listing: { userId, status: { not: 'DELETED' } } },
+      select: { listingId: true },
+    });
+    if (failingFeeds.length) {
+      const listingIds = [...new Set(failingFeeds.map((feed) => feed.listingId))];
+      items.push({ urgency: 'critical', title: 'ical_sync_failed', actionUrl: icalUrl(listingIds, MY_LISTINGS_URL), count: failingFeeds.length });
     }
 
     const newRequests = await this.prisma.booking.count({ where: { ownerId: userId, status: 'REQUESTED' } });
@@ -244,7 +262,7 @@ export class DashboardService {
       steps.push({ key: 'availability', done, actionUrl: availabilityUrl(bookable) });
     }
     if (noListing || icalCapable.length) {
-      steps.push({ key: 'ical', done: icalCount > 0, actionUrl: availabilityUrl(icalCapable) });
+      steps.push({ key: 'ical', done: icalCount > 0, actionUrl: icalUrl(icalCapable) });
     }
     steps.push({ key: 'bankAccount', done: !!user.bankAccount, actionUrl: '/kontrolna-tabla/podesavanja' });
 
