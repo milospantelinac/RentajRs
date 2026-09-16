@@ -22,23 +22,25 @@
 </template>
 
 <script setup>
+// A segment with a dot is a file someone asked for, never a category or a
+// city: it gets its 404 before this page renders or asks the API anything.
+definePageMeta({
+  validate: (route) => ![route.params.categorySlug, route.params.citySlug].some((segment) => String(segment).includes('.')),
+})
+
 const { t } = useI18n()
 const api = useApi()
 const route = useRoute()
 const config = useRuntimeConfig()
 
-const { data: category } = await useAsyncData(`cc-category-${route.params.categorySlug}`, async () => {
-  try {
-    return await api.get(`/categories/${route.params.categorySlug}`)
-  } catch {
-    return null
-  }
-})
+const { data: category, error: categoryError } = await useAsyncData(`cc-category-${route.params.categorySlug}`, () =>
+  api.get(`/categories/${route.params.categorySlug}`),
+)
 
 const { data: cities } = await useAsyncData('cc-cities', () => api.get('/locations/cities'))
 const city = computed(() => cities.value?.find((c) => c.slug === route.params.citySlug))
 
-if (!category.value || !city.value) {
+if (categoryError.value || !category.value || !city.value) {
   throw createError({ statusCode: 404, statusMessage: 'Not found' })
 }
 

@@ -47,20 +47,21 @@
 </template>
 
 <script setup>
+// A segment with a dot is a file a browser or crawler asked for
+// (apple-touch-icon-precomposed.png, wp-login.php), never a category: it gets
+// its 404 before this page renders or asks the API anything.
+definePageMeta({ validate: (route) => !String(route.params.categorySlug).includes('.') })
+
 const { t } = useI18n()
 const api = useApi()
 const route = useRoute()
 const config = useRuntimeConfig()
 
-const { data: category } = await useAsyncData(`category-${route.params.categorySlug}`, async () => {
-  try {
-    return await api.get(`/categories/${route.params.categorySlug}`)
-  } catch {
-    return null
-  }
-})
+const { data: category, error: categoryError } = await useAsyncData(`category-${route.params.categorySlug}`, () =>
+  api.get(`/categories/${route.params.categorySlug}`),
+)
 
-if (!category.value) {
+if (categoryError.value || !category.value) {
   throw createError({ statusCode: 404, statusMessage: 'Category not found' })
 }
 
