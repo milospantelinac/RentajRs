@@ -1,6 +1,6 @@
 <template>
   <div>
-    <h1 class="text-page-title mb-4">{{ role === 'owner' ? t('dashboard.requests') : t('dashboard.myBookings') }}</h1>
+    <DashboardPageHeader :title="role === 'owner' ? t('dashboard.requests') : t('dashboard.myBookings')" />
 
     <div class="form-row-inline mb-4">
       <button class="btn btn-sm" :class="role === 'guest' ? 'btn-primary-flat' : 'btn-tertiary'" @click="setRole('guest')">

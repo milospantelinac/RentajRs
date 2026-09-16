@@ -1,8 +1,8 @@
 <template>
   <div class="settings-page">
-    <h1 class="text-page-title mb-4">{{ t('dashboard.settings') }}</h1>
+    <DashboardPageHeader :title="t('dashboard.settings')" />
 
-    <div class="card mb-4">
+    <div class="card mb-6">
       <div class="card-body">
         <h2 class="text-section-title mb-3">{{ t('dashboard.avatarSettings') }}</h2>
 
@@ -36,7 +36,7 @@
 
     <AvatarCropModal v-if="pendingAvatarFile" :file="pendingAvatarFile" @confirm="onCropConfirm" @cancel="pendingAvatarFile = null" />
 
-    <div class="card mb-4">
+    <div class="card mb-6">
       <div class="card-body">
         <h2 class="text-section-title mb-3">{{ t('dashboard.profileSettings') }}</h2>
         <div class="row">
@@ -64,7 +64,7 @@
       </div>
     </div>
 
-    <div class="card mb-4">
+    <div class="card mb-6">
       <div class="card-body">
         <h2 class="text-section-title mb-3">{{ t('dashboard.billingSettings') }}</h2>
         <div class="form-group mb-3">
@@ -105,7 +105,7 @@
       </div>
     </div>
 
-    <div class="card mb-4">
+    <div class="card mb-6">
       <div class="card-body">
         <h2 class="text-section-title mb-3">{{ t('dashboard.twoFactorSettings') }}</h2>
 
@@ -170,7 +170,7 @@
       </div>
     </div>
 
-    <div class="card mb-4">
+    <div class="card mb-6">
       <div class="card-body">
         <h2 class="text-section-title mb-2">{{ t('dashboard.notificationSettings') }}</h2>
         <p class="text-muted mb-3">{{ t('dashboard.notificationSettingsHint') }}</p>

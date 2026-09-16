@@ -74,3 +74,24 @@ describe('DashboardService#getOnboarding (R106 new-owner checklist)', () => {
     expect(onboarding.allDone).toBe(false);
   });
 });
+
+describe('DashboardService#getCounts (Dizajn 30 menu counters)', () => {
+  it('counts requests awaiting this owner and conversations unread on either side', async () => {
+    const prisma = {
+      booking: { count: jest.fn().mockResolvedValue(4) },
+      conversation: { count: jest.fn().mockResolvedValue(2) },
+    };
+    const service = new DashboardService(prisma as any, {} as any, {} as any);
+
+    await expect(service.getCounts('user1')).resolves.toEqual({ bookingRequests: 4, unreadConversations: 2 });
+    expect(prisma.booking.count).toHaveBeenCalledWith({ where: { ownerId: 'user1', status: 'REQUESTED' } });
+    expect(prisma.conversation.count).toHaveBeenCalledWith({
+      where: {
+        OR: [
+          { ownerId: 'user1', unreadOwnerCount: { gt: 0 } },
+          { guestId: 'user1', unreadGuestCount: { gt: 0 } },
+        ],
+      },
+    });
+  });
+});

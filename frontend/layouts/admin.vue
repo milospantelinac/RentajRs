@@ -14,6 +14,8 @@
 
 <script setup>
 const { t } = useI18n()
+// Dizajn 30: the shared bottom bar shows the dashboard counters here too.
+useDashboardCountsPolling()
 </script>
 
 <style lang="scss" scoped>

@@ -1,6 +1,6 @@
 <template>
   <div>
-    <h1 class="text-page-title mb-4">{{ t('dashboard.conversations') }}</h1>
+    <DashboardPageHeader :title="t('dashboard.conversations')" />
     <div v-if="!conversations?.length" class="empty-state card">
       <div class="card-body text-center">
         <p class="text-body mb-1">{{ t('dashboard.noConversations') }}</p>
@@ -8,7 +8,7 @@
         <NuxtLink to="/pretraga" class="btn btn-primary-flat">{{ t('dashboard.browseListings') }}</NuxtLink>
       </div>
     </div>
-    <div v-for="c in conversations" :key="c.id" class="card mb-2 conv-card" @click="navigateTo(`/kontrolna-tabla/poruke/${c.id}`)">
+    <div v-for="c in conversations" :key="c.id" class="card mb-6 conv-card" @click="navigateTo(`/kontrolna-tabla/poruke/${c.id}`)">
       <div class="card-body-sm conv-row">
         <div>
           <p class="text-body conv-title">{{ c.listing?.title }}</p>

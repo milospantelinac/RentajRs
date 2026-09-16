@@ -1,10 +1,10 @@
 <template>
   <div>
-    <h1 class="text-page-title mb-4">{{ t('nav.favorites') }}</h1>
+    <DashboardPageHeader :title="t('nav.favorites')" />
 
     <p v-if="!visibleFavorites.length" class="text-muted">{{ t('dashboard.noFavorites') }}</p>
     <div class="row">
-      <div v-for="f in visibleFavorites" :key="f.listingId" class="col-6 col-md-3 mb-4">
+      <div v-for="f in visibleFavorites" :key="f.listingId" class="col-6 col-md-3 mb-6">
         <ListingCard :listing="{ ...f.listing, price: f.listing.price, coverPhoto: f.listing.photos?.[0] }" />
         <p v-if="f.priceDropped" class="text-success text-muted mt-1">{{ t('dashboard.priceDropped') }}</p>
       </div>

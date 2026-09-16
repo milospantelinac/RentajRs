@@ -38,6 +38,20 @@ let DashboardService = class DashboardService {
             upcomingBookings: upcoming,
         };
     }
+    async getCounts(userId) {
+        const [bookingRequests, unreadConversations] = await Promise.all([
+            this.prisma.booking.count({ where: { ownerId: userId, status: 'REQUESTED' } }),
+            this.prisma.conversation.count({
+                where: {
+                    OR: [
+                        { ownerId: userId, unreadOwnerCount: { gt: 0 } },
+                        { guestId: userId, unreadGuestCount: { gt: 0 } },
+                    ],
+                },
+            }),
+        ]);
+        return { bookingRequests, unreadConversations };
+    }
     async getOwnerAttention(userId) {
         const items = [];
         const awaitingConfirmation = await this.prisma.booking.count({

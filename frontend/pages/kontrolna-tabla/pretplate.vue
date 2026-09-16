@@ -1,9 +1,10 @@
 <template>
   <div>
-    <div class="d-flex justify-content-between align-items-center mb-4">
-      <h1 class="text-page-title">{{ t('billing.mySubscriptions') }}</h1>
-      <NuxtLink :to="buyPackageLink" class="btn btn-tertiary">{{ t('billing.buyPackage') }}</NuxtLink>
-    </div>
+    <DashboardPageHeader :title="t('billing.mySubscriptions')">
+      <template #actions>
+        <NuxtLink :to="buyPackageLink" class="btn btn-tertiary">{{ t('billing.buyPackage') }}</NuxtLink>
+      </template>
+    </DashboardPageHeader>
 
     <div v-if="showUpgradedBanner" class="upgraded-banner mb-4">{{ t('billing.upgradedBanner') }}</div>
 
@@ -15,7 +16,7 @@
     <div v-if="upgradeableListings.length" class="mb-5">
       <h2 class="text-section-title mb-2">{{ t('billing.upgradeSectionTitle') }}</h2>
       <p class="text-muted mb-3">{{ t('billing.upgradeExplain') }}</p>
-      <div v-for="listing in upgradeableListings" :key="listing.id" class="card mb-2">
+      <div v-for="listing in upgradeableListings" :key="listing.id" class="card mb-6">
         <div class="card-body d-flex justify-content-between align-items-center flex-wrap upgrade-row">
           <span class="text-body">{{ listing.title }}</span>
           <div class="upgrade-actions">
@@ -35,7 +36,7 @@
       </div>
     </div>
 
-    <div v-for="sub in subscriptions" :key="sub.id" class="card mb-3">
+    <div v-for="sub in subscriptions" :key="sub.id" class="card mb-6">
       <div class="card-body">
         <div class="d-flex justify-content-between align-items-center mb-2">
           <h2 class="text-section-title">{{ sub.package?.name || sub.package?.key }}</h2>

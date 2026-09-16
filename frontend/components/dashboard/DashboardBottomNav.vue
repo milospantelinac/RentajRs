@@ -8,9 +8,11 @@
           :to="item.to"
           class="bottom-nav-item"
           :class="{ 'bottom-nav-item-active': isActive(item.to) }"
+          :aria-current="isActive(item.to) ? 'page' : null"
         >
           <span class="bottom-nav-icon-wrap">
             <DashboardNavIcon :name="item.icon" class="bottom-nav-icon" />
+            <span v-if="item.count && counts[item.count] > 0" class="bottom-nav-count">{{ formatNavCount(counts[item.count]) }}</span>
           </span>
           <span class="bottom-nav-label">{{ t(item.labelKey) }}</span>
         </NuxtLink>
@@ -23,9 +25,11 @@
           to="/kontrolna-tabla/poruke"
           class="bottom-nav-item"
           :class="{ 'bottom-nav-item-active': isActive('/kontrolna-tabla/poruke') }"
+          :aria-current="isActive('/kontrolna-tabla/poruke') ? 'page' : null"
         >
           <span class="bottom-nav-icon-wrap">
-            <DashboardNavIcon name="message" class="bottom-nav-icon" />
+            <DashboardNavIcon name="messages" class="bottom-nav-icon" />
+            <span v-if="counts.unreadConversations > 0" class="bottom-nav-count">{{ formatNavCount(counts.unreadConversations) }}</span>
           </span>
           <span class="bottom-nav-label">{{ t('nav.messages') }}</span>
         </NuxtLink>
@@ -63,6 +67,7 @@
               :to="item.to"
               class="more-sheet-item"
               :class="{ 'more-sheet-item-active': isActive(item.to) }"
+              :aria-current="isActive(item.to) ? 'page' : null"
               @click="moreOpen = false"
             >
               <DashboardNavIcon :name="item.icon" class="more-sheet-icon" />
@@ -83,6 +88,7 @@
 const { t } = useI18n()
 const auth = useAuthStore()
 const route = useRoute()
+const counts = useDashboardCountsStore()
 const moreOpen = ref(false)
 
 watch(
@@ -95,39 +101,34 @@ watch(
 const leftItems = computed(() =>
   auth.user?.isOwner
     ? [
-        { to: '/kontrolna-tabla/oglasi', labelKey: 'dashboard.tabListings', icon: 'list' },
-        { to: '/kontrolna-tabla/rezervacije?role=owner', labelKey: 'dashboard.tabRequests', icon: 'inbox' },
+        { to: '/kontrolna-tabla/oglasi', labelKey: 'dashboard.tabListings', icon: 'listings' },
+        { to: '/kontrolna-tabla/rezervacije?role=owner', labelKey: 'dashboard.tabRequests', icon: 'requests', count: 'bookingRequests' },
       ]
     : [
-        { to: '/kontrolna-tabla/rezervacije?role=guest', labelKey: 'dashboard.tabBookings', icon: 'calendar' },
-        { to: '/kontrolna-tabla/sacuvano', labelKey: 'nav.favorites', icon: 'heart' },
+        { to: '/kontrolna-tabla/rezervacije?role=guest', labelKey: 'dashboard.tabBookings', icon: 'bookings' },
+        { to: '/kontrolna-tabla/sacuvano', labelKey: 'nav.favorites', icon: 'saved' },
       ],
 )
 
 const moreItems = computed(() => {
   const items = auth.user?.isOwner
     ? [
-        { to: '/kontrolna-tabla/pretplate', labelKey: 'dashboard.subscriptions', icon: 'card' },
-        { to: '/kontrolna-tabla/rezervacije?role=guest', labelKey: 'dashboard.myBookings', icon: 'calendar' },
-        { to: '/kontrolna-tabla/sacuvano', labelKey: 'nav.favorites', icon: 'heart' },
-        { to: '/kontrolna-tabla/podesavanja', labelKey: 'dashboard.settings', icon: 'gear' },
+        { to: '/kontrolna-tabla/pretplate', labelKey: 'dashboard.subscriptions', icon: 'packages' },
+        { to: '/kontrolna-tabla/rezervacije?role=guest', labelKey: 'dashboard.myBookings', icon: 'bookings' },
+        { to: '/kontrolna-tabla/sacuvano', labelKey: 'nav.favorites', icon: 'saved' },
+        { to: '/kontrolna-tabla/podesavanja', labelKey: 'dashboard.settings', icon: 'profile' },
       ]
-    : [{ to: '/kontrolna-tabla/podesavanja', labelKey: 'dashboard.settings', icon: 'gear' }]
-  if (auth.user?.isAdmin) items.push({ to: '/admin', labelKey: 'dashboard.adminPanel', icon: 'shield' })
+    : [{ to: '/kontrolna-tabla/podesavanja', labelKey: 'dashboard.settings', icon: 'profile' }]
+  if (auth.user?.isAdmin) items.push({ to: '/admin', labelKey: 'dashboard.adminPanel', icon: 'admin' })
   return items
 })
 
 // "Zahtevi" (?role=owner) and "Moje rezervacije" in the sheet (?role=guest)
-// are the same path with a different query — Vue Router's own active-class
-// ignores query entirely, so both used to light up together. Comparing the
-// query values a link actually specifies (not just the path) tells them
-// apart; a link with no query in `to` still matches on path alone.
+// share a path; utils/dashboardNav.js tells them apart, the same rule the
+// sidebar uses. aria-current is set from it too, since Vue Router's own
+// ignores the query as well.
 function isActive(to) {
-  const [path, queryString] = to.split('?')
-  if (route.path !== path) return false
-  if (!queryString) return true
-  const expected = new URLSearchParams(queryString)
-  return [...expected.entries()].every(([key, value]) => route.query[key] === value)
+  return isDashboardLinkActive(route, to)
 }
 
 // The "Više" tab itself has no route of its own — mark it by hand whenever
@@ -202,6 +203,7 @@ const isMoreActive = computed(() => moreItems.value.some((item) => isActive(item
 // highlight behind the icon instead — no gradients, just a tinted pill, and
 // every tab (including Home) uses the exact same treatment when current.
 .bottom-nav-icon-wrap {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -214,6 +216,26 @@ const isMoreActive = computed(() => moreItems.value.some((item) => isActive(item
 .bottom-nav-icon {
   width: 20px;
   height: 20px;
+}
+
+// Dizajn 30: the sidebar's red counter (357:462) has no mobile frame, so on
+// the tab bar it sits on the icon's top right corner, ringed in white to stay
+// clear of the icon.
+.bottom-nav-count {
+  position: absolute;
+  top: -3px;
+  left: calc(50% + 5px);
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: $radius-pill;
+  background: #f43f5e;
+  box-shadow: 0 0 0 2px $color-surface;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 18px;
+  text-align: center;
+  color: $color-surface;
 }
 
 .bottom-nav-label {

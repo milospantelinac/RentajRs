@@ -68,6 +68,7 @@ const { t } = useI18n()
 const api = useApi()
 const route = useRoute()
 const auth = useAuthStore()
+const dashboardCounts = useDashboardCountsStore()
 
 const MAX_ATTACHMENT_MB = 5
 const ALLOWED_ATTACHMENT_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
@@ -141,7 +142,12 @@ async function send() {
   }
 }
 
-onMounted(load)
+// Opening the thread marks it read (GET /conversations/:id), so the menu's
+// Poruke counter is refreshed once that is done.
+onMounted(async () => {
+  await load()
+  dashboardCounts.refresh()
+})
 useSeoMeta({ title: () => (counterpartName.value ? `${counterpartName.value} — ${t('dashboard.conversations')}` : t('dashboard.conversations')) })
 </script>
 

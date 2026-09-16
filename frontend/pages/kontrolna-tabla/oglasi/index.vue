@@ -1,9 +1,10 @@
 <template>
   <div>
-    <div class="d-flex justify-content-between align-items-center mb-4">
-      <h1 class="text-page-title">{{ t('listing.myListings') }}</h1>
-      <NuxtLink to="/oglasi/novi" class="btn btn-primary-flat">{{ t('nav.addListing') }}</NuxtLink>
-    </div>
+    <DashboardPageHeader :title="t('listing.myListings')">
+      <template #actions>
+        <NuxtLink to="/oglasi/novi" class="btn btn-primary-flat">{{ t('nav.addListing') }}</NuxtLink>
+      </template>
+    </DashboardPageHeader>
 
     <div v-if="showUpdatedBanner" class="updated-banner mb-4">{{ t('listing.changesSavedMessage') }}</div>
 

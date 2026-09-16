@@ -47,6 +47,27 @@ export class DashboardService {
     };
   }
 
+  /**
+   * Dizajn 30: the red counters in the dashboard menu, polled by the layout.
+   * Requests are the ones still waiting for this owner's answer, and messages
+   * count conversations (as owner or guest) with anything unread, the same
+   * rows the attention items above count.
+   */
+  async getCounts(userId: string) {
+    const [bookingRequests, unreadConversations] = await Promise.all([
+      this.prisma.booking.count({ where: { ownerId: userId, status: 'REQUESTED' } }),
+      this.prisma.conversation.count({
+        where: {
+          OR: [
+            { ownerId: userId, unreadOwnerCount: { gt: 0 } },
+            { guestId: userId, unreadGuestCount: { gt: 0 } },
+          ],
+        },
+      }),
+    ]);
+    return { bookingRequests, unreadConversations };
+  }
+
   private async getOwnerAttention(userId: string): Promise<AttentionItem[]> {
     const items: AttentionItem[] = [];
 

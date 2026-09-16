@@ -1,14 +1,8 @@
 import { library, config } from '@fortawesome/fontawesome-svg-core'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
+// Dizajn 30: the dashboard menu draws its own Figma icons now, so of its old
+// glyphs only the admin panel's shield and the bottom bar's "Više" are left.
 import {
-  faHouse,
-  faList,
-  faInbox,
-  faCreditCard,
-  faCalendarDays,
-  faHeart,
-  faCommentDots,
-  faGear,
   faShieldHalved,
   faEllipsis,
   faBars,
@@ -28,14 +22,6 @@ import '@fortawesome/fontawesome-svg-core/styles.css'
 config.autoAddCss = false
 
 library.add(
-  faHouse,
-  faList,
-  faInbox,
-  faCreditCard,
-  faCalendarDays,
-  faHeart,
-  faCommentDots,
-  faGear,
   faShieldHalved,
   faEllipsis,
   faBars,

@@ -1,9 +1,10 @@
 <template>
   <div v-if="dashboard">
-    <h1 class="text-page-title mb-1">{{ t('dashboard.greeting', { name: auth.user?.firstName }) }}</h1>
-    <p class="text-muted mb-4">
-      {{ dashboard.attentionItems.length ? thingsWaitingText : t('dashboard.allCaughtUp') }}
-    </p>
+    <DashboardPageHeader
+      greeting
+      :title="t('dashboard.greeting', { name: auth.user?.firstName })"
+      :subtitle="dashboard.attentionItems.length ? thingsWaitingText : t('dashboard.allCaughtUp')"
+    />
 
     <section v-if="dashboard.attentionItems.length" class="mb-4">
       <div
@@ -17,7 +18,7 @@
       </div>
     </section>
 
-    <section v-if="dashboard.onboarding && !dashboard.onboarding.allDone" class="card mb-4">
+    <section v-if="dashboard.onboarding && !dashboard.onboarding.allDone" class="card mb-6">
       <div class="card-body">
         <h2 class="text-section-title mb-3">{{ t('dashboard.onboardingTitle') }}</h2>
         <ul class="onboarding-list">
@@ -41,23 +42,23 @@
          3" while the list below had 7 rows (this only counts CONFIRMED +
          COMPLETED), "Vrednost" with no hint of the period or whether it's
          money received vs. still expected. Every card now explains itself. -->
-    <section class="row mb-4">
-      <div class="col-6 col-md-3 mb-3">
+    <section class="row">
+      <div class="col-6 col-md-3 mb-6">
         <div class="card" :title="t('dashboard.listingsExplanation')">
           <div class="card-body-sm"><p class="text-muted">{{ t('dashboard.listings') }}</p><p class="text-page-title">{{ dashboard.stats.listingCount }}</p></div>
         </div>
       </div>
-      <div class="col-6 col-md-3 mb-3">
+      <div class="col-6 col-md-3 mb-6">
         <div class="card" :title="t('dashboard.bookingsExplanation')">
           <div class="card-body-sm"><p class="text-muted">{{ t('dashboard.bookings') }}</p><p class="text-page-title">{{ dashboard.stats.bookingCount }}</p></div>
         </div>
       </div>
-      <div class="col-6 col-md-3 mb-3">
+      <div class="col-6 col-md-3 mb-6">
         <div class="card" :title="t('dashboard.valueExplanation')">
           <div class="card-body-sm"><p class="text-muted">{{ t('dashboard.value') }}</p><p class="text-page-title">{{ formatPrice(dashboard.stats.confirmedValue) }}</p></div>
         </div>
       </div>
-      <div class="col-6 col-md-3 mb-3">
+      <div class="col-6 col-md-3 mb-6">
         <div class="card" :title="t('dashboard.ratingExplanation')">
           <div class="card-body-sm"><p class="text-muted">{{ t('dashboard.rating') }}</p><p class="text-page-title">{{ dashboard.stats.avgRating ? dashboard.stats.avgRating.toFixed(1) : '—' }}</p></div>
         </div>
@@ -67,7 +68,7 @@
     <section>
       <h2 class="text-section-title mb-3">{{ t('dashboard.upcoming') }}</h2>
       <p v-if="!dashboard.upcomingBookings.length" class="text-muted">{{ t('dashboard.noUpcoming') }}</p>
-      <div v-for="b in dashboard.upcomingBookings" :key="b.id" class="card mb-2">
+      <div v-for="b in dashboard.upcomingBookings" :key="b.id" class="card mb-6">
         <div class="card-body-sm upcoming-row">
           <span>{{ new Date(b.startsAt).toLocaleDateString('sr-RS') }}</span>
           <span>{{ b.listing.title }}</span>
