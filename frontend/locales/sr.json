@@ -1356,7 +1356,34 @@
     "deleteAccount": "Obriši nalog",
     "deleteAccountWarning": "Ova radnja je trajna i ne može se poništiti.",
     "noFavorites": "Nemate sačuvanih oglasa",
-    "priceDropped": "Cena je pala od kada ste sačuvali"
+    "priceDropped": "Cena je pala od kada ste sačuvali",
+    "listingsHint": "Trenutno aktivni oglasi.",
+    "bookingsHint": "Potvrđene i realizovane.",
+    "valueHint": "Vrednost vaših rezervacija.",
+    "ratingHint": "Prosečna ocena vaših oglasa.",
+    "upcomingSeeAll": "Vidi sve",
+    "upcomingStatus": {
+      "REQUESTED": "Čeka odobrenje",
+      "AWAITING_PAYMENT": "Čeka uplatu",
+      "CONFIRMED": "Potvrđeno"
+    },
+    "upcomingUntil": "do {date}",
+    "upcomingGuests": {
+      "childrenOne": "{count} dete",
+      "childrenFew": "{count} deteta",
+      "childrenMany": "{count} dece",
+      "guestsOne": "{count} gost",
+      "guestsFew": "{count} gosta",
+      "guestsMany": "{count} gostiju"
+    },
+    "noUpcomingText": "Ovde se prikazuju zahtevi i rezervacije za narednih 7 dana.",
+    "onboardingProgress": "{done} / {total}",
+    "onboardingAction": {
+      "listing": "Objavi",
+      "availability": "Postavi",
+      "ical": "Poveži",
+      "bankAccount": "Dodaj"
+    }
   },
   "attention": {
     "payment_confirmationOne": "{count} uplata čeka potvrdu",
@@ -1377,9 +1404,25 @@
     "unread_messages_guestFew": "Imate {count} nepročitane poruke",
     "unread_messages_guestMany": "Imate {count} nepročitanih poruka",
     "payment_deadline": "Rok za uplatu ističe uskoro",
-    "pending_reviewsOne": "Ocenite {count} realizovanu rezervaciju",
-    "pending_reviewsFew": "Ocenite {count} realizovane rezervacije",
-    "pending_reviewsMany": "Ocenite {count} realizovanih rezervacija"
+    "pending_reviews_ownerOne": "Ocenite {count} realizovanu rezervaciju",
+    "pending_reviews_ownerFew": "Ocenite {count} realizovane rezervacije",
+    "pending_reviews_ownerMany": "Ocenite {count} realizovanih rezervacija",
+    "pending_reviews_guestOne": "Ocenite {count} realizovanu rezervaciju",
+    "pending_reviews_guestFew": "Ocenite {count} realizovane rezervacije",
+    "pending_reviews_guestMany": "Ocenite {count} realizovanih rezervacija",
+    "hint": {
+      "payment_confirmation": "Kada uplata stigne na račun, potvrdite je i rezervacija postaje potvrđena.",
+      "term_conflict": "Termin uvezen iz spoljnog kalendara preklapa se sa rezervacijom na Rentaju.",
+      "new_requests": "Termini su privremeno blokirani dok ne odgovorite.",
+      "subscription_expiring": "Obnovite paket da bi oglasi ostali vidljivi u pretrazi.",
+      "rejected_listings": "Pogledajte razlog, izmenite oglas i pošaljite ga ponovo na odobrenje.",
+      "unread_messages_owner": "Gosti čekaju vaš odgovor u porukama.",
+      "payment_deadline": "Uplatite pre isteka roka, inače rezervacija ističe i termin se oslobađa.",
+      "pending_reviews_owner": "Ocena podiže poziciju vaših oglasa u pretrazi.",
+      "pending_reviews_guest": "Vaša ocena pomaže drugim gostima da izaberu.",
+      "unread_messages_guest": "Odgovori vlasnika čekaju vas u porukama."
+    },
+    "actionReview": "Pregledaj"
   },
   "reviews": {
     "leaveReview": "Ostavite recenziju",

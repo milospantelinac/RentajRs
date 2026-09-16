@@ -147,11 +147,9 @@ let ReviewsService = class ReviewsService {
             include: { listing: { select: { title: true, slug: true } }, reviews: true },
         });
         return completed
-            .filter((b) => {
-            const direction = b.guestId === userId ? 'GUEST_TO_OWNER' : 'OWNER_TO_GUEST';
-            return !b.reviews.some((r) => r.direction === direction);
-        })
-            .map((b) => ({ bookingId: b.id, listing: b.listing }));
+            .map((b) => ({ booking: b, direction: (b.guestId === userId ? 'GUEST_TO_OWNER' : 'OWNER_TO_GUEST') }))
+            .filter(({ booking, direction }) => !booking.reviews.some((r) => r.direction === direction))
+            .map(({ booking, direction }) => ({ bookingId: booking.id, listing: booking.listing, direction }));
     }
     async adminHideReview(adminId, reviewId) {
         await this.prisma.review.update({ where: { id: reviewId }, data: { hiddenByAdmin: true } });

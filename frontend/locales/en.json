@@ -1356,7 +1356,34 @@
     "deleteAccount": "Delete account",
     "deleteAccountWarning": "This action is permanent and cannot be undone.",
     "noFavorites": "No saved listings yet",
-    "priceDropped": "Price dropped since you saved this"
+    "priceDropped": "Price dropped since you saved this",
+    "listingsHint": "Currently active listings.",
+    "bookingsHint": "Confirmed and completed.",
+    "valueHint": "The value of your bookings.",
+    "ratingHint": "Average rating of your listings.",
+    "upcomingSeeAll": "See all",
+    "upcomingStatus": {
+      "REQUESTED": "Awaiting approval",
+      "AWAITING_PAYMENT": "Awaiting payment",
+      "CONFIRMED": "Confirmed"
+    },
+    "upcomingUntil": "until {date}",
+    "upcomingGuests": {
+      "childrenOne": "{count} child",
+      "childrenFew": "{count} children",
+      "childrenMany": "{count} children",
+      "guestsOne": "{count} guest",
+      "guestsFew": "{count} guests",
+      "guestsMany": "{count} guests"
+    },
+    "noUpcomingText": "Requests and bookings for the next 7 days show up here.",
+    "onboardingProgress": "{done} / {total}",
+    "onboardingAction": {
+      "listing": "Publish",
+      "availability": "Set up",
+      "ical": "Connect",
+      "bankAccount": "Add"
+    }
   },
   "attention": {
     "payment_confirmationOne": "{count} payment awaiting confirmation",
@@ -1377,9 +1404,25 @@
     "unread_messages_guestFew": "You have {count} unread messages",
     "unread_messages_guestMany": "You have {count} unread messages",
     "payment_deadline": "Payment deadline approaching",
-    "pending_reviewsOne": "Review {count} completed booking",
-    "pending_reviewsFew": "Review {count} completed bookings",
-    "pending_reviewsMany": "Review {count} completed bookings"
+    "pending_reviews_ownerOne": "Review {count} completed booking",
+    "pending_reviews_ownerFew": "Review {count} completed bookings",
+    "pending_reviews_ownerMany": "Review {count} completed bookings",
+    "pending_reviews_guestOne": "Review {count} completed booking",
+    "pending_reviews_guestFew": "Review {count} completed bookings",
+    "pending_reviews_guestMany": "Review {count} completed bookings",
+    "hint": {
+      "payment_confirmation": "Once the payment reaches your account, confirm it and the booking is confirmed.",
+      "term_conflict": "A term imported from an external calendar overlaps a booking on Rentaj.",
+      "new_requests": "The terms are held until you reply.",
+      "subscription_expiring": "Renew your package to keep your listings visible in search.",
+      "rejected_listings": "See the reason, edit the listing and send it for approval again.",
+      "unread_messages_owner": "Guests are waiting for your reply in messages.",
+      "payment_deadline": "Pay before the deadline, or the booking expires and the term is released.",
+      "pending_reviews_owner": "Reviews lift your listings in search.",
+      "pending_reviews_guest": "Your review helps other guests choose.",
+      "unread_messages_guest": "Replies from owners are waiting in your messages."
+    },
+    "actionReview": "Review"
   },
   "reviews": {
     "leaveReview": "Leave a review",

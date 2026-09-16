@@ -2748,6 +2748,10 @@ async function loadListing() {
   const resumeStep = Math.min(listing.value.wizardStep || 0, steps.value.length - 1)
   currentStep.value = resumeStep
   maxStepReached.value = Math.max(maxStepReached.value, resumeStep)
+  // Dizajn 31: a listing past the draft stage has been through every step,
+  // whatever wizardStep says (listings saved before it existed hold 0), so
+  // links such as the dashboard's ?korak=availability can open any of them.
+  if (listing.value.status !== 'DRAFT') maxStepReached.value = steps.value.length - 1
   // Dizajn 29: "Izmeni oglas" on a rejected listing opens the step its reason points at.
   if (route.query.korak) {
     const index = steps.value.findIndex((s) => s.key === route.query.korak)

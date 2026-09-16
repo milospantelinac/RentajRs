@@ -157,12 +157,11 @@ export class ReviewsService {
       where: { OR: [{ guestId: userId }, { ownerId: userId }], status: 'COMPLETED' },
       include: { listing: { select: { title: true, slug: true } }, reviews: true },
     });
+    // Dizajn 31: the direction tells the dashboard which side's reminder the review belongs to.
     return completed
-      .filter((b) => {
-        const direction: ReviewDirection = b.guestId === userId ? 'GUEST_TO_OWNER' : 'OWNER_TO_GUEST';
-        return !b.reviews.some((r) => r.direction === direction);
-      })
-      .map((b) => ({ bookingId: b.id, listing: b.listing }));
+      .map((b) => ({ booking: b, direction: (b.guestId === userId ? 'GUEST_TO_OWNER' : 'OWNER_TO_GUEST') as ReviewDirection }))
+      .filter(({ booking, direction }) => !booking.reviews.some((r) => r.direction === direction))
+      .map(({ booking, direction }) => ({ bookingId: booking.id, listing: booking.listing, direction }));
   }
 
   // -- Admin ---------------------------------------------------------
