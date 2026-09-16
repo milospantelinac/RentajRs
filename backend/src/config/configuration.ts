@@ -53,6 +53,15 @@ export default () => ({
     googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY,
   },
 
+  ical: {
+    // Feed addresses on loopback, private or link-local networks are refused
+    // (server-side request forgery). Unset, that holds in production only, so
+    // local development can read test feeds from 127.0.0.1.
+    allowPrivateAddresses: process.env.ICAL_ALLOW_PRIVATE_ADDRESSES
+      ? process.env.ICAL_ALLOW_PRIVATE_ADDRESSES === 'true'
+      : (process.env.NODE_ENV || 'development') !== 'production',
+  },
+
   payment: {
     provider: process.env.PAYMENT_PROVIDER || 'mock',
     bancaIntesa: {

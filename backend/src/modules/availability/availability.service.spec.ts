@@ -1,7 +1,21 @@
-import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Logger, NotFoundException } from '@nestjs/common';
+import * as dns from 'dns';
 import { AvailabilityService } from './availability.service';
 
 const i18n = { t: jest.fn((key: string) => key) };
+
+// Production refuses feeds on private addresses; local development allows them.
+function configWith(allowPrivateAddresses: boolean) {
+  return { get: jest.fn((key: string) => (key === 'ical.allowPrivateAddresses' ? allowPrivateAddresses : undefined)) };
+}
+
+// Hosts under .internal stand for machines inside the server's network.
+function mockLookup() {
+  return jest.spyOn(dns.promises, 'lookup').mockImplementation(async (host: any) => {
+    const address = String(host).endsWith('.internal') ? '10.0.0.5' : '93.184.216.34';
+    return [{ address, family: 4 }] as any;
+  });
+}
 
 const FEED = ['BEGIN:VCALENDAR', 'BEGIN:VEVENT', 'UID:a1', 'DTSTART;VALUE=DATE:20261003', 'DTEND;VALUE=DATE:20261006', 'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
 
@@ -36,9 +50,19 @@ describe('AvailabilityService#addIcalSource (Dizajn 33)', () => {
   afterAll(() => {
     global.fetch = originalFetch;
   });
-  beforeEach(() => fetchMock.mockReset());
+  let lookup: jest.SpyInstance;
+  let warn: jest.SpyInstance;
+  beforeEach(() => {
+    fetchMock.mockReset();
+    lookup = mockLookup();
+    warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+  });
+  afterEach(() => {
+    lookup.mockRestore();
+    warn.mockRestore();
+  });
 
-  function makeService(options: { listing?: Record<string, any>; hasIcal?: boolean; existing?: boolean } = {}) {
+  function makeService(options: { listing?: Record<string, any>; hasIcal?: boolean; existing?: boolean; allowPrivate?: boolean } = {}) {
     let created: any = null;
     const prisma = {
       listing: { findUnique: jest.fn().mockResolvedValue(listingRow(options.listing)) },
@@ -57,7 +81,8 @@ describe('AvailabilityService#addIcalSource (Dizajn 33)', () => {
       blockedTerm: { create: jest.fn(async ({ data }) => ({ id: 'bt1', ...data })), deleteMany: jest.fn() },
     };
     const events = { emit: jest.fn() };
-    return { service: new AvailabilityService(prisma as any, events as any, i18n as any), prisma, events };
+    const config = configWith(options.allowPrivate ?? false);
+    return { service: new AvailabilityService(prisma as any, events as any, i18n as any, config as any), prisma, events };
   }
 
   it.each([
@@ -110,6 +135,8 @@ describe('AvailabilityService#addIcalSource (Dizajn 33)', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0][0]).toBe('https://www.airbnb.com/1.ics');
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({ redirect: 'manual' });
+    expect(lookup).toHaveBeenCalledWith('www.airbnb.com', { all: true });
     expect(prisma.icalSource.create).toHaveBeenCalledWith({ data: { listingId: 'l1', name: 'Airbnb', url: 'https://www.airbnb.com/1.ics' } });
     expect(prisma.blockedTerm.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ listingId: 'l1', source: 'ICAL', icalSourceId: 'new', startsAt: new Date('2026-10-03T00:00:00Z') }),
@@ -130,17 +157,69 @@ describe('AvailabilityService#addIcalSource (Dizajn 33)', () => {
     await service.addIcalSource('u1', 'l1', { url: 'https://www.airbnb.com/1.ics', name: '  Airbnb soba 2 ' });
     expect(prisma.icalSource.create.mock.calls[0][0].data.name).toBe('Airbnb soba 2');
   });
+
+  it.each([
+    ['a host that resolves inside the network', 'http://calendar.internal/feed.ics'],
+    ['a loopback address', 'http://127.0.0.1:5432/'],
+    ['the cloud metadata address', 'http://169.254.169.254/latest/meta-data/'],
+    ['an IPv6 loopback', 'http://[::1]:6379/'],
+  ])('answers %s as unreachable and never fetches it', async (_label, url) => {
+    const { service, prisma } = makeService();
+    const error = await service.addIcalSource('u1', 'l1', { url }).catch((e) => e);
+    expect(error).toBeInstanceOf(BadRequestException);
+    expect(error.message).toBe('errors.ICAL_URL_UNREACHABLE');
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(prisma.icalSource.create).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('non-public host'));
+  });
+
+  it('answers a redirect into the network as unreachable without following it', async () => {
+    fetchMock.mockResolvedValueOnce({
+      status: 302,
+      ok: false,
+      headers: { get: (name: string) => (name === 'location' ? 'http://169.254.169.254/latest/meta-data/' : null) },
+      body: { cancel: jest.fn().mockResolvedValue(undefined) },
+    });
+    const { service, prisma } = makeService();
+    const error = await service.addIcalSource('u1', 'l1', { url: 'https://feeds.example.com/cal.ics' }).catch((e) => e);
+    expect(error.message).toBe('errors.ICAL_URL_UNREACHABLE');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(prisma.icalSource.create).not.toHaveBeenCalled();
+  });
+
+  it('reads a feed from a private address where that is allowed (local development)', async () => {
+    fetchMock.mockResolvedValue(respond(200, FEED));
+    const { service, prisma } = makeService({ allowPrivate: true });
+    const row = await service.addIcalSource('u1', 'l1', { url: 'http://127.0.0.1:3399/good.ics' });
+    expect(row).toMatchObject({ name: '127.0.0.1', status: 'ACTIVE' });
+    expect(prisma.icalSource.create).toHaveBeenCalled();
+    expect(lookup).not.toHaveBeenCalled();
+  });
 });
 
 describe('AvailabilityService#syncIcalSource', () => {
   const fetchMock = jest.fn();
   const originalFetch = global.fetch;
+  let lookup: jest.SpyInstance;
   beforeAll(() => {
     global.fetch = fetchMock as any;
   });
   afterAll(() => {
     global.fetch = originalFetch;
   });
+  beforeEach(() => {
+    fetchMock.mockReset();
+    lookup = mockLookup();
+  });
+  afterEach(() => lookup.mockRestore());
+
+  function makePrisma(source: Record<string, any>) {
+    return {
+      icalSource: { findUniqueOrThrow: jest.fn().mockResolvedValue(sourceRow(source)), update: jest.fn() },
+      icalOccupancy: { findMany: jest.fn(), update: jest.fn() },
+      blockedTerm: { deleteMany: jest.fn() },
+    };
+  }
 
   it('treats a feed that stops being a calendar as a failed sync and keeps what it imported (Dizajn 33)', async () => {
     fetchMock.mockResolvedValue(respond(200, '<html>Session expired</html>'));
@@ -153,7 +232,7 @@ describe('AvailabilityService#syncIcalSource', () => {
       blockedTerm: { deleteMany: jest.fn() },
     };
     const events = { emit: jest.fn() };
-    const service = new AvailabilityService(prisma as any, events as any, i18n as any);
+    const service = new AvailabilityService(prisma as any, events as any, i18n as any, configWith(false) as any);
 
     await service.syncIcalSource('src1');
 
@@ -161,6 +240,32 @@ describe('AvailabilityService#syncIcalSource', () => {
     expect(prisma.blockedTerm.deleteMany).not.toHaveBeenCalled();
     expect(prisma.icalOccupancy.update).not.toHaveBeenCalled();
     expect(events.emit).toHaveBeenCalledWith('availability.ical_sync_failed', { listingId: 'l1', sourceId: 'src1' });
+  });
+
+  it('does not fetch a stored address that points inside the network and counts it as a failed sync', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    const prisma = makePrisma({ url: 'https://calendar.internal/feed.ics', failureCount: 0, lastSyncedAt: new Date() });
+    const service = new AvailabilityService(prisma as any, { emit: jest.fn() } as any, i18n as any, configWith(false) as any);
+
+    await service.syncIcalSource('src1');
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(prisma.icalSource.update).toHaveBeenCalledWith({ where: { id: 'src1' }, data: { failureCount: 1, lastError: 'NON_PUBLIC_ADDRESS' } });
+    expect(prisma.blockedTerm.deleteMany).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('src1'));
+    warn.mockRestore();
+  });
+
+  it('checks the address when config leaves the setting out', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    const prisma = makePrisma({ url: 'http://127.0.0.1:3399/good.ics' });
+    const service = new AvailabilityService(prisma as any, { emit: jest.fn() } as any, i18n as any, { get: () => undefined } as any);
+
+    await service.syncIcalSource('src1');
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(prisma.icalSource.update.mock.calls[0][0].data.lastError).toBe('NON_PUBLIC_ADDRESS');
+    warn.mockRestore();
   });
 });
 
@@ -173,7 +278,7 @@ describe('AvailabilityService#removeIcalSource', () => {
       blockedTerm: { deleteMany: jest.fn().mockReturnValue('delete-blocks') },
       $transaction: jest.fn(async (operations: unknown[]) => operations),
     };
-    return { service: new AvailabilityService(prisma as any, {} as any, i18n as any), prisma };
+    return { service: new AvailabilityService(prisma as any, {} as any, i18n as any, configWith(false) as any), prisma };
   }
 
   it("leaves another listing's calendar and its imported dates alone (Dizajn 33)", async () => {
@@ -211,7 +316,7 @@ describe('AvailabilityService#getIcalOverview (Dizajn 33)', () => {
       },
       icalSource: { findMany: jest.fn().mockResolvedValue(sources) },
     };
-    return { service: new AvailabilityService(prisma as any, {} as any, i18n as any), prisma };
+    return { service: new AvailabilityService(prisma as any, {} as any, i18n as any, configWith(false) as any), prisma };
   }
 
   const withPlace = (overrides: Record<string, any> = {}) =>

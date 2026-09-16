@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Logger } from '@nestjs/common';
@@ -7,6 +8,7 @@ import { IcalSource, OccupancySource } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { parseIcs, buildIcsCalendar, icalSourceName, isIcsCalendar, normalizeIcalUrl } from '../../common/utils/ics';
 import { ICAL_FAILURE_ALERT_THRESHOLD, getIcalAvailability } from '../../common/utils/ical-availability';
+import { NonPublicAddressError, fetchUserUrl } from '../../common/utils/outbound-fetch';
 import { paraToRsd, rsdToPara } from '../../common/utils/money';
 import { toBelgradeDateOnly, toBelgradeHHMM, toBelgradeISODayOfWeek } from '../../common/utils/timezone';
 import {
@@ -26,10 +28,12 @@ const ICAL_NOT_CALENDAR = 'NOT_CALENDAR';
 /**
  * Dizajn 33: one fetch for adding a feed and for the hourly sync. A hanging
  * host no longer holds up the sync of every other feed, and a response that
- * isn't a calendar fails the same way an unreachable one does.
+ * isn't a calendar fails the same way an unreachable one does. The address is
+ * the owner's, so fetchUserUrl keeps it (and every redirect) off the server's
+ * own network.
  */
-async function fetchIcalFeed(url: string): Promise<string> {
-  const response = await fetch(url, { signal: AbortSignal.timeout(ICAL_FETCH_TIMEOUT_MS) });
+async function fetchIcalFeed(url: string, allowPrivateAddresses: boolean): Promise<string> {
+  const response = await fetchUserUrl(url, { allowPrivateAddresses, signal: AbortSignal.timeout(ICAL_FETCH_TIMEOUT_MS) });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const text = await response.text();
   if (!isIcsCalendar(text)) throw new Error(ICAL_NOT_CALENDAR);
@@ -56,7 +60,13 @@ export class AvailabilityService {
     private prisma: PrismaService,
     private events: EventEmitter2,
     private i18n: I18nService,
+    private config: ConfigService,
   ) {}
+
+  /** Only local development may read feeds from private addresses (config `ical.allowPrivateAddresses`). */
+  private get allowPrivateFeedAddresses(): boolean {
+    return this.config.get<boolean>('ical.allowPrivateAddresses') === true;
+  }
 
   // -- Core term-locking (used by BookingsService) ------------------------
 
@@ -418,8 +428,12 @@ export class AvailabilityService {
 
     let text: string;
     try {
-      text = await fetchIcalFeed(url);
+      text = await fetchIcalFeed(url, this.allowPrivateFeedAddresses);
     } catch (err) {
+      // An address inside the server's network reads as unreachable, so the answer can't be used to map it.
+      if (err instanceof NonPublicAddressError) {
+        this.logger.warn(`Refused an iCal address on a non-public host (${err.host}) for listing ${listingId}`);
+      }
       const notCalendar = (err as Error).message === ICAL_NOT_CALENDAR;
       throw new BadRequestException(this.i18n.t(notCalendar ? 'errors.ICAL_URL_NOT_CALENDAR' : 'errors.ICAL_URL_UNREACHABLE'));
     }
@@ -529,8 +543,11 @@ export class AvailabilityService {
     const source = await this.prisma.icalSource.findUniqueOrThrow({ where: { id: sourceId } });
     let text: string;
     try {
-      text = feedText ?? (await fetchIcalFeed(source.url));
+      text = feedText ?? (await fetchIcalFeed(source.url, this.allowPrivateFeedAddresses));
     } catch (err) {
+      if (err instanceof NonPublicAddressError) {
+        this.logger.warn(`iCal source ${sourceId} points at a non-public host (${err.host}); not fetched`);
+      }
       const failureCount = source.failureCount + 1;
       await this.prisma.icalSource.update({
         where: { id: sourceId },

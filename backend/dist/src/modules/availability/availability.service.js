@@ -12,6 +12,7 @@ var AvailabilityService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AvailabilityService = void 0;
 const common_1 = require("@nestjs/common");
+const config_1 = require("@nestjs/config");
 const schedule_1 = require("@nestjs/schedule");
 const event_emitter_1 = require("@nestjs/event-emitter");
 const common_2 = require("@nestjs/common");
@@ -19,12 +20,13 @@ const nestjs_i18n_1 = require("nestjs-i18n");
 const prisma_service_1 = require("../../prisma/prisma.service");
 const ics_1 = require("../../common/utils/ics");
 const ical_availability_1 = require("../../common/utils/ical-availability");
+const outbound_fetch_1 = require("../../common/utils/outbound-fetch");
 const money_1 = require("../../common/utils/money");
 const timezone_1 = require("../../common/utils/timezone");
 const ICAL_FETCH_TIMEOUT_MS = 15_000;
 const ICAL_NOT_CALENDAR = 'NOT_CALENDAR';
-async function fetchIcalFeed(url) {
-    const response = await fetch(url, { signal: AbortSignal.timeout(ICAL_FETCH_TIMEOUT_MS) });
+async function fetchIcalFeed(url, allowPrivateAddresses) {
+    const response = await (0, outbound_fetch_1.fetchUserUrl)(url, { allowPrivateAddresses, signal: AbortSignal.timeout(ICAL_FETCH_TIMEOUT_MS) });
     if (!response.ok)
         throw new Error(`HTTP ${response.status}`);
     const text = await response.text();
@@ -43,11 +45,15 @@ function serializeIcalSource(source) {
     };
 }
 let AvailabilityService = AvailabilityService_1 = class AvailabilityService {
-    constructor(prisma, events, i18n) {
+    constructor(prisma, events, i18n, config) {
         this.prisma = prisma;
         this.events = events;
         this.i18n = i18n;
+        this.config = config;
         this.logger = new common_2.Logger(AvailabilityService_1.name);
+    }
+    get allowPrivateFeedAddresses() {
+        return this.config.get('ical.allowPrivateAddresses') === true;
     }
     async lockTerm(listingId, startsAt, endsAt, source, opts = {}) {
         try {
@@ -301,9 +307,12 @@ let AvailabilityService = AvailabilityService_1 = class AvailabilityService {
         }
         let text;
         try {
-            text = await fetchIcalFeed(url);
+            text = await fetchIcalFeed(url, this.allowPrivateFeedAddresses);
         }
         catch (err) {
+            if (err instanceof outbound_fetch_1.NonPublicAddressError) {
+                this.logger.warn(`Refused an iCal address on a non-public host (${err.host}) for listing ${listingId}`);
+            }
             const notCalendar = err.message === ICAL_NOT_CALENDAR;
             throw new common_1.BadRequestException(this.i18n.t(notCalendar ? 'errors.ICAL_URL_NOT_CALENDAR' : 'errors.ICAL_URL_UNREACHABLE'));
         }
@@ -385,9 +394,12 @@ let AvailabilityService = AvailabilityService_1 = class AvailabilityService {
         const source = await this.prisma.icalSource.findUniqueOrThrow({ where: { id: sourceId } });
         let text;
         try {
-            text = feedText ?? (await fetchIcalFeed(source.url));
+            text = feedText ?? (await fetchIcalFeed(source.url, this.allowPrivateFeedAddresses));
         }
         catch (err) {
+            if (err instanceof outbound_fetch_1.NonPublicAddressError) {
+                this.logger.warn(`iCal source ${sourceId} points at a non-public host (${err.host}); not fetched`);
+            }
             const failureCount = source.failureCount + 1;
             await this.prisma.icalSource.update({
                 where: { id: sourceId },
@@ -456,7 +468,8 @@ exports.AvailabilityService = AvailabilityService = AvailabilityService_1 = __de
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
         event_emitter_1.EventEmitter2,
-        nestjs_i18n_1.I18nService])
+        nestjs_i18n_1.I18nService,
+        config_1.ConfigService])
 ], AvailabilityService);
 function isExclusionViolation(err) {
     const message = err?.message ?? '';

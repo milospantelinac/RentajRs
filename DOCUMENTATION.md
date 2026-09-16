@@ -183,6 +183,7 @@ Never cached: bookings, messages, availability, anything user-specific or money-
 - Google OAuth2 is wired but requires real credentials (`GOOGLE_CLIENT_ID`/`SECRET`) to function — unconfigured, the button reaches Google's own "OAuth client not found" error page, not a bug in this codebase.
 - `@nestjs/throttler` global rate limiting; Helmet; CORS locked to the frontend origin; every DTO validated with `class-validator` and the global pipe set to `whitelist: true` (unknown properties rejected) — this caught a real bug during this build (see §14).
 - Anti-bot: honeypot field + rate-limit heuristic on registration and first-message-in-a-conversation (R177), documented as swappable for hCaptcha/Turnstile later.
+- Outbound requests to addresses users type in (iCal feeds, on add and in the hourly sync) go through `fetchUserUrl()` in `backend/src/common/utils/outbound-fetch.ts`: http and https only, the host is resolved first and refused if any of its addresses is loopback, private, link-local, unique-local, unspecified, shared (carrier-grade NAT), multicast or reserved, and redirects are followed by hand (at most three) with the same check on every hop. A refused address reads as "unreachable" to the owner, so the answers can't be used to map the internal network. See `ICAL_ALLOW_PRIVATE_ADDRESSES` in §12 for local development.
 - Money never touches this platform (ADR-002) — no card data is ever stored; the mock payment/fiscalization providers exist behind an interface specifically so a real Banca Intesa/Sparkom VP integration is a provider swap, not a rewrite, once those integrations are contracted (Product Bible open items O22/O23).
 
 ---
@@ -223,6 +224,7 @@ Never cached: bookings, messages, availability, anything user-specific or money-
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM_NAME`, `MAIL_FROM_ADDRESS` | Email delivery (MailDev by default) |
 | `UPLOADS_DIR`, `UPLOADS_BASE_URL`, `MAX_PHOTO_SIZE_MB`, `MAX_PHOTOS_PER_LISTING` | Photo storage |
 | `GEOCODING_PROVIDER`, `GOOGLE_MAPS_API_KEY` | `nominatim` (default, free, no key) or `google` |
+| `ICAL_ALLOW_PRIVATE_ADDRESSES` | Whether an owner's iCal feed address may point at a loopback, private, link-local or unique-local host. Unset: allowed unless `NODE_ENV=production` (local development reads test feeds from `127.0.0.1`). Set it to `false` on every internet-facing server that doesn't run with `NODE_ENV=production` (the docker-compose setup runs `development`), and `true` only where a trusted internal feed has to be read |
 | `PAYMENT_PROVIDER`, `BANCA_INTESA_*` | `mock` (default) or real Banca Intesa credentials |
 | `FISCALIZATION_PROVIDER`, `SPARKOM_VP_*` | `mock` (default) or real Sparkom VP credentials |
 | `ANTI_BOT_HONEYPOT_FIELD`, `RATE_LIMIT_TTL_SECONDS`, `RATE_LIMIT_MAX_REQUESTS` | Abuse prevention |
