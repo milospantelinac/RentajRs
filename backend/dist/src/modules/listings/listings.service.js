@@ -526,8 +526,62 @@ let ListingsService = class ListingsService {
                 decidedAt: new Date(),
             },
         });
-        this.events.emit('listing.rejected', { listingId, userId: listing.userId, reason: dto.reason });
+        this.events.emit('listing.rejected', { listingId, userId: listing.userId, reason: dto.reason, note: dto.note });
         return this.serialize(updated);
+    }
+    async getSubmissionOutcome(userId, listingId) {
+        await this.assertOwnership(userId, listingId);
+        const listing = await this.prisma.listing.findUniqueOrThrow({
+            where: { id: listingId },
+            include: {
+                city: true,
+                cityArea: true,
+                photos: { where: { pendingRemoval: false }, orderBy: [{ isCover: 'desc' }, { displayOrder: 'asc' }], take: 1 },
+                subscription: { include: { package: { select: { key: true } } } },
+                moderations: { where: { decision: client_1.ModerationDecision.REJECTED }, orderBy: { decidedAt: 'desc' }, take: 1 },
+            },
+        });
+        const categoryNames = await this.taxonomy.getCategoryNames([listing.categoryId]);
+        const { subscription } = listing;
+        const rejection = listing.status === client_1.ListingStatus.REJECTED ? listing.moderations[0] : undefined;
+        return {
+            id: listing.id,
+            title: listing.title,
+            status: listing.status,
+            categoryName: categoryNames.get(listing.categoryId) ?? null,
+            cityName: listing.city?.name ?? null,
+            cityAreaName: listing.cityArea?.name ?? null,
+            coverPhotoUrl: listing.photos[0]?.url ?? null,
+            slaHours: await this.getModerationSlaHours(),
+            subscription: subscription
+                ? {
+                    package: subscription.package.key,
+                    billingCycle: subscription.billingCycle,
+                    status: subscription.status,
+                    expiresAt: subscription.expiresAt,
+                }
+                : null,
+            canResubmit: listing.status === client_1.ListingStatus.REJECTED && RESUBMITTABLE_SUBSCRIPTION_STATUSES.includes(subscription?.status ?? ''),
+            rejection: rejection
+                ? { reason: rejection.rejectionReason, note: rejection.note, decidedAt: rejection.decidedAt }
+                : null,
+        };
+    }
+    async resubmit(userId, listingId) {
+        const listing = await this.assertOwnership(userId, listingId);
+        const subscription = listing.subscriptionId
+            ? await this.prisma.subscription.findUnique({ where: { id: listing.subscriptionId } })
+            : null;
+        if (listing.status !== client_1.ListingStatus.REJECTED || !subscription) {
+            throw new common_1.BadRequestException(this.i18n.t('errors.LISTING_RESUBMIT_NOT_ALLOWED'));
+        }
+        if (!RESUBMITTABLE_SUBSCRIPTION_STATUSES.includes(subscription.status)) {
+            throw new common_1.BadRequestException(this.i18n.t('errors.LISTING_RESUBMIT_PACKAGE_INACTIVE'));
+        }
+        const { ready } = await this.getReadiness(userId, listingId);
+        if (!ready)
+            throw new common_1.BadRequestException(this.i18n.t('errors.LISTING_NOT_READY'));
+        return this.markPendingApproval(listing.id, subscription.id);
     }
     async adminListPendingCategoryAssignment() {
         const listings = await this.prisma.listing.findMany({
@@ -697,6 +751,7 @@ exports.ListingsService = ListingsService = __decorate([
         nestjs_i18n_1.I18nService,
         event_emitter_1.EventEmitter2])
 ], ListingsService);
+const RESUBMITTABLE_SUBSCRIPTION_STATUSES = ['PENDING_ACTIVATION', 'ACTIVE'];
 function slugify(input) {
     return input
         .toLowerCase()

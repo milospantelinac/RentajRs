@@ -78,6 +78,12 @@ let ListingsController = class ListingsController {
     getReadiness(userId, id) {
         return this.listingsService.getReadiness(userId, id);
     }
+    getSubmissionOutcome(userId, id) {
+        return this.listingsService.getSubmissionOutcome(userId, id);
+    }
+    resubmit(userId, id) {
+        return this.listingsService.resubmit(userId, id);
+    }
     deleteListing(userId, id) {
         return this.listingsService.deleteListing(userId, id);
     }
@@ -230,6 +236,22 @@ __decorate([
     __metadata("design:paramtypes", [String, String]),
     __metadata("design:returntype", void 0)
 ], ListingsController.prototype, "getReadiness", null);
+__decorate([
+    (0, common_1.Get)('listings/:id/submission'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)('id')),
+    __param(1, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", void 0)
+], ListingsController.prototype, "getSubmissionOutcome", null);
+__decorate([
+    (0, common_1.Post)('listings/:id/resubmit'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)('id')),
+    __param(1, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", void 0)
+], ListingsController.prototype, "resubmit", null);
 __decorate([
     (0, common_1.Delete)('listings/:id'),
     __param(0, (0, current_user_decorator_1.CurrentUser)('id')),

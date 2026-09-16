@@ -1,0 +1,12 @@
+{
+  "REJECT_REASON": {
+    "MISSING_PHOTOS": "Missing photos",
+    "INAPPROPRIATE_CONTENT": "Inappropriate content",
+    "CONTACT_INFO_IN_DESCRIPTION": "Contact info in description",
+    "PRICE_OUT_OF_RANGE": "Price out of range",
+    "INCOMPLETE_INFORMATION": "Incomplete information",
+    "SUSPECTED_FRAUD": "Suspected fraud",
+    "DUPLICATE_LISTING": "Duplicate listing",
+    "OTHER": "Other"
+  }
+}

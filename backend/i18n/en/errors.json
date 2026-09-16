@@ -38,5 +38,8 @@
   "CATEGORY_NOT_SELECTABLE": "This category can't be chosen for a listing",
   "IMAGE_TYPE_NOT_ALLOWED": "Only JPG, PNG and WEBP photos are allowed",
   "IMAGE_TOO_LARGE": "The photo is larger than {max}MB",
-  "IMAGE_INVALID": "The uploaded file is not a valid image"
+  "IMAGE_INVALID": "The uploaded file is not a valid image",
+  "LISTING_RESUBMIT_NOT_ALLOWED": "Only a rejected listing with a package can be sent for approval again",
+  "LISTING_RESUBMIT_PACKAGE_INACTIVE": "This listing’s package is no longer valid, pick a new package",
+  "LISTING_NOT_READY": "The listing isn’t ready to send yet, fill in what is missing"
 }

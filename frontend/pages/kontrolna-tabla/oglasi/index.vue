@@ -30,7 +30,13 @@
             <p v-if="listing.status === 'DRAFT'" class="text-muted draft-hint mb-0">{{ t('listing.draftHint') }}</p>
           </td>
           <td :data-label="t('common.search')">
-            <span class="badge" :class="statusBadge(listing)">{{ statusText(listing) }}</span>
+            <NuxtLink
+              v-if="listing.status === 'REJECTED'"
+              :to="`/oglasi/${listing.id}/odbijeno`"
+              class="badge badge-link"
+              :class="statusBadge(listing)"
+            >{{ statusText(listing) }}</NuxtLink>
+            <span v-else class="badge" :class="statusBadge(listing)">{{ statusText(listing) }}</span>
           </td>
           <td :data-label="t('billing.mySubscriptions')">
             <span v-if="listing.subscription" class="text-muted">
@@ -100,6 +106,11 @@ useSeoMeta({ title: t('listing.myListings') })
   border: 1px solid rgba($color-success, 0.35);
   color: $color-success;
   font-size: $font-size-body;
+}
+
+// Dizajn 29: a rejected listing's badge opens the page with the reason.
+.badge-link {
+  text-decoration: underline;
 }
 
 .empty-state {

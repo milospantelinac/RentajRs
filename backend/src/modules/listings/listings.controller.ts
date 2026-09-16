@@ -114,6 +114,16 @@ export class ListingsController {
     return this.listingsService.getReadiness(userId, id);
   }
 
+  @Get('listings/:id/submission')
+  getSubmissionOutcome(@CurrentUser('id') userId: string, @Param('id') id: string) {
+    return this.listingsService.getSubmissionOutcome(userId, id);
+  }
+
+  @Post('listings/:id/resubmit')
+  resubmit(@CurrentUser('id') userId: string, @Param('id') id: string) {
+    return this.listingsService.resubmit(userId, id);
+  }
+
   @Delete('listings/:id')
   deleteListing(@CurrentUser('id') userId: string, @Param('id') id: string) {
     return this.listingsService.deleteListing(userId, id);

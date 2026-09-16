@@ -2397,6 +2397,15 @@ const reviewTips = computed(() => {
 // 285:467: the frame's single "Pošalji na odobrenje" covers three real outcomes, so the
 // button says which one this listing gets (T41, T42).
 const reviewCta = computed(() => {
+  // Dizajn 29: a rejected listing goes back to review on its own package while that
+  // package is still waiting or running; an ended one needs a new package.
+  if (listing.value?.status === 'REJECTED' && listing.value.subscriptionId) {
+    const subscription = (mySubscriptions.value || []).find((s) => s.id === listing.value.subscriptionId)
+    if (['PENDING_ACTIVATION', 'ACTIVE'].includes(subscription?.status)) {
+      return { label: t('listing.resubmitForApproval'), to: '', run: resubmitForApproval }
+    }
+    return { label: t('listing.goToPackages'), to: `/oglasi/${listingId}/paket`, run: () => {} }
+  }
   if (listing.value?.subscriptionId) return { label: t('listing.saveChanges'), to: '', run: finishEditing }
   if (freeSlotSubscription.value) return { label: t('listing.reviewSubmit'), to: '', run: publishWithFreeSlot }
   return { label: t('listing.goToPackages'), to: `/oglasi/${listingId}/paket`, run: () => {} }
@@ -2739,6 +2748,11 @@ async function loadListing() {
   const resumeStep = Math.min(listing.value.wizardStep || 0, steps.value.length - 1)
   currentStep.value = resumeStep
   maxStepReached.value = Math.max(maxStepReached.value, resumeStep)
+  // Dizajn 29: "Izmeni oglas" on a rejected listing opens the step its reason points at.
+  if (route.query.korak) {
+    const index = steps.value.findIndex((s) => s.key === route.query.korak)
+    if (index >= 0 && index <= maxStepReached.value) currentStep.value = index
+  }
 }
 
 async function onRegionChange() {
@@ -2974,6 +2988,19 @@ async function publishWithFreeSlot() {
       listingId,
       existingSubscriptionId: freeSlotSubscription.value.id,
     })
+    await navigateTo(`/oglasi/${listingId}/poslato`)
+  } catch (e) {
+    error.value = extractErrorMessage(e, t('auth.genericError'))
+  } finally {
+    finishing.value = false
+  }
+}
+
+async function resubmitForApproval() {
+  error.value = ''
+  finishing.value = true
+  try {
+    await api.post(`/listings/${listingId}/resubmit`)
     await navigateTo(`/oglasi/${listingId}/poslato`)
   } catch (e) {
     error.value = extractErrorMessage(e, t('auth.genericError'))

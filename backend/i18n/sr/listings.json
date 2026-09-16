@@ -1,0 +1,12 @@
+{
+  "REJECT_REASON": {
+    "MISSING_PHOTOS": "Nedostaju fotografije",
+    "INAPPROPRIATE_CONTENT": "Neprimeren sadržaj",
+    "CONTACT_INFO_IN_DESCRIPTION": "Kontakt podaci u opisu",
+    "PRICE_OUT_OF_RANGE": "Cena van opsega",
+    "INCOMPLETE_INFORMATION": "Nepotpune informacije",
+    "SUSPECTED_FRAUD": "Sumnja na prevaru",
+    "DUPLICATE_LISTING": "Duplirani oglas",
+    "OTHER": "Drugo"
+  }
+}

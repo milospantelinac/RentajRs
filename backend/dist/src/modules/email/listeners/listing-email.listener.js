@@ -13,12 +13,14 @@ exports.ListingEmailListener = void 0;
 const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
 const event_emitter_1 = require("@nestjs/event-emitter");
+const nestjs_i18n_1 = require("nestjs-i18n");
 const prisma_service_1 = require("../../../prisma/prisma.service");
 const email_service_1 = require("../../../common/email/email.service");
 let ListingEmailListener = class ListingEmailListener {
-    constructor(prisma, email, config) {
+    constructor(prisma, email, i18n, config) {
         this.prisma = prisma;
         this.email = email;
+        this.i18n = i18n;
         this.frontendUrl = config.get('frontendUrl');
     }
     async loadListingAndOwner(listingId) {
@@ -56,17 +58,21 @@ let ListingEmailListener = class ListingEmailListener {
             buttonUrl: `${this.frontendUrl}/oglasi/${data.listing.slug}`,
         });
     }
-    async onRejected({ listingId, reason }) {
+    async onRejected({ listingId, reason, note }) {
         const data = await this.loadListingAndOwner(listingId);
         if (!data)
             return;
+        const lang = data.owner.language === 'EN' ? 'en' : 'sr';
+        const label = this.i18n.t(`listings.REJECT_REASON.${reason}`, { lang, defaultValue: reason });
+        const trimmedNote = note?.trim().replace(/[.!?]+$/, '');
+        const razlog = trimmedNote ? `${label}. ${trimmedNote}` : label;
         await this.email.send({
             key: 'listing_rejected',
             to: data.owner.email,
             language: data.owner.language,
             userId: data.owner.id,
-            context: { oglas: data.listing.title, razlog: reason },
-            buttonUrl: `${this.frontendUrl}/oglasi/${data.listing.id}/uredi`,
+            context: { oglas: data.listing.title, razlog },
+            buttonUrl: `${this.frontendUrl}/oglasi/${data.listing.id}/odbijeno`,
         });
     }
     async onCategoryAssigned({ listingId }) {
@@ -134,6 +140,7 @@ exports.ListingEmailListener = ListingEmailListener = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
         email_service_1.EmailService,
+        nestjs_i18n_1.I18nService,
         config_1.ConfigService])
 ], ListingEmailListener);
 //# sourceMappingURL=listing-email.listener.js.map

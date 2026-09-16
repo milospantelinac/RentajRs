@@ -38,5 +38,8 @@
   "CATEGORY_NOT_SELECTABLE": "Ova kategorija ne može da se izabere za oglas",
   "IMAGE_TYPE_NOT_ALLOWED": "Dozvoljene su samo JPG, PNG i WEBP fotografije",
   "IMAGE_TOO_LARGE": "Fotografija je veća od {max}MB",
-  "IMAGE_INVALID": "Otpremljeni fajl nije ispravna slika"
+  "IMAGE_INVALID": "Otpremljeni fajl nije ispravna slika",
+  "LISTING_RESUBMIT_NOT_ALLOWED": "Ponovo na odobrenje može da se pošalje samo odbijen oglas koji ima paket",
+  "LISTING_RESUBMIT_PACKAGE_INACTIVE": "Paket ovog oglasa više ne važi, izaberite novi paket",
+  "LISTING_NOT_READY": "Oglas još nije spreman za slanje, dopunite ono što nedostaje"
 }

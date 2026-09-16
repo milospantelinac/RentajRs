@@ -720,8 +720,72 @@ export class ListingsService {
         decidedAt: new Date(),
       },
     });
-    this.events.emit('listing.rejected', { listingId, userId: listing.userId, reason: dto.reason });
+    this.events.emit('listing.rejected', { listingId, userId: listing.userId, reason: dto.reason, note: dto.note });
     return this.serialize(updated);
+  }
+
+  /**
+   * Dizajn 29: what the "poslat na odobrenje" and "nije odobren" pages show about a
+   * listing its owner sent for review.
+   */
+  async getSubmissionOutcome(userId: string, listingId: string) {
+    await this.assertOwnership(userId, listingId);
+    const listing = await this.prisma.listing.findUniqueOrThrow({
+      where: { id: listingId },
+      include: {
+        city: true,
+        cityArea: true,
+        photos: { where: { pendingRemoval: false }, orderBy: [{ isCover: 'desc' }, { displayOrder: 'asc' }], take: 1 },
+        subscription: { include: { package: { select: { key: true } } } },
+        moderations: { where: { decision: ModerationDecision.REJECTED }, orderBy: { decidedAt: 'desc' }, take: 1 },
+      },
+    });
+    const categoryNames = await this.taxonomy.getCategoryNames([listing.categoryId]);
+    const { subscription } = listing;
+    const rejection = listing.status === ListingStatus.REJECTED ? listing.moderations[0] : undefined;
+    return {
+      id: listing.id,
+      title: listing.title,
+      status: listing.status,
+      categoryName: categoryNames.get(listing.categoryId) ?? null,
+      cityName: listing.city?.name ?? null,
+      cityAreaName: listing.cityArea?.name ?? null,
+      coverPhotoUrl: listing.photos[0]?.url ?? null,
+      slaHours: await this.getModerationSlaHours(),
+      subscription: subscription
+        ? {
+            package: subscription.package.key,
+            billingCycle: subscription.billingCycle,
+            status: subscription.status,
+            expiresAt: subscription.expiresAt,
+          }
+        : null,
+      canResubmit:
+        listing.status === ListingStatus.REJECTED && RESUBMITTABLE_SUBSCRIPTION_STATUSES.includes(subscription?.status ?? ''),
+      rejection: rejection
+        ? { reason: rejection.rejectionReason, note: rejection.note, decidedAt: rejection.decidedAt }
+        : null,
+    };
+  }
+
+  /**
+   * Dizajn 29: a rejected listing goes back to the queue on the package it already has,
+   * whose clock only starts at the first approval (R28).
+   */
+  async resubmit(userId: string, listingId: string) {
+    const listing = await this.assertOwnership(userId, listingId);
+    const subscription = listing.subscriptionId
+      ? await this.prisma.subscription.findUnique({ where: { id: listing.subscriptionId } })
+      : null;
+    if (listing.status !== ListingStatus.REJECTED || !subscription) {
+      throw new BadRequestException(this.i18n.t('errors.LISTING_RESUBMIT_NOT_ALLOWED'));
+    }
+    if (!RESUBMITTABLE_SUBSCRIPTION_STATUSES.includes(subscription.status)) {
+      throw new BadRequestException(this.i18n.t('errors.LISTING_RESUBMIT_PACKAGE_INACTIVE'));
+    }
+    const { ready } = await this.getReadiness(userId, listingId);
+    if (!ready) throw new BadRequestException(this.i18n.t('errors.LISTING_NOT_READY'));
+    return this.markPendingApproval(listing.id, subscription.id);
   }
 
   /**
@@ -921,6 +985,9 @@ export class ListingsService {
     };
   }
 }
+
+/** A package that is waiting for its first approval or still running can carry a resubmission. */
+const RESUBMITTABLE_SUBSCRIPTION_STATUSES: string[] = ['PENDING_ACTIVATION', 'ACTIVE'];
 
 function slugify(input: string): string {
   return input
