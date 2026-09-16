@@ -27,7 +27,8 @@ const STATUS_LABELS = {
 
 const dayFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit' })
 
-function belgradeDayNumber(value) {
+// Whole days since 1970 on the Belgrade calendar, for "za N dana" countdowns.
+export function belgradeDayNumber(value) {
   const [year, month, day] = dayFormatter.format(new Date(value)).split('-').map(Number)
   return Date.UTC(year, month - 1, day) / DAY_MS
 }

@@ -637,7 +637,13 @@ export class SubscriptionsService {
     const subscriptions = await this.prisma.subscription.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
-      include: { package: true, listings: { select: { id: true, title: true, slug: true } } },
+      include: {
+        package: true,
+        // A deleted listing keeps its subscriptionId but no longer takes a place on
+        // the package (attachToExistingSubscription doesn't count it), so the free
+        // Pro slot offers and Moje pretplate count the same listings the server does.
+        listings: { where: { status: { not: 'DELETED' } }, select: { id: true, title: true, slug: true } },
+      },
     });
     const listingIds = subscriptions.flatMap((s) => s.listings.map((l) => l.id));
     const bankedDays = listingIds.length
