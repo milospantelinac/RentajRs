@@ -784,51 +784,48 @@
       </div>
 
       <!-- Pregled -->
-      <div v-else-if="steps[currentStep].key === 'review'">
-        <ul class="wizard-checklist mb-4">
-          <li v-for="(ok, key) in readiness?.checklist" :key="key" :class="ok ? 'text-success' : 'text-error'">
-            {{ ok ? '✓' : '✗' }} {{ t(`listing.checklist.${key}`) }}
-            <NuxtLink v-if="!ok && key === 'hasPhone'" to="/kontrolna-tabla/podesavanja">{{ t('common.edit') }} →</NuxtLink>
-            <!-- T33 — name the specific missing attribute(s) instead of leaving
-                 the owner to guess which of the category's fields is empty. -->
-            <span v-if="!ok && key === 'requiredAttributesFilled' && readiness?.missingAttributeNames?.length" class="text-muted">
-              ({{ t('listing.missingAttributesPrefix') }}: {{ readiness.missingAttributeNames.join(', ') }})
-            </span>
-          </li>
-        </ul>
-        <p v-if="!readiness?.ready" class="text-muted mb-3">{{ t('listing.notReadyYet') }}</p>
+      <!-- 289:317: the readiness card, then one summary card per step (289:360 and the
+           seven after it). The frame draws Igraonice; a listing only gets the sections
+           and rows its own steps really have. -->
+      <div v-else-if="steps[currentStep].key === 'review'" class="review">
+        <!-- 289:317 -->
+        <section class="review-readiness" :class="{ 'is-ready': !reviewMissingCount }">
+          <p class="review-readiness-head">
+            <span class="review-readiness-mark"><img src="/images/icons/check-review-24.svg" alt="" /></span>
+            {{ reviewHeadline }}
+          </p>
+          <ul class="review-checks">
+            <!-- 499:514: the row names what is missing and leads to the step that fixes
+                 it (289:357); the phone and the bank account live in the profile. -->
+            <li v-for="item in reviewChecklist" :key="item.key" class="review-check" :class="{ 'is-missing': !item.ok }">
+              <span class="review-check-mark" aria-hidden="true">{{ item.ok ? '✓' : '!' }}</span>
+              <NuxtLink v-if="item.to" :to="item.to" class="review-check-label">{{ item.label }}</NuxtLink>
+              <button v-else-if="item.step" type="button" class="review-check-label" @click="goToStepKey(item.step)">
+                {{ item.label }}
+              </button>
+              <span v-else class="review-check-label is-plain">{{ item.label }}</span>
+              <span v-if="item.note" class="review-check-note">{{ item.note }}</span>
+              <NuxtLink v-if="!item.ok && item.to" :to="item.to" class="review-check-link">{{ t('listing.reviewFillProfile') }}</NuxtLink>
+            </li>
+          </ul>
+          <!-- 289:356 -->
+          <p class="review-note">
+            {{ t('listing.reviewChecklistNote') }}
+            <img src="/images/icons/info-circle.svg" alt="" />
+          </p>
+        </section>
 
-        <div class="review-actions">
-          <NuxtLink :to="`/oglasi/${listingId}/pregled`" class="btn btn-tertiary">{{ t('listing.previewListing') }}</NuxtLink>
-          <NuxtLink v-if="!listing?.subscriptionId" to="/kontrolna-tabla/oglasi" class="btn btn-tertiary">{{ t('listing.saveAsDraft') }}</NuxtLink>
-          <!-- T41 — a listing that already has a package attached (editing an
-               existing/published listing) never needs to go through package
-               selection again; every step already saved as the owner went,
-               so "finishing" here is just a confirmation, no purchase. -->
-          <button
-            v-if="readiness?.ready && listing?.subscriptionId"
-            class="btn btn-primary-flat"
-            :disabled="finishing"
-            @click="finishEditing"
-          >
-            {{ finishing ? t('common.loading') : t('listing.saveChanges') }}
-          </button>
-          <!-- T42 — a brand-new listing whose owner already has an active PRO
-               subscription with a free slot attaches to it directly instead
-               of detouring through a package purchase they don't need. -->
-          <button
-            v-else-if="readiness?.ready && freeSlotSubscription"
-            class="btn btn-primary-flat"
-            :disabled="finishing"
-            @click="publishWithFreeSlot"
-          >
-            {{ finishing ? t('common.loading') : t('listing.publishWithExistingPackage') }}
-          </button>
-          <NuxtLink v-else-if="readiness?.ready" :to="`/oglasi/${listingId}/paket`" class="btn btn-primary-flat">
-            {{ t('listing.goToPackages') }}
-          </NuxtLink>
-        </div>
-        <p class="text-muted mt-2">{{ t('listing.draftSavedExplain') }}</p>
+        <!-- 289:360 -->
+        <section v-for="section in reviewSections" :key="section.key" class="review-card">
+          <div class="review-card-head">
+            <span class="review-card-title">{{ section.title }}</span>
+            <button type="button" class="review-card-edit" @click="goToStepKey(section.key)">{{ t('common.edit') }}</button>
+          </div>
+          <div v-for="row in section.rows" :key="row.key" class="review-row">
+            <span class="review-row-label">{{ row.label }}</span>
+            <span class="review-row-value">{{ row.value }}</span>
+          </div>
+        </section>
       </div>
 
       <p v-if="error" class="wizard-error" role="alert"><img src="/images/icons/field-error.svg" alt="" />{{ error }}</p>
@@ -1133,6 +1130,34 @@
       </section>
     </aside>
 
+    <!-- 285:426: step 9's live search card and the checks to run before sending. -->
+    <aside v-if="steps[currentStep].key === 'review'" class="wizard-aside">
+      <!-- 291:317 -->
+      <section class="wizard-aside-card">
+        <p class="wizard-aside-title">
+          {{ t('listing.reviewCardPreviewTitle') }}
+          <img src="/images/icons/info-circle.svg" alt="" />
+        </p>
+        <div class="photos-card" aria-hidden="true">
+          <ListingCard :listing="cardPreviewListing" />
+        </div>
+      </section>
+
+      <!-- 291:344 -->
+      <section class="wizard-aside-card">
+        <p class="wizard-aside-title">
+          {{ t('listing.reviewTipsTitle') }}
+          <img src="/images/icons/info-circle.svg" alt="" />
+        </p>
+        <ul class="wizard-aside-tips">
+          <li v-for="tip in reviewTips" :key="tip" class="wizard-aside-tip">
+            <img src="/images/icons/check-brand-tips.svg" alt="" />
+            <span>{{ tip }}</span>
+          </li>
+        </ul>
+      </section>
+    </aside>
+
     <!-- 228:376 -->
     <div class="wizard-actions">
       <div class="wizard-actions-back">
@@ -1142,8 +1167,27 @@
         </button>
         <span class="wizard-count">{{ t('listing.wizardStepsProgress', { current: currentStep + 1, total: steps.length }) }}</span>
       </div>
+      <!-- 499:552: only step 9 offers the guest's view, between the two buttons. -->
+      <NuxtLink
+        v-if="steps[currentStep].key === 'review'"
+        :to="`/oglasi/${listingId}/pregled`"
+        class="wizard-preview-link"
+      >
+        {{ t('listing.previewListing') }}
+      </NuxtLink>
       <button v-if="currentStep < steps.length - 1" type="button" class="wizard-next" :disabled="saving" @click="saveCurrentStep">
         {{ saving ? t('common.loading') : t('listing.saveAndContinue') }}
+        <img src="/images/icons/arrow-right-white.svg" alt="" />
+      </button>
+      <!-- 285:467: the last step's own button. It says what the click really does: the
+           listing goes to the admin only when it already has a package (T41/T42) or a
+           free slot to attach to; otherwise the package still has to be picked first. -->
+      <NuxtLink v-else-if="readiness?.ready && reviewCta.to" :to="reviewCta.to" class="wizard-next">
+        {{ reviewCta.label }}
+        <img src="/images/icons/arrow-right-white.svg" alt="" />
+      </NuxtLink>
+      <button v-else type="button" class="wizard-next" :disabled="!readiness?.ready || finishing" @click="reviewCta.run()">
+        {{ finishing ? t('common.loading') : reviewCta.label }}
         <img src="/images/icons/arrow-right-white.svg" alt="" />
       </button>
     </div>
@@ -1270,8 +1314,25 @@ const freeSlotSubscription = computed(() =>
 watch(currentStep, async (step) => {
   if (step === steps.value.length - 1) {
     readiness.value = await api.get(`/listings/${listingId}/readiness`)
+    if (form.bookingModel !== 'NO_BOOKING') await loadAvailabilitySummary()
   }
 })
+
+// Dizajn 28 (289:389): the owner payload carries no hours, slots or blocks, so the
+// availability summary reads the same endpoint the step 3 editors do.
+const availability = ref(null)
+async function loadAvailabilitySummary() {
+  const from = new Date()
+  const to = new Date(Date.now() + 1000 * 60 * 60 * 24 * 365)
+  availability.value = await api
+    .get(`/listings/${listingId}/availability`, { query: { from: from.toISOString(), to: to.toISOString() } })
+    .catch(() => null)
+}
+
+function goToStepKey(key) {
+  const index = steps.value.findIndex((s) => s.key === key)
+  if (index >= 0) currentStep.value = index
+}
 
 // "Način rezervacije" (Dodavanje Oglasa spec §0/§2) — the owner never picks
 // PER_STAY vs PER_SLOT directly; that always comes from the category. This
@@ -2007,6 +2068,339 @@ const locationConfirmedText = computed(() => {
   return place ? `${address}, ${place}` : address
 })
 const locationTips = computed(() => Array.from({ length: 5 }, (_, i) => t(`listing.locationTips.tip${i + 1}`)))
+
+// Dizajn 28: step 9's body, read off 285:392 (Forma) and 285:426 (Saveti) ---------------
+
+const SETTINGS_PATH = '/kontrolna-tabla/podesavanja'
+// 289:357: every check leads to the step that fixes it. The phone and the bank account
+// are profile fields, so those two rows leave the wizard instead.
+const REVIEW_CHECK_STEPS = {
+  hasTitle: 'basics',
+  hasDescription: 'basics',
+  hasPhotos: 'photos',
+  hasLocation: 'location',
+  hasPrice: 'pricing',
+  hasPaymentMethod: 'payment',
+  requiredAttributesFilled: 'attributes',
+}
+const REVIEW_PROFILE_CHECKS = ['hasPhone', 'hasBankAccountIfNeeded']
+
+// 289:323: the readiness endpoint's own checks, in its own order.
+const reviewChecklist = computed(() =>
+  Object.entries(readiness.value?.checklist || {}).map(([key, ok]) => {
+    // A defined-slot listing carries its prices on the slots, so "Cena" is fixed in
+    // step 3, not step 2.
+    const stepKey = key === 'hasPrice' && isDefinedSlotsModel.value ? 'availability' : REVIEW_CHECK_STEPS[key]
+    let note = ''
+    if (key === 'hasBankAccountIfNeeded' && form.paymentMethod === 'CASH') note = t('listing.reviewBankNotNeeded')
+    // T33: name the specific missing attribute(s) instead of leaving the owner to
+    // guess which of the category's fields is empty.
+    if (key === 'requiredAttributesFilled' && !ok && readiness.value?.missingAttributeNames?.length) {
+      note = `${t('listing.missingAttributesPrefix')}: ${readiness.value.missingAttributeNames.join(', ')}`
+    }
+    return {
+      key,
+      ok,
+      label: t(`listing.checklist.${key}`),
+      note,
+      to: REVIEW_PROFILE_CHECKS.includes(key) ? SETTINGS_PATH : '',
+      step: steps.value.some((s) => s.key === stepKey) ? stepKey : '',
+    }
+  }),
+)
+
+const reviewMissingCount = computed(() => reviewChecklist.value.filter((item) => !item.ok).length)
+// 289:322
+const reviewHeadline = computed(() =>
+  reviewMissingCount.value
+    ? t(`listing.reviewMissing${srPluralCategory(reviewMissingCount.value)}`, { count: reviewMissingCount.value })
+    : t('listing.reviewAllDone'),
+)
+
+const REVIEW_DAY_KEYS = ['dayMon', 'dayTue', 'dayWed', 'dayThu', 'dayFri', 'daySat', 'daySun']
+// 289:395: consecutive days read as a range ("Ponedeljak - subota"), and only the first
+// day keeps its capital, the way the frame writes it.
+function reviewDayRange(days) {
+  const sorted = [...new Set(days)].sort((a, b) => a - b)
+  const name = (day, first) => {
+    const label = t(`listing.${REVIEW_DAY_KEYS[day - 1]}`)
+    return first ? label : label.toLocaleLowerCase('sr-RS')
+  }
+  if (sorted.length > 2 && sorted.every((day, i) => i === 0 || day === sorted[i - 1] + 1)) {
+    return `${name(sorted[0], true)} - ${name(sorted[sorted.length - 1])}`
+  }
+  return sorted.map((day, i) => name(day, i === 0)).join(', ')
+}
+
+function reviewDateCount(dates) {
+  const count = new Set(dates.map((date) => String(date).slice(0, 10))).size
+  return t(`listing.reviewDates${srPluralCategory(count)}`, { count })
+}
+
+// 289:393: what step 3 saved, in the words its own fields use.
+const reviewAvailabilityRows = computed(() => {
+  const data = availability.value
+  const notSelected = t('listing.reviewNotSelected')
+  const manualBlocks = (data?.blocked || []).filter((block) => block.source === 'MANUAL')
+  if (isDefinedSlotsModel.value) {
+    const slots = data?.definedSlots || []
+    return [
+      {
+        key: 'slots',
+        label: t('listing.dsExistingSlots'),
+        value: t(`listing.reviewSlots${srPluralCategory(slots.length)}`, { count: slots.length }),
+      },
+      { key: 'blocked', label: t('listing.reviewRowBlockedDates'), value: reviewDateCount(manualBlocks.map((b) => b.startsAt)) },
+    ]
+  }
+  if (form.bookingModel === 'PER_SLOT') {
+    const hours = data?.workingHours || []
+    const times = new Set(hours.map((h) => `${h.startsAt} - ${h.endsAt}`))
+    const ranges = data?.hourlyPriceRanges || []
+    const exceptions = [...manualBlocks.map((b) => b.startsAt), ...(data?.slotPriceOverrides || []).map((o) => o.date)]
+    return [
+      { key: 'days', label: t('listing.whAvailableDays'), value: hours.length ? reviewDayRange(hours.map((h) => h.dayOfWeek)) : notSelected },
+      {
+        key: 'hours',
+        label: t('listing.whWorkingHours'),
+        value: times.size === 1 ? [...times][0] : times.size ? t('listing.reviewHoursPerDay') : notSelected,
+      },
+      {
+        key: 'ranges',
+        label: t('listing.whHourlyRanges'),
+        value: t(`listing.reviewIntervals${srPluralCategory(ranges.length)}`, { count: ranges.length }),
+      },
+      { key: 'exceptions', label: t('listing.whExceptions'), value: reviewDateCount(exceptions) },
+    ]
+  }
+  // A stay keeps a calendar of blocked dates and per-date prices instead of hours.
+  return [
+    { key: 'blocked', label: t('listing.reviewRowBlockedDates'), value: reviewDateCount(manualBlocks.map((b) => b.startsAt)) },
+    {
+      key: 'prices',
+      label: t('listing.reviewRowDatePrices'),
+      value: reviewDateCount((data?.datePriceOverrides || []).map((o) => o.date)),
+    },
+  ]
+})
+
+// 289:409: the same rules as step 4, each in the unit that step uses.
+const reviewRulesRows = computed(() => {
+  const noLimit = t('listing.rulesSummaryNoLimit')
+  const rows = []
+  if (!isDefinedSlotsModel.value) {
+    const unit = rulesDurationUnit.value
+    const withUnit = (count) => `${count} ${srDurationUnitWord(unit, count)}`
+    const { minDuration: min, maxDuration: max } = form
+    let value = noLimit
+    if (min && max) value = `${min} - ${withUnit(max)}`
+    else if (min) value = t('listing.rulesSummaryAtLeast', { value: withUnit(min) })
+    else if (max) value = t('listing.rulesSummaryAtMost', { value: withUnit(max) })
+    rows.push({ key: 'duration', label: rulesDurationTitle.value, value })
+  }
+  rows.push({
+    key: 'notice',
+    label: t('listing.reviewRowNotice'),
+    value: form.earliestBookingHours ? termCount('termHours', form.earliestBookingHours) : t('listing.rulesSummaryUntilStart'),
+  })
+  rows.push({
+    key: 'horizon',
+    label: t('listing.termHorizon'),
+    value: form.maxAdvanceBookingDays ? termCount('termDays', form.maxAdvanceBookingDays) : noLimit,
+  })
+  if (showGuestCount.value) {
+    const min = form.minGuests || 1
+    const max = rulesGuestCap.value
+    // The unit follows the number it stands after, the way step 6 declines its own units.
+    const kind = rulesChildren.value ? 'children' : 'guests'
+    const unit = t(`listing.detailsUnit.${kind}${srPluralCategory(max || min)}`)
+    let value = noLimit
+    if (max && min > 1) value = `${min} - ${max} ${unit}`
+    else if (max) value = t('listing.rulesSummaryAtMost', { value: `${max} ${unit}` })
+    else if (min > 1) value = t('listing.rulesSummaryAtLeast', { value: `${min} ${unit}` })
+    rows.push({ key: 'guests', label: t('listing.rulesGuestsTitle'), value })
+  }
+  if (showGapAfter.value) {
+    rows.push({
+      key: 'gap',
+      label: t('listing.gapAfterMinutes'),
+      value: form.gapAfterMinutes
+        ? t('listing.rulesSummaryMinutes', { count: form.gapAfterMinutes })
+        : t('listing.rulesSummaryNoGap'),
+    })
+  }
+  if (showVehicleTimes.value) {
+    const byArrangement = t('listing.rulesSummaryByArrangement')
+    rows.push({ key: 'pickup', label: t('listing.pickupTime'), value: form.pickupTime || byArrangement })
+    rows.push({ key: 'return', label: t('listing.returnTime'), value: form.returnTime || byArrangement })
+  }
+  return rows
+})
+
+// 289:437: cash has no advance and no deadline, so those rows only show with a QR code.
+const reviewPaymentRows = computed(() => {
+  const rows = [
+    {
+      key: 'method',
+      label: t('listing.paymentMethod'),
+      value:
+        form.paymentMethod === 'BOTH'
+          ? t('listing.reviewPaymentBoth')
+          : t(PAYMENT_METHOD_TITLES[form.paymentMethod] || PAYMENT_METHOD_TITLES.CASH),
+    },
+  ]
+  if (paymentUsesQr.value) {
+    rows.push({
+      key: 'advance',
+      label: t('listing.reviewRowAdvance'),
+      value: form.advancePercent
+        ? t('listing.reviewAdvance', {
+            percent: form.advancePercent,
+            deadline: termCount('termHours', form.paymentDeadlineHours || 48),
+          })
+        : t('listing.reviewNoAdvance'),
+    })
+  }
+  rows.push({
+    key: 'handling',
+    label: t('listing.reviewRowHandling'),
+    value: t(form.requiresApproval ? 'listing.requestHandlingApproval' : 'listing.requestHandlingInstant'),
+  })
+  const threshold = form.cancellationThreshold
+  const freePolicy = FREE_CANCELLATION_POLICIES.includes(form.cancellationPolicyType) && threshold
+  rows.push({
+    key: 'cancellation',
+    label: t('listing.reviewRowCancellation'),
+    value: freePolicy
+      ? t('listing.reviewCancellationFree', {
+          value: termCount(form.cancellationPolicyType === 'FREE_UNTIL_DAYS' ? 'termDays' : 'termHours', threshold),
+        })
+      : t('listing.cancellationNone'),
+  })
+  return rows
+})
+
+// 289:457: the address row shows what the owner typed; the guest only gets it with a
+// confirmed booking (Dizajn 26).
+const reviewLocationRows = computed(() => {
+  const region = regions.value.find((r) => r.id === location.regionId)
+  const city = locationCity.value
+  return [
+    {
+      key: 'city',
+      label: t('listing.reviewRowRegionCity'),
+      value: region && city ? `${region.name} · ${city.name}` : t('listing.reviewNotSelected'),
+    },
+    {
+      key: 'area',
+      label: t('listing.cityArea'),
+      value: locationArea.value ? locationArea.value.name : cityAreas.value.length ? t('listing.reviewNotSelected') : t('listing.cityAreaNone'),
+    },
+    { key: 'address', label: t('listing.address'), value: location.address || t('listing.reviewNotEnteredF') },
+    { key: 'placeId', label: t('listing.reviewRowPlaceId'), value: location.googlePlaceId || t('listing.reviewNotEnteredM') },
+  ]
+})
+
+// 289:473
+const reviewPhotoRows = computed(() => [
+  { key: 'count', label: t('listing.reviewRowPhotoCount'), value: String(photos.value.length) },
+  {
+    key: 'cover',
+    label: t('listing.coverPhotoBadge'),
+    value: t(photos.value.length ? 'listing.reviewCoverSet' : 'listing.reviewCoverMissing'),
+  },
+])
+
+// 289:360 and the seven cards after it, in the wizard's own step order. A listing only
+// gets the sections its steps really have.
+const reviewSections = computed(() => {
+  const chars = (form.description || '').length
+  const notEnteredM = t('listing.reviewNotEnteredM')
+  const sections = [
+    {
+      key: 'basics',
+      title: t('listing.stepBasics'),
+      rows: [
+        { key: 'title', label: t('listing.title'), value: form.title || notEnteredM },
+        {
+          key: 'description',
+          label: t('listing.description'),
+          value: chars ? t(`listing.reviewCharacters${srPluralCategory(chars)}`, { count: chars }) : notEnteredM,
+        },
+        // 289:372 prints the link without its scheme.
+        { key: 'video', label: t('listing.videoSection'), value: form.videoUrl.replace(/^https?:\/\//, '') || notEnteredM },
+      ],
+    },
+  ]
+
+  const pricingRows = [
+    {
+      key: 'booking',
+      label: t('listing.reservationMethod'),
+      value: bookingOptions.value.find((option) => option.value === bookingChoice.value)?.title || '',
+    },
+  ]
+  if (form.bookingModel === 'PER_SLOT') {
+    pricingRows.push({
+      key: 'submode',
+      label: t('listing.slotCreationMethod'),
+      value: slotSubmodeOptions.value.find((option) => option.value === form.slotSubmode)?.title || t('listing.reviewNotSelected'),
+    })
+  }
+  if (showFlatPriceFields.value) {
+    pricingRows.push({
+      key: 'price',
+      label: t('listing.price'),
+      value: form.price ? `${previewPrice.value} ${previewUnit.value}`.trim() : t('listing.reviewNotEnteredF'),
+    })
+  }
+  if (showWeekendPrice.value) {
+    pricingRows.push({
+      key: 'weekend',
+      label: t('listing.weekendPrice'),
+      value: form.weekendPrice
+        ? `${rsdFormatter.format(Math.round(form.weekendPrice))} RSD ${previewUnit.value}`.trim()
+        : t('listing.reviewNotEnteredF'),
+    })
+  }
+  sections.push({ key: 'pricing', title: t('listing.stepPricing'), rows: pricingRows })
+
+  if (form.bookingModel !== 'NO_BOOKING') {
+    sections.push({ key: 'availability', title: t('listing.stepAvailability'), rows: reviewAvailabilityRows.value })
+    sections.push({ key: 'rules', title: t('listing.stepRules'), rows: reviewRulesRows.value })
+    sections.push({ key: 'payment', title: t('listing.stepPayment'), rows: reviewPaymentRows.value })
+  }
+  sections.push({
+    key: 'attributes',
+    title: t('listing.stepAttributes'),
+    rows: detailsPreviewRows.value.length
+      ? detailsPreviewRows.value
+      : [{ key: 'empty', label: t('listing.reviewRowFilled'), value: t('listing.reviewNotEntered') }],
+  })
+  sections.push({ key: 'location', title: t('listing.stepLocation'), rows: reviewLocationRows.value })
+  sections.push({ key: 'photos', title: t('listing.stepPhotos'), rows: reviewPhotoRows.value })
+  return sections
+})
+
+// 291:350: five checks to run before sending, each about a step this listing has.
+const reviewTips = computed(() => {
+  const tips = [t('listing.reviewTipName'), t(showWeekendPrice.value ? 'listing.reviewTipPriceWeekend' : 'listing.reviewTipPrice')]
+  if (form.bookingModel !== 'NO_BOOKING') {
+    const kind = isDefinedSlotsModel.value ? 'definedSlots' : form.bookingModel === 'PER_SLOT' ? 'workingHours' : 'stay'
+    tips.push(t(`listing.reviewTipAvailability.${kind}`))
+  }
+  tips.push(t(`listing.reviewTipCover.${detailsCopyKind.value}`))
+  if (form.bookingModel !== 'NO_BOOKING') tips.push(t('listing.reviewTipCancellation'))
+  return tips
+})
+
+// 285:467: the frame's single "Pošalji na odobrenje" covers three real outcomes, so the
+// button says which one this listing gets (T41, T42).
+const reviewCta = computed(() => {
+  if (listing.value?.subscriptionId) return { label: t('listing.saveChanges'), to: '', run: finishEditing }
+  if (freeSlotSubscription.value) return { label: t('listing.reviewSubmit'), to: '', run: publishWithFreeSlot }
+  return { label: t('listing.goToPackages'), to: `/oglasi/${listingId}/paket`, run: () => {} }
+})
 
 // Dizajn 6 errors under the required fields. The area counts only when the city has
 // areas, the rule updateLocation enforces too. Focuses the first field that needs attention.
@@ -4886,6 +5280,32 @@ $field-danger-border: #f43f5e;
   white-space: nowrap;
 }
 
+// 499:552: step 9's middle button, white with a 1px stroke inside a 12 radius.
+.wizard-preview-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 15px 19px;
+  border: 1px solid $color-border;
+  border-radius: $radius-input;
+  background: $color-surface;
+  color: $color-text;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 19px;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: border-color 0.15s ease;
+}
+
+.wizard-preview-link:hover {
+  border-color: $color-primary;
+}
+
+.wizard-preview-link:focus-visible {
+  outline: 2px solid rgba($color-primary, 0.35);
+  outline-offset: 2px;
+}
+
 // 228:383: left to right, three stops.
 .wizard-next {
   display: inline-flex;
@@ -5190,18 +5610,266 @@ $photos-dash-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/
   gap: 6px 16px;
 }
 
-.wizard-checklist {
-  list-style: none;
-  padding: 0;
+// Dizajn 28: step 9's body, read off 285:392 (Forma) and 285:426 (Saveti). Figma's strokes
+// sit inside the box, so every padding here is a pixel short of the frame's.
+$review-ok-bg: #cdfad1;
+$review-ok-ink: #1db82b;
+
+.review {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 20px;
 }
 
-.review-actions {
+// 289:317
+.review-readiness {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 14px;
+  padding: 19px 21px;
+  border: 1px solid $color-border;
+  border-radius: $radius-card;
+  background: $color-surface;
+}
+
+// 289:318
+.review-readiness-head {
+  display: flex;
+  align-items: center;
   gap: 10px;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 24px;
+  color: $color-text;
+}
+
+.review-readiness-mark {
+  display: block;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: $radius-pill;
+  background: $color-warning-bg;
+}
+
+// The frame only draws the card with something still missing; with every check green the
+// mark takes the same tint as the green rows.
+.review-readiness.is-ready .review-readiness-mark {
+  background: $review-ok-bg;
+}
+
+.review-readiness-mark img {
+  display: block;
+  width: 24px;
+  height: 24px;
+}
+
+// 289:323
+.review-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+// 499:514
+.review-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 20px;
+}
+
+.review-check-mark {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: $radius-pill;
+  background: $review-ok-bg;
+  color: $review-ok-ink;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: normal;
+}
+
+// 499:544: an unfinished check is a warning, not an error; nothing is broken yet.
+.review-check.is-missing .review-check-mark {
+  background: $color-warning-bg;
+  color: $color-warning;
+}
+
+// 499:517: the label itself is the link to the step that fixes the check (289:357).
+.review-check-label {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: $color-text;
+  font-family: $font-family-base;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 18px;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.review-check-label.is-plain {
+  cursor: default;
+}
+
+.review-check-label:hover:not(.is-plain) {
+  color: $color-primary;
+}
+
+// 499:546
+.review-check.is-missing .review-check-label {
+  font-weight: 500;
+  color: $color-warning;
+}
+
+// 499:542
+.review-check-note {
+  font-size: 13px;
+  font-weight: 300;
+  line-height: 16px;
+  color: $color-text-muted;
+}
+
+// 499:547
+.review-check-link {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 16px;
+  color: $color-primary;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.review-check-link:hover {
+  text-decoration: underline;
+}
+
+// 289:356
+.review-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 300;
+  line-height: 16px;
+  color: $color-text-muted;
+}
+
+.review-note img {
+  display: block;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+}
+
+// 289:360
+.review-card {
+  overflow: hidden;
+  border: 1px solid $color-border;
+  border-radius: $radius-card;
+  background: $color-surface;
+}
+
+// 289:361
+.review-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  height: 45px;
+  padding: 0 19px;
+  background: $color-background;
+}
+
+.review-card-title {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 18px;
+  color: $color-text;
+}
+
+// 289:363
+.review-card-edit {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: $color-primary;
+  font-family: $font-family-base;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 16px;
+  cursor: pointer;
+}
+
+.review-card-edit:hover {
+  text-decoration: underline;
+}
+
+.review-check-label:focus-visible,
+.review-card-edit:focus-visible {
+  outline: 2px solid rgba($color-primary, 0.35);
+  outline-offset: 2px;
+}
+
+// 289:364
+.review-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 19px 11px;
+  border-top: 1px solid $color-border;
+  font-size: 13px;
+  line-height: 16px;
+}
+
+.review-row:last-child {
+  padding-bottom: 10px;
+}
+
+.review-row-label {
+  flex-shrink: 0;
+  width: 230px;
+  font-weight: 300;
+  color: $color-text-muted;
+}
+
+.review-row-value {
+  flex: 1 1 0;
+  min-width: 0;
+  color: $color-text;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+// The frame is drawn at 1440; on a phone the 230 label column would leave the value a
+// sliver, and a check with a note needs a second line.
+@include respond-below(sm) {
+  .review-row-label {
+    flex: 0 1 auto;
+    width: auto;
+    max-width: 45%;
+  }
+
+  .review-check {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: 20px;
+  }
 }
 
 .ical-locked {
