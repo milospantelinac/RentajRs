@@ -12,6 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.MessagingService = void 0;
 const common_1 = require("@nestjs/common");
 const event_emitter_1 = require("@nestjs/event-emitter");
+const client_1 = require("@prisma/client");
 const nestjs_i18n_1 = require("nestjs-i18n");
 const prisma_service_1 = require("../../prisma/prisma.service");
 const uploads_service_1 = require("../../common/uploads/uploads.service");
@@ -78,6 +79,9 @@ let MessagingService = class MessagingService {
         });
         if (existing) {
             return this.sendMessage(guestId, existing.id, dto.content);
+        }
+        if (listing.status !== client_1.ListingStatus.ACTIVE) {
+            throw new common_1.NotFoundException(this.i18n.t('errors.LISTING_NOT_FOUND'));
         }
         if (listing.user.anonymizedAt) {
             throw new common_1.BadRequestException(this.i18n.t('errors.CONVERSATION_ACCOUNT_REMOVED'));

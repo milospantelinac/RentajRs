@@ -283,18 +283,27 @@ describe('MessagingService#sendMessage (Dizajn 37)', () => {
 });
 
 describe('MessagingService#startConversation (Dizajn 37)', () => {
-  function startPrisma({ ownerRemoved = false, booking = null as any } = {}) {
+  function startPrisma({ ownerRemoved = false, booking = null as any, status = 'ACTIVE', existing = null as any } = {}) {
     return {
       listing: {
         findUniqueOrThrow: jest.fn().mockResolvedValue({
           id: 'l1',
           userId: 'owner-1',
+          status,
           subscription: { package: { hasMessaging: true } },
           user: { anonymizedAt: ownerRemoved ? new Date() : null },
         }),
       },
-      booking: { findFirst: jest.fn().mockResolvedValue(booking) },
-      conversation: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn() },
+      booking: { findFirst: jest.fn().mockResolvedValue(booking), count: jest.fn().mockResolvedValue(0) },
+      conversation: {
+        findFirst: jest.fn().mockResolvedValue(existing),
+        findUnique: jest.fn().mockResolvedValue(
+          existing && { ...existing, guest: { anonymizedAt: null }, owner: { anonymizedAt: null } },
+        ),
+        create: jest.fn(),
+        update: jest.fn().mockResolvedValue({}),
+      },
+      message: { create: jest.fn().mockResolvedValue({ id: 'm9', conversationId: 'c1' }) },
     };
   }
 
@@ -312,6 +321,27 @@ describe('MessagingService#startConversation (Dizajn 37)', () => {
     await expect(makeService(prisma).startConversation('guest-1', { listingId: 'l1', content: 'Zdravo' })).rejects.toBeInstanceOf(
       BadRequestException,
     );
+    expect(prisma.conversation.create).not.toHaveBeenCalled();
+  });
+
+  // A listing that is not live has no page to write from, so a new thread on
+  // it reads as missing (the API was the only way in).
+  it.each(['DELETED', 'EXPIRED', 'DRAFT', 'PENDING_APPROVAL', 'REJECTED'])('refuses a new thread on a %s listing', async (status) => {
+    const prisma = startPrisma({ status });
+    await expect(makeService(prisma).startConversation('guest-1', { listingId: 'l1', content: 'Zdravo' })).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    expect(i18n.t).toHaveBeenCalledWith('errors.LISTING_NOT_FOUND');
+    expect(prisma.conversation.create).not.toHaveBeenCalled();
+    expect(prisma.message.create).not.toHaveBeenCalled();
+  });
+
+  it('still lets the two sides write in a thread they already have on such a listing', async () => {
+    const prisma = startPrisma({ status: 'EXPIRED', existing: { id: 'c1', guestId: 'guest-1', ownerId: 'owner-1', bookingId: null } });
+    const message = await makeService(prisma).startConversation('guest-1', { listingId: 'l1', content: 'Da li je oglas opet aktivan?' });
+
+    expect(message).toEqual({ id: 'm9', conversationId: 'c1' });
+    expect(prisma.message.create).toHaveBeenCalled();
     expect(prisma.conversation.create).not.toHaveBeenCalled();
   });
 });

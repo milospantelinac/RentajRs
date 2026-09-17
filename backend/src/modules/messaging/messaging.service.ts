@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { BookingStatus, Prisma } from '@prisma/client';
+import { BookingStatus, ListingStatus, Prisma } from '@prisma/client';
 import { I18nService } from 'nestjs-i18n';
 import { PrismaService } from '../../prisma/prisma.service';
 import { UploadsService } from '../../common/uploads/uploads.service';
@@ -101,8 +101,14 @@ export class MessagingService {
       return this.sendMessage(guestId, existing.id, dto.content);
     }
 
-    // Checked before the thread exists, so a refused first message leaves no
-    // empty conversation behind.
+    // Only a live listing has a page to write from, so a new thread on a
+    // deleted, expired or unpublished one reads as missing, the way its page
+    // does (getPublicBySlug). Both checks here run before the thread exists,
+    // so a refused first message leaves no empty conversation behind.
+    if (listing.status !== ListingStatus.ACTIVE) {
+      throw new NotFoundException(this.i18n.t('errors.LISTING_NOT_FOUND'));
+    }
+
     if (listing.user.anonymizedAt) {
       throw new BadRequestException(this.i18n.t('errors.CONVERSATION_ACCOUNT_REMOVED'));
     }
