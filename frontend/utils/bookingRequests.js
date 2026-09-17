@@ -86,7 +86,7 @@ export function formatBookingWeekday(t, value) {
 }
 
 // "19. 9. - 22. 9. 2026." (380:671), with the year once when both days share it.
-function formatBookingDays(startsAt, endsAt) {
+export function formatBookingDays(startsAt, endsAt) {
   const from = getParts(startsAt)
   const to = getParts(endsAt)
   const start = from.year === to.year ? `${from.day}. ${from.month}.` : formatBookingDate(startsAt)

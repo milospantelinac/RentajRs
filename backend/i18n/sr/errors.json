@@ -54,5 +54,6 @@
   "SUBSCRIPTION_RENEWAL_NOT_ALLOWED": "Ovaj paket ne može da se obnovi",
   "SUBSCRIPTION_RENEWAL_SAME_PACKAGE": "Obnova zadržava isti paket; za prelazak na Pro koristite „Nadogradi na Pro”",
   "SUBSCRIPTION_UPGRADE_PRO_ONLY": "Objavljen oglas ovde može da pređe samo na Pro paket; trenutni paket se produžava obnovom",
-  "LISTING_PACKAGE_PURCHASE_NOT_ALLOWED": "Za ovaj oglas trenutno ne može da se kupi paket"
+  "LISTING_PACKAGE_PURCHASE_NOT_ALLOWED": "Za ovaj oglas trenutno ne može da se kupi paket",
+  "CONVERSATION_ACCOUNT_REMOVED": "Ovaj nalog je uklonjen i više ne prima poruke"
 }

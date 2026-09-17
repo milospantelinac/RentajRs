@@ -16,8 +16,41 @@ const nestjs_i18n_1 = require("nestjs-i18n");
 const prisma_service_1 = require("../../prisma/prisma.service");
 const uploads_service_1 = require("../../common/uploads/uploads.service");
 const contact_detector_1 = require("../../common/utils/contact-detector");
-const money_1 = require("../../common/utils/money");
+const short_name_1 = require("../../common/utils/short-name");
 const ATTACHMENT_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+const PREVIEW_LENGTH = 160;
+const OPEN_BOOKING_STATUSES = ['REQUESTED', 'AWAITING_PAYMENT', 'CONFIRMED'];
+const PERSON_SELECT = {
+    firstName: true,
+    lastName: true,
+    avatarUrl: true,
+    anonymizedAt: true,
+};
+const LISTING_SELECT = {
+    title: true,
+    city: { select: { name: true } },
+    cityArea: { select: { name: true } },
+};
+const BOOKING_SELECT = {
+    id: true,
+    status: true,
+    startsAt: true,
+    endsAt: true,
+    priceUnit: true,
+};
+function serializePerson(person) {
+    if (person.anonymizedAt)
+        return { name: null, initials: null, avatarUrl: null, removed: true };
+    const initials = `${person.firstName.trim().charAt(0)}${person.lastName.trim().charAt(0)}`.toUpperCase();
+    return { name: (0, short_name_1.shortName)(person), initials, avatarUrl: person.avatarUrl, removed: false };
+}
+function serializeListing(listing) {
+    return { title: listing.title, place: listing.cityArea?.name ?? listing.city?.name ?? null };
+}
+function previewText(content) {
+    const text = content.replace(/\s+/g, ' ').trim();
+    return text.length > PREVIEW_LENGTH ? text.slice(0, PREVIEW_LENGTH) : text;
+}
 let MessagingService = class MessagingService {
     constructor(prisma, uploads, i18n, events) {
         this.prisma = prisma;
@@ -28,15 +61,26 @@ let MessagingService = class MessagingService {
     async startConversation(guestId, dto) {
         const listing = await this.prisma.listing.findUniqueOrThrow({
             where: { id: dto.listingId },
-            include: { subscription: { include: { package: true } } },
+            include: { subscription: { include: { package: true } }, user: { select: { anonymizedAt: true } } },
         });
         if (listing.userId === guestId)
             throw new common_1.BadRequestException('Cannot message your own listing');
+        if (dto.bookingId) {
+            const booking = await this.prisma.booking.findFirst({
+                where: { id: dto.bookingId, listingId: dto.listingId, guestId },
+                select: { id: true },
+            });
+            if (!booking)
+                throw new common_1.NotFoundException();
+        }
         const existing = await this.prisma.conversation.findFirst({
             where: { listingId: dto.listingId, guestId, bookingId: dto.bookingId ?? null },
         });
         if (existing) {
             return this.sendMessage(guestId, existing.id, dto.content);
+        }
+        if (listing.user.anonymizedAt) {
+            throw new common_1.BadRequestException(this.i18n.t('errors.CONVERSATION_ACCOUNT_REMOVED'));
         }
         if (!listing.subscription?.package.hasMessaging) {
             throw new common_1.ForbiddenException(this.i18n.t('errors.PACKAGE_FEATURE_NOT_INCLUDED'));
@@ -64,12 +108,19 @@ let MessagingService = class MessagingService {
         }
     }
     async sendMessage(userId, conversationId, content) {
-        const conversation = await this.prisma.conversation.findUnique({ where: { id: conversationId } });
+        const conversation = await this.prisma.conversation.findUnique({
+            where: { id: conversationId },
+            include: { guest: { select: { anonymizedAt: true } }, owner: { select: { anonymizedAt: true } } },
+        });
         if (!conversation)
             throw new common_1.NotFoundException();
         if (conversation.guestId !== userId && conversation.ownerId !== userId)
             throw new common_1.ForbiddenException();
         const isGuest = conversation.guestId === userId;
+        const recipient = isGuest ? conversation.owner : conversation.guest;
+        if (recipient.anonymizedAt) {
+            throw new common_1.BadRequestException(this.i18n.t('errors.CONVERSATION_ACCOUNT_REMOVED'));
+        }
         const bookingConfirmed = conversation.bookingId
             ? await this.prisma.booking.count({ where: { id: conversation.bookingId, status: { in: ['CONFIRMED', 'COMPLETED'] } } })
             : 0;
@@ -88,6 +139,8 @@ let MessagingService = class MessagingService {
         return message;
     }
     async addAttachment(userId, messageId, file) {
+        if (!file)
+            throw new common_1.BadRequestException(this.i18n.t('errors.FILE_REQUIRED'));
         const message = await this.prisma.message.findUnique({ where: { id: messageId }, include: { conversation: true } });
         if (!message)
             throw new common_1.NotFoundException();
@@ -103,34 +156,70 @@ let MessagingService = class MessagingService {
     async listConversations(userId) {
         const conversations = await this.prisma.conversation.findMany({
             where: { OR: [{ guestId: userId }, { ownerId: userId }] },
-            orderBy: { lastMessageAt: 'desc' },
-            include: {
-                listing: { select: { id: true, title: true, slug: true } },
-                booking: { select: { id: true, status: true, startsAt: true, endsAt: true, totalAmount: true } },
-                guest: { select: { id: true, firstName: true, lastName: true, avatarUrl: true } },
-                owner: { select: { id: true, firstName: true, lastName: true, avatarUrl: true } },
+            orderBy: { lastMessageAt: { sort: 'desc', nulls: 'last' } },
+            select: {
+                id: true,
+                guestId: true,
+                unreadGuestCount: true,
+                unreadOwnerCount: true,
+                listing: { select: LISTING_SELECT },
+                guest: { select: PERSON_SELECT },
+                owner: { select: PERSON_SELECT },
+                messages: {
+                    orderBy: { sentAt: 'desc' },
+                    take: 1,
+                    select: {
+                        content: true,
+                        sentAt: true,
+                        senderId: true,
+                        attachments: { select: { filename: true }, take: 1 },
+                    },
+                },
             },
         });
         return conversations
-            .map((c) => ({
-            ...c,
-            booking: c.booking ? { ...c.booking, totalAmount: (0, money_1.paraToRsd)(c.booking.totalAmount) } : null,
-            unreadCount: c.guestId === userId ? c.unreadGuestCount : c.unreadOwnerCount,
-            counterpart: c.guestId === userId ? c.owner : c.guest,
-        }))
+            .map((c) => {
+            const isGuest = c.guestId === userId;
+            const [last] = c.messages;
+            return {
+                id: c.id,
+                role: isGuest ? 'guest' : 'owner',
+                counterpart: serializePerson(isGuest ? c.owner : c.guest),
+                listing: serializeListing(c.listing),
+                lastMessage: last
+                    ? {
+                        text: previewText(last.content),
+                        sentAt: last.sentAt,
+                        mine: last.senderId === userId,
+                        attachment: last.attachments[0]?.filename ?? null,
+                    }
+                    : null,
+                unreadCount: isGuest ? c.unreadGuestCount : c.unreadOwnerCount,
+            };
+        })
             .sort((a, b) => (b.unreadCount > 0 ? 1 : 0) - (a.unreadCount > 0 ? 1 : 0));
     }
     async getConversation(userId, conversationId) {
         const conversation = await this.prisma.conversation.findUnique({
             where: { id: conversationId },
-            include: {
-                listing: { select: { id: true, title: true, slug: true } },
-                booking: true,
-                guest: { select: { id: true, firstName: true, lastName: true, avatarUrl: true } },
-                owner: { select: { id: true, firstName: true, lastName: true, avatarUrl: true } },
+            select: {
+                id: true,
+                listingId: true,
+                guestId: true,
+                ownerId: true,
+                bookingId: true,
+                listing: { select: LISTING_SELECT },
+                guest: { select: PERSON_SELECT },
+                owner: { select: PERSON_SELECT },
                 messages: {
                     orderBy: { sentAt: 'asc' },
-                    include: { attachments: true, sender: { select: { id: true, firstName: true, lastName: true, avatarUrl: true } } },
+                    select: {
+                        id: true,
+                        content: true,
+                        sentAt: true,
+                        senderId: true,
+                        attachments: { select: { id: true, url: true, type: true, filename: true } },
+                    },
                 },
             },
         });
@@ -138,35 +227,71 @@ let MessagingService = class MessagingService {
             throw new common_1.NotFoundException();
         if (conversation.guestId !== userId && conversation.ownerId !== userId)
             throw new common_1.ForbiddenException();
-        await this.markRead(userId, conversationId);
+        await this.clearUnread(conversation, userId);
+        const isGuest = conversation.guestId === userId;
+        const counterpart = serializePerson(isGuest ? conversation.owner : conversation.guest);
         return {
-            ...conversation,
-            counterpart: conversation.guestId === userId ? conversation.owner : conversation.guest,
-            booking: conversation.booking
-                ? {
-                    ...conversation.booking,
-                    pricePerUnit: (0, money_1.paraToRsd)(conversation.booking.pricePerUnit),
-                    totalAmount: (0, money_1.paraToRsd)(conversation.booking.totalAmount),
-                    amountDue: (0, money_1.paraToRsd)(conversation.booking.amountDue),
-                }
-                : null,
+            id: conversation.id,
+            role: isGuest ? 'guest' : 'owner',
+            counterpart,
+            listing: serializeListing(conversation.listing),
+            booking: await this.findHeaderBooking(conversation),
+            canReply: !counterpart.removed,
+            messages: conversation.messages.map((m) => ({
+                id: m.id,
+                text: m.content,
+                sentAt: m.sentAt,
+                mine: m.senderId === userId,
+                attachments: m.attachments,
+            })),
         };
     }
     async markRead(userId, conversationId) {
-        const conversation = await this.prisma.conversation.findUnique({ where: { id: conversationId } });
+        const conversation = await this.prisma.conversation.findUnique({
+            where: { id: conversationId },
+            select: { id: true, guestId: true, ownerId: true },
+        });
         if (!conversation)
             throw new common_1.NotFoundException();
+        if (conversation.guestId !== userId && conversation.ownerId !== userId)
+            throw new common_1.ForbiddenException();
+        await this.clearUnread(conversation, userId);
+    }
+    async clearUnread(conversation, userId) {
         const isGuest = conversation.guestId === userId;
         await this.prisma.$transaction([
             this.prisma.conversation.update({
-                where: { id: conversationId },
+                where: { id: conversation.id },
                 data: isGuest ? { unreadGuestCount: 0 } : { unreadOwnerCount: 0 },
             }),
             this.prisma.message.updateMany({
-                where: { conversationId, senderId: { not: userId }, readAt: null },
+                where: { conversationId: conversation.id, senderId: { not: userId }, readAt: null },
                 data: { readAt: new Date() },
             }),
         ]);
+    }
+    async findHeaderBooking(conversation) {
+        const parties = { listingId: conversation.listingId, guestId: conversation.guestId, ownerId: conversation.ownerId };
+        if (conversation.bookingId) {
+            const own = await this.prisma.booking.findFirst({
+                where: { id: conversation.bookingId, ...parties },
+                select: BOOKING_SELECT,
+            });
+            if (own)
+                return own;
+        }
+        const open = await this.prisma.booking.findFirst({
+            where: { ...parties, status: { in: OPEN_BOOKING_STATUSES }, endsAt: { gt: new Date() } },
+            orderBy: { startsAt: 'asc' },
+            select: BOOKING_SELECT,
+        });
+        if (open)
+            return open;
+        return this.prisma.booking.findFirst({
+            where: parties,
+            orderBy: { createdAt: 'desc' },
+            select: BOOKING_SELECT,
+        });
     }
 };
 exports.MessagingService = MessagingService;
