@@ -1363,8 +1363,6 @@
     "notifCategoryAccount": "Account",
     "deleteAccount": "Delete account",
     "deleteAccountWarning": "This action is permanent and cannot be undone.",
-    "noFavorites": "No saved listings yet",
-    "priceDropped": "Price dropped since you saved this",
     "listingsHint": "Currently active listings.",
     "bookingsHint": "Confirmed and completed.",
     "valueHint": "The value of your bookings.",
@@ -2091,5 +2089,14 @@
     "expiredNoteOne": "The listing stays out of search until the package is renewed.",
     "expiredNoteMany": "The listings stay out of search until the package is renewed.",
     "expiredBankedNote": "The listing is visible on carried-over days; renewing keeps the rest for later."
+  },
+  "savedListings": {
+    "summaryOne": "{count} listing you saved",
+    "summaryFew": "{count} listings you saved",
+    "summaryMany": "{count} listings you saved",
+    "emptyTitle": "No saved listings yet",
+    "emptyText": "Tap the heart on a listing you like and you will find it here.",
+    "loadErrorTitle": "Saved listings could not be loaded",
+    "loadErrorText": "Check your internet connection and try again."
   }
 }

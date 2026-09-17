@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   UploadedFile,
@@ -48,12 +49,12 @@ export class UsersController {
   }
 
   @Post('listings/:id/favorite')
-  addFavorite(@CurrentUser('id') userId: string, @Param('id') id: string) {
+  addFavorite(@CurrentUser('id') userId: string, @Param('id', ParseUUIDPipe) id: string) {
     return this.usersService.addFavorite(userId, id);
   }
 
   @Delete('listings/:id/favorite')
-  removeFavorite(@CurrentUser('id') userId: string, @Param('id') id: string) {
+  removeFavorite(@CurrentUser('id') userId: string, @Param('id', ParseUUIDPipe) id: string) {
     return this.usersService.removeFavorite(userId, id);
   }
 

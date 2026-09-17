@@ -1363,8 +1363,6 @@
     "notifCategoryAccount": "Nalog",
     "deleteAccount": "Obriši nalog",
     "deleteAccountWarning": "Ova radnja je trajna i ne može se poništiti.",
-    "noFavorites": "Nemate sačuvanih oglasa",
-    "priceDropped": "Cena je pala od kada ste sačuvali",
     "listingsHint": "Trenutno aktivni oglasi.",
     "bookingsHint": "Potvrđene i realizovane.",
     "valueHint": "Vrednost vaših rezervacija.",
@@ -2091,5 +2089,14 @@
     "expiredNoteOne": "Oglas nije vidljiv u pretrazi dok se paket ne obnovi.",
     "expiredNoteMany": "Oglasi nisu vidljivi u pretrazi dok se paket ne obnovi.",
     "expiredBankedNote": "Oglas je vidljiv iz prenetih dana; obnova čuva ostatak za posle."
+  },
+  "savedListings": {
+    "summaryOne": "{count} oglas koji ste sačuvali",
+    "summaryFew": "{count} oglasa koja ste sačuvali",
+    "summaryMany": "{count} oglasa koje ste sačuvali",
+    "emptyTitle": "Nemate sačuvanih oglasa",
+    "emptyText": "Pritisnite srce na oglasu koji vam se dopada i naći ćete ga ovde.",
+    "loadErrorTitle": "Sačuvani oglasi nisu učitani",
+    "loadErrorText": "Proverite internet vezu i pokušajte ponovo."
   }
 }

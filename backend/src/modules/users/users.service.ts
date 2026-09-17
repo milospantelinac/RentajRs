@@ -7,6 +7,7 @@ import { UploadsService } from '../../common/uploads/uploads.service';
 import { TaxonomyService } from '../taxonomy/taxonomy.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { paraToRsd } from '../../common/utils/money';
+import { LISTING_CARD_INCLUDE, loadListingCardNames, serializeListingCard } from '../../common/utils/listing-card';
 
 const DELETION_TOKEN_TTL_MS = 60 * 60_000; // 1h — matches the password-reset token lifetime
 
@@ -153,59 +154,40 @@ export class UsersService {
 
   // -- Favorites ---------------------------------------------------------
 
+  /**
+   * Dizajn 36: the saved page shows each listing as the very card search
+   * shows (common/utils/listing-card.ts), so a guest never receives the
+   * address, the iCal export token or anything else the public page keeps
+   * back. Only live listings are listed, since only they have a page to open;
+   * an expired, rejected or deleted one keeps its row and shows again if the
+   * listing comes back. The price-drop email and bell entry still read
+   * priceAtAdd (sendPriceDropNotifications).
+   */
   async listFavorites(userId: string) {
     const favorites = await this.prisma.favorite.findMany({
-      where: { userId },
+      where: { userId, listing: { status: 'ACTIVE' } },
       orderBy: { addedAt: 'desc' },
-      include: {
-        listing: {
-          include: {
-            photos: { where: { isCover: true }, take: 1 },
-            city: true,
-            category: true,
-            // Dizajn 3/4 — same key-facts data shape as SearchService.serializeResult,
-            // so ListingCard renders identically here and in search results.
-            attributes: { include: { attribute: { select: { key: true, unit: true, type: true } } } },
-          },
-        },
-      },
+      select: { listingId: true, addedAt: true, listing: { include: LISTING_CARD_INCLUDE } },
     });
-
-    const categoryNames = await this.taxonomy.getCategoryNames(favorites.map((f) => f.listing.category.id));
-    const optionIds = [
-      ...new Set(favorites.flatMap((f) => f.listing.attributes.flatMap((a) => a.valueOptionIds))),
-    ];
-    const optionNames = optionIds.length ? await this.taxonomy.getOptionNames(optionIds) : new Map<string, string>();
-
-    // Price-drop signal (Ch.10 "Ako stigne" item) — compare today's price to the price when saved.
-    // Prisma's BigInt (para) fields must be converted before this crosses into JSON — see money.ts.
-    // weekendPrice/pricePerGuest are BigInt too (like price) — left unconverted in the ...f.listing
-    // spread below, they crashed JSON.stringify on any listing that had either set.
+    const { categoryNames, optionNames } = await loadListingCardNames(
+      this.taxonomy,
+      favorites.map((f) => f.listing),
+    );
     return favorites.map((f) => ({
-      ...f,
-      priceAtAdd: paraToRsd(f.priceAtAdd),
-      priceDropped: f.listing.price < f.priceAtAdd,
-      listing: {
-        ...f.listing,
-        price: paraToRsd(f.listing.price),
-        weekendPrice: paraToRsd(f.listing.weekendPrice),
-        pricePerGuest: paraToRsd(f.listing.pricePerGuest),
-        category: { ...f.listing.category, name: categoryNames.get(f.listing.category.id) ?? f.listing.category.slug },
-        attributes: f.listing.attributes.map((a) => ({
-          key: a.attribute.key,
-          type: a.attribute.type,
-          unit: a.attribute.unit,
-          valueNumber: a.valueNumber !== null ? Number(a.valueNumber) : null,
-          valueText: a.valueText,
-          valueBoolean: a.valueBoolean,
-          optionNames: a.valueOptionIds.map((id) => optionNames.get(id)).filter(Boolean),
-        })),
-      },
+      listingId: f.listingId,
+      addedAt: f.addedAt,
+      listing: serializeListingCard(f.listing, categoryNames, optionNames),
     }));
   }
 
   async addFavorite(userId: string, listingId: string) {
-    const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: listingId } });
+    // Only a live listing has a page with a heart on it, so anything else is
+    // reported as missing instead of being saved out of sight (Dizajn 36).
+    const listing = await this.prisma.listing.findFirst({
+      where: { id: listingId, status: 'ACTIVE' },
+      select: { price: true },
+    });
+    if (!listing) throw new NotFoundException(this.i18n.t('errors.LISTING_NOT_FOUND'));
     const favorite = await this.prisma.favorite.upsert({
       where: { userId_listingId: { userId, listingId } },
       update: {},

@@ -51,6 +51,7 @@ const prisma_service_1 = require("../../prisma/prisma.service");
 const uploads_service_1 = require("../../common/uploads/uploads.service");
 const taxonomy_service_1 = require("../taxonomy/taxonomy.service");
 const money_1 = require("../../common/utils/money");
+const listing_card_1 = require("../../common/utils/listing-card");
 const DELETION_TOKEN_TTL_MS = 60 * 60_000;
 const ME_SELECT = {
     id: true,
@@ -173,48 +174,24 @@ let UsersService = class UsersService {
     }
     async listFavorites(userId) {
         const favorites = await this.prisma.favorite.findMany({
-            where: { userId },
+            where: { userId, listing: { status: 'ACTIVE' } },
             orderBy: { addedAt: 'desc' },
-            include: {
-                listing: {
-                    include: {
-                        photos: { where: { isCover: true }, take: 1 },
-                        city: true,
-                        category: true,
-                        attributes: { include: { attribute: { select: { key: true, unit: true, type: true } } } },
-                    },
-                },
-            },
+            select: { listingId: true, addedAt: true, listing: { include: listing_card_1.LISTING_CARD_INCLUDE } },
         });
-        const categoryNames = await this.taxonomy.getCategoryNames(favorites.map((f) => f.listing.category.id));
-        const optionIds = [
-            ...new Set(favorites.flatMap((f) => f.listing.attributes.flatMap((a) => a.valueOptionIds))),
-        ];
-        const optionNames = optionIds.length ? await this.taxonomy.getOptionNames(optionIds) : new Map();
+        const { categoryNames, optionNames } = await (0, listing_card_1.loadListingCardNames)(this.taxonomy, favorites.map((f) => f.listing));
         return favorites.map((f) => ({
-            ...f,
-            priceAtAdd: (0, money_1.paraToRsd)(f.priceAtAdd),
-            priceDropped: f.listing.price < f.priceAtAdd,
-            listing: {
-                ...f.listing,
-                price: (0, money_1.paraToRsd)(f.listing.price),
-                weekendPrice: (0, money_1.paraToRsd)(f.listing.weekendPrice),
-                pricePerGuest: (0, money_1.paraToRsd)(f.listing.pricePerGuest),
-                category: { ...f.listing.category, name: categoryNames.get(f.listing.category.id) ?? f.listing.category.slug },
-                attributes: f.listing.attributes.map((a) => ({
-                    key: a.attribute.key,
-                    type: a.attribute.type,
-                    unit: a.attribute.unit,
-                    valueNumber: a.valueNumber !== null ? Number(a.valueNumber) : null,
-                    valueText: a.valueText,
-                    valueBoolean: a.valueBoolean,
-                    optionNames: a.valueOptionIds.map((id) => optionNames.get(id)).filter(Boolean),
-                })),
-            },
+            listingId: f.listingId,
+            addedAt: f.addedAt,
+            listing: (0, listing_card_1.serializeListingCard)(f.listing, categoryNames, optionNames),
         }));
     }
     async addFavorite(userId, listingId) {
-        const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: listingId } });
+        const listing = await this.prisma.listing.findFirst({
+            where: { id: listingId, status: 'ACTIVE' },
+            select: { price: true },
+        });
+        if (!listing)
+            throw new common_1.NotFoundException(this.i18n.t('errors.LISTING_NOT_FOUND'));
         const favorite = await this.prisma.favorite.upsert({
             where: { userId_listingId: { userId, listingId } },
             update: {},

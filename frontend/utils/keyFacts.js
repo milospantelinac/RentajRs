@@ -1,8 +1,8 @@
 // Dizajn 4 — which 3 attribute values show on a listing card's "traka
 // ključnih činjenica", and in what order, per category. Reads real
-// attribute values (SearchService.serializeResult / UsersService.listFavorites
-// already resolve LIST/CHECKBOX_GROUP option ids to names) — this module only
-// picks and formats, it never invents a value.
+// attribute values (the backend's serializeListingCard in
+// common/utils/listing-card.ts already resolves LIST/CHECKBOX_GROUP option ids
+// to names); this module only picks and formats, it never invents a value.
 //
 // Keyed by the listing's actual (leaf) category slug — Prostori za proslave's
 // two bookable leaves share their parent's attribute set (T64), so both list
