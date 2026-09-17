@@ -23,6 +23,7 @@ const payment_provider_interface_1 = require("../../common/payment/payment-provi
 const nestpay_checkout_service_1 = require("../../common/payment/nestpay/nestpay-checkout.service");
 const fiscalization_provider_interface_1 = require("../../common/fiscalization/fiscalization-provider.interface");
 const money_1 = require("../../common/utils/money");
+const subscription_renewal_1 = require("../../common/utils/subscription-renewal");
 let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
     constructor(prisma, cache, listings, payment, nestpay, fiscalization, i18n, events, config) {
         this.prisma = prisma;
@@ -188,8 +189,11 @@ let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
         const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: dto.listingId } });
         if (listing.userId !== userId)
             throw new common_1.ForbiddenException();
+        const renewed = dto.renewSubscriptionId ? await this.assertRenewable(userId, dto) : null;
+        if (renewed)
+            return this.startCheckout(userId, dto, renewed.id);
         if (!['DRAFT', 'REJECTED', 'ACTIVE'].includes(listing.status)) {
-            throw new common_1.BadRequestException('Listing is not eligible for a package purchase');
+            throw new common_1.BadRequestException(this.i18n.t('errors.LISTING_PACKAGE_PURCHASE_NOT_ALLOWED'));
         }
         if (listing.status !== 'ACTIVE') {
             const owner = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
@@ -197,8 +201,13 @@ let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
                 throw new common_1.ForbiddenException(this.i18n.t('errors.EMAIL_NOT_VERIFIED'));
             }
         }
-        const pkg = await this.prisma.package.findUniqueOrThrow({ where: { id: dto.packageId } });
         await this.assertPackageCompatibleWithListing(listing.id, dto.packageId);
+        if (listing.status === 'ACTIVE')
+            await this.assertUpgradeToPro(listing.subscriptionId, dto.packageId);
+        return this.startCheckout(userId, dto, null);
+    }
+    async startCheckout(userId, dto, renewsSubscriptionId) {
+        const pkg = await this.prisma.package.findUniqueOrThrow({ where: { id: dto.packageId } });
         const price = dto.billingCycle === 'YEARLY' ? pkg.priceYearly : pkg.priceMonthly;
         await this.prisma.user.update({
             where: { id: userId },
@@ -223,6 +232,7 @@ let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
                 status: 'AWAITING_PAYMENT',
                 priceAtPurchase: price,
                 pendingListingId: dto.listingId,
+                renewsSubscriptionId,
                 termsAcceptedAt: new Date(),
             },
         });
@@ -241,6 +251,173 @@ let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
             description: `Rentaj — ${pkg.key} (${dto.billingCycle})`,
         });
         return { actionUrl, fields };
+    }
+    async assertUpgradeToPro(currentSubscriptionId, packageId) {
+        const [pkg, current] = await Promise.all([
+            this.prisma.package.findUniqueOrThrow({ where: { id: packageId } }),
+            currentSubscriptionId
+                ? this.prisma.subscription.findUnique({ where: { id: currentSubscriptionId }, include: { package: true } })
+                : null,
+        ]);
+        if (pkg.key !== 'PRO' || current?.package.key === 'PRO') {
+            throw new common_1.BadRequestException(this.i18n.t('errors.SUBSCRIPTION_UPGRADE_PRO_ONLY'));
+        }
+    }
+    async getRenewal(userId, subscriptionId) {
+        const subscription = await this.prisma.subscription.findUnique({
+            where: { id: subscriptionId },
+            include: {
+                package: true,
+                listings: {
+                    where: { status: { not: 'DELETED' } },
+                    orderBy: { createdAt: 'asc' },
+                    select: { id: true, title: true, status: true, city: { select: { name: true } }, cityArea: { select: { name: true } } },
+                },
+            },
+        });
+        if (!subscription || subscription.userId !== userId) {
+            throw new common_1.NotFoundException(this.i18n.t('errors.SUBSCRIPTION_NOT_FOUND'));
+        }
+        const block = await this.getRenewalBlock(subscription);
+        const { package: pkg } = subscription;
+        return {
+            id: subscription.id,
+            status: subscription.status,
+            billingCycle: subscription.billingCycle,
+            expiresAt: subscription.expiresAt,
+            package: {
+                id: pkg.id,
+                key: pkg.key,
+                listingLimit: pkg.listingLimit,
+                priceMonthly: (0, money_1.paraToRsd)(pkg.priceMonthly),
+                priceYearly: (0, money_1.paraToRsd)(pkg.priceYearly),
+            },
+            listings: subscription.listings.map((listing) => ({
+                id: listing.id,
+                title: listing.title,
+                status: listing.status,
+                place: listing.cityArea?.name ?? listing.city?.name ?? null,
+            })),
+            renewable: !block,
+            reason: block,
+            startsAt: (0, subscription_renewal_1.isRunningPeriod)(subscription) ? subscription.expiresAt : null,
+        };
+    }
+    async getRenewalBlock(subscription) {
+        if (!subscription_renewal_1.RENEWABLE_SUBSCRIPTION_STATUSES.includes(subscription.status))
+            return 'NOT_RENEWABLE';
+        if (!subscription.listings.length)
+            return 'NO_LISTINGS';
+        const scheduled = await this.prisma.subscription.count({
+            where: { renewsSubscriptionId: subscription.id, status: 'SCHEDULED' },
+        });
+        return scheduled ? 'ALREADY_RENEWED' : null;
+    }
+    async assertRenewable(userId, dto) {
+        const subscription = await this.prisma.subscription.findUnique({
+            where: { id: dto.renewSubscriptionId },
+            include: { listings: { where: { status: { not: 'DELETED' } }, select: { id: true } } },
+        });
+        if (!subscription || subscription.userId !== userId) {
+            throw new common_1.NotFoundException(this.i18n.t('errors.SUBSCRIPTION_NOT_FOUND'));
+        }
+        const block = await this.getRenewalBlock(subscription);
+        if (block === 'ALREADY_RENEWED')
+            throw new common_1.BadRequestException(this.i18n.t('errors.SUBSCRIPTION_ALREADY_RENEWED'));
+        if (block || !subscription.listings.some((listing) => listing.id === dto.listingId)) {
+            throw new common_1.BadRequestException(this.i18n.t('errors.SUBSCRIPTION_RENEWAL_NOT_ALLOWED'));
+        }
+        if (subscription.packageId !== dto.packageId) {
+            throw new common_1.BadRequestException(this.i18n.t('errors.SUBSCRIPTION_RENEWAL_SAME_PACKAGE'));
+        }
+        for (const listing of subscription.listings) {
+            await this.assertPackageCompatibleWithListing(listing.id, dto.packageId);
+        }
+        return subscription;
+    }
+    async findRenewalTail(subscription) {
+        let tail = subscription;
+        for (let depth = 0; depth < 100; depth++) {
+            const next = await this.prisma.subscription.findFirst({
+                where: { renewsSubscriptionId: tail.id, status: 'SCHEDULED' },
+                orderBy: { startsAt: 'desc' },
+            });
+            if (!next)
+                break;
+            tail = next;
+        }
+        return tail;
+    }
+    async completeRenewal(renewal) {
+        const renewed = await this.prisma.subscription.findUniqueOrThrow({ where: { id: renewal.renewsSubscriptionId } });
+        const days = (0, subscription_renewal_1.cycleLength)(renewal.billingCycle);
+        const tail = await this.findRenewalTail(renewed);
+        if ((0, subscription_renewal_1.isRunningPeriod)(tail)) {
+            await this.prisma.subscription.update({
+                where: { id: renewal.id },
+                data: {
+                    status: 'SCHEDULED',
+                    startsAt: tail.expiresAt,
+                    expiresAt: (0, subscription_renewal_1.addDays)(tail.expiresAt, days),
+                    renewsSubscriptionId: tail.id,
+                    pendingListingId: null,
+                },
+            });
+            return 'scheduled';
+        }
+        const now = new Date();
+        await this.prisma.subscription.update({
+            where: { id: renewal.id },
+            data: { status: 'ACTIVE', startsAt: now, expiresAt: (0, subscription_renewal_1.addDays)(now, days), pendingListingId: null },
+        });
+        if (renewed.status === 'ACTIVE') {
+            await this.prisma.subscription.update({ where: { id: renewed.id }, data: { status: 'EXPIRED' } });
+        }
+        await this.handOverListings(renewed.id, renewal.id, { reactivate: true });
+        return 'active';
+    }
+    async handOverListings(fromId, toId, { reactivate }) {
+        const listings = await this.prisma.listing.findMany({
+            where: { subscriptionId: fromId, status: { not: 'DELETED' } },
+            select: { id: true, status: true, publishedAt: true },
+        });
+        for (const listing of listings) {
+            if (reactivate)
+                await this.rebankRunningDays(listing.id);
+            const approvedBefore = !!listing.publishedAt;
+            await this.prisma.listing.update({
+                where: { id: listing.id },
+                data: {
+                    subscriptionId: toId,
+                    ...(reactivate && listing.status === 'EXPIRED' && approvedBefore ? { status: 'ACTIVE' } : {}),
+                },
+            });
+            if (reactivate && listing.status === 'EXPIRED' && !approvedBefore) {
+                try {
+                    await this.listings.markPendingApproval(listing.id, toId);
+                }
+                catch (err) {
+                    this.logger.warn(`Renewed listing ${listing.id} could not go back to review: ${err.message}`);
+                }
+            }
+        }
+        if (reactivate && listings.some((listing) => listing.status === 'EXPIRED')) {
+            await this.cache.delByPrefix('taxonomy:category:');
+        }
+    }
+    async rebankRunningDays(listingId) {
+        const now = new Date();
+        const running = await this.prisma.bankedDay.findMany({
+            where: { listingId, usedAt: null, validUntil: { not: null } },
+        });
+        if (!running.length)
+            return;
+        await this.prisma.bankedDay.updateMany({ where: { id: { in: running.map((row) => row.id) } }, data: { usedAt: now } });
+        const until = Math.max(...running.map((row) => row.validUntil.getTime()));
+        const left = Math.ceil((until - now.getTime()) / subscription_renewal_1.DAY_MS);
+        if (left > 0) {
+            await this.prisma.bankedDay.create({ data: { listingId, days: left, originPackageId: running[0].originPackageId } });
+        }
     }
     async handleNestPaySuccess(body) {
         const frontendUrl = this.config.get('frontendUrl');
@@ -265,7 +442,7 @@ let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
                     errorMessage: verification.errMsg || `ProcReturnCode ${verification.procReturnCode}`,
                 },
             });
-            return `${frontendUrl}/oglasi/${listingId}/placanje-neuspesno`;
+            return `${frontendUrl}${paymentFailedPath(listingId, subscription.renewsSubscriptionId)}`;
         }
         await this.prisma.transaction.create({
             data: {
@@ -278,8 +455,13 @@ let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
             },
         });
         const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: listingId } });
+        const isRenewal = !!subscription.renewsSubscriptionId;
         let redirectPath;
-        if (listing.status === 'ACTIVE') {
+        if (isRenewal) {
+            const outcome = await this.completeRenewal(subscription);
+            redirectPath = `/kontrolna-tabla/pretplate?renewed=${outcome}`;
+        }
+        else if (listing.status === 'ACTIVE') {
             const previousSubscription = listing.subscriptionId
                 ? await this.prisma.subscription.findUnique({ where: { id: listing.subscriptionId }, include: { package: true } })
                 : null;
@@ -337,7 +519,10 @@ let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
                 externalId: doc.externalId,
             },
         });
-        this.events.emit('subscription.purchased', { userId: subscription.userId, subscriptionId: subscription.id });
+        this.events.emit(isRenewal ? 'subscription.renewed' : 'subscription.purchased', {
+            userId: subscription.userId,
+            subscriptionId: subscription.id,
+        });
         return `${frontendUrl}${redirectPath}`;
     }
     async handleNestPayFail(body) {
@@ -360,7 +545,9 @@ let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
             },
         });
         await this.prisma.subscription.delete({ where: { id: subscription.id } });
-        return listingId ? `${frontendUrl}/oglasi/${listingId}/placanje-neuspesno` : `${frontendUrl}/kontrolna-tabla/pretplate?payment=failed`;
+        return listingId
+            ? `${frontendUrl}${paymentFailedPath(listingId, subscription.renewsSubscriptionId)}`
+            : `${frontendUrl}/kontrolna-tabla/pretplate?payment=failed`;
     }
     async bankRemainingDays(listingId, oldSubscription) {
         if (!oldSubscription.expiresAt)
@@ -581,9 +768,9 @@ let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
     }
     async sendExpiringSoonReminders() {
         for (const daysLeft of [7, 3, 1]) {
-            const target = addDays(new Date(), daysLeft);
+            const target = (0, subscription_renewal_1.addDays)(new Date(), daysLeft);
             const subs = await this.prisma.subscription.findMany({
-                where: { status: 'ACTIVE', expiresAt: { gte: startOfDay(target), lt: endOfDay(target) } },
+                where: { ...subscription_renewal_1.PACKAGE_ENDING_WITHOUT_RENEWAL, expiresAt: { gte: startOfDay(target), lt: endOfDay(target) } },
             });
             for (const sub of subs) {
                 this.events.emit('subscription.expiring_soon', { subscriptionId: sub.id, daysLeft });
@@ -593,13 +780,23 @@ let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
     async expireOverdueSubscriptions() {
         const overdue = await this.prisma.subscription.findMany({ where: { status: 'ACTIVE', expiresAt: { lt: new Date() } } });
         for (const sub of overdue) {
-            const listings = await this.prisma.listing.findMany({ where: { subscriptionId: sub.id } });
             await this.prisma.subscription.update({ where: { id: sub.id }, data: { status: 'EXPIRED' } });
+            const renewal = await this.prisma.subscription.findFirst({
+                where: { renewsSubscriptionId: sub.id, status: 'SCHEDULED' },
+                orderBy: { startsAt: 'asc' },
+            });
+            if (renewal) {
+                await this.prisma.subscription.update({ where: { id: renewal.id }, data: { status: 'ACTIVE' } });
+                await this.handOverListings(sub.id, renewal.id, { reactivate: false });
+                continue;
+            }
+            const listings = await this.prisma.listing.findMany({ where: { subscriptionId: sub.id, status: { not: 'DELETED' } } });
+            const leftSearch = [];
             for (const listing of listings) {
                 const unused = await this.prisma.bankedDay.findMany({ where: { listingId: listing.id, usedAt: null } });
                 const totalDays = unused.reduce((sum, b) => sum + b.days, 0);
                 if (totalDays > 0) {
-                    const validUntil = addDays(new Date(), totalDays);
+                    const validUntil = (0, subscription_renewal_1.addDays)(new Date(), totalDays);
                     await this.prisma.bankedDay.updateMany({
                         where: { id: { in: unused.map((b) => b.id) } },
                         data: { validFrom: new Date(), validUntil },
@@ -607,9 +804,12 @@ let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
                 }
                 else {
                     await this.prisma.listing.update({ where: { id: listing.id }, data: { status: 'EXPIRED' } });
+                    if (listing.status === 'ACTIVE')
+                        leftSearch.push(listing.id);
                 }
             }
-            this.events.emit('subscription.expired', { subscriptionId: sub.id });
+            if (leftSearch.length)
+                this.events.emit('subscription.expired', { subscriptionId: sub.id, listingIds: leftSearch });
         }
     }
     async expireBankedDayCoverage() {
@@ -622,7 +822,7 @@ let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
                 where: { listingId: banked.listingId, usedAt: null, validUntil: { gt: new Date() } },
             });
             if (stillCovered === 0) {
-                await this.prisma.listing.update({ where: { id: banked.listingId }, data: { status: 'EXPIRED' } });
+                await this.prisma.listing.updateMany({ where: { id: banked.listingId, status: 'ACTIVE' }, data: { status: 'EXPIRED' } });
             }
         }
     }
@@ -692,8 +892,9 @@ exports.SubscriptionsService = SubscriptionsService = SubscriptionsService_1 = _
         event_emitter_1.EventEmitter2,
         config_1.ConfigService])
 ], SubscriptionsService);
-function addDays(date, days) {
-    return new Date(date.getTime() + days * 86_400_000);
+function paymentFailedPath(listingId, renewsSubscriptionId) {
+    const path = `/oglasi/${listingId}/placanje-neuspesno`;
+    return renewsSubscriptionId ? `${path}?obnova=${renewsSubscriptionId}` : path;
 }
 function startOfDay(date) {
     const d = new Date(date);

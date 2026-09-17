@@ -108,6 +108,7 @@
               </button>
               <div v-if="openMenuId === row.id" :id="`mylist-menu-${row.id}`" class="mylist-menu" role="menu" @keydown="onMenuKeydown">
                 <NuxtLink :to="row.viewUrl" class="mylist-menu-item" role="menuitem">{{ t('myListings.view') }}</NuxtLink>
+                <NuxtLink v-if="row.renewUrl" :to="row.renewUrl" class="mylist-menu-item" role="menuitem">{{ t('myListings.renew') }}</NuxtLink>
                 <NuxtLink v-if="row.icalUrl" :to="row.icalUrl" class="mylist-menu-item" role="menuitem">{{ t('myListings.ical') }}</NuxtLink>
                 <button type="button" class="mylist-menu-item is-danger" role="menuitem" @click="remove(row)">
                   {{ t('listing.deleteListing') }}

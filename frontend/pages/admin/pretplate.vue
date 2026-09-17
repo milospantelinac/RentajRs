@@ -97,7 +97,7 @@ definePageMeta({ middleware: ['auth', 'admin'], layout: 'admin' })
 const { t } = useI18n()
 const api = useApi()
 
-const statuses = ['AWAITING_PAYMENT', 'PENDING_ACTIVATION', 'ACTIVE', 'EXPIRED', 'CANCELLED']
+const statuses = ['AWAITING_PAYMENT', 'PENDING_ACTIVATION', 'SCHEDULED', 'ACTIVE', 'EXPIRED', 'CANCELLED']
 const statusFilter = ref('')
 const subscriptions = ref([])
 
@@ -107,7 +107,7 @@ async function load() {
 }
 
 function statusBadge(status) {
-  const map = { AWAITING_PAYMENT: 'badge-neutral', PENDING_ACTIVATION: 'badge-warning', ACTIVE: 'badge-success', EXPIRED: 'badge-critical', CANCELLED: 'badge-neutral' }
+  const map = { AWAITING_PAYMENT: 'badge-neutral', PENDING_ACTIVATION: 'badge-warning', SCHEDULED: 'badge-neutral', ACTIVE: 'badge-success', EXPIRED: 'badge-critical', CANCELLED: 'badge-neutral' }
   return map[status] || 'badge-neutral'
 }
 
@@ -115,6 +115,7 @@ function statusLabel(status) {
   const map = {
     AWAITING_PAYMENT: 'AwaitingPayment',
     PENDING_ACTIVATION: 'PendingActivation',
+    SCHEDULED: 'Scheduled',
     ACTIVE: 'Active',
     EXPIRED: 'Expired',
     CANCELLED: 'Cancelled',

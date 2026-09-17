@@ -948,7 +948,8 @@
     "reviewPaymentBoth": "Oba (keš i IPS QR)",
     "reviewCancellationFree": "Besplatno do {value} pre početka",
     "reviewSubmit": "Pošalji na odobrenje",
-    "resubmitForApproval": "Pošalji ponovo na odobrenje"
+    "resubmitForApproval": "Pošalji ponovo na odobrenje",
+    "renewPackage": "Obnovi paket"
   },
   "search": {
     "sortRelevance": "Preporučeno",
@@ -1258,7 +1259,31 @@
     "pricePerListing": "cena po oglasu",
     "termsLinkTerms": "Uslove korišćenja",
     "termsLinkPrivacy": "Politiku privatnosti",
-    "payButtonDisabledNote": "Dugme je neaktivno dok se ne označi prihvatanje uslova."
+    "payButtonDisabledNote": "Dugme je neaktivno dok se ne označi prihvatanje uslova.",
+    "statusScheduled": "Zakazana",
+    "renewEyebrow": "Obnova paketa",
+    "renewLead": "Obnovite",
+    "renewSubtitleScheduledOne": "Novi period počinje {date}, kad istekne trenutni, pa oglas ostaje vidljiv bez prekida. Paket se ne obnavlja automatski.",
+    "renewSubtitleScheduledMany": "Novi period počinje {date}, kad istekne trenutni, pa oglasi ostaju vidljivi bez prekida. Paket se ne obnavlja automatski.",
+    "renewSubtitleNowOne": "Oglas je ponovo vidljiv čim uplata prođe, a novi period teče od tog dana. Paket se ne obnavlja automatski.",
+    "renewSubtitleNowMany": "Oglasi su ponovo vidljivi čim uplata prođe, a novi period teče od tog dana. Paket se ne obnavlja automatski.",
+    "renewCoversOne": "Obnavlja se paket oglasa {listings}.",
+    "renewCoversMany": "Obnavlja se paket za sve njegove oglase: {listings}.",
+    "renewSamePackage": "Obnova zadržava isti paket.",
+    "renewAction": "Obnovi paket",
+    "renewAlreadyPaid": "Sledeći period ovog paketa je već plaćen.",
+    "renewNotAllowed": "Ovaj paket ne može da se obnovi.",
+    "renewForListingOne": "Paket se obnavlja za oglas:",
+    "renewForListingMany": "Paket se obnavlja za oglase:",
+    "renewAfterPaymentScheduled": "Iznos se naplaćuje odmah, a novi period počinje {date}",
+    "renewAfterPaymentNow": "Novi period počinje čim uplata prođe.",
+    "payAndRenew": "Plati i obnovi paket",
+    "renewPaymentFailedMessage": "Uplata nije prošla ili je otkazana. Pokušajte ponovo; paket i oglas su ostali kakvi su bili.",
+    "upgradeEyebrow": "Nadogradnja paketa",
+    "upgradeSubtitle": "Pro paket važi čim uplata prođe, a preostali plaćeni dani trenutnog paketa se prenose i troše posle njega.",
+    "upgradeProOnly": "Objavljen oglas ovde prelazi samo na Pro; trenutni paket se produžava obnovom.",
+    "upgradeAfterPayment": "Posle uplate oglas odmah prelazi na Pro paket.",
+    "payAndUpgrade": "Plati i nadogradi"
   },
   "dashboard": {
     "overview": "Početna",
@@ -1853,7 +1878,8 @@
     "showAll": "Prikaži sve oglase",
     "loadErrorTitle": "Oglasi nisu učitani",
     "loadErrorText": "Proverite internet vezu i pokušajte ponovo.",
-    "ical": "iCal sinhronizacija"
+    "ical": "iCal sinhronizacija",
+    "renew": "Obnovi paket"
   },
   "ical": {
     "title": "Sinhronizacija kalendara (iCal)",
@@ -2039,7 +2065,10 @@
       "awaitingMany": "{count} plaćanja nije završeno",
       "expiredOne": "{count} istekla pretplata",
       "expiredFew": "{count} istekle pretplate",
-      "expiredMany": "{count} isteklih pretplata"
+      "expiredMany": "{count} isteklih pretplata",
+      "scheduledOne": "{count} zakazana obnova",
+      "scheduledFew": "{count} zakazane obnove",
+      "scheduledMany": "{count} zakazanih obnova"
     },
     "emptyTitle": "Nemate aktivnih pretplata",
     "emptyText": "Paket se kupuje za oglas pre objave i važi od odobrenja oglasa.",
@@ -2053,7 +2082,14 @@
       "chargedAfter": ".",
       "verifyBefore": "Potvrdite adresu i javite nam se preko strane ",
       "verifyAfter": " da uplatu povežemo sa oglasom.",
-      "contactLink": "Kontakt"
-    }
+      "contactLink": "Kontakt",
+      "renewedScheduled": "Paket je obnovljen. Novi period počinje kad istekne trenutni, pa oglas ostaje vidljiv bez prekida.",
+      "renewedActive": "Paket je obnovljen i oglas je ponovo vidljiv u pretrazi."
+    },
+    "startsLabel": "Počinje",
+    "renewedNote": "Obnovljeno: novi period počinje {date}",
+    "expiredNoteOne": "Oglas nije vidljiv u pretrazi dok se paket ne obnovi.",
+    "expiredNoteMany": "Oglasi nisu vidljivi u pretrazi dok se paket ne obnovi.",
+    "expiredBankedNote": "Oglas je vidljiv iz prenetih dana; obnova čuva ostatak za posle."
   }
 }

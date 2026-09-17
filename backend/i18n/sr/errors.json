@@ -48,5 +48,11 @@
   "ICAL_SOURCE_DUPLICATE": "Ovaj kalendar je već povezan",
   "ICAL_SOURCE_NOT_FOUND": "Kalendar nije pronađen",
   "ICAL_URL_UNREACHABLE": "Adresa nije dostupna. Proverite da li ste je kopirali celu",
-  "ICAL_URL_NOT_CALENDAR": "Na ovoj adresi nije iCal kalendar. Kopirajte .ics adresu iz podešavanja kalendara na drugoj platformi"
+  "ICAL_URL_NOT_CALENDAR": "Na ovoj adresi nije iCal kalendar. Kopirajte .ics adresu iz podešavanja kalendara na drugoj platformi",
+  "SUBSCRIPTION_NOT_FOUND": "Pretplata nije pronađena",
+  "SUBSCRIPTION_ALREADY_RENEWED": "Sledeći period ovog paketa je već plaćen",
+  "SUBSCRIPTION_RENEWAL_NOT_ALLOWED": "Ovaj paket ne može da se obnovi",
+  "SUBSCRIPTION_RENEWAL_SAME_PACKAGE": "Obnova zadržava isti paket; za prelazak na Pro koristite „Nadogradi na Pro”",
+  "SUBSCRIPTION_UPGRADE_PRO_ONLY": "Objavljen oglas ovde može da pređe samo na Pro paket; trenutni paket se produžava obnovom",
+  "LISTING_PACKAGE_PURCHASE_NOT_ALLOWED": "Za ovaj oglas trenutno ne može da se kupi paket"
 }

@@ -29,17 +29,30 @@ let SubscriptionEmailListener = class SubscriptionEmailListener {
         });
         return sub;
     }
-    async onPurchased({ userId, subscriptionId }) {
-        const sub = await this.loadSub(subscriptionId);
-        if (!sub)
-            return;
-        const transaction = await this.prisma.transaction.findFirst({
+    loadPayment(subscriptionId) {
+        return this.prisma.transaction.findFirst({
             where: { subscriptionId, status: 'SUCCESSFUL' },
             orderBy: { occurredAt: 'desc' },
             include: { invoices: true },
         });
+    }
+    async renewUrl(subscriptionId, listingId) {
+        const target = listingId ??
+            (await this.prisma.listing.findFirst({
+                where: { subscriptionId, status: { not: 'DELETED' } },
+                orderBy: { createdAt: 'asc' },
+                select: { id: true },
+            }))?.id;
+        return target
+            ? `${this.frontendUrl}/oglasi/${target}/paket?obnova=${subscriptionId}`
+            : `${this.frontendUrl}/kontrolna-tabla/pretplate`;
+    }
+    async onPurchased({ userId, subscriptionId }) {
+        const sub = await this.loadSub(subscriptionId);
+        if (!sub)
+            return;
+        const transaction = await this.loadPayment(subscriptionId);
         const locale = (0, format_1.localeFor)(sub.user.language);
-        const invoice = transaction?.invoices[0];
         await this.email.send({
             key: 'subscription_activated',
             to: sub.user.email,
@@ -52,21 +65,47 @@ let SubscriptionEmailListener = class SubscriptionEmailListener {
             },
             buttonUrl: `${this.frontendUrl}/kontrolna-tabla/pretplate`,
         });
-        if (invoice) {
-            await this.email.send({
-                key: 'subscription_invoice',
-                to: sub.user.email,
-                language: sub.user.language,
-                userId,
-                context: {
-                    paket: sub.package.key,
-                    iznos: (0, format_1.formatRsd)(sub.priceAtPurchase),
-                    datum: (0, format_1.formatDateTime)(transaction?.occurredAt ?? sub.createdAt, locale),
-                    broj: invoice.documentNumber,
-                },
-                buttonUrl: `${this.frontendUrl}/kontrolna-tabla/pretplate`,
-            });
-        }
+        await this.sendInvoice(sub, transaction, userId);
+    }
+    async onRenewed({ userId, subscriptionId }) {
+        const sub = await this.loadSub(subscriptionId);
+        if (!sub)
+            return;
+        const transaction = await this.loadPayment(subscriptionId);
+        const locale = (0, format_1.localeFor)(sub.user.language);
+        await this.email.send({
+            key: 'subscription_renewed',
+            to: sub.user.email,
+            language: sub.user.language,
+            userId,
+            context: {
+                paket: sub.package.key,
+                iznos: (0, format_1.formatRsd)(sub.priceAtPurchase),
+                datum: (0, format_1.formatDateTime)(transaction?.occurredAt ?? sub.createdAt, locale),
+                od: (0, format_1.formatDate)(sub.startsAt, locale),
+                do: (0, format_1.formatDate)(sub.expiresAt, locale),
+            },
+            buttonUrl: `${this.frontendUrl}/kontrolna-tabla/pretplate`,
+        });
+        await this.sendInvoice(sub, transaction, userId);
+    }
+    async sendInvoice(sub, transaction, userId) {
+        const invoice = transaction?.invoices[0];
+        if (!invoice)
+            return;
+        await this.email.send({
+            key: 'subscription_invoice',
+            to: sub.user.email,
+            language: sub.user.language,
+            userId,
+            context: {
+                paket: sub.package.key,
+                iznos: (0, format_1.formatRsd)(sub.priceAtPurchase),
+                datum: (0, format_1.formatDateTime)(transaction.occurredAt ?? sub.createdAt, (0, format_1.localeFor)(sub.user.language)),
+                broj: invoice.documentNumber,
+            },
+            buttonUrl: `${this.frontendUrl}/kontrolna-tabla/pretplate`,
+        });
     }
     async onProFormaIssued({ userId, subscriptionId }) {
         const sub = await this.loadSub(subscriptionId);
@@ -91,10 +130,10 @@ let SubscriptionEmailListener = class SubscriptionEmailListener {
             language: sub.user.language,
             userId: sub.userId,
             context: { paket: sub.package.key, broj: daysLeft, datum: (0, format_1.formatDate)(sub.expiresAt, (0, format_1.localeFor)(sub.user.language)) },
-            buttonUrl: `${this.frontendUrl}/kontrolna-tabla/pretplate`,
+            buttonUrl: await this.renewUrl(sub.id),
         });
     }
-    async onExpired({ subscriptionId }) {
+    async onExpired({ subscriptionId, listingIds }) {
         const sub = await this.loadSub(subscriptionId);
         if (!sub)
             return;
@@ -104,7 +143,7 @@ let SubscriptionEmailListener = class SubscriptionEmailListener {
             language: sub.user.language,
             userId: sub.userId,
             context: { paket: sub.package.key },
-            buttonUrl: `${this.frontendUrl}/kontrolna-tabla/pretplate`,
+            buttonUrl: await this.renewUrl(sub.id, listingIds?.[0]),
         });
     }
 };
@@ -115,6 +154,12 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], SubscriptionEmailListener.prototype, "onPurchased", null);
+__decorate([
+    (0, event_emitter_1.OnEvent)('subscription.renewed'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], SubscriptionEmailListener.prototype, "onRenewed", null);
 __decorate([
     (0, event_emitter_1.OnEvent)('subscription.pro_forma_issued'),
     __metadata("design:type", Function),

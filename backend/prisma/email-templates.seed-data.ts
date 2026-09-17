@@ -515,6 +515,22 @@ export const emailTemplates: EmailTemplateSeed[] = [
     },
   },
   {
+    key: 'subscription_renewed',
+    sr: {
+      subject: 'Paket je obnovljen',
+      heading: 'Paket {paket} je obnovljen',
+      // The Serbian date already ends with its own period.
+      bodyText: 'Naplaćeno: {iznos}, dana {datum}. Novi period paketa traje od {od} do {do}',
+      buttonLabel: 'Pogledaj pretplate',
+    },
+    en: {
+      subject: 'Your package is renewed',
+      heading: '{paket} is renewed',
+      bodyText: "Charged: {iznos} on {datum}. The package's new period runs from {od} to {do}.",
+      buttonLabel: 'View subscriptions',
+    },
+  },
+  {
     key: 'subscription_invoice',
     sr: {
       subject: 'Račun za {paket}',

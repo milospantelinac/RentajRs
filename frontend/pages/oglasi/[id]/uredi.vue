@@ -2398,6 +2398,10 @@ const reviewCta = computed(() => {
     }
     return { label: t('listing.goToPackages'), to: `/oglasi/${listingId}/paket`, run: () => {} }
   }
+  // An expired listing is back in search once its package is renewed.
+  if (listing.value?.status === 'EXPIRED' && listing.value.subscriptionId) {
+    return { label: t('listing.renewPackage'), to: `/oglasi/${listingId}/paket?obnova=${listing.value.subscriptionId}`, run: () => {} }
+  }
   if (listing.value?.subscriptionId) return { label: t('listing.saveChanges'), to: '', run: finishEditing }
   if (freeSlotSubscription.value) return { label: t('listing.reviewSubmit'), to: '', run: publishWithFreeSlot }
   return { label: t('listing.goToPackages'), to: `/oglasi/${listingId}/paket`, run: () => {} }

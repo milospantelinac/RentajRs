@@ -17,6 +17,9 @@ const SUMMARY_ORDER = ['ACTIVE', 'EXPIRED', 'PENDING_APPROVAL', 'REJECTED', 'DRA
 // A listing that never went live has no package period or bookings (380:634).
 const PUBLISHED_STATUSES = ['ACTIVE', 'EXPIRED']
 
+// Packages whose next period can be bought (SubscriptionsService.initCheckout).
+const RENEWABLE_SUBSCRIPTIONS = ['ACTIVE', 'EXPIRED']
+
 const STATUS_LABELS = {
   DRAFT: 'listing.statusDraft',
   PENDING_APPROVAL: 'listing.statusPendingApproval',
@@ -134,5 +137,10 @@ export function buildMyListingRow(t, listing, now = Date.now()) {
     rejectedUrl: listing.status === 'REJECTED' ? `/oglasi/${listing.id}/odbijeno` : null,
     // Dizajn 33: only listings that can connect calendars get the menu item.
     icalUrl: listing.icalAvailable ? `/kontrolna-tabla/oglasi/${listing.id}/ical` : null,
+    // A published listing's package can be renewed until its next period is paid for.
+    renewUrl:
+      published && listing.subscriptionId && RENEWABLE_SUBSCRIPTIONS.includes(listing.subscription?.status) && !listing.renewalScheduled
+        ? `/oglasi/${listing.id}/paket?obnova=${listing.subscriptionId}`
+        : null,
   }
 }

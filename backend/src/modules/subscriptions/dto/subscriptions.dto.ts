@@ -93,6 +93,13 @@ export class InitCheckoutDto {
   @ApiProperty({ description: 'Must be true — checkbox confirming the terms of use and privacy policy were read and accepted.' })
   @IsIn([true], { message: 'validation.TERMS_NOT_ACCEPTED' })
   termsAccepted: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Renew this subscription (same package; listingId must be one of its listings) instead of buying a first package',
+  })
+  @IsOptional()
+  @IsUUID('4')
+  renewSubscriptionId?: string;
 }
 
 export class AdjustPriceDto {

@@ -7,7 +7,7 @@ import {
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { I18nService } from 'nestjs-i18n';
-import { BookingStatus, Category, Listing, ListingStatus, ModerationDecision, Prisma } from '@prisma/client';
+import { BookingStatus, Category, Listing, ListingStatus, ModerationDecision, Prisma, SubscriptionStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CacheService } from '../../common/cache/cache.service';
 import { UploadsService } from '../../common/uploads/uploads.service';
@@ -17,6 +17,7 @@ import { UsersService } from '../users/users.service';
 import { containsContactInfo } from '../../common/utils/contact-detector';
 import { getIcalAvailability } from '../../common/utils/ical-availability';
 import { rsdToPara, paraToRsd } from '../../common/utils/money';
+import { DAY_MS } from '../../common/utils/subscription-renewal';
 import { CreateListingDto } from './dto/create-listing.dto';
 import { UpdateListingDto } from './dto/update-listing.dto';
 import { UpdateLocationDto } from './dto/update-location.dto';
@@ -141,11 +142,27 @@ export class ListingsService {
         subscription: { select: { package: { select: { key: true, hasIcal: true } }, status: true, expiresAt: true } },
         // Each submission opens a moderation row, and a rejection is written onto it.
         moderations: { orderBy: { createdAt: 'desc' }, take: 1, select: { createdAt: true, rejectionReason: true, note: true } },
-        bankedDays: { where: { validUntil: { not: null } }, select: { validUntil: true } },
+        bankedDays: { where: { usedAt: null }, select: { validUntil: true, days: true } },
       },
     });
     const listingIds = listings.map((l) => l.id);
     const categoryNames = await this.taxonomy.getCategoryNames([...new Set(listings.map((l) => l.categoryId))]);
+    // Renewals paid in advance (SCHEDULED, each continuing the one before it)
+    // carry a listing's package past its current end.
+    const scheduled = await this.prisma.subscription.findMany({
+      where: { userId, status: SubscriptionStatus.SCHEDULED },
+      select: { id: true, renewsSubscriptionId: true, expiresAt: true },
+    });
+    const renewalOf = new Map(scheduled.map((s) => [s.renewsSubscriptionId, s]));
+    const lastPaidEnd = (subscriptionId: string | null, expiresAt: Date | null) => {
+      let end = expiresAt;
+      let renewal = subscriptionId ? renewalOf.get(subscriptionId) : undefined;
+      for (let depth = 0; renewal && depth < 100; depth++) {
+        end = renewal.expiresAt;
+        renewal = renewalOf.get(renewal.id);
+      }
+      return end;
+    };
     const bookingCounts = listingIds.length
       ? await this.prisma.booking.groupBy({
           by: ['listingId', 'status'],
@@ -160,11 +177,15 @@ export class ListingsService {
 
     return listings.map(({ moderations, bankedDays, city, cityArea, ...listing }) => {
       const moderation = moderations[0];
-      // A listing that outlives its package on banked days (ADR-005) stays online until the last of them ends.
-      const validUntil = [listing.subscription?.expiresAt, ...bankedDays.map((b) => b.validUntil)].reduce<Date | null>(
-        (latest, date) => (date && (!latest || date > latest) ? date : latest),
-        null,
-      );
+      // A listing that outlives its package on banked days (ADR-005) stays online
+      // until the last of them ends: a window already running, or the days still
+      // waiting, which start where the last paid period (renewals included) ends.
+      const paidUntil = lastPaidEnd(listing.subscriptionId, listing.subscription?.expiresAt ?? null);
+      const waitingDays = bankedDays.filter((b) => !b.validUntil).reduce((sum, b) => sum + b.days, 0);
+      const validUntil = [
+        paidUntil && waitingDays ? new Date(paidUntil.getTime() + waitingDays * DAY_MS) : paidUntil,
+        ...bankedDays.map((b) => b.validUntil),
+      ].reduce<Date | null>((latest, date) => (date && (!latest || date > latest) ? date : latest), null);
       return {
         ...this.serialize(listing),
         categoryName: categoryNames.get(listing.categoryId) ?? null,
@@ -177,6 +198,8 @@ export class ListingsService {
             ? { reason: moderation.rejectionReason, note: moderation.note }
             : null,
         validUntil,
+        // The next period of this listing's package is already paid for.
+        renewalScheduled: !!listing.subscriptionId && renewalOf.has(listing.subscriptionId),
         // Dizajn 33: the row menu links to the listing's iCal page only when it can use it.
         icalAvailable: getIcalAvailability(listing, !!listing.subscription?.package.hasIcal) === 'AVAILABLE',
         bookings: {
@@ -534,7 +557,10 @@ export class ListingsService {
    */
   async markPendingApproval(listingId: string, subscriptionId: string) {
     const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: listingId } });
-    if (listing.status !== ListingStatus.DRAFT && listing.status !== ListingStatus.REJECTED) {
+    // A listing whose package ended before its first approval comes back here
+    // when that package is renewed (SubscriptionsService.handOverListings).
+    const neverApprovedExpired = listing.status === ListingStatus.EXPIRED && !listing.publishedAt;
+    if (listing.status !== ListingStatus.DRAFT && listing.status !== ListingStatus.REJECTED && !neverApprovedExpired) {
       throw new BadRequestException('Listing is not awaiting submission');
     }
     // R126 — a listing can't go public (leave DRAFT) until the owner has

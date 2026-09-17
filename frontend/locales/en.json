@@ -948,7 +948,8 @@
     "reviewPaymentBoth": "Both (cash and IPS QR)",
     "reviewCancellationFree": "Free up to {value} before the start",
     "reviewSubmit": "Submit for approval",
-    "resubmitForApproval": "Send for approval again"
+    "resubmitForApproval": "Send for approval again",
+    "renewPackage": "Renew package"
   },
   "search": {
     "sortRelevance": "Recommended",
@@ -1258,7 +1259,31 @@
     "pricePerListing": "price per listing",
     "termsLinkTerms": "Terms of Use",
     "termsLinkPrivacy": "Privacy Policy",
-    "payButtonDisabledNote": "The button stays disabled until you accept the terms."
+    "payButtonDisabledNote": "The button stays disabled until you accept the terms.",
+    "statusScheduled": "Scheduled",
+    "renewEyebrow": "Package renewal",
+    "renewLead": "Renew your",
+    "renewSubtitleScheduledOne": "The new period starts on {date}, when the current one ends, so the listing stays visible without a break. Packages never renew on their own.",
+    "renewSubtitleScheduledMany": "The new period starts on {date}, when the current one ends, so the listings stay visible without a break. Packages never renew on their own.",
+    "renewSubtitleNowOne": "The listing is visible again as soon as the payment goes through, and the new period runs from that day. Packages never renew on their own.",
+    "renewSubtitleNowMany": "The listings are visible again as soon as the payment goes through, and the new period runs from that day. Packages never renew on their own.",
+    "renewCoversOne": "This renews the package of {listings}.",
+    "renewCoversMany": "This renews the package for all its listings: {listings}.",
+    "renewSamePackage": "A renewal keeps the same package.",
+    "renewAction": "Renew package",
+    "renewAlreadyPaid": "The next period of this package is already paid for.",
+    "renewNotAllowed": "This package can't be renewed.",
+    "renewForListingOne": "Renewing the package of:",
+    "renewForListingMany": "Renewing the package of:",
+    "renewAfterPaymentScheduled": "The amount is charged now, and the new period starts on {date}",
+    "renewAfterPaymentNow": "The new period starts as soon as the payment goes through.",
+    "payAndRenew": "Pay and renew",
+    "renewPaymentFailedMessage": "The payment didn't go through or was cancelled. Try again; the package and the listing are unchanged.",
+    "upgradeEyebrow": "Package upgrade",
+    "upgradeSubtitle": "The Pro package applies as soon as the payment goes through, and the paid days left on your current package carry over and are used after it.",
+    "upgradeProOnly": "A published listing only moves to Pro here; its current package is extended by renewing it.",
+    "upgradeAfterPayment": "After the payment the listing moves to Pro at once.",
+    "payAndUpgrade": "Pay and upgrade"
   },
   "dashboard": {
     "overview": "Home",
@@ -1853,7 +1878,8 @@
     "showAll": "Show all listings",
     "loadErrorTitle": "Listings could not be loaded",
     "loadErrorText": "Check your internet connection and try again.",
-    "ical": "iCal sync"
+    "ical": "iCal sync",
+    "renew": "Renew package"
   },
   "ical": {
     "title": "Calendar sync (iCal)",
@@ -2039,7 +2065,10 @@
       "awaitingMany": "{count} payments not completed",
       "expiredOne": "{count} expired subscription",
       "expiredFew": "{count} expired subscriptions",
-      "expiredMany": "{count} expired subscriptions"
+      "expiredMany": "{count} expired subscriptions",
+      "scheduledOne": "{count} scheduled renewal",
+      "scheduledFew": "{count} scheduled renewals",
+      "scheduledMany": "{count} scheduled renewals"
     },
     "emptyTitle": "You have no active subscriptions",
     "emptyText": "A package is bought for a listing before it goes live and starts when the listing is approved.",
@@ -2053,7 +2082,14 @@
       "chargedAfter": " page.",
       "verifyBefore": "Confirm your address and reach us through the ",
       "verifyAfter": " page so we can link the payment to your listing.",
-      "contactLink": "Contact"
-    }
+      "contactLink": "Contact",
+      "renewedScheduled": "The package is renewed. The new period starts when the current one ends, so the listing stays visible without a break.",
+      "renewedActive": "The package is renewed and the listing is back in search."
+    },
+    "startsLabel": "Starts",
+    "renewedNote": "Renewed: the new period starts on {date}",
+    "expiredNoteOne": "The listing stays out of search until the package is renewed.",
+    "expiredNoteMany": "The listings stay out of search until the package is renewed.",
+    "expiredBankedNote": "The listing is visible on carried-over days; renewing keeps the rest for later."
   }
 }

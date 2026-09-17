@@ -305,7 +305,7 @@ export class UsersService {
       }
       await tx.listing.updateMany({ where: { userId }, data: { status: 'DELETED', deletedAt: new Date() } });
       await tx.subscription.updateMany({
-        where: { userId, status: { in: ['ACTIVE', 'PENDING_ACTIVATION'] } },
+        where: { userId, status: { in: ['ACTIVE', 'PENDING_ACTIVATION', 'SCHEDULED'] } },
         data: { status: 'CANCELLED', cancelledAt: new Date() },
       });
       await tx.session.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } });

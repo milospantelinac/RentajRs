@@ -6,6 +6,7 @@ import { UsersService } from '../users/users.service';
 import { TaxonomyService } from '../taxonomy/taxonomy.service';
 import { paraToRsd } from '../../common/utils/money';
 import { ICAL_FAILURE_ALERT_THRESHOLD } from '../../common/utils/ical-availability';
+import { PACKAGE_ENDING_WITHOUT_RENEWAL } from '../../common/utils/subscription-renewal';
 import { getGuestUnits } from '../../common/utils/guest-capacity';
 import { shortName } from '../../common/utils/short-name';
 
@@ -140,8 +141,9 @@ export class DashboardService {
       items.push({ urgency: 'decision', title: 'new_requests', actionUrl: '/kontrolna-tabla/rezervacije?role=owner&status=REQUESTED', count: newRequests });
     }
 
+    // The same packages Moje pretplate marks red: renewed ones and ones no listing depends on don't count.
     const expiringSoon = await this.prisma.subscription.count({
-      where: { userId, status: 'ACTIVE', expiresAt: { lt: new Date(Date.now() + 7 * 86_400_000) } },
+      where: { ...PACKAGE_ENDING_WITHOUT_RENEWAL, userId, expiresAt: { lt: new Date(Date.now() + 7 * 86_400_000) } },
     });
     if (expiringSoon) {
       items.push({ urgency: 'decision', title: 'subscription_expiring', actionUrl: '/kontrolna-tabla/pretplate', count: expiringSoon });

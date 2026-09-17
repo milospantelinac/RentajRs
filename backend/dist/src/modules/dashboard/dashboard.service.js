@@ -17,6 +17,7 @@ const users_service_1 = require("../users/users.service");
 const taxonomy_service_1 = require("../taxonomy/taxonomy.service");
 const money_1 = require("../../common/utils/money");
 const ical_availability_1 = require("../../common/utils/ical-availability");
+const subscription_renewal_1 = require("../../common/utils/subscription-renewal");
 const guest_capacity_1 = require("../../common/utils/guest-capacity");
 const short_name_1 = require("../../common/utils/short-name");
 const NEW_LISTING_URL = '/oglasi/novi';
@@ -99,7 +100,7 @@ let DashboardService = class DashboardService {
             items.push({ urgency: 'decision', title: 'new_requests', actionUrl: '/kontrolna-tabla/rezervacije?role=owner&status=REQUESTED', count: newRequests });
         }
         const expiringSoon = await this.prisma.subscription.count({
-            where: { userId, status: 'ACTIVE', expiresAt: { lt: new Date(Date.now() + 7 * 86_400_000) } },
+            where: { ...subscription_renewal_1.PACKAGE_ENDING_WITHOUT_RENEWAL, userId, expiresAt: { lt: new Date(Date.now() + 7 * 86_400_000) } },
         });
         if (expiringSoon) {
             items.push({ urgency: 'decision', title: 'subscription_expiring', actionUrl: '/kontrolna-tabla/pretplate', count: expiringSoon });

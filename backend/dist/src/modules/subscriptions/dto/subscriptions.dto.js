@@ -127,6 +127,14 @@ __decorate([
     (0, class_validator_1.IsIn)([true], { message: 'validation.TERMS_NOT_ACCEPTED' }),
     __metadata("design:type", Boolean)
 ], InitCheckoutDto.prototype, "termsAccepted", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Renew this subscription (same package; listingId must be one of its listings) instead of buying a first package',
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsUUID)('4'),
+    __metadata("design:type", String)
+], InitCheckoutDto.prototype, "renewSubscriptionId", void 0);
 class AdjustPriceDto {
 }
 exports.AdjustPriceDto = AdjustPriceDto;

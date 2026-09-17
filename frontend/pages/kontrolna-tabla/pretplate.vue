@@ -11,7 +11,9 @@
       <template v-if="notice.key === 'upgraded'">{{ t('billing.upgradedBanner') }}</template>
       <template v-else>
         {{ t(`mySubscriptions.payment.${notice.key}`) }}
-        {{ t(`mySubscriptions.payment.${notice.contact}Before`) }}<NuxtLink to="/kontakt" class="subs-notice-link">{{ t('mySubscriptions.payment.contactLink') }}</NuxtLink>{{ t(`mySubscriptions.payment.${notice.contact}After`) }}
+        <template v-if="notice.contact">
+          {{ t(`mySubscriptions.payment.${notice.contact}Before`) }}<NuxtLink to="/kontakt" class="subs-notice-link">{{ t('mySubscriptions.payment.contactLink') }}</NuxtLink>{{ t(`mySubscriptions.payment.${notice.contact}After`) }}
+        </template>
       </template>
     </p>
 
@@ -62,9 +64,9 @@
                 <dd class="subs-value">{{ card.duration }}</dd>
               </div>
 
-              <div v-if="card.end" class="subs-fact">
-                <dt class="subs-label">{{ card.end.label }}</dt>
-                <dd class="subs-value" :class="{ 'is-urgent': card.end.urgent }">{{ card.end.value }}</dd>
+              <div v-for="date in card.dates" :key="date.label" class="subs-fact">
+                <dt class="subs-label">{{ date.label }}</dt>
+                <dd class="subs-value" :class="{ 'is-urgent': date.urgent }">{{ date.value }}</dd>
               </div>
 
               <div v-if="card.banked" class="subs-fact">
@@ -83,7 +85,11 @@
               </div>
             </dl>
 
-            <p v-if="card.warning" class="subs-warning">{{ card.warning }}</p>
+            <!-- 380:1348, and what a renewal changes: packages never renew by themselves. -->
+            <div v-if="card.note" class="subs-note" :class="`is-${card.note.tone}`">
+              <p class="subs-note-text">{{ card.note.text }}</p>
+              <NuxtLink v-if="card.note.action" :to="card.note.action.to" class="subs-note-action">{{ card.note.action.label }}</NuxtLink>
+            </div>
           </article>
         </div>
 
@@ -138,11 +144,10 @@
 // Dizajn 35 (frame 380:1219): the packages an owner pays for, one card each,
 // and the live listings that can still move to Pro.
 import {
-  buildSubscriptionCard,
+  buildSubscriptionCards,
   buildUpgradeRow,
   formatSubscriptionsSummary,
   getPaymentNotice,
-  selectShownSubscriptions,
   selectUpgradeableListings,
 } from '~/utils/subscriptions'
 
@@ -166,9 +171,7 @@ onMounted(() => {
   now.value = Date.now()
 })
 
-const cards = computed(() =>
-  selectShownSubscriptions(subscriptions.value).map((subscription) => buildSubscriptionCard(t, subscription, listingsById.value, now.value)),
-)
+const cards = computed(() => buildSubscriptionCards(t, subscriptions.value, listingsById.value, now.value))
 const summary = computed(() => formatSubscriptionsSummary(t, cards.value))
 const upgradeRows = computed(() => selectUpgradeableListings(listings.value).map((listing) => buildUpgradeRow(t, listing)))
 const notice = computed(() => getPaymentNotice(route.query))
@@ -394,6 +397,12 @@ $subs-alert-bg: #fdeff1;
   color: $subs-success-text;
 }
 
+// Paid in advance: blue, like a request waiting its turn on the home page (Dizajn 31).
+.subs-pill-SCHEDULED {
+  background: $color-accent-tint;
+  color: $color-primary;
+}
+
 .subs-pill-PENDING_ACTIVATION {
   background: $color-warning-bg;
   color: $color-warning;
@@ -521,14 +530,48 @@ $subs-alert-bg: #fdeff1;
   cursor: default;
 }
 
-// 380:1348
-.subs-warning {
+// 380:1348. The renew link sits on the right and the text wraps before it does.
+.subs-note {
+  display: flex;
+  align-items: center;
+  gap: 16px;
   padding: 12px 22px 14px;
-  background: $subs-danger-bg;
   font-size: 12px;
   font-weight: 400;
   line-height: 18px;
+}
+
+.subs-note.is-danger {
+  background: $subs-danger-bg;
   color: $color-error;
+}
+
+.subs-note.is-success {
+  background: $subs-success-bg;
+  color: $subs-success-note;
+}
+
+.subs-note.is-muted {
+  background: $color-background;
+  color: $color-text-muted;
+}
+
+.subs-note-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.subs-note-action {
+  flex-shrink: 0;
+  font-weight: 600;
+  color: inherit;
+  text-decoration: underline;
+  white-space: nowrap;
+}
+
+.subs-note-action:hover {
+  color: inherit;
+  text-decoration: none;
 }
 
 // 380:1387
@@ -727,7 +770,7 @@ $subs-alert-bg: #fdeff1;
     padding-left: 16px;
   }
 
-  .subs-warning {
+  .subs-note {
     padding: 12px 16px 14px;
   }
 

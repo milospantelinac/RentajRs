@@ -48,5 +48,11 @@
   "ICAL_SOURCE_DUPLICATE": "This calendar is already connected",
   "ICAL_SOURCE_NOT_FOUND": "Calendar not found",
   "ICAL_URL_UNREACHABLE": "The address cannot be reached. Check that you copied all of it",
-  "ICAL_URL_NOT_CALENDAR": "There is no iCal calendar at this address. Copy the .ics address from the calendar settings on the other platform"
+  "ICAL_URL_NOT_CALENDAR": "There is no iCal calendar at this address. Copy the .ics address from the calendar settings on the other platform",
+  "SUBSCRIPTION_NOT_FOUND": "Subscription not found",
+  "SUBSCRIPTION_ALREADY_RENEWED": "The next period of this package is already paid for",
+  "SUBSCRIPTION_RENEWAL_NOT_ALLOWED": "This package can’t be renewed",
+  "SUBSCRIPTION_RENEWAL_SAME_PACKAGE": "A renewal keeps the same package; to move to Pro, use \"Upgrade to Pro\"",
+  "SUBSCRIPTION_UPGRADE_PRO_ONLY": "A published listing can only move to the Pro package here; its current package is extended by renewing it",
+  "LISTING_PACKAGE_PURCHASE_NOT_ALLOWED": "A package can’t be bought for this listing right now"
 }

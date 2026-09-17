@@ -146,6 +146,7 @@ enum OccupancySource {
 enum SubscriptionStatus {
   AWAITING_PAYMENT // created at checkout, before the NestPay redirect resolves — see nestpay callback handlers
   PENDING_ACTIVATION
+  SCHEDULED // a paid renewal waiting for the subscription it renews to end, see renewsSubscriptionId
   ACTIVE
   EXPIRED
   CANCELLED
@@ -960,16 +961,24 @@ model Subscription {
   // before the NestPay callback confirms payment and ListingsService.markPendingApproval()
   // takes over as the authoritative link (Listing.subscriptionId). Not used afterwards.
   pendingListingId    String?            @db.Uuid
+  // A renewal: the subscription whose listings this one takes over. Bought while
+  // that one still runs, it waits as SCHEDULED and starts where the other ends
+  // (SubscriptionsService.expireOverdueSubscriptions); bought after it ended, it
+  // starts at payment. Kept afterwards as the chain of paid periods.
+  renewsSubscriptionId String?           @db.Uuid
   createdAt           DateTime           @default(now()) @db.Timestamptz
 
-  user     User      @relation(fields: [userId], references: [id])
-  package  Package   @relation(fields: [packageId], references: [id])
+  user     User          @relation(fields: [userId], references: [id])
+  package  Package       @relation(fields: [packageId], references: [id])
+  renews   Subscription? @relation("SubscriptionRenewals", fields: [renewsSubscriptionId], references: [id], onDelete: SetNull)
+  renewals Subscription[] @relation("SubscriptionRenewals")
   listings Listing[]
 
   transactions Transaction[]
 
   @@index([userId])
   @@index([status])
+  @@index([renewsSubscriptionId])
 }
 
 /// ADR-005: paid days transfer, never refund or expire. See

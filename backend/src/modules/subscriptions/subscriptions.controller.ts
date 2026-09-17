@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Post, Query, Redirect } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Query, Redirect } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { SubscriptionsService } from './subscriptions.service';
 import {
@@ -35,6 +35,12 @@ export class SubscriptionsController {
   @Get('subscriptions/:id/receipt')
   getReceipt(@CurrentUser('id') userId: string, @Param('id') id: string) {
     return this.subscriptionsService.getSubscriptionReceipt(userId, id);
+  }
+
+  // What renewing this package would carry over and when the new period starts.
+  @Get('subscriptions/:id/renewal')
+  getRenewal(@CurrentUser('id') userId: string, @Param('id', ParseUUIDPipe) id: string) {
+    return this.subscriptionsService.getRenewal(userId, id);
   }
 
   @Post('subscriptions/purchase')

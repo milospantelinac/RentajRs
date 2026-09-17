@@ -69,6 +69,7 @@ describe('ListingsService#getMine (Dizajn 32)', () => {
           { listingId: 'banked', status: 'AWAITING_PAYMENT', _count: { _all: 1 } },
         ]),
       },
+      subscription: { findMany: jest.fn().mockResolvedValue([]) },
     };
     const service = makeService(prisma, taxonomy);
 
@@ -114,9 +115,44 @@ describe('ListingsService#getMine (Dizajn 32)', () => {
     const prisma = {
       listing: { findMany: jest.fn().mockResolvedValue([]) },
       booking: { groupBy: jest.fn() },
+      subscription: { findMany: jest.fn().mockResolvedValue([]) },
     };
     await expect(makeService(prisma, taxonomy).getMine('u1')).resolves.toEqual([]);
     expect(prisma.booking.groupBy).not.toHaveBeenCalled();
+  });
+
+  it('keeps a listing online through paid renewals and carried-over days', async () => {
+    const prisma = {
+      listing: {
+        findMany: jest.fn().mockResolvedValue([
+          listingRow({
+            id: 'renewed',
+            subscriptionId: 's1',
+            subscription: { package: { key: 'STANDARD' }, status: 'ACTIVE', expiresAt: new Date('2026-10-01T00:00:00Z') },
+          }),
+          listingRow({
+            id: 'carried',
+            subscriptionId: 's2',
+            subscription: { package: { key: 'PRO' }, status: 'ACTIVE', expiresAt: new Date('2026-10-01T00:00:00Z') },
+            bankedDays: [{ validUntil: null, days: 5 }, { validUntil: null, days: 7 }],
+          }),
+        ]),
+      },
+      booking: { groupBy: jest.fn().mockResolvedValue([]) },
+      subscription: {
+        findMany: jest.fn().mockResolvedValue([
+          // Two periods paid in advance, the second continuing the first.
+          { id: 'r2', renewsSubscriptionId: 'r1', expiresAt: new Date('2026-11-30T00:00:00Z') },
+          { id: 'r1', renewsSubscriptionId: 's1', expiresAt: new Date('2026-10-31T00:00:00Z') },
+        ]),
+      },
+    };
+    const [renewed, carried] = await makeService(prisma, taxonomy).getMine('u1');
+
+    expect(prisma.subscription.findMany.mock.calls[0][0].where).toEqual({ userId: 'u1', status: 'SCHEDULED' });
+    expect(renewed).toMatchObject({ validUntil: new Date('2026-11-30T00:00:00Z'), renewalScheduled: true });
+    // Twelve days wait for the Pro package to end.
+    expect(carried).toMatchObject({ validUntil: new Date('2026-10-13T00:00:00Z'), renewalScheduled: false });
   });
 });
 

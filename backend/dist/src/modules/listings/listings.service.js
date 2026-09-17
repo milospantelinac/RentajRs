@@ -24,6 +24,7 @@ const users_service_1 = require("../users/users.service");
 const contact_detector_1 = require("../../common/utils/contact-detector");
 const ical_availability_1 = require("../../common/utils/ical-availability");
 const money_1 = require("../../common/utils/money");
+const subscription_renewal_1 = require("../../common/utils/subscription-renewal");
 const taxonomy_service_2 = require("../taxonomy/taxonomy.service");
 const MAX_PHOTOS = 20;
 const MODERATION_SLA_HOURS = 24;
@@ -107,11 +108,25 @@ let ListingsService = class ListingsService {
                 cityArea: { select: { name: true } },
                 subscription: { select: { package: { select: { key: true, hasIcal: true } }, status: true, expiresAt: true } },
                 moderations: { orderBy: { createdAt: 'desc' }, take: 1, select: { createdAt: true, rejectionReason: true, note: true } },
-                bankedDays: { where: { validUntil: { not: null } }, select: { validUntil: true } },
+                bankedDays: { where: { usedAt: null }, select: { validUntil: true, days: true } },
             },
         });
         const listingIds = listings.map((l) => l.id);
         const categoryNames = await this.taxonomy.getCategoryNames([...new Set(listings.map((l) => l.categoryId))]);
+        const scheduled = await this.prisma.subscription.findMany({
+            where: { userId, status: client_1.SubscriptionStatus.SCHEDULED },
+            select: { id: true, renewsSubscriptionId: true, expiresAt: true },
+        });
+        const renewalOf = new Map(scheduled.map((s) => [s.renewsSubscriptionId, s]));
+        const lastPaidEnd = (subscriptionId, expiresAt) => {
+            let end = expiresAt;
+            let renewal = subscriptionId ? renewalOf.get(subscriptionId) : undefined;
+            for (let depth = 0; renewal && depth < 100; depth++) {
+                end = renewal.expiresAt;
+                renewal = renewalOf.get(renewal.id);
+            }
+            return end;
+        };
         const bookingCounts = listingIds.length
             ? await this.prisma.booking.groupBy({
                 by: ['listingId', 'status'],
@@ -124,7 +139,12 @@ let ListingsService = class ListingsService {
             .reduce((sum, row) => sum + row._count._all, 0);
         return listings.map(({ moderations, bankedDays, city, cityArea, ...listing }) => {
             const moderation = moderations[0];
-            const validUntil = [listing.subscription?.expiresAt, ...bankedDays.map((b) => b.validUntil)].reduce((latest, date) => (date && (!latest || date > latest) ? date : latest), null);
+            const paidUntil = lastPaidEnd(listing.subscriptionId, listing.subscription?.expiresAt ?? null);
+            const waitingDays = bankedDays.filter((b) => !b.validUntil).reduce((sum, b) => sum + b.days, 0);
+            const validUntil = [
+                paidUntil && waitingDays ? new Date(paidUntil.getTime() + waitingDays * subscription_renewal_1.DAY_MS) : paidUntil,
+                ...bankedDays.map((b) => b.validUntil),
+            ].reduce((latest, date) => (date && (!latest || date > latest) ? date : latest), null);
             return {
                 ...this.serialize(listing),
                 categoryName: categoryNames.get(listing.categoryId) ?? null,
@@ -136,6 +156,7 @@ let ListingsService = class ListingsService {
                     ? { reason: moderation.rejectionReason, note: moderation.note }
                     : null,
                 validUntil,
+                renewalScheduled: !!listing.subscriptionId && renewalOf.has(listing.subscriptionId),
                 icalAvailable: (0, ical_availability_1.getIcalAvailability)(listing, !!listing.subscription?.package.hasIcal) === 'AVAILABLE',
                 bookings: {
                     confirmed: countBookings(listing.id, [client_1.BookingStatus.CONFIRMED, client_1.BookingStatus.COMPLETED]),
@@ -382,7 +403,8 @@ let ListingsService = class ListingsService {
     }
     async markPendingApproval(listingId, subscriptionId) {
         const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: listingId } });
-        if (listing.status !== client_1.ListingStatus.DRAFT && listing.status !== client_1.ListingStatus.REJECTED) {
+        const neverApprovedExpired = listing.status === client_1.ListingStatus.EXPIRED && !listing.publishedAt;
+        if (listing.status !== client_1.ListingStatus.DRAFT && listing.status !== client_1.ListingStatus.REJECTED && !neverApprovedExpired) {
             throw new common_1.BadRequestException('Listing is not awaiting submission');
         }
         const owner = await this.prisma.user.findUniqueOrThrow({ where: { id: listing.userId } });
