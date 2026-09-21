@@ -274,6 +274,7 @@ describe('BookingsService#listMine (Dizajn 34)', () => {
       guestCount: 12,
       listing: { title: 'Igraonica', slug: 'igraonica', categoryId, city: { name: 'Beograd' }, cityArea: { name: 'Vračar' } },
       guest: { firstName: 'Milica', lastName: 'Jovanović' },
+      owner: { firstName: 'Dragan', lastName: 'Simić' },
     });
     const prisma = {
       booking: {
@@ -281,7 +282,7 @@ describe('BookingsService#listMine (Dizajn 34)', () => {
           row('cancelled', 'CANCELLED', 28),
           row('confirmed', 'CONFIRMED', 16, 'hall'),
           row('requested-late', 'REQUESTED', 18),
-          row('completed', 'COMPLETED', 5),
+          row('completed', 'COMPLETED', 5, 'room'),
           row('awaiting', 'AWAITING_PAYMENT', 13),
           row('rejected', 'REJECTED', 30),
           row('requested-soon', 'REQUESTED', 12),
@@ -290,6 +291,8 @@ describe('BookingsService#listMine (Dizajn 34)', () => {
     };
     const taxonomy = {
       resolveAttributesForCategory: jest.fn(async (id: string) => (id === 'kids' ? [{ key: 'kapacitet_dece' }] : [])),
+      // Dizajn 39: a stay counts people.
+      getCategoryTree: jest.fn(async () => [{ id: 'realestate', slug: 'nekretnine', children: [{ id: 'room', slug: 'sobe' }] }]),
     };
     const service = new BookingsService(prisma as any, {} as any, {} as any, {} as any, taxonomy as any);
 
@@ -310,9 +313,81 @@ describe('BookingsService#listMine (Dizajn 34)', () => {
       totalAmount: 7000,
     });
     expect(rows[3].guestUnit).toBe('guests');
+    expect(rows[6].guestUnit).toBe('people');
     expect(rows[0]).not.toHaveProperty('guestName');
+    expect(rows[0]).not.toHaveProperty('ownerShortName');
 
+    // Dizajn 39 (380:671): "Vlasnik: Dragan S." on the guest's rows.
     const asGuest = await service.listMine('g1', 'guest');
     expect(asGuest[0]).not.toHaveProperty('guestShortName');
+    expect(asGuest[0]).toMatchObject({ ownerShortName: 'Dragan S.' });
+  });
+});
+
+describe('BookingsService#cancelByGuest (Dizajn 39)', () => {
+  const DAY = 86_400_000;
+
+  function setup(overrides: Record<string, unknown>) {
+    const booking = {
+      id: 'b1',
+      guestId: 'g1',
+      ownerId: 'o1',
+      status: 'CONFIRMED',
+      paymentMethod: 'CASH',
+      startsAt: new Date(Date.now() + 10 * DAY),
+      endsAt: new Date(Date.now() + 12 * DAY),
+      cancellationPolicyType: 'FREE_UNTIL_DAYS',
+      cancellationThreshold: 5,
+      pricePerUnit: 1000000n,
+      unitCount: 2,
+      totalAmount: 2000000n,
+      amountDue: 2000000n,
+      fees: null,
+      ...overrides,
+    };
+    const prisma = {
+      booking: {
+        findUnique: jest.fn().mockResolvedValue(booking),
+        update: jest.fn(async ({ data }: any) => ({ ...booking, ...data })),
+      },
+      bookingHistory: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const availability = { releaseTermsForBooking: jest.fn().mockResolvedValue(undefined) };
+    const i18n = { t: jest.fn((key: string) => key) };
+    const events = { emit: jest.fn() };
+    const service = new BookingsService(prisma as any, availability as any, i18n as any, events as any, {} as any);
+    return { service, prisma, availability, events };
+  }
+
+  it('cancels a confirmed cash booking while its free cancellation lasts', async () => {
+    const { service, availability, events } = setup({});
+    const result = await service.cancelByGuest('g1', 'b1', {});
+    expect(result.status).toBe('CANCELLED');
+    expect(availability.releaseTermsForBooking).toHaveBeenCalledWith('b1');
+    expect(events.emit).toHaveBeenCalledWith('booking.cancelled_by_guest', { bookingId: 'b1' });
+  });
+
+  it.each([
+    ['after the free period', { startsAt: new Date(Date.now() + 3 * DAY) }],
+    ['with no cancellation', { cancellationPolicyType: 'NO_CANCELLATION', cancellationThreshold: null }],
+    ['without a policy on the booking', { cancellationPolicyType: null, cancellationThreshold: null }],
+    ['when it was paid by transfer', { paymentMethod: 'BANK_TRANSFER' }],
+  ])('refuses a confirmed booking %s', async (_label, overrides) => {
+    const { service, prisma, availability } = setup(overrides);
+    await expect(service.cancelByGuest('g1', 'b1', {})).rejects.toThrow('bookings.GUEST_CANCELLATION_CLOSED');
+    expect(availability.releaseTermsForBooking).not.toHaveBeenCalled();
+    expect(prisma.booking.update).not.toHaveBeenCalled();
+  });
+
+  it('still withdraws a request and cancels an unpaid one whatever the policy', async () => {
+    for (const status of ['REQUESTED', 'AWAITING_PAYMENT']) {
+      const { service } = setup({ status, paymentMethod: 'BANK_TRANSFER', cancellationPolicyType: 'NO_CANCELLATION' });
+      await expect(service.cancelByGuest('g1', 'b1', {})).resolves.toMatchObject({ status: 'CANCELLED' });
+    }
+  });
+
+  it('refuses a completed booking as before', async () => {
+    const { service } = setup({ status: 'COMPLETED' });
+    await expect(service.cancelByGuest('g1', 'b1', {})).rejects.toThrow('bookings.INVALID_STATE');
   });
 });

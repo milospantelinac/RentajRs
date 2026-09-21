@@ -1,7 +1,7 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { ReviewsService } from './reviews.service';
-import { CreateReviewDto, ReplyToReviewDto } from './dto/reviews.dto';
+import { CreateReviewDto, ReplyToReviewDto, UpdateReviewDto } from './dto/reviews.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
@@ -14,6 +14,12 @@ export class ReviewsController {
   @Post('reviews')
   create(@CurrentUser('id') userId: string, @Body() dto: CreateReviewDto) {
     return this.reviewsService.createReview(userId, dto);
+  }
+
+  // Dizajn 39: the author's change, until the review is published (R96).
+  @Patch('reviews/:id')
+  update(@CurrentUser('id') userId: string, @Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateReviewDto) {
+    return this.reviewsService.updateReview(userId, id, dto);
   }
 
   @Post('reviews/:id/reply')
@@ -33,7 +39,7 @@ export class ReviewsController {
   }
 
   @Get('bookings/:id/reviews')
-  getBookingReviewStatus(@CurrentUser('id') userId: string, @Param('id') id: string) {
+  getBookingReviewStatus(@CurrentUser('id') userId: string, @Param('id', ParseUUIDPipe) id: string) {
     return this.reviewsService.getBookingReviewStatus(userId, id);
   }
 

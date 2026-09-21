@@ -55,5 +55,6 @@
   "SUBSCRIPTION_RENEWAL_SAME_PACKAGE": "A renewal keeps the same package; to move to Pro, use \"Upgrade to Pro\"",
   "SUBSCRIPTION_UPGRADE_PRO_ONLY": "A published listing can only move to the Pro package here; its current package is extended by renewing it",
   "LISTING_PACKAGE_PURCHASE_NOT_ALLOWED": "A package can’t be bought for this listing right now",
-  "CONVERSATION_ACCOUNT_REMOVED": "This account has been removed and no longer receives messages"
+  "CONVERSATION_ACCOUNT_REMOVED": "This account has been removed and no longer receives messages",
+  "REVIEW_ALREADY_PUBLISHED": "The review has been published in the meantime and can no longer be changed"
 }

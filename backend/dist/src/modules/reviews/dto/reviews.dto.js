@@ -9,7 +9,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ReplyToReviewDto = exports.CreateReviewDto = void 0;
+exports.ReplyToReviewDto = exports.UpdateReviewDto = exports.CreateReviewDto = void 0;
 const swagger_1 = require("@nestjs/swagger");
 const class_validator_1 = require("class-validator");
 const GUEST_TAGS = ['ARRIVED_ON_TIME', 'RETURNED_NEATLY', 'COMMUNICATIVE', 'LATE', 'DAMAGE', 'NO_SHOW'];
@@ -42,6 +42,23 @@ __decorate([
     (0, class_validator_1.IsIn)(GUEST_TAGS, { each: true }),
     __metadata("design:type", Array)
 ], CreateReviewDto.prototype, "tags", void 0);
+class UpdateReviewDto {
+}
+exports.UpdateReviewDto = UpdateReviewDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ minimum: 1, maximum: 5 }),
+    (0, class_validator_1.IsInt)(),
+    (0, class_validator_1.Min)(1),
+    (0, class_validator_1.Max)(5),
+    __metadata("design:type", Number)
+], UpdateReviewDto.prototype, "rating", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Empty clears the comment' }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.MaxLength)(2000),
+    __metadata("design:type", String)
+], UpdateReviewDto.prototype, "comment", void 0);
 class ReplyToReviewDto {
 }
 exports.ReplyToReviewDto = ReplyToReviewDto;

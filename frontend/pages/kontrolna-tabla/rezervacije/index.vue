@@ -21,24 +21,24 @@
 
     <!-- Dizajn 44: a failed load and a role without bookings say so in the
          card the table would fill. -->
-    <section v-if="error" class="bookreq-card bookreq-state is-error">
+    <section v-if="error" class="bookreq-card bookreq-state is-error" :class="cardClass">
       <DashboardNavIcon :name="stateIcon" class="bookreq-state-icon" />
       <p class="bookreq-state-title">{{ t('bookingRequests.loadErrorTitle') }}</p>
       <p class="bookreq-state-text">{{ t('bookingRequests.loadErrorText') }}</p>
       <button type="button" class="bookreq-button" @click="refresh()">{{ t('errorPage.tryAgain') }}</button>
     </section>
 
-    <section v-else-if="!rows.length && !status" class="bookreq-card bookreq-state">
+    <section v-else-if="!rows.length && !status" class="bookreq-card bookreq-state" :class="cardClass">
       <DashboardNavIcon :name="stateIcon" class="bookreq-state-icon" />
       <p class="bookreq-state-title">{{ t(`bookingRequests.empty.${role}.title`) }}</p>
       <p class="bookreq-state-text">{{ t(`bookingRequests.empty.${role}.text`) }}</p>
       <NuxtLink :to="emptyAction.to" class="bookreq-button">{{ emptyAction.label }}</NuxtLink>
     </section>
 
-    <div v-else class="bookreq-card" role="table" :aria-label="title">
+    <div v-else class="bookreq-card" :class="cardClass" role="table" :aria-label="title">
       <div class="bookreq-head" role="row">
         <span class="bookreq-cell-listing" role="columnheader">{{ t('booking.listingTitle') }}</span>
-        <span class="bookreq-cell-term" role="columnheader">{{ t('booking.dateTime') }}</span>
+        <span class="bookreq-cell-term" role="columnheader">{{ termHeader }}</span>
         <span class="bookreq-cell-amount" role="columnheader">{{ t('booking.totalAmount') }}</span>
         <span class="bookreq-cell-status" role="columnheader">{{ t('common.status') }}</span>
         <span class="bookreq-cell-arrow" aria-hidden="true" />
@@ -76,8 +76,9 @@
 <script setup>
 // One list for both sides of a booking: ?role=owner is "Zahtevi za
 // rezervaciju", the guest's side (the default) "Moje rezervacije". Dizajn 34
-// (frame 378:493) draws the owner's; the role and the status both live in the
-// URL, so the home page's task cards can open one filtered list (T96).
+// (frame 378:493) draws the owner's, Dizajn 39 (380:671) the guest's; the role
+// and the status both live in the URL, so the home page's task cards can open
+// one filtered list (T96).
 import { BOOKING_STATUSES, buildBookingRow, getBookingStatus, getBookingStatusLabel } from '~/utils/bookingRequests'
 
 definePageMeta({ middleware: 'auth', layout: 'dashboard' })
@@ -96,6 +97,11 @@ const { data: bookings, error, refresh } = await useAsyncData(
 )
 
 const title = computed(() => (role.value === 'owner' ? t('dashboard.requests') : t('dashboard.myBookings')))
+
+// 380:773: the guest's table heads the term column "Termin" (the frame sets
+// it in capitals, unlike its other headers) and casts a lighter shadow (380:770).
+const termHeader = computed(() => (role.value === 'owner' ? t('booking.dateTime') : t('bookingRequests.termHeader')))
+const cardClass = computed(() => ({ 'is-guest': role.value === 'guest' }))
 
 // 378:497, 378:499
 const roleOptions = computed(() =>
@@ -222,6 +228,13 @@ $bookreq-closed-bg: #f0f2f5;
   border-radius: $radius-card;
   background: $color-surface;
   box-shadow: $shadow-card;
+}
+
+// 380:770. Close to $shadow-card-wide, whose 1px layer is lighter.
+.bookreq-card.is-guest {
+  box-shadow:
+    0 1px 3px rgba(97, 115, 133, 0.05),
+    0 6px 20px rgba(97, 115, 133, 0.08);
 }
 
 // 378:506

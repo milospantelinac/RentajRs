@@ -1131,6 +1131,10 @@ model Booking {
   paymentConfirmedAt        DateTime?     @db.Timestamptz
   phoneUnlocked             Boolean       @default(false) // guest phone visible to owner after acceptance
   cancellationTermsSnapshot String?
+  /// Dizajn 39: the same policy as data, frozen with the text above, so the
+  /// guest's free-cancellation deadline never follows a later edit.
+  cancellationPolicyType    CancellationPolicyType?
+  cancellationThreshold     Int?
   cancellationReason        String?
   noShowDisputed            Boolean       @default(false)
   /// Which time-based email reminders already went out for this booking —

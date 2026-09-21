@@ -16,6 +16,18 @@ const event_emitter_1 = require("@nestjs/event-emitter");
 const nestjs_i18n_1 = require("nestjs-i18n");
 const prisma_service_1 = require("../../prisma/prisma.service");
 const DEFAULT_REVIEW_WINDOW_DAYS = 14;
+const DAY_MS = 86_400_000;
+function reviewView(review) {
+    return {
+        id: review.id,
+        rating: review.rating,
+        comment: review.comment,
+        tags: review.tags.map((row) => row.tag),
+        writtenAt: review.writtenAt,
+        published: review.published,
+        publishedAt: review.publishedAt,
+    };
+}
 let ReviewsService = class ReviewsService {
     constructor(prisma, i18n, events) {
         this.prisma = prisma;
@@ -66,6 +78,21 @@ let ReviewsService = class ReviewsService {
         await this.tryPublishPair(booking.id);
         this.events.emit('review.written', { reviewId: review.id, bookingId: booking.id, direction });
         return review;
+    }
+    async updateReview(authorId, reviewId, dto) {
+        const review = await this.prisma.review.findUnique({ where: { id: reviewId } });
+        if (!review)
+            throw new common_1.NotFoundException();
+        if (review.authorId !== authorId)
+            throw new common_1.ForbiddenException();
+        const { count } = await this.prisma.review.updateMany({
+            where: { id: reviewId, published: false },
+            data: { rating: dto.rating, comment: dto.comment?.trim() || null },
+        });
+        if (!count)
+            throw new common_1.BadRequestException(this.i18n.t('errors.REVIEW_ALREADY_PUBLISHED'));
+        const updated = await this.prisma.review.findUniqueOrThrow({ where: { id: reviewId }, include: { tags: true } });
+        return reviewView(updated);
     }
     async tryPublishPair(bookingId) {
         const reviews = await this.prisma.review.findMany({ where: { bookingId } });
@@ -130,15 +157,25 @@ let ReviewsService = class ReviewsService {
             throw new common_1.ForbiddenException();
         const myDirection = booking.guestId === userId ? 'GUEST_TO_OWNER' : 'OWNER_TO_GUEST';
         const counterpartDirection = myDirection === 'GUEST_TO_OWNER' ? 'OWNER_TO_GUEST' : 'GUEST_TO_OWNER';
-        const reviews = await this.prisma.review.findMany({ where: { bookingId }, include: { tags: true } });
+        const [reviews, windowDays] = await Promise.all([
+            this.prisma.review.findMany({ where: { bookingId }, include: { tags: true } }),
+            this.getReviewWindowDays(),
+        ]);
         const mine = reviews.find((r) => r.direction === myDirection) ?? null;
         const counterpart = reviews.find((r) => r.direction === counterpartDirection) ?? null;
         return {
             canReview: booking.status === 'COMPLETED' && !mine,
             direction: myDirection,
-            myReview: mine,
+            windowDays,
+            myReview: mine
+                ? {
+                    ...reviewView(mine),
+                    editable: !mine.published,
+                    publishesBy: mine.published ? null : new Date(mine.writtenAt.getTime() + (windowDays + 1) * DAY_MS),
+                }
+                : null,
             counterpartHasReviewed: !!counterpart,
-            counterpartReview: counterpart?.published ? counterpart : null,
+            counterpartReview: counterpart?.published ? reviewView(counterpart) : null,
         };
     }
     async getMyPendingReviews(userId) {

@@ -41,12 +41,15 @@ if (listing.value && !listing.value.canMessage) {
 const content = ref('')
 const error = ref('')
 const sending = ref(false)
+// Dizajn 39: "Pošalji poruku vlasniku" on the guest's booking ties the new
+// conversation to that booking, which its header then shows (Dizajn 37).
+const bookingId = typeof route.query.rezervacija === 'string' ? route.query.rezervacija : undefined
 
 async function send() {
   error.value = ''
   sending.value = true
   try {
-    const message = await api.post('/conversations', { listingId: listing.value.id, content: content.value })
+    const message = await api.post('/conversations', { listingId: listing.value.id, bookingId, content: content.value })
     await navigateTo(`/kontrolna-tabla/poruke/${message.conversationId}`)
   } catch (e) {
     error.value = extractErrorMessage(e, t('auth.genericError'))

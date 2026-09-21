@@ -27,6 +27,21 @@ export class CreateReviewDto {
   tags?: (typeof GUEST_TAGS)[number][];
 }
 
+/** Dizajn 39: the author's change to a review that is not published yet. */
+export class UpdateReviewDto {
+  @ApiProperty({ minimum: 1, maximum: 5 })
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  rating: number;
+
+  @ApiPropertyOptional({ description: 'Empty clears the comment' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  comment?: string;
+}
+
 export class ReplyToReviewDto {
   @ApiProperty()
   @IsString()

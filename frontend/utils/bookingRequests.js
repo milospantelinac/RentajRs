@@ -103,9 +103,12 @@ export function formatBookingListing(listing) {
   return listing.place ? `${listing.title} - ${listing.place}` : listing.title
 }
 
-// "18 dece", "30 gostiju"
+// "18 dece", "2 osobe" (a stay, Dizajn 39), "30 gostiju"
+const GUEST_UNITS = ['children', 'people', 'guests']
+
 export function formatBookingGuests(t, guestUnit, count) {
-  return t(`dashboard.upcomingGuests.${guestUnit === 'children' ? 'children' : 'guests'}${srPluralCategory(count)}`, { count })
+  const unit = GUEST_UNITS.includes(guestUnit) ? guestUnit : 'guests'
+  return t(`dashboard.upcomingGuests.${unit}${srPluralCategory(count)}`, { count })
 }
 
 // "2 sata", "3 noći", "1 termin"; a booking priced per guest counts its guests.
@@ -156,7 +159,8 @@ export function formatBookingPriceBreakdown(t, booking) {
 }
 
 // 378:511: the listing, who booked it and for how many, the day and hours,
-// the total and the state of one booking.
+// the total and the state of one booking. The guest's row (380:776) names
+// the owner instead.
 export function buildBookingRow(t, booking) {
   const term = formatBookingTerm(t, booking)
   const guests = booking.guestCount ? formatBookingGuests(t, booking.guestUnit, booking.guestCount) : ''
@@ -164,7 +168,9 @@ export function buildBookingRow(t, booking) {
     id: booking.id,
     to: `/rezervacije/${booking.id}`,
     listing: formatBookingListing(booking.listing),
-    meta: [booking.guestShortName, guests].filter(Boolean).join(' · '),
+    meta: booking.ownerShortName
+      ? t('bookingRequests.ownerMeta', { name: booking.ownerShortName })
+      : [booking.guestShortName, guests].filter(Boolean).join(' · '),
     date: term.date,
     time: term.detail,
     amount: formatRsd(booking.totalAmount),

@@ -2,7 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { I18nContext, I18nService } from 'nestjs-i18n';
-import { Booking, BookingStatus, Prisma, PriceUnit } from '@prisma/client';
+import { Booking, BookingStatus, ListingStatus, Prisma, PriceUnit } from '@prisma/client';
 import * as QRCode from 'qrcode';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AvailabilityService, PriceKind, PricedUnit } from '../availability/availability.service';
@@ -11,6 +11,7 @@ import { buildIpsQrPayload } from '../../common/utils/ips-qr';
 import { paraToRsd, rsdToPara } from '../../common/utils/money';
 import { toBelgradeHHMM } from '../../common/utils/timezone';
 import { GUEST_CAPACITY_ATTRIBUTE_KEYS, getGuestUnits } from '../../common/utils/guest-capacity';
+import { canGuestCancel, getFreeCancellationUntil } from '../../common/utils/guest-cancellation';
 import { shortName } from '../../common/utils/short-name';
 import { CreateBookingRequestDto } from './dto/create-booking-request.dto';
 import { CancelBookingDto, DisputeNoShowDto, RejectBookingDto } from './dto/booking-actions.dto';
@@ -136,6 +137,8 @@ export class BookingsService {
           listing.cancellationThreshold,
           guest.language,
         ),
+        cancellationPolicyType: listing.cancellationPolicyType,
+        cancellationThreshold: listing.cancellationThreshold,
       },
     });
 
@@ -494,9 +497,16 @@ export class BookingsService {
 
   // -- Guest actions -----------------------------------------------------
 
-  /** R "gost otkaze posle uplate -> blokirano": self-service cancellation stops once CONFIRMED. */
+  /**
+   * R "gost otkaze posle uplate -> blokirano": a paid booking is never the
+   * guest's to cancel. Dizajn 39 lets them cancel a confirmed cash booking
+   * while its free cancellation lasts (canGuestCancel).
+   */
   async cancelByGuest(guestId: string, bookingId: string, dto: CancelBookingDto) {
-    const booking = await this.assertGuestAccess(guestId, bookingId, ['REQUESTED', 'AWAITING_PAYMENT']);
+    const booking = await this.assertGuestAccess(guestId, bookingId, ['REQUESTED', 'AWAITING_PAYMENT', 'CONFIRMED']);
+    if (!canGuestCancel(booking)) {
+      throw new BadRequestException(this.i18n.t('bookings.GUEST_CANCELLATION_CLOSED'));
+    }
     await this.availability.releaseTermsForBooking(booking.id);
     const updated = await this.applyStatus(booking, 'CANCELLED', guestId, { cancellationReason: dto.reason });
     this.events.emit('booking.cancelled_by_guest', { bookingId: booking.id });
@@ -574,12 +584,16 @@ export class BookingsService {
             paymentMethod: true,
             maxGuests: true,
             categoryId: true,
+            status: true,
+            pickupTime: true,
+            returnTime: true,
             city: { select: { name: true } },
             cityArea: { select: { name: true } },
+            subscription: { select: { package: { select: { hasMessaging: true } } } },
           },
         },
         guest: { select: { firstName: true, lastName: true, phone: true } },
-        owner: { select: { firstName: true, lastName: true, phone: true, bankAccount: true } },
+        owner: { select: { firstName: true, lastName: true, phone: true, bankAccount: true, anonymizedAt: true } },
       },
     });
     if (!booking) throw new NotFoundException();
@@ -630,9 +644,11 @@ export class BookingsService {
 
     const { listing } = booking;
     const isOwnerViewing = booking.ownerId === userId;
-    const [guestUnits, guestCapacity] = await Promise.all([
+    const [guestUnits, guestCapacity, categoryNames, messaging] = await Promise.all([
       getGuestUnits(this.taxonomy, [listing.categoryId]),
       this.getGuestCapacity(booking.listingId, listing.maxGuests),
+      this.taxonomy.getCategoryNames([listing.categoryId]),
+      isOwnerViewing ? null : this.getGuestMessaging(booking),
     ]);
     const serialized = this.serialize(booking, userId);
 
@@ -640,15 +656,33 @@ export class BookingsService {
       ...serialized,
       // Dizajn 34: the card's title reads "Igraonica Balončići - Vračar", and
       // "gost je izabrao keš" only when the listing offered both methods.
+      // Dizajn 39 (528:514): "Sobe · Kopaonik, Suvo Rudište" under the guest's
+      // title, a link to the listing only while it is live, and a vehicle's
+      // fixed pickup and return times under the two dates.
       listing: {
         ...serialized.listing,
         place: listing.cityArea?.name ?? listing.city?.name ?? null,
         acceptsBothPaymentMethods: listing.paymentMethod === 'BOTH',
+        status: listing.status,
+        categoryName: categoryNames.get(listing.categoryId) ?? null,
+        city: listing.city?.name ?? null,
+        area: listing.cityArea?.name ?? null,
+        pickupTime: listing.pickupTime,
+        returnTime: listing.returnTime,
       },
       guestUnit: guestUnits.get(listing.categoryId),
       guestCapacity,
       statusChangedAt: statusEntry?.changedAt ?? booking.createdAt,
-      ...(isOwnerViewing ? { guestShortName: shortName(booking.guest) } : {}),
+      cancellationPolicy: {
+        type: booking.cancellationPolicyType,
+        threshold: booking.cancellationThreshold,
+        freeUntil: getFreeCancellationUntil(booking),
+      },
+      ...(isOwnerViewing
+        ? { guestShortName: shortName(booking.guest) }
+        : // The guest already sees "Dragan S." on the listing's page; the full
+          // name, phone and address still wait for phoneUnlocked (serialize).
+          { ownerShortName: shortName(booking.owner), canCancel: canGuestCancel(booking), messaging }),
       ...(cancellation ? { cancellation } : {}),
       ...(bankTransferDetails ? { bankTransferDetails } : {}),
       ...(awaitingPaymentSince ? { awaitingPaymentSince } : {}),
@@ -672,18 +706,49 @@ export class BookingsService {
           },
         },
         guest: { select: { firstName: true, lastName: true } },
+        owner: { select: { firstName: true, lastName: true } },
       },
     });
     const guestUnits = await getGuestUnits(this.taxonomy, bookings.map((b) => b.listing.categoryId));
 
     // Dizajn 34: a row names the listing with its area and, for the owner,
-    // the guest ("Milica J. · 18 dece"); the guest's side is Dizajn 39.
-    return bookings.sort(compareForList).map(({ guest, listing, ...booking }) => ({
+    // the guest ("Milica J. · 18 dece"); Dizajn 39 (380:671) names the owner
+    // on the guest's rows ("Vlasnik: Dragan S."), as the listing's page does.
+    return bookings.sort(compareForList).map(({ guest, owner, listing, ...booking }) => ({
       ...this.serialize(booking),
       listing: { title: listing.title, slug: listing.slug, place: listing.cityArea?.name ?? listing.city?.name ?? null },
       guestUnit: guestUnits.get(listing.categoryId),
-      ...(role === 'owner' ? { guestShortName: shortName(guest) } : {}),
+      ...(role === 'owner' ? { guestShortName: shortName(guest) } : { ownerShortName: shortName(owner) }),
     }));
+  }
+
+  /**
+   * Dizajn 39: "Pošalji poruku vlasniku" opens the guest's thread about this
+   * listing, the one about this booking first, or starts one where
+   * MessagingService.startConversation would accept it (a live listing whose
+   * package has messaging, an owner whose account still exists).
+   */
+  private async getGuestMessaging(booking: {
+    id: string;
+    listingId: string;
+    guestId: string;
+    listing: { status: ListingStatus; subscription: { package: { hasMessaging: boolean } } | null };
+    owner: { anonymizedAt: Date | null };
+  }) {
+    const threads = await this.prisma.conversation.findMany({
+      where: { listingId: booking.listingId, guestId: booking.guestId },
+      select: { id: true, bookingId: true },
+      orderBy: { lastMessageAt: { sort: 'desc', nulls: 'last' } },
+    });
+    const thread = threads.find((t) => t.bookingId === booking.id) ?? threads[0] ?? null;
+    return {
+      conversationId: thread?.id ?? null,
+      canStart:
+        !thread &&
+        booking.listing.status === ListingStatus.ACTIVE &&
+        !!booking.listing.subscription?.package.hasMessaging &&
+        !booking.owner.anonymizedAt,
+    };
   }
 
   // -- Scheduled jobs --------------------------------------------------

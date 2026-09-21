@@ -1373,7 +1373,10 @@
       "childrenMany": "{count} dece",
       "guestsOne": "{count} gost",
       "guestsFew": "{count} gosta",
-      "guestsMany": "{count} gostiju"
+      "guestsMany": "{count} gostiju",
+      "peopleOne": "{count} osoba",
+      "peopleFew": "{count} osobe",
+      "peopleMany": "{count} osoba"
     },
     "noUpcomingText": "Ovde se prikazuju zahtevi i rezervacije za narednih 7 dana.",
     "onboardingProgress": "{done} / {total}",
@@ -1451,7 +1454,17 @@
     "replyPlaceholder": "Napišite odgovor (opciono, može se poslati samo jednom)",
     "sendReply": "Pošalji odgovor",
     "replySent": "Odgovor je poslat",
-    "noReviewsYet": "Ovaj oglas još uvek nema recenzija"
+    "noReviewsYet": "Ovaj oglas još uvek nema recenzija",
+    "formNoteOne": "Ocena i komentar se objavljuju na oglasu kada i vlasnik oceni vas, a najkasnije za {count} dan. Dugme je neaktivno dok se ne izabere ocena.",
+    "formNoteFew": "Ocena i komentar se objavljuju na oglasu kada i vlasnik oceni vas, a najkasnije za {count} dana. Dugme je neaktivno dok se ne izabere ocena.",
+    "formNoteMany": "Ocena i komentar se objavljuju na oglasu kada i vlasnik oceni vas, a najkasnije za {count} dana. Dugme je neaktivno dok se ne izabere ocena.",
+    "pendingNote": "Recenzija će biti objavljena na oglasu kada i vlasnik oceni vas, a najkasnije {date} Do tada je možete izmeniti.",
+    "publishedNote": "Recenzija je objavljena na oglasu.",
+    "edit": "Izmeni recenziju",
+    "saveEdit": "Sačuvaj izmene",
+    "cancelEdit": "Odustani",
+    "starLabel": "Ocena {count} od 5",
+    "ownerReview": "Recenzija vlasnika"
   },
   "admin": {
     "panel": "Administracija",
@@ -2007,7 +2020,9 @@
     "loadErrorTitle": "Rezervacije nisu učitane",
     "loadErrorText": "Proverite internet vezu i pokušajte ponovo.",
     "detailLoadErrorTitle": "Rezervacija nije učitana",
-    "notFoundTitle": "Rezervacija nije pronađena"
+    "notFoundTitle": "Rezervacija nije pronađena",
+    "termHeader": "Termin",
+    "ownerMeta": "Vlasnik: {name}"
   },
   "mySubscriptions": {
     "cardsLabel": "Pretplate",
@@ -2120,5 +2135,48 @@
     "notFoundTitle": "Razgovor nije pronađen",
     "notFoundText": "Ovaj razgovor ne postoji ili mu nemate pristup.",
     "threadErrorTitle": "Razgovor nije učitan"
+  },
+  "guestBooking": {
+    "detailsTitle": "Detalji rezervacije",
+    "dayFrom": "{day}, od {time}",
+    "dayUntil": "{day}, do {time}",
+    "paymentCash": "Gotovina pri dolasku",
+    "paymentTransfer": "Bezgotovinski (IPS QR)",
+    "noAdvance": "avans nije tražen",
+    "paidOn": "potvrđeno {date}",
+    "paidAdvanceOn": "avans, potvrđeno {date}; ostatak {rest} pri dolasku",
+    "payAfterApproval": "uplaćuje se kada vlasnik odobri zahtev",
+    "noTerms": "Vlasnik nije naveo uslove",
+    "termsAdvanceKept": "posle toga se avans ne vraća",
+    "termsWithOwner": "posle toga se otkazivanje dogovara sa vlasnikom",
+    "termsNone": "potvrđena rezervacija se ne otkazuje besplatno",
+    "subtitle": {
+      "REQUESTED": "Zahtev poslat {date} u {time}",
+      "AWAITING_PAYMENT": "Zahtev odobren {date}",
+      "COMPLETED_STAY": "Boravak završen {date}",
+      "COMPLETED": "Termin završen {date}"
+    },
+    "note": {
+      "requested": "Termin je privremeno blokiran za vas dok vlasnik ne odgovori. Ako ne odgovori u roku, zahtev ističe i termin se oslobađa.",
+      "awaitingPayment": "Vlasnik je odobrio zahtev. Uplatite iznos do roka preko QR koda ili podataka ispod; rezervacija je potvrđena kada vlasnik potvrdi uplatu.",
+      "cash": "Rezervacija se plaća gotovinski prilikom dolaska. Detalji rezervacije poslati su vam na e-mail.",
+      "cashWithOwner": "Rezervacija se plaća gotovinski prilikom dolaska. Ako ne možete da dođete, otkazivanje dogovorite direktno sa vlasnikom.",
+      "transfer": "Uplata je potvrđena. Detalji rezervacije poslati su vam na e-mail.",
+      "transferWithOwner": "Uplata je potvrđena. Ako ne možete da dođete, otkazivanje dogovorite direktno sa vlasnikom.",
+      "cancelledByGuest": "Otkazali ste ovu rezervaciju i termin je oslobođen.",
+      "cancelledByOwner": "Vlasnik je otkazao ovu rezervaciju. Obaveštenje vam je poslato na e-mail.",
+      "rejected": "Vlasnik je odbio zahtev i termin je oslobođen. Možete poslati zahtev za drugi termin.",
+      "expired": "Rok za uplatu je istekao, pa je rezervacija otkazana i termin oslobođen.",
+      "noShow": "Vlasnik je označio da se niste pojavili. Ako to nije tačno, osporite oznaku.",
+      "noShowDisputed": "Osporili ste oznaku nedolaska. Administrator će proveriti i javiti vam odluku."
+    },
+    "sendMessage": "Pošalji poruku vlasniku",
+    "contactName": "Ime",
+    "contactPhone": "Telefon",
+    "contactAddress": "Adresa",
+    "contactVisible": "Kontakt vlasnika je vidljiv jer je rezervacija potvrđena.",
+    "contactHidden": "Telefon i adresa vlasnika biće vidljivi kada vlasnik potvrdi rezervaciju.",
+    "paymentTitle": "Uplata",
+    "disputeTitle": "Osporite oznaku"
   }
 }

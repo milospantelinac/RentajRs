@@ -1373,7 +1373,10 @@
       "childrenMany": "{count} children",
       "guestsOne": "{count} guest",
       "guestsFew": "{count} guests",
-      "guestsMany": "{count} guests"
+      "guestsMany": "{count} guests",
+      "peopleOne": "{count} person",
+      "peopleFew": "{count} people",
+      "peopleMany": "{count} people"
     },
     "noUpcomingText": "Requests and bookings for the next 7 days show up here.",
     "onboardingProgress": "{done} / {total}",
@@ -1451,7 +1454,17 @@
     "replyPlaceholder": "Write a reply (optional, can only be sent once)",
     "sendReply": "Send reply",
     "replySent": "Reply sent",
-    "noReviewsYet": "This listing has no reviews yet"
+    "noReviewsYet": "This listing has no reviews yet",
+    "formNoteOne": "The rating and comment are published on the listing once the owner reviews you too, or within {count} day at the latest. The button stays inactive until you choose a rating.",
+    "formNoteFew": "The rating and comment are published on the listing once the owner reviews you too, or within {count} days at the latest. The button stays inactive until you choose a rating.",
+    "formNoteMany": "The rating and comment are published on the listing once the owner reviews you too, or within {count} days at the latest. The button stays inactive until you choose a rating.",
+    "pendingNote": "The review will be published on the listing once the owner reviews you too, by {date} at the latest. Until then you can change it.",
+    "publishedNote": "The review is published on the listing.",
+    "edit": "Edit review",
+    "saveEdit": "Save changes",
+    "cancelEdit": "Cancel",
+    "starLabel": "Rating {count} of 5",
+    "ownerReview": "The owner’s review"
   },
   "admin": {
     "panel": "Admin panel",
@@ -2007,7 +2020,9 @@
     "loadErrorTitle": "Bookings could not be loaded",
     "loadErrorText": "Check your internet connection and try again.",
     "detailLoadErrorTitle": "The booking could not be loaded",
-    "notFoundTitle": "Booking not found"
+    "notFoundTitle": "Booking not found",
+    "termHeader": "Term",
+    "ownerMeta": "Owner: {name}"
   },
   "mySubscriptions": {
     "cardsLabel": "Subscriptions",
@@ -2120,5 +2135,48 @@
     "notFoundTitle": "Conversation not found",
     "notFoundText": "This conversation doesn't exist or you don't have access to it.",
     "threadErrorTitle": "Conversation didn't load"
+  },
+  "guestBooking": {
+    "detailsTitle": "Booking details",
+    "dayFrom": "{day}, from {time}",
+    "dayUntil": "{day}, until {time}",
+    "paymentCash": "Cash on arrival",
+    "paymentTransfer": "Bank transfer (IPS QR)",
+    "noAdvance": "no advance required",
+    "paidOn": "confirmed on {date}",
+    "paidAdvanceOn": "advance, confirmed on {date}; the remaining {rest} on arrival",
+    "payAfterApproval": "paid once the owner approves the request",
+    "noTerms": "The owner has not set any terms",
+    "termsAdvanceKept": "after that the advance is not refunded",
+    "termsWithOwner": "after that, cancellation is arranged with the owner",
+    "termsNone": "a confirmed booking cannot be cancelled for free",
+    "subtitle": {
+      "REQUESTED": "Request sent on {date} at {time}",
+      "AWAITING_PAYMENT": "Request approved on {date}",
+      "COMPLETED_STAY": "Stay ended on {date}",
+      "COMPLETED": "Ended on {date}"
+    },
+    "note": {
+      "requested": "The time is held for you until the owner replies. If they do not reply in time, the request expires and the time is released.",
+      "awaitingPayment": "The owner approved your request. Pay the amount before the deadline using the QR code or the details below; the booking is confirmed once the owner confirms the payment.",
+      "cash": "The booking is paid in cash on arrival. The booking details have been sent to your email.",
+      "cashWithOwner": "The booking is paid in cash on arrival. If you cannot come, arrange the cancellation directly with the owner.",
+      "transfer": "The payment is confirmed. The booking details have been sent to your email.",
+      "transferWithOwner": "The payment is confirmed. If you cannot come, arrange the cancellation directly with the owner.",
+      "cancelledByGuest": "You cancelled this booking and the time was released.",
+      "cancelledByOwner": "The owner cancelled this booking. A notice has been sent to your email.",
+      "rejected": "The owner declined the request and the time was released. You can send a request for another time.",
+      "expired": "The payment deadline passed, so the booking was cancelled and the time released.",
+      "noShow": "The owner marked that you did not show up. If that is not right, dispute it.",
+      "noShowDisputed": "You disputed the no-show mark. An administrator will review it and let you know."
+    },
+    "sendMessage": "Message the owner",
+    "contactName": "Name",
+    "contactPhone": "Phone",
+    "contactAddress": "Address",
+    "contactVisible": "The owner’s contact is visible because the booking is confirmed.",
+    "contactHidden": "The owner’s phone and address become visible once the owner confirms the booking.",
+    "paymentTitle": "Payment",
+    "disputeTitle": "Dispute the mark"
   }
 }

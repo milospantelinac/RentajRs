@@ -2,11 +2,25 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { I18nService } from 'nestjs-i18n';
-import { ReviewDirection } from '@prisma/client';
+import { Review, ReviewDirection, ReviewTagRow } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
-import { CreateReviewDto, ReplyToReviewDto } from './dto/reviews.dto';
+import { CreateReviewDto, ReplyToReviewDto, UpdateReviewDto } from './dto/reviews.dto';
 
 const DEFAULT_REVIEW_WINDOW_DAYS = 14;
+const DAY_MS = 86_400_000;
+
+/** What the booking page shows of one review: no author, recipient or moderation fields. */
+function reviewView(review: Review & { tags: ReviewTagRow[] }) {
+  return {
+    id: review.id,
+    rating: review.rating,
+    comment: review.comment,
+    tags: review.tags.map((row) => row.tag),
+    writtenAt: review.writtenAt,
+    published: review.published,
+    publishedAt: review.publishedAt,
+  };
+}
 
 @Injectable()
 export class ReviewsService {
@@ -65,6 +79,27 @@ export class ReviewsService {
     await this.tryPublishPair(booking.id);
     this.events.emit('review.written', { reviewId: review.id, bookingId: booking.id, direction });
     return review;
+  }
+
+  /**
+   * Dizajn 39 (568:698): the author may change a review until it is published
+   * (R96). Once it is public it stays as it is, so nobody rewrites theirs
+   * after reading what the other side wrote. The condition sits in the update
+   * itself, since the other side's review can publish the pair at any moment.
+   */
+  async updateReview(authorId: string, reviewId: string, dto: UpdateReviewDto) {
+    const review = await this.prisma.review.findUnique({ where: { id: reviewId } });
+    if (!review) throw new NotFoundException();
+    if (review.authorId !== authorId) throw new ForbiddenException();
+
+    const { count } = await this.prisma.review.updateMany({
+      where: { id: reviewId, published: false },
+      data: { rating: dto.rating, comment: dto.comment?.trim() || null },
+    });
+    if (!count) throw new BadRequestException(this.i18n.t('errors.REVIEW_ALREADY_PUBLISHED'));
+
+    const updated = await this.prisma.review.findUniqueOrThrow({ where: { id: reviewId }, include: { tags: true } });
+    return reviewView(updated);
   }
 
   /** R96: both publish together once the second side writes theirs, or after 14 days — whichever first. */
@@ -138,16 +173,30 @@ export class ReviewsService {
     const myDirection: ReviewDirection = booking.guestId === userId ? 'GUEST_TO_OWNER' : 'OWNER_TO_GUEST';
     const counterpartDirection: ReviewDirection = myDirection === 'GUEST_TO_OWNER' ? 'OWNER_TO_GUEST' : 'GUEST_TO_OWNER';
 
-    const reviews = await this.prisma.review.findMany({ where: { bookingId }, include: { tags: true } });
+    const [reviews, windowDays] = await Promise.all([
+      this.prisma.review.findMany({ where: { bookingId }, include: { tags: true } }),
+      this.getReviewWindowDays(),
+    ]);
     const mine = reviews.find((r) => r.direction === myDirection) ?? null;
     const counterpart = reviews.find((r) => r.direction === counterpartDirection) ?? null;
 
     return {
       canReview: booking.status === 'COMPLETED' && !mine,
       direction: myDirection,
-      myReview: mine,
+      // Dizajn 39: the form says how long the other side has to write theirs.
+      windowDays,
+      // Dizajn 39: an unpublished review can still change, and goes public at
+      // the latest with the first nightly run (publishOverdueReviews) after
+      // the window, hence the extra day.
+      myReview: mine
+        ? {
+            ...reviewView(mine),
+            editable: !mine.published,
+            publishesBy: mine.published ? null : new Date(mine.writtenAt.getTime() + (windowDays + 1) * DAY_MS),
+          }
+        : null,
       counterpartHasReviewed: !!counterpart,
-      counterpartReview: counterpart?.published ? counterpart : null,
+      counterpartReview: counterpart?.published ? reviewView(counterpart) : null,
     };
   }
 

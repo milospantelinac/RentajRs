@@ -221,6 +221,7 @@ describe('DashboardService#getUpcoming (Dizajn 31 "Sledećih 7 dana")', () => {
     };
     const taxonomy = {
       resolveAttributesForCategory: jest.fn(async (id: string) => (id === 'cat-kids' ? [{ key: 'kapacitet_dece' }] : [{ key: 'kapacitet_ljudi' }])),
+      getCategoryTree: jest.fn(async () => [{ id: 'cat-hall', slug: 'prostori-za-proslave', children: [] }]),
     };
     const service = new DashboardService(prisma as any, {} as any, {} as any, taxonomy as any);
 

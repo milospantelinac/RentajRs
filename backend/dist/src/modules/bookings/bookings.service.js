@@ -47,6 +47,7 @@ const common_1 = require("@nestjs/common");
 const schedule_1 = require("@nestjs/schedule");
 const event_emitter_1 = require("@nestjs/event-emitter");
 const nestjs_i18n_1 = require("nestjs-i18n");
+const client_1 = require("@prisma/client");
 const QRCode = __importStar(require("qrcode"));
 const prisma_service_1 = require("../../prisma/prisma.service");
 const availability_service_1 = require("../availability/availability.service");
@@ -55,6 +56,7 @@ const ips_qr_1 = require("../../common/utils/ips-qr");
 const money_1 = require("../../common/utils/money");
 const timezone_1 = require("../../common/utils/timezone");
 const guest_capacity_1 = require("../../common/utils/guest-capacity");
+const guest_cancellation_1 = require("../../common/utils/guest-cancellation");
 const short_name_1 = require("../../common/utils/short-name");
 const OPEN_STATUS_ORDER = ['REQUESTED', 'AWAITING_PAYMENT', 'CONFIRMED'];
 let BookingsService = class BookingsService {
@@ -123,6 +125,8 @@ let BookingsService = class BookingsService {
                 amountDue,
                 paymentMethod: resolvedPaymentMethod,
                 cancellationTermsSnapshot: formatCancellationPolicy(listing.cancellationPolicyType, listing.cancellationThreshold, guest.language),
+                cancellationPolicyType: listing.cancellationPolicyType,
+                cancellationThreshold: listing.cancellationThreshold,
             },
         });
         try {
@@ -349,7 +353,10 @@ let BookingsService = class BookingsService {
         return updated;
     }
     async cancelByGuest(guestId, bookingId, dto) {
-        const booking = await this.assertGuestAccess(guestId, bookingId, ['REQUESTED', 'AWAITING_PAYMENT']);
+        const booking = await this.assertGuestAccess(guestId, bookingId, ['REQUESTED', 'AWAITING_PAYMENT', 'CONFIRMED']);
+        if (!(0, guest_cancellation_1.canGuestCancel)(booking)) {
+            throw new common_1.BadRequestException(this.i18n.t('bookings.GUEST_CANCELLATION_CLOSED'));
+        }
         await this.availability.releaseTermsForBooking(booking.id);
         const updated = await this.applyStatus(booking, 'CANCELLED', guestId, { cancellationReason: dto.reason });
         this.events.emit('booking.cancelled_by_guest', { bookingId: booking.id });
@@ -413,12 +420,16 @@ let BookingsService = class BookingsService {
                         paymentMethod: true,
                         maxGuests: true,
                         categoryId: true,
+                        status: true,
+                        pickupTime: true,
+                        returnTime: true,
                         city: { select: { name: true } },
                         cityArea: { select: { name: true } },
+                        subscription: { select: { package: { select: { hasMessaging: true } } } },
                     },
                 },
                 guest: { select: { firstName: true, lastName: true, phone: true } },
-                owner: { select: { firstName: true, lastName: true, phone: true, bankAccount: true } },
+                owner: { select: { firstName: true, lastName: true, phone: true, bankAccount: true, anonymizedAt: true } },
             },
         });
         if (!booking)
@@ -456,9 +467,11 @@ let BookingsService = class BookingsService {
         }
         const { listing } = booking;
         const isOwnerViewing = booking.ownerId === userId;
-        const [guestUnits, guestCapacity] = await Promise.all([
+        const [guestUnits, guestCapacity, categoryNames, messaging] = await Promise.all([
             (0, guest_capacity_1.getGuestUnits)(this.taxonomy, [listing.categoryId]),
             this.getGuestCapacity(booking.listingId, listing.maxGuests),
+            this.taxonomy.getCategoryNames([listing.categoryId]),
+            isOwnerViewing ? null : this.getGuestMessaging(booking),
         ]);
         const serialized = this.serialize(booking, userId);
         return {
@@ -467,11 +480,25 @@ let BookingsService = class BookingsService {
                 ...serialized.listing,
                 place: listing.cityArea?.name ?? listing.city?.name ?? null,
                 acceptsBothPaymentMethods: listing.paymentMethod === 'BOTH',
+                status: listing.status,
+                categoryName: categoryNames.get(listing.categoryId) ?? null,
+                city: listing.city?.name ?? null,
+                area: listing.cityArea?.name ?? null,
+                pickupTime: listing.pickupTime,
+                returnTime: listing.returnTime,
             },
             guestUnit: guestUnits.get(listing.categoryId),
             guestCapacity,
             statusChangedAt: statusEntry?.changedAt ?? booking.createdAt,
-            ...(isOwnerViewing ? { guestShortName: (0, short_name_1.shortName)(booking.guest) } : {}),
+            cancellationPolicy: {
+                type: booking.cancellationPolicyType,
+                threshold: booking.cancellationThreshold,
+                freeUntil: (0, guest_cancellation_1.getFreeCancellationUntil)(booking),
+            },
+            ...(isOwnerViewing
+                ? { guestShortName: (0, short_name_1.shortName)(booking.guest) }
+                :
+                    { ownerShortName: (0, short_name_1.shortName)(booking.owner), canCancel: (0, guest_cancellation_1.canGuestCancel)(booking), messaging }),
             ...(cancellation ? { cancellation } : {}),
             ...(bankTransferDetails ? { bankTransferDetails } : {}),
             ...(awaitingPaymentSince ? { awaitingPaymentSince } : {}),
@@ -494,15 +521,31 @@ let BookingsService = class BookingsService {
                     },
                 },
                 guest: { select: { firstName: true, lastName: true } },
+                owner: { select: { firstName: true, lastName: true } },
             },
         });
         const guestUnits = await (0, guest_capacity_1.getGuestUnits)(this.taxonomy, bookings.map((b) => b.listing.categoryId));
-        return bookings.sort(compareForList).map(({ guest, listing, ...booking }) => ({
+        return bookings.sort(compareForList).map(({ guest, owner, listing, ...booking }) => ({
             ...this.serialize(booking),
             listing: { title: listing.title, slug: listing.slug, place: listing.cityArea?.name ?? listing.city?.name ?? null },
             guestUnit: guestUnits.get(listing.categoryId),
-            ...(role === 'owner' ? { guestShortName: (0, short_name_1.shortName)(guest) } : {}),
+            ...(role === 'owner' ? { guestShortName: (0, short_name_1.shortName)(guest) } : { ownerShortName: (0, short_name_1.shortName)(owner) }),
         }));
+    }
+    async getGuestMessaging(booking) {
+        const threads = await this.prisma.conversation.findMany({
+            where: { listingId: booking.listingId, guestId: booking.guestId },
+            select: { id: true, bookingId: true },
+            orderBy: { lastMessageAt: { sort: 'desc', nulls: 'last' } },
+        });
+        const thread = threads.find((t) => t.bookingId === booking.id) ?? threads[0] ?? null;
+        return {
+            conversationId: thread?.id ?? null,
+            canStart: !thread &&
+                booking.listing.status === client_1.ListingStatus.ACTIVE &&
+                !!booking.listing.subscription?.package.hasMessaging &&
+                !booking.owner.anonymizedAt,
+        };
     }
     async expireUnpaidBookings() {
         const expired = await this.prisma.booking.findMany({

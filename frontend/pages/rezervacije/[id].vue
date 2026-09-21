@@ -1,11 +1,26 @@
 <template>
   <div class="booking-page">
-    <a v-if="booking" :href="backLink.href" class="booking-back" @click="goBack">
+    <!-- Dizajn 39 (528:514): the guest's page has its own way back. -->
+    <GuestBookingView
+      v-if="booking && !isOwner"
+      :booking="booking"
+      :review-status="reviewStatus"
+      :qr-data-url="qrDataUrl"
+      :back-href="backLink.href"
+      :busy="acting"
+      :notice="actionNotice"
+      @back="goBack"
+      @action="act"
+      @dispute-no-show="submitDispute"
+      @review-saved="refresh()"
+    />
+
+    <a v-if="booking && isOwner" :href="backLink.href" class="booking-back" @click="goBack">
       <img src="/images/icons/chevron-left-muted.svg" alt="" width="16" height="16" />
       <span class="booking-back-text">{{ backLink.label }}</span>
     </a>
 
-    <div class="booking-center">
+    <div v-if="!booking || isOwner" class="booking-center">
       <!-- T92: a foreign or nonexistent booking used to leave this whole page
            blank, with no way to tell whether the link, the account, or the
            platform was at fault. Dizajn 44 lays the message out. -->
@@ -24,172 +39,9 @@
       </section>
 
       <template v-else-if="booking">
-        <OwnerRequestCard v-if="isOwner" :booking="booking" :busy="acting" :notice="ownerNotice" @action="act" />
+        <OwnerRequestCard :booking="booking" :busy="acting" :notice="actionNotice" @action="act" />
 
-        <!-- The guest's side keeps its content until Dizajn 39 (528:514) lays it out. -->
-        <div v-else class="booking-guest">
-          <h1 class="text-page-title mb-1">{{ booking.listing?.title }}</h1>
-          <span class="badge mb-4" :class="guestBadgeClass">{{ getBookingStatusLabel(t, booking.status) }}</span>
-
-          <div class="card mb-4">
-            <div class="card-body">
-              <div class="row mb-2">
-                <div class="col-6 text-muted">{{ t('booking.listingTitle') }}</div>
-                <div class="col-6">{{ booking.listing?.title }}</div>
-              </div>
-              <div class="row mb-2">
-                <div class="col-6 text-muted">{{ t('booking.checkIn') }}</div>
-                <div class="col-6">{{ formatCheckDate(booking.startsAt) }}</div>
-              </div>
-              <div class="row mb-2">
-                <div class="col-6 text-muted">{{ t('booking.checkOut') }}</div>
-                <div class="col-6">{{ formatCheckDate(booking.endsAt) }}</div>
-              </div>
-              <div v-if="booking.guestCount" class="row mb-2">
-                <div class="col-6 text-muted">{{ t('booking.guestCount') }}</div>
-                <div class="col-6">{{ booking.guestCount }}</div>
-              </div>
-              <div class="row mb-2">
-                <div class="col-6 text-muted">{{ t('booking.totalAmount') }}</div>
-                <div class="col-6">{{ formatRsd(booking.totalAmount) }}</div>
-              </div>
-              <!-- T76: the guest's choice on a "Oba" listing, as agreed. -->
-              <div v-if="booking.paymentMethod" class="row mb-2">
-                <div class="col-6 text-muted">{{ t('booking.paymentMethodLabel') }}</div>
-                <div class="col-6">{{ booking.paymentMethod === 'CASH' ? t('booking.paymentMethodCash') : t('booking.paymentMethodOnline') }}</div>
-              </div>
-              <!-- T77: "Iznos za uplatu" only while payment is pending, what
-                   was paid once paymentConfirmedAt is set. -->
-              <div v-if="booking.status === 'AWAITING_PAYMENT'" class="row mb-2">
-                <div class="col-6 text-muted">{{ t('booking.payAmount') }}</div>
-                <div class="col-6">{{ formatRsd(booking.amountDue) }}</div>
-              </div>
-              <div v-else-if="booking.paymentConfirmedAt" class="row mb-2">
-                <div class="col-6 text-muted">{{ t('booking.paidLabel') }}</div>
-                <div class="col-6">
-                  {{ formatRsd(booking.amountDue) }} ·
-                  {{ t('booking.paidConfirmedOn', { date: formatBookingDate(booking.paymentConfirmedAt) }) }}
-                </div>
-              </div>
-              <div v-if="booking.guestMessage" class="row mb-2">
-                <div class="col-6 text-muted">{{ t('booking.guestMessage') }}</div>
-                <div class="col-6">{{ booking.guestMessage }}</div>
-              </div>
-              <!-- T87: frozen at the moment the request was made (Booking.cancellationTermsSnapshot). -->
-              <div v-if="booking.cancellationTermsSnapshot" class="row mb-2">
-                <div class="col-6 text-muted">{{ t('booking.cancellationTerms') }}</div>
-                <div class="col-6">{{ booking.cancellationTermsSnapshot }}</div>
-              </div>
-              <!-- T79: who cancelled/rejected and when. -->
-              <div v-if="booking.cancellation" class="row mb-2">
-                <div class="col-6 text-muted">{{ getBookingStatusLabel(t, booking.status) }}</div>
-                <div class="col-6">{{ cancellationLabel }} · {{ formatBookingDateTime(booking.cancellation.at) }}</div>
-              </div>
-            </div>
-          </div>
-
-          <!-- T80: the guest only learns how to reach the owner once the stay
-               is confirmed (backend gates this on phoneUnlocked). -->
-          <div v-if="booking.ownerName" class="card mb-4">
-            <div class="card-body">
-              <h2 class="text-section-title mb-3">{{ t('booking.ownerContactTitle') }}</h2>
-              <div class="row mb-2">
-                <div class="col-6 text-muted">{{ t('booking.ownerNameLabel') }}</div>
-                <div class="col-6">{{ booking.ownerName }}</div>
-              </div>
-              <div v-if="booking.ownerPhone" class="row mb-2">
-                <div class="col-6 text-muted">{{ t('booking.ownerPhoneLabel') }}</div>
-                <div class="col-6"><a :href="`tel:${booking.ownerPhone}`">{{ booking.ownerPhone }}</a></div>
-              </div>
-              <div v-if="booking.listing?.address" class="row mb-2">
-                <div class="col-6 text-muted">{{ t('booking.listingAddressLabel') }}</div>
-                <div class="col-6">{{ booking.listing.address }}</div>
-              </div>
-              <NuxtLink v-if="booking.listing?.slug" :to="`/oglasi/${booking.listing.slug}`" class="btn btn-tertiary btn-sm mt-2">
-                {{ t('booking.viewListing') }}
-              </NuxtLink>
-            </div>
-          </div>
-
-          <!-- T47/T91: the QR and the same fields as copyable text. -->
-          <div v-if="booking.status === 'AWAITING_PAYMENT'" class="card mb-4">
-            <div class="card-body text-center">
-              <p class="text-body mb-2">{{ t('booking.payInstructions') }}</p>
-              <p class="text-muted mb-3">{{ t('booking.notMediating') }}</p>
-              <p class="text-body mb-2">{{ t('booking.scanQr') }}</p>
-              <img v-if="qrDataUrl" :src="qrDataUrl" :alt="t('booking.scanQr')" class="qr-image mb-3" />
-              <p class="text-muted mb-3">{{ t('booking.payDeadline') }}: {{ formatBookingDateTime(booking.paymentDeadline) }}</p>
-              <div v-if="booking.bankTransferDetails" class="pay-details text-start">
-                <p class="text-label mb-2">{{ t('booking.manualPayTitle') }}</p>
-                <div v-for="field in payDetailFields" :key="field.key" class="pay-detail-row">
-                  <span class="pay-detail-label">{{ field.label }}</span>
-                  <span class="pay-detail-value">{{ field.value }}</span>
-                  <button type="button" class="btn btn-tertiary btn-sm" @click="copyField(field.key, field.value)">
-                    {{ copiedField === field.key ? t('common.copied') : t('common.copy') }}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-          <!-- T49: cash bookings skip AWAITING_PAYMENT entirely. -->
-          <div v-else-if="booking.paymentMethod === 'CASH' && ['CONFIRMED', 'COMPLETED'].includes(booking.status)" class="card mb-4">
-            <div class="card-body text-center">
-              <p class="text-body">{{ t('booking.cashPaymentNotice') }}</p>
-            </div>
-          </div>
-
-          <div class="action-buttons">
-            <!-- T78: "Povuci zahtev" while it's still just a request,
-                 "Otkaži rezervaciju" once payment instructions went out. -->
-            <button v-if="['REQUESTED', 'AWAITING_PAYMENT'].includes(booking.status)" class="btn btn-danger" :disabled="acting" @click="act('cancel')">
-              {{ booking.status === 'REQUESTED' ? t('booking.withdrawRequest') : t('booking.cancelBooking') }}
-            </button>
-            <!-- T94: hidden until the guest has had long enough to pay. -->
-            <button
-              v-if="booking.status === 'AWAITING_PAYMENT' && disputePaymentAvailable"
-              class="btn btn-tertiary"
-              :disabled="acting"
-              @click="act('dispute-payment')"
-            >
-              {{ t('booking.reportUnpaidConfirmed') }}
-            </button>
-            <button
-              v-if="booking.status === 'NO_SHOW' && !booking.noShowDisputed && !disputingNoShow"
-              class="btn btn-tertiary"
-              @click="disputingNoShow = true"
-            >{{ t('booking.disputeNoShow') }}</button>
-          </div>
-
-          <!-- T90: a dispute carries the guest's explanation for the admin. -->
-          <div v-if="disputingNoShow" class="card mt-3">
-            <div class="card-body">
-              <div class="form-group mb-3">
-                <label class="form-label">{{ t('booking.disputeExplanationLabel') }}</label>
-                <textarea
-                  v-model="disputeExplanation"
-                  class="form-control"
-                  rows="3"
-                  :placeholder="t('booking.disputeExplanationPlaceholder')"
-                  maxlength="1000"
-                ></textarea>
-              </div>
-              <p v-if="disputeError" class="form-error mb-2">{{ disputeError }}</p>
-              <div class="action-buttons">
-                <button
-                  class="btn btn-primary-flat btn-sm"
-                  :disabled="!disputeExplanation.trim() || submittingDispute"
-                  @click="submitDispute"
-                >{{ t('booking.disputeSubmit') }}</button>
-                <button class="btn btn-tertiary btn-sm" @click="disputingNoShow = false">{{ t('common.cancel') }}</button>
-              </div>
-            </div>
-          </div>
-
-          <p v-if="successMessage" class="form-success mt-3">{{ successMessage }}</p>
-          <p v-if="actionError" class="form-error mt-3">{{ actionError }}</p>
-        </div>
-
-        <!-- Both sides review each other once the stay is over. -->
+        <!-- The owner reviews the guest once the stay is over; the guest's side is in GuestBookingView. -->
         <div v-if="booking.status === 'COMPLETED'" class="booking-panel booking-review">
           <template v-if="reviewStatus?.canReview">
             <h2 class="text-section-title mb-3">{{ t('reviews.leaveReview') }}</h2>
@@ -247,16 +99,10 @@
 
 <script setup>
 // One booking, for either side of it, inside the dashboard. Dizajn 34
-// (359:406, 384:496, 565:657) draws the owner's card; the guest's side keeps
-// its content for Dizajn 39. The address stays /rezervacije/:id, which the
-// emails and notifications link to.
-import {
-  formatBookingDate,
-  formatBookingDateTime,
-  formatBookingMoment,
-  formatRsd,
-  getBookingStatusLabel,
-} from '~/utils/bookingRequests'
+// (359:406, 384:496, 565:657) draws the owner's card, Dizajn 39 (528:514,
+// 568:514, 568:698) the guest's page. The address stays /rezervacije/:id,
+// which the emails and notifications link to.
+import { formatBookingMoment } from '~/utils/bookingRequests'
 
 definePageMeta({ middleware: ['auth', 'booking-menu'], layout: 'dashboard' })
 const { t } = useI18n()
@@ -328,63 +174,10 @@ function goBack(event) {
   else router.push(listUrl.value)
 }
 
-// T79: a REJECTED status only ever comes from the owner; CANCELLED from either side.
-const cancellationLabel = computed(() => {
-  if (booking.value?.status === 'REJECTED') return t('booking.rejectedByOwner')
-  return booking.value?.cancellation?.by === 'GUEST' ? t('booking.cancelledByGuest') : t('booking.cancelledByOwner')
-})
-
-const guestBadgeClass = computed(() => {
-  const map = {
-    REQUESTED: 'badge-warning',
-    AWAITING_PAYMENT: 'badge-warning',
-    CONFIRMED: 'badge-success',
-    COMPLETED: 'badge-success',
-    CANCELLED: 'badge-critical',
-    REJECTED: 'badge-critical',
-    EXPIRED: 'badge-critical',
-    NO_SHOW: 'badge-critical',
-  }
-  return map[booking.value?.status] || 'badge-neutral'
-})
-
 // T82: a booking by whole days shows only the date.
 function formatCheckDate(value) {
   return formatBookingMoment(booking.value, value)
 }
-
-// T94: "Prijavi da uplata nije potvrđena" shows from halfway through the
-// payment window, when the deadline reminder also goes out
-// (bookings.service.ts sendPaymentDeadlineReminders).
-const disputePaymentAvailable = computed(() => {
-  const b = booking.value
-  if (!b?.awaitingPaymentSince || !b?.paymentDeadline) return false
-  const start = new Date(b.awaitingPaymentSince).getTime()
-  const end = new Date(b.paymentDeadline).getTime()
-  return Date.now() >= start + (end - start) / 2
-})
-
-// T91: the fields the IPS QR code encodes, as copyable text.
-const payDetailFields = computed(() => {
-  const d = booking.value?.bankTransferDetails
-  if (!d) return []
-  return [
-    { key: 'account', label: t('booking.bankAccountLabel'), value: d.recipientAccount },
-    { key: 'recipient', label: t('booking.recipientLabel'), value: d.recipientName },
-    { key: 'amount', label: t('booking.payAmount'), value: formatRsd(d.amountRsd) },
-    { key: 'purpose', label: t('booking.paymentPurposeLabel'), value: d.purpose },
-    { key: 'reference', label: t('booking.paymentReferenceLabel'), value: d.referenceNumber },
-  ]
-})
-const copiedField = ref('')
-let copiedTimer
-async function copyField(key, value) {
-  await navigator.clipboard.writeText(String(value))
-  copiedField.value = key
-  clearTimeout(copiedTimer)
-  copiedTimer = setTimeout(() => (copiedField.value = ''), 2000)
-}
-onUnmounted(() => clearTimeout(copiedTimer))
 
 const reviewForm = reactive({ rating: 0, comment: '', tags: [] })
 const reviewError = ref('')
@@ -459,8 +252,8 @@ const successMessage = ref('')
 const actionError = ref('')
 const dashboardCounts = useDashboardCountsStore()
 
-// The owner's card shows what just happened in place of its own note (565:800).
-const ownerNotice = computed(() => {
+// Both sides' cards show what just happened in place of their own note (565:800).
+const actionNotice = computed(() => {
   if (actionError.value) return { tone: 'danger', text: actionError.value }
   if (successMessage.value) return { tone: 'success', text: successMessage.value }
   return null
@@ -488,26 +281,21 @@ async function act(action) {
   }
 }
 
-// T90: "Osporite oznaku" carries a required explanation.
-const disputingNoShow = ref(false)
-const disputeExplanation = ref('')
-const disputeError = ref('')
-const submittingDispute = ref(false)
-
-async function submitDispute() {
-  disputeError.value = ''
+// T90: "Osporite oznaku" carries a required explanation, written in the
+// guest's page (GuestBookingView), which closes its form when this succeeds.
+async function submitDispute({ explanation, done, fail }) {
+  actionError.value = ''
   successMessage.value = ''
-  submittingDispute.value = true
+  acting.value = true
   try {
-    await api.post(`/bookings/${bookingId}/dispute-no-show`, { explanation: disputeExplanation.value.trim() })
-    disputingNoShow.value = false
-    disputeExplanation.value = ''
+    await api.post(`/bookings/${bookingId}/dispute-no-show`, { explanation })
+    done()
     await refresh()
     successMessage.value = t('booking.successDisputeNoShow')
   } catch (e) {
-    disputeError.value = extractErrorMessage(e, t('auth.genericError'))
+    fail(extractErrorMessage(e, t('auth.genericError')))
   } finally {
-    submittingDispute.value = false
+    acting.value = false
   }
 }
 
@@ -566,13 +354,9 @@ useSeoMeta({
   padding: 8px;
 }
 
-.booking-panel,
-.booking-guest {
+.booking-panel {
   width: 560px;
   max-width: 100%;
-}
-
-.booking-panel {
   padding: 26px 28px;
   border-radius: $radius-card;
   background: $color-surface;
@@ -637,45 +421,6 @@ useSeoMeta({
 
 .booking-state-button:hover {
   color: $color-primary;
-}
-
-.qr-image {
-  width: 220px;
-  height: 220px;
-  margin: 0 auto;
-}
-
-.action-buttons {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-// T91: copyable manual-payment fields, below the QR.
-.pay-details {
-  border-top: 1px solid $color-border;
-  padding-top: 12px;
-  margin-top: 4px;
-}
-
-.pay-detail-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 0;
-  flex-wrap: wrap;
-}
-
-.pay-detail-label {
-  flex: 0 0 120px;
-  font-size: $font-size-label;
-  color: $color-text-muted;
-}
-
-.pay-detail-value {
-  flex: 1 1 auto;
-  font-weight: 600;
-  word-break: break-word;
 }
 
 .rating-stars {
