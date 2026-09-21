@@ -11,5 +11,6 @@
   "PAYMENT_METHOD_REQUIRED": "Izaberite način plaćanja — gotovina ili online",
   "GUEST_CANCELLATION_CLOSED": "Ovu rezervaciju više ne možete sami da otkažete. Otkazivanje dogovorite sa vlasnikom.",
   "PAYMENT_ALREADY_REPORTED": "Već ste prijavili da uplata nije potvrđena. Administrator proverava prijavu.",
+  "PAYMENT_DEADLINE_PASSED": "Rok za uplatu je prošao, pa prijava više nije moguća.",
   "NO_SHOW_ALREADY_DISPUTED": "Oznaku nedolaska ste već osporili. Administrator proverava prigovor."
 }

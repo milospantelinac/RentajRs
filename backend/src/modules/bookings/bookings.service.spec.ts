@@ -402,7 +402,15 @@ describe('BookingsService#disputeUnconfirmedPayment (one open report per booking
     (where.status?.in === undefined || where.status.in.includes(row.status));
 
   function setup(overrides: Record<string, unknown> = {}, existing: DisputeRow[] = []) {
-    const booking = { id: 'b1', guestId: 'g1', ownerId: 'o1', listingId: 'l1', status: 'AWAITING_PAYMENT', ...overrides };
+    const booking = {
+      id: 'b1',
+      guestId: 'g1',
+      ownerId: 'o1',
+      listingId: 'l1',
+      status: 'AWAITING_PAYMENT',
+      paymentDeadline: new Date(Date.now() + 3_600_000),
+      ...overrides,
+    };
     const disputes: DisputeRow[] = [...existing];
     const steps: string[] = [];
     // Like the row lock in Postgres: a second transaction waits at the lock
@@ -502,6 +510,22 @@ describe('BookingsService#disputeUnconfirmedPayment (one open report per booking
     await expect(service.disputeUnconfirmedPayment('g1', 'b1')).rejects.toThrow('bookings.INVALID_STATE');
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
+
+  // A report holds the booking past its deadline, so a new one after the
+  // admin closed the last must not hold an overdue booking once more.
+  it('refuses a report once the payment deadline has passed', async () => {
+    const { service, events, disputes } = setup({ paymentDeadline: new Date(Date.now() - 60_000) });
+    await expect(service.disputeUnconfirmedPayment('g1', 'b1')).rejects.toThrow('bookings.PAYMENT_DEADLINE_PASSED');
+    expect(disputes).toHaveLength(0);
+    expect(events.emit).not.toHaveBeenCalled();
+  });
+
+  it('still says the report is in when the deadline passed while it was open', async () => {
+    const { service } = setup({ paymentDeadline: new Date(Date.now() - 60_000) }, [
+      { id: 'd0', type: 'UNCONFIRMED_PAYMENT', bookingId: 'b1', status: 'NEW' },
+    ]);
+    await expect(service.disputeUnconfirmedPayment('g1', 'b1')).rejects.toThrow('bookings.PAYMENT_ALREADY_REPORTED');
+  });
 });
 
 describe('BookingsService#getOne paymentDisputed', () => {
@@ -577,11 +601,99 @@ describe('BookingsService#getOne paymentDisputed', () => {
     expect(prisma.dispute.count).not.toHaveBeenCalled();
   });
 
-  it("keeps it out of the owner's view", async () => {
-    const { service, prisma } = setup({}, 1);
-    const view = await service.getOne('o1', 'b1');
-    expect(view).not.toHaveProperty('paymentDisputed');
-    expect(prisma.dispute.count).not.toHaveBeenCalled();
+  it('tells the owner too, whose card asks them to confirm the payment', async () => {
+    const { service } = setup({}, 1);
+    await expect(service.getOne('o1', 'b1')).resolves.toMatchObject({ paymentDisputed: true, guestShortName: 'Ivana M.' });
+  });
+});
+
+describe('BookingsService#expireUnpaidBookings (an open payment report holds the booking)', () => {
+  const MINUTE = 60_000;
+  const DAY = 86_400_000;
+
+  function setup(rows: Array<{ id: string; overdueBy: number; openReports?: number }>) {
+    const bookings = rows.map(({ id, overdueBy, openReports = 0 }) => ({
+      id,
+      status: 'AWAITING_PAYMENT',
+      paymentDeadline: new Date(Date.now() - overdueBy),
+      disputes: Array.from({ length: openReports }, (_, i) => ({ id: `${id}-report${i}` })),
+      pricePerUnit: 1000000n,
+      unitCount: 1,
+      totalAmount: 1000000n,
+      amountDue: 1000000n,
+      fees: null,
+    }));
+    const prisma = {
+      booking: {
+        findMany: jest.fn().mockResolvedValue(bookings),
+        update: jest.fn(async ({ where, data }: any) => ({ ...bookings.find((b) => b.id === where.id), ...data })),
+      },
+      bookingHistory: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const availability = { releaseTermsForBooking: jest.fn().mockResolvedValue(undefined) };
+    const events = { emit: jest.fn() };
+    const service = new BookingsService(prisma as any, availability as any, {} as any, events as any, {} as any);
+    return { service, prisma, availability, events };
+  }
+
+  it('expires what nobody reported and holds what the admin still has open, for at most seven days', async () => {
+    const { service, prisma, availability, events } = setup([
+      { id: 'unreported', overdueBy: MINUTE },
+      { id: 'reported', overdueBy: MINUTE, openReports: 1 },
+      { id: 'reportedSixDaysAgo', overdueBy: 7 * DAY - MINUTE, openReports: 1 },
+      { id: 'reportedOverAWeekAgo', overdueBy: 7 * DAY + MINUTE, openReports: 1 },
+    ]);
+    await service.expireUnpaidBookings();
+
+    const expired = ['unreported', 'reportedOverAWeekAgo'];
+    expect(events.emit.mock.calls).toEqual(expired.map((bookingId) => ['booking.expired', { bookingId }]));
+    expect(availability.releaseTermsForBooking.mock.calls).toEqual(expired.map((id) => [id]));
+    expect(prisma.booking.update.mock.calls.map(([args]) => [args.where.id, args.data.status])).toEqual(
+      expired.map((id) => [id, 'EXPIRED']),
+    );
+  });
+
+  it('loads only the open reports, so one the admin closed holds nothing', async () => {
+    const { service, prisma } = setup([]);
+    await service.expireUnpaidBookings();
+    expect(prisma.booking.findMany).toHaveBeenCalledWith({
+      where: { status: 'AWAITING_PAYMENT', paymentDeadline: { lt: expect.any(Date) } },
+      include: { disputes: { where: { type: 'UNCONFIRMED_PAYMENT', status: { in: ['NEW', 'IN_PROGRESS'] } }, select: { id: true } } },
+    });
+  });
+});
+
+describe('BookingsService#sendPaymentDeadlineReminders', () => {
+  it('sends no "pay before the deadline" nudge while the guest has the payment reported', async () => {
+    const prisma = { booking: { findMany: jest.fn().mockResolvedValue([]) } };
+    const service = new BookingsService(prisma as any, {} as any, {} as any, { emit: jest.fn() } as any, {} as any);
+    await service.sendPaymentDeadlineReminders();
+    expect(prisma.booking.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          status: 'AWAITING_PAYMENT',
+          paymentDeadline: { not: null },
+          disputes: { none: { type: 'UNCONFIRMED_PAYMENT', status: { in: ['NEW', 'IN_PROGRESS'] } } },
+        },
+      }),
+    );
+  });
+
+  it('still nudges an unreported booking at the halfway point', async () => {
+    const now = Date.now();
+    const booking = {
+      id: 'b1',
+      paymentDeadline: new Date(now + 20 * 3_600_000),
+      remindersSent: [],
+      listing: { paymentDeadlineHours: 48 },
+    };
+    const prisma = {
+      booking: { findMany: jest.fn().mockResolvedValue([booking]), update: jest.fn().mockResolvedValue({}) },
+    };
+    const events = { emit: jest.fn() };
+    const service = new BookingsService(prisma as any, {} as any, {} as any, events as any, {} as any);
+    await service.sendPaymentDeadlineReminders();
+    expect(events.emit).toHaveBeenCalledWith('booking.payment_reminder_half', { bookingId: 'b1' });
   });
 });
 

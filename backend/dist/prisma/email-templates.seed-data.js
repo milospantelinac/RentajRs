@@ -348,6 +348,21 @@ exports.emailTemplates = [
         },
     },
     {
+        key: 'booking_payment_reported_owner',
+        sr: {
+            subject: 'Gost je prijavio uplatu',
+            heading: 'Gost kaže da je uplatio za "{oglas}"',
+            bodyText: 'Gost je prijavio da je poslao uplatu od {iznos}, a prijem još niste potvrdili. Proverite račun i potvrdite prijem na stranici rezervacije. Dok administrator proverava prijavu, rezervacija ne ističe.',
+            buttonLabel: 'Pogledaj rezervaciju',
+        },
+        en: {
+            subject: 'The guest reported a payment',
+            heading: 'The guest says they paid for "{oglas}"',
+            bodyText: 'The guest reported sending a payment of {iznos}, but you have not confirmed it yet. Check your account and confirm the payment on the booking page. The booking does not expire while an administrator reviews the report.',
+            buttonLabel: 'View booking',
+        },
+    },
+    {
         key: 'booking_cancelled',
         sr: {
             subject: 'Rezervacija je otkazana',

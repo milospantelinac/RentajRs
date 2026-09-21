@@ -20,6 +20,11 @@
             <NuxtLink v-if="d.booking?.id" :to="`/admin/rezervacije/${d.booking.id}`">{{ bookingSummary(d) }}</NuxtLink>
             <span v-else>{{ d.listing?.title || '—' }}</span>
           </p>
+          <!-- T94: an open payment report holds the unpaid booking past its deadline. -->
+          <template v-if="d.paymentHeldUntil">
+            <p class="text-muted mb-1">{{ t('admin.paymentDeadline') }}: {{ formatDateTime(d.booking.paymentDeadline) }}</p>
+            <p class="form-hint mb-2">{{ t('admin.paymentReportHold', { date: formatDateTime(d.paymentHeldUntil) }) }}</p>
+          </template>
           <p class="text-muted mb-2">{{ t('admin.submittedBy') }}: {{ d.submittedByUser?.firstName }} {{ d.submittedByUser?.lastName }}</p>
           <p class="text-body mb-1"><strong>{{ t('admin.explanationLabel') }}:</strong></p>
           <p class="text-body mb-3">{{ d.description || t('admin.noExplanationGiven') }}</p>

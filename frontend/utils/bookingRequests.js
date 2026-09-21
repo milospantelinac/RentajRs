@@ -272,7 +272,12 @@ function getStateNote(t, booking) {
     case 'REQUESTED':
       return { tone: 'warning', text: t('bookingRequests.noteRequested') }
     case 'AWAITING_PAYMENT':
-      return { tone: 'warning', text: t('bookingRequests.noteAwaitingPayment') }
+      // T94: the guest reported the payment as sent; the booking waits past
+      // its deadline while the admin has that report open.
+      return {
+        tone: 'warning',
+        text: t(booking.paymentDisputed ? 'bookingRequests.notePaymentReported' : 'bookingRequests.noteAwaitingPayment'),
+      }
     case 'REJECTED':
       return { tone: 'success', text: t('booking.successReject') }
     case 'CANCELLED':

@@ -1606,6 +1606,8 @@
     "disputeType": "Dispute type",
     "submittedBy": "Submitted by",
     "relatedBooking": "Related booking",
+    "paymentDeadline": "Payment deadline",
+    "paymentReportHold": "While the report is open, the booking does not expire, at most until {date}. Once you resolve it and the owner still has not confirmed the payment, the booking expires at the deadline, straight away if the deadline has passed.",
     "bookingNotFound": "Booking not found.",
     "bookingOwnerLabel": "Owner",
     "saveSetting": "Save",
@@ -2000,6 +2002,7 @@
     "noShowDisputed": "the guest disputed the mark, an administrator decides",
     "noteRequested": "The term is blocked until you respond. Respond as soon as possible; if you decline, the term is released right away.",
     "noteAwaitingPayment": "The guest received the payment instructions. When the money arrives, confirm receipt; if the deadline passes, the term is released.",
+    "notePaymentReported": "The guest reported that they paid, but you have not confirmed the payment yet. Check your account and confirm it; the booking does not expire while an administrator reviews the report.",
     "roleLabel": "Whose bookings",
     "statusLabel": "Booking status",
     "empty": {
@@ -2159,7 +2162,7 @@
     "note": {
       "requested": "The time is held for you until the owner replies. If they do not reply in time, the request expires and the time is released.",
       "awaitingPayment": "The owner approved your request. Pay the amount before the deadline using the QR code or the details below; the booking is confirmed once the owner confirms the payment.",
-      "paymentReported": "You reported that the owner has not confirmed your payment. An administrator is looking into it; the booking is confirmed once the owner confirms the payment.",
+      "paymentReported": "You reported that the owner has not confirmed your payment. While an administrator reviews the report, the booking does not expire, even after the payment deadline; it is confirmed once the owner confirms the payment.",
       "cash": "The booking is paid in cash on arrival. The booking details have been sent to your email.",
       "cashWithOwner": "The booking is paid in cash on arrival. If you cannot come, arrange the cancellation directly with the owner.",
       "transfer": "The payment is confirmed. The booking details have been sent to your email.",

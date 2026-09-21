@@ -20,6 +20,7 @@ const ical_availability_1 = require("../../common/utils/ical-availability");
 const subscription_renewal_1 = require("../../common/utils/subscription-renewal");
 const guest_capacity_1 = require("../../common/utils/guest-capacity");
 const short_name_1 = require("../../common/utils/short-name");
+const payment_report_1 = require("../../common/utils/payment-report");
 const NEW_LISTING_URL = '/oglasi/novi';
 const MY_LISTINGS_URL = '/kontrolna-tabla/oglasi';
 const UPCOMING_STATUSES = ['REQUESTED', 'AWAITING_PAYMENT', 'CONFIRMED'];
@@ -117,7 +118,9 @@ let DashboardService = class DashboardService {
     }
     async getGuestAttention(userId) {
         const items = [];
-        const awaitingPayment = await this.prisma.booking.count({ where: { guestId: userId, status: 'AWAITING_PAYMENT' } });
+        const awaitingPayment = await this.prisma.booking.count({
+            where: { guestId: userId, status: 'AWAITING_PAYMENT', disputes: { none: payment_report_1.OPEN_PAYMENT_REPORT } },
+        });
         if (awaitingPayment) {
             items.push({ urgency: 'critical', title: 'payment_deadline', actionUrl: '/kontrolna-tabla/rezervacije?role=guest&status=AWAITING_PAYMENT', count: awaitingPayment });
         }

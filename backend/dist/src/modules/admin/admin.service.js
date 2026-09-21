@@ -17,6 +17,7 @@ const prisma_service_1 = require("../../prisma/prisma.service");
 const users_service_1 = require("../users/users.service");
 const bookings_service_1 = require("../bookings/bookings.service");
 const money_1 = require("../../common/utils/money");
+const payment_report_1 = require("../../common/utils/payment-report");
 const payment_settings_service_1 = require("../../common/payment/nestpay/payment-settings.service");
 const uploads_service_1 = require("../../common/uploads/uploads.service");
 const PRIORITY_REPORT_THRESHOLD = 3;
@@ -86,14 +87,28 @@ let AdminService = class AdminService {
         return { message: this.i18n.t('common.SUCCESS') };
     }
     async listDisputes(status) {
-        return this.prisma.dispute.findMany({
+        const disputes = await this.prisma.dispute.findMany({
             where: status ? { status } : undefined,
             orderBy: { createdAt: 'desc' },
             include: {
                 listing: { select: { id: true, title: true, slug: true } },
-                booking: { select: { id: true, status: true, startsAt: true, endsAt: true, guest: { select: { firstName: true, lastName: true } } } },
+                booking: {
+                    select: {
+                        id: true,
+                        status: true,
+                        startsAt: true,
+                        endsAt: true,
+                        paymentDeadline: true,
+                        guest: { select: { firstName: true, lastName: true } },
+                    },
+                },
                 submittedByUser: { select: { id: true, firstName: true, lastName: true } },
             },
+        });
+        return disputes.map((dispute) => {
+            const deadline = dispute.booking?.status === 'AWAITING_PAYMENT' ? dispute.booking.paymentDeadline : null;
+            const open = dispute.type === 'UNCONFIRMED_PAYMENT' && payment_report_1.OPEN_DISPUTE_STATUSES.includes(dispute.status);
+            return { ...dispute, paymentHeldUntil: open && deadline ? new Date(deadline.getTime() + payment_report_1.PAYMENT_REPORT_HOLD_MS) : null };
         });
     }
     async getBookingForAdmin(bookingId) {

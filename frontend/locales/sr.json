@@ -1606,6 +1606,8 @@
     "disputeType": "Tip spora",
     "submittedBy": "Podneo",
     "relatedBooking": "Povezana rezervacija",
+    "paymentDeadline": "Rok za uplatu",
+    "paymentReportHold": "Dok je prijava otvorena, rezervacija ne ističe, najduže do {date}. Kada je rešite, a vlasnik još nije potvrdio uplatu, rezervacija ističe na roku, odmah ako je rok već prošao.",
     "bookingNotFound": "Rezervacija nije pronađena.",
     "bookingOwnerLabel": "Vlasnik",
     "saveSetting": "Sačuvaj",
@@ -2000,6 +2002,7 @@
     "noShowDisputed": "gost je osporio oznaku, odluku donosi administrator",
     "noteRequested": "Termin je blokiran dok ne odgovorite. Odgovorite što pre - ako odbijete, termin se odmah oslobodi.",
     "noteAwaitingPayment": "Gost je dobio uputstvo za uplatu. Kada novac stigne, potvrdite prijem; ako rok istekne, termin se oslobađa.",
+    "notePaymentReported": "Gost je prijavio da je uplatio, a prijem još niste potvrdili. Proverite račun i potvrdite prijem; dok administrator proverava prijavu, rezervacija ne ističe.",
     "roleLabel": "Čije rezervacije",
     "statusLabel": "Status rezervacije",
     "empty": {
@@ -2159,7 +2162,7 @@
     "note": {
       "requested": "Termin je privremeno blokiran za vas dok vlasnik ne odgovori. Ako ne odgovori u roku, zahtev ističe i termin se oslobađa.",
       "awaitingPayment": "Vlasnik je odobrio zahtev. Uplatite iznos do roka preko QR koda ili podataka ispod; rezervacija je potvrđena kada vlasnik potvrdi uplatu.",
-      "paymentReported": "Prijavili ste da vlasnik nije potvrdio uplatu. Administrator proverava prijavu; rezervacija je potvrđena kada vlasnik potvrdi uplatu.",
+      "paymentReported": "Prijavili ste da vlasnik nije potvrdio uplatu. Dok administrator proverava prijavu, rezervacija ne ističe ni posle roka za uplatu; potvrđena je kada vlasnik potvrdi uplatu.",
       "cash": "Rezervacija se plaća gotovinski prilikom dolaska. Detalji rezervacije poslati su vam na e-mail.",
       "cashWithOwner": "Rezervacija se plaća gotovinski prilikom dolaska. Ako ne možete da dođete, otkazivanje dogovorite direktno sa vlasnikom.",
       "transfer": "Uplata je potvrđena. Detalji rezervacije poslati su vam na e-mail.",

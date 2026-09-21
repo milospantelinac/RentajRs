@@ -142,8 +142,9 @@ function getNoteText(t, booking) {
 
 // 528:761: the guest's own actions, the danger one first as the frame has it.
 // T94: the unconfirmed payment can be reported from halfway through the
-// payment window, when the deadline reminder also goes out, and not again
-// while the admin still has the report open.
+// payment window, when the deadline reminder also goes out, until the
+// deadline (the server refuses it later), and not again while the admin
+// still has the report open.
 function getActions(t, booking, now) {
   const actions = []
   if (booking.canCancel) {
@@ -161,7 +162,7 @@ function getActions(t, booking, now) {
   ) {
     const start = new Date(booking.awaitingPaymentSince).getTime()
     const end = new Date(booking.paymentDeadline).getTime()
-    if (now >= start + (end - start) / 2) {
+    if (now >= start + (end - start) / 2 && now < end) {
       actions.push({ name: 'dispute-payment', look: 'plain', label: t('booking.reportUnpaidConfirmed') })
     }
   }

@@ -176,6 +176,26 @@ describe('DashboardService attention items (Dizajn 31)', () => {
     const [item] = await (several as any).getOwnerAttention('user1');
     expect(item.actionUrl).toBe('/kontrolna-tabla/oglasi');
   });
+
+  it('leaves a booking whose payment the guest reported out of "Rok za uplatu" (T94)', async () => {
+    const prisma = {
+      booking: { count: jest.fn().mockResolvedValue(1) },
+      conversation: { count: jest.fn().mockResolvedValue(0) },
+    };
+    const reviews = { getMyPendingReviews: jest.fn().mockResolvedValue([]) };
+    const service = new DashboardService(prisma as any, reviews as any, {} as any, {} as any);
+
+    await expect((service as any).getGuestAttention('user1')).resolves.toEqual([
+      { urgency: 'critical', title: 'payment_deadline', actionUrl: '/kontrolna-tabla/rezervacije?role=guest&status=AWAITING_PAYMENT', count: 1 },
+    ]);
+    expect(prisma.booking.count).toHaveBeenCalledWith({
+      where: {
+        guestId: 'user1',
+        status: 'AWAITING_PAYMENT',
+        disputes: { none: { type: 'UNCONFIRMED_PAYMENT', status: { in: ['NEW', 'IN_PROGRESS'] } } },
+      },
+    });
+  });
 });
 
 describe('DashboardService#getStats', () => {

@@ -57,11 +57,11 @@ const money_1 = require("../../common/utils/money");
 const timezone_1 = require("../../common/utils/timezone");
 const guest_capacity_1 = require("../../common/utils/guest-capacity");
 const guest_cancellation_1 = require("../../common/utils/guest-cancellation");
+const payment_report_1 = require("../../common/utils/payment-report");
 const short_name_1 = require("../../common/utils/short-name");
 const OPEN_STATUS_ORDER = ['REQUESTED', 'AWAITING_PAYMENT', 'CONFIRMED'];
-const OPEN_DISPUTE_STATUSES = ['NEW', 'IN_PROGRESS'];
 function openPaymentReportWhere(bookingId) {
-    return { bookingId, type: 'UNCONFIRMED_PAYMENT', status: { in: OPEN_DISPUTE_STATUSES } };
+    return { bookingId, ...payment_report_1.OPEN_PAYMENT_REPORT };
 }
 let BookingsService = class BookingsService {
     constructor(prisma, availability, i18n, events, taxonomy) {
@@ -410,6 +410,9 @@ let BookingsService = class BookingsService {
             if ((await tx.dispute.count({ where: openPaymentReportWhere(booking.id) })) > 0) {
                 throw new common_1.BadRequestException(this.i18n.t('bookings.PAYMENT_ALREADY_REPORTED'));
             }
+            if (booking.paymentDeadline && booking.paymentDeadline.getTime() <= Date.now()) {
+                throw new common_1.BadRequestException(this.i18n.t('bookings.PAYMENT_DEADLINE_PASSED'));
+            }
             await tx.dispute.create({
                 data: {
                     type: 'UNCONFIRMED_PAYMENT',
@@ -487,9 +490,7 @@ let BookingsService = class BookingsService {
             this.getGuestCapacity(booking.listingId, listing.maxGuests),
             this.taxonomy.getCategoryNames([listing.categoryId]),
             isOwnerViewing ? null : this.getGuestMessaging(booking),
-            !isOwnerViewing && booking.status === 'AWAITING_PAYMENT'
-                ? this.prisma.dispute.count({ where: openPaymentReportWhere(booking.id) })
-                : 0,
+            booking.status === 'AWAITING_PAYMENT' ? this.prisma.dispute.count({ where: openPaymentReportWhere(booking.id) }) : 0,
         ]);
         const serialized = this.serialize(booking, userId);
         return {
@@ -513,15 +514,11 @@ let BookingsService = class BookingsService {
                 threshold: booking.cancellationThreshold,
                 freeUntil: (0, guest_cancellation_1.getFreeCancellationUntil)(booking),
             },
+            paymentDisputed: openPaymentReports > 0,
             ...(isOwnerViewing
                 ? { guestShortName: (0, short_name_1.shortName)(booking.guest) }
                 :
-                    {
-                        ownerShortName: (0, short_name_1.shortName)(booking.owner),
-                        canCancel: (0, guest_cancellation_1.canGuestCancel)(booking),
-                        messaging,
-                        paymentDisputed: openPaymentReports > 0,
-                    }),
+                    { ownerShortName: (0, short_name_1.shortName)(booking.owner), canCancel: (0, guest_cancellation_1.canGuestCancel)(booking), messaging }),
             ...(cancellation ? { cancellation } : {}),
             ...(bankTransferDetails ? { bankTransferDetails } : {}),
             ...(awaitingPaymentSince ? { awaitingPaymentSince } : {}),
@@ -571,10 +568,14 @@ let BookingsService = class BookingsService {
         };
     }
     async expireUnpaidBookings() {
-        const expired = await this.prisma.booking.findMany({
-            where: { status: 'AWAITING_PAYMENT', paymentDeadline: { lt: new Date() } },
+        const now = Date.now();
+        const overdue = await this.prisma.booking.findMany({
+            where: { status: 'AWAITING_PAYMENT', paymentDeadline: { lt: new Date(now) } },
+            include: { disputes: { where: payment_report_1.OPEN_PAYMENT_REPORT, select: { id: true } } },
         });
-        for (const booking of expired) {
+        for (const booking of overdue) {
+            if ((0, payment_report_1.isHeldByPaymentReport)(booking, now))
+                continue;
             await this.availability.releaseTermsForBooking(booking.id);
             await this.applyStatus(booking, 'EXPIRED', null, {}, true);
             this.events.emit('booking.expired', { bookingId: booking.id });
@@ -602,7 +603,7 @@ let BookingsService = class BookingsService {
     }
     async sendPaymentDeadlineReminders() {
         const candidates = await this.prisma.booking.findMany({
-            where: { status: 'AWAITING_PAYMENT', paymentDeadline: { not: null } },
+            where: { status: 'AWAITING_PAYMENT', paymentDeadline: { not: null }, disputes: { none: payment_report_1.OPEN_PAYMENT_REPORT } },
             include: { listing: { select: { paymentDeadlineHours: true } } },
         });
         const now = Date.now();

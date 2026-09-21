@@ -171,6 +171,19 @@ let BookingEmailListener = class BookingEmailListener {
             buttonUrl: this.bookingUrl(b.id),
         });
     }
+    async onPaymentReported({ bookingId }) {
+        const b = await this.load(bookingId);
+        if (!b)
+            return;
+        await this.email.send({
+            key: 'booking_payment_reported_owner',
+            to: b.owner.email,
+            language: b.owner.language,
+            userId: b.owner.id,
+            context: { oglas: b.listing.title, iznos: (0, format_1.formatRsd)(b.amountDue) },
+            buttonUrl: this.bookingUrl(b.id),
+        });
+    }
     async onExpired({ bookingId }) {
         const b = await this.load(bookingId);
         if (!b)
@@ -283,6 +296,12 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], BookingEmailListener.prototype, "onPaymentReminderFinal", null);
+__decorate([
+    (0, event_emitter_1.OnEvent)('booking.payment_disputed'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], BookingEmailListener.prototype, "onPaymentReported", null);
 __decorate([
     (0, event_emitter_1.OnEvent)('booking.expired'),
     __metadata("design:type", Function),

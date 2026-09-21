@@ -9,6 +9,7 @@ import { ICAL_FAILURE_ALERT_THRESHOLD } from '../../common/utils/ical-availabili
 import { PACKAGE_ENDING_WITHOUT_RENEWAL } from '../../common/utils/subscription-renewal';
 import { getGuestUnits } from '../../common/utils/guest-capacity';
 import { shortName } from '../../common/utils/short-name';
+import { OPEN_PAYMENT_REPORT } from '../../common/utils/payment-report';
 
 interface AttentionItem {
   urgency: 'critical' | 'decision' | 'info';
@@ -166,7 +167,11 @@ export class DashboardService {
   private async getGuestAttention(userId: string): Promise<AttentionItem[]> {
     const items: AttentionItem[] = [];
 
-    const awaitingPayment = await this.prisma.booking.count({ where: { guestId: userId, status: 'AWAITING_PAYMENT' } });
+    // "Uplatite pre isteka roka" is wrong once the guest has reported the
+    // payment as sent: the booking waits past its deadline while that is open.
+    const awaitingPayment = await this.prisma.booking.count({
+      where: { guestId: userId, status: 'AWAITING_PAYMENT', disputes: { none: OPEN_PAYMENT_REPORT } },
+    });
     if (awaitingPayment) {
       items.push({ urgency: 'critical', title: 'payment_deadline', actionUrl: '/kontrolna-tabla/rezervacije?role=guest&status=AWAITING_PAYMENT', count: awaitingPayment });
     }

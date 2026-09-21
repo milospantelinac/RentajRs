@@ -155,6 +155,22 @@ export class BookingEmailListener {
     });
   }
 
+  // T94: the admins get their own mail (AdminEmailListener); the owner is the
+  // one who can settle it by confirming the payment.
+  @OnEvent('booking.payment_disputed')
+  async onPaymentReported({ bookingId }: { bookingId: string }) {
+    const b = await this.load(bookingId);
+    if (!b) return;
+    await this.email.send({
+      key: 'booking_payment_reported_owner',
+      to: b.owner.email,
+      language: b.owner.language,
+      userId: b.owner.id,
+      context: { oglas: b.listing.title, iznos: formatRsd(b.amountDue) },
+      buttonUrl: this.bookingUrl(b.id),
+    });
+  }
+
   @OnEvent('booking.expired')
   async onExpired({ bookingId }: { bookingId: string }) {
     const b = await this.load(bookingId);

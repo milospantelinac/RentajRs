@@ -2,7 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { I18nContext, I18nService } from 'nestjs-i18n';
-import { Booking, BookingStatus, ListingStatus, Prisma, PriceUnit, ProcessingStatus } from '@prisma/client';
+import { Booking, BookingStatus, ListingStatus, Prisma, PriceUnit } from '@prisma/client';
 import * as QRCode from 'qrcode';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AvailabilityService, PriceKind, PricedUnit } from '../availability/availability.service';
@@ -12,6 +12,7 @@ import { paraToRsd, rsdToPara } from '../../common/utils/money';
 import { toBelgradeHHMM } from '../../common/utils/timezone';
 import { GUEST_CAPACITY_ATTRIBUTE_KEYS, getGuestUnits } from '../../common/utils/guest-capacity';
 import { canGuestCancel, getFreeCancellationUntil } from '../../common/utils/guest-cancellation';
+import { OPEN_PAYMENT_REPORT, isHeldByPaymentReport } from '../../common/utils/payment-report';
 import { shortName } from '../../common/utils/short-name';
 import { CreateBookingRequestDto } from './dto/create-booking-request.dto';
 import { CancelBookingDto, DisputeNoShowDto, RejectBookingDto } from './dto/booking-actions.dto';
@@ -48,11 +49,8 @@ interface StoredFees {
 // else follows, the latest term first.
 const OPEN_STATUS_ORDER: BookingStatus[] = ['REQUESTED', 'AWAITING_PAYMENT', 'CONFIRMED'];
 
-// A dispute the admin has not closed yet (RESOLVED or DISMISSED).
-const OPEN_DISPUTE_STATUSES: ProcessingStatus[] = ['NEW', 'IN_PROGRESS'];
-
 function openPaymentReportWhere(bookingId: string): Prisma.DisputeWhereInput {
-  return { bookingId, type: 'UNCONFIRMED_PAYMENT', status: { in: OPEN_DISPUTE_STATUSES } };
+  return { bookingId, ...OPEN_PAYMENT_REPORT };
 }
 
 @Injectable()
@@ -580,6 +578,11 @@ export class BookingsService {
    * again. Once the admin closes it, a booking still waiting for the payment
    * can be reported again. The booking row is locked first, so two reports
    * sent at once take turns and the second one finds the first.
+   *
+   * An open report holds the booking past its deadline (expireUnpaidBookings),
+   * so a new report has to come in before the deadline. That also keeps a
+   * guest from holding an overdue booking again by reporting anew once the
+   * admin has closed the last report.
    */
   async disputeUnconfirmedPayment(guestId: string, bookingId: string) {
     const booking = await this.assertGuestAccess(guestId, bookingId, ['AWAITING_PAYMENT']);
@@ -587,6 +590,9 @@ export class BookingsService {
       await tx.$queryRaw`SELECT "id" FROM "Booking" WHERE "id" = ${booking.id}::uuid FOR UPDATE`;
       if ((await tx.dispute.count({ where: openPaymentReportWhere(booking.id) })) > 0) {
         throw new BadRequestException(this.i18n.t('bookings.PAYMENT_ALREADY_REPORTED'));
+      }
+      if (booking.paymentDeadline && booking.paymentDeadline.getTime() <= Date.now()) {
+        throw new BadRequestException(this.i18n.t('bookings.PAYMENT_DEADLINE_PASSED'));
       }
       await tx.dispute.create({
         data: {
@@ -681,10 +687,9 @@ export class BookingsService {
       this.getGuestCapacity(booking.listingId, listing.maxGuests),
       this.taxonomy.getCategoryNames([listing.categoryId]),
       isOwnerViewing ? null : this.getGuestMessaging(booking),
-      // The guest's page drops "Prijavi da uplata nije potvrđena" while a report is open.
-      !isOwnerViewing && booking.status === 'AWAITING_PAYMENT'
-        ? this.prisma.dispute.count({ where: openPaymentReportWhere(booking.id) })
-        : 0,
+      // While a report is open the guest's page drops "Prijavi da uplata nije
+      // potvrđena", and both sides are told the booking waits past its deadline.
+      booking.status === 'AWAITING_PAYMENT' ? this.prisma.dispute.count({ where: openPaymentReportWhere(booking.id) }) : 0,
     ]);
     const serialized = this.serialize(booking, userId);
 
@@ -714,16 +719,12 @@ export class BookingsService {
         threshold: booking.cancellationThreshold,
         freeUntil: getFreeCancellationUntil(booking),
       },
+      paymentDisputed: openPaymentReports > 0,
       ...(isOwnerViewing
         ? { guestShortName: shortName(booking.guest) }
         : // The guest already sees "Dragan S." on the listing's page; the full
           // name, phone and address still wait for phoneUnlocked (serialize).
-          {
-            ownerShortName: shortName(booking.owner),
-            canCancel: canGuestCancel(booking),
-            messaging,
-            paymentDisputed: openPaymentReports > 0,
-          }),
+          { ownerShortName: shortName(booking.owner), canCancel: canGuestCancel(booking), messaging }),
       ...(cancellation ? { cancellation } : {}),
       ...(bankTransferDetails ? { bankTransferDetails } : {}),
       ...(awaitingPaymentSince ? { awaitingPaymentSince } : {}),
@@ -794,13 +795,21 @@ export class BookingsService {
 
   // -- Scheduled jobs --------------------------------------------------
 
-  /** R59/status table — payment window closed, term released, guest+owner notified. */
+  /**
+   * R59/status table: payment window closed, term released, guest and owner notified.
+   * A guest's open report that the owner has not confirmed the payment holds
+   * the booking until the admin closes the report, at most seven days past
+   * the deadline (isHeldByPaymentReport); the next run after that expires it.
+   */
   @Cron(CronExpression.EVERY_MINUTE)
   async expireUnpaidBookings() {
-    const expired = await this.prisma.booking.findMany({
-      where: { status: 'AWAITING_PAYMENT', paymentDeadline: { lt: new Date() } },
+    const now = Date.now();
+    const overdue = await this.prisma.booking.findMany({
+      where: { status: 'AWAITING_PAYMENT', paymentDeadline: { lt: new Date(now) } },
+      include: { disputes: { where: OPEN_PAYMENT_REPORT, select: { id: true } } },
     });
-    for (const booking of expired) {
+    for (const booking of overdue) {
+      if (isHeldByPaymentReport(booking, now)) continue;
       await this.availability.releaseTermsForBooking(booking.id);
       await this.applyStatus(booking, 'EXPIRED', null, {}, true);
       this.events.emit('booking.expired', { bookingId: booking.id });
@@ -833,11 +842,15 @@ export class BookingsService {
     }
   }
 
-  /** Ch.22.4 "Podsetnik na pola roka" / "Podsetnik pred istek" — one nudge at the halfway point, one on the last day. */
+  /**
+   * Ch.22.4 "Podsetnik na pola roka" / "Podsetnik pred istek": one nudge at the halfway point, one on the last day.
+   * None while the guest's report of an unconfirmed payment is open: they say
+   * they paid, and the booking does not expire at the deadline meanwhile.
+   */
   @Cron(CronExpression.EVERY_10_MINUTES)
   async sendPaymentDeadlineReminders() {
     const candidates = await this.prisma.booking.findMany({
-      where: { status: 'AWAITING_PAYMENT', paymentDeadline: { not: null } },
+      where: { status: 'AWAITING_PAYMENT', paymentDeadline: { not: null }, disputes: { none: OPEN_PAYMENT_REPORT } },
       include: { listing: { select: { paymentDeadlineHours: true } } },
     });
     const now = Date.now();
