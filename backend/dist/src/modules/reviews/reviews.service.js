@@ -139,7 +139,7 @@ let ReviewsService = class ReviewsService {
         return reply;
     }
     async getListingReviews(listingId) {
-        return this.prisma.review.findMany({
+        const reviews = await this.prisma.review.findMany({
             where: { listingId, published: true, hiddenByAdmin: false, direction: 'GUEST_TO_OWNER' },
             orderBy: { publishedAt: 'desc' },
             include: {
@@ -148,6 +148,21 @@ let ReviewsService = class ReviewsService {
                 reply: true,
             },
         });
+        return reviews.map(({ author, tags, reply, ...review }) => ({
+            id: review.id,
+            rating: review.rating,
+            comment: review.comment,
+            writtenAt: review.writtenAt,
+            publishedAt: review.publishedAt,
+            author: {
+                id: author.id,
+                firstName: author.firstName,
+                lastInitial: author.lastName?.trim().charAt(0) || null,
+                avatarUrl: author.avatarUrl,
+            },
+            tags: tags.map((row) => row.tag),
+            reply: reply ? { content: reply.content, createdAt: reply.createdAt } : null,
+        }));
     }
     async getBookingReviewStatus(userId, bookingId) {
         const booking = await this.prisma.booking.findUnique({ where: { id: bookingId } });

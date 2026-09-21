@@ -394,12 +394,7 @@ async function share() {
 
 // -- Owner ----------------------------------------------------------------
 
-const ownerName = computed(() => {
-  const owner = props.listing.owner
-  if (!owner) return ''
-  const lastInitial = owner.lastName ? `${owner.lastName.charAt(0)}.` : ''
-  return [owner.firstName, lastInitial].filter(Boolean).join(' ')
-})
+const ownerName = computed(() => shortName(props.listing.owner))
 
 const ownerInitials = computed(() => initialsOf(props.listing.owner))
 
@@ -421,9 +416,11 @@ const responseTimeLabel = computed(() => {
   return t('listing.responseWithinHours', { count: Math.round(minutes / 60) })
 })
 
+// The owner and the reviewers reach this page by first name and the surname's
+// initial only ("Marko P.").
 function initialsOf(person) {
   if (!person) return ''
-  return [person.firstName, person.lastName]
+  return [person.firstName, person.lastInitial]
     .filter(Boolean)
     .map((part) => part.charAt(0).toLocaleUpperCase('sr-RS'))
     .join('')
@@ -431,7 +428,7 @@ function initialsOf(person) {
 
 function shortName(person) {
   if (!person) return ''
-  const lastInitial = person.lastName ? `${person.lastName.charAt(0)}.` : ''
+  const lastInitial = person.lastInitial ? `${person.lastInitial}.` : ''
   return [person.firstName, lastInitial].filter(Boolean).join(' ')
 }
 

@@ -151,7 +151,7 @@ export class ReviewsService {
   }
 
   async getListingReviews(listingId: string) {
-    return this.prisma.review.findMany({
+    const reviews = await this.prisma.review.findMany({
       where: { listingId, published: true, hiddenByAdmin: false, direction: 'GUEST_TO_OWNER' },
       orderBy: { publishedAt: 'desc' },
       include: {
@@ -162,6 +162,24 @@ export class ReviewsService {
         reply: true,
       },
     });
+    // Found in Dizajn 39: this public list used to send the whole row, with
+    // the guest's full surname and the booking behind the review. It keeps
+    // what the listing's page shows.
+    return reviews.map(({ author, tags, reply, ...review }) => ({
+      id: review.id,
+      rating: review.rating,
+      comment: review.comment,
+      writtenAt: review.writtenAt,
+      publishedAt: review.publishedAt,
+      author: {
+        id: author.id,
+        firstName: author.firstName,
+        lastInitial: author.lastName?.trim().charAt(0) || null,
+        avatarUrl: author.avatarUrl,
+      },
+      tags: tags.map((row) => row.tag),
+      reply: reply ? { content: reply.content, createdAt: reply.createdAt } : null,
+    }));
   }
 
   /** Drives the "leave a review" panel on the booking detail page — never exposes an unpublished counterpart review (R96). */

@@ -693,7 +693,9 @@ export class ListingsService {
     // contact point, so it's only exposed in that fallback case.
     const canBook = listing.subscription?.package?.hasBookings ?? false;
     const canMessage = listing.subscription?.package?.hasMessaging ?? false;
-    const { phone, ...ownerRest } = listing.user;
+    // The page names the owner "Marko P." (T80: the full name comes with a
+    // confirmed booking), so only the surname's initial leaves the server.
+    const { phone, lastName, ...ownerRest } = listing.user;
 
     // Dizajn 11 — the owner block reads "Član od 2024. · 3 oglasa na
     // Rentaj.rs"; the second half is a live count of that owner's other
@@ -704,8 +706,12 @@ export class ListingsService {
 
     // Dizajn 26: the address reaches a guest with the confirmed booking (BookingsService's
     // serialize), never through the public page, which shows the city and its area.
+    // Found in Dizajn 39: the payload also carried the owner's row (phone and
+    // full surname, whatever the package), the iCal export token that opens
+    // the listing's calendar feed (Dizajn 33) and the package. It keeps only
+    // what the page reads.
     const publicListing = this.serialize(listing);
-    delete publicListing.address;
+    for (const field of PRIVATE_LISTING_FIELDS) delete publicListing[field];
 
     return {
       ...publicListing,
@@ -716,7 +722,12 @@ export class ListingsService {
       region: listing.region,
       city: listing.city,
       cityArea: listing.cityArea,
-      owner: { ...ownerRest, phone: canMessage ? undefined : phone, listingCount: ownerListingCount },
+      owner: {
+        ...ownerRest,
+        lastInitial: lastName?.trim().charAt(0) || null,
+        phone: canMessage ? undefined : phone,
+        listingCount: ownerListingCount,
+      },
       attributes: attributes.map((a: any) => ({ ...a, value: valueMap.get(a.id) ?? null })),
       canBook,
       canMessage,
@@ -1073,6 +1084,23 @@ export class ListingsService {
     };
   }
 }
+
+/**
+ * Listing columns and relations the public page never shows (buildDisplayPayload):
+ * the exact address, the owner's raw row (the page gets `owner`), the package,
+ * the iCal export token, and wizard, moderation and deletion bookkeeping.
+ */
+const PRIVATE_LISTING_FIELDS = [
+  'address',
+  'user',
+  'subscription',
+  'subscriptionId',
+  'icalExportToken',
+  'wizardStep',
+  'pendingCategoryAssignment',
+  'deletedAt',
+  'viewCount',
+];
 
 /** A package that is waiting for its first approval or still running can carry a resubmission. */
 const RESUBMITTABLE_SUBSCRIPTION_STATUSES: string[] = ['PENDING_ACTIVATION', 'ACTIVE'];

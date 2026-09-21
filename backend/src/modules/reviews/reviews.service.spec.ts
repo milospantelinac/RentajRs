@@ -77,6 +77,38 @@ describe('ReviewsService#updateReview (Dizajn 39)', () => {
   });
 });
 
+describe('ReviewsService#getListingReviews (found in Dizajn 39)', () => {
+  it('signs each review "Miloš J." and leaves out the booking and moderation fields', async () => {
+    const publishedAt = new Date('2026-09-10T02:00:00Z');
+    const replyAt = new Date('2026-09-11T08:00:00Z');
+    const prisma = {
+      review: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            ...review({ published: true, publishedAt, rating: 5, comment: 'Sjajno.' }),
+            author: { id: 'g1', firstName: 'Miloš', lastName: 'Jovanović', avatarUrl: null },
+            reply: { id: 'rp1', reviewId: 'r1', authorId: 'o1', content: 'Hvala!', createdAt: replyAt },
+          },
+        ]),
+      },
+    };
+    const reviews = await makeService(prisma).getListingReviews('l1');
+    expect(reviews).toEqual([
+      {
+        id: 'r1',
+        rating: 5,
+        comment: 'Sjajno.',
+        writtenAt: expect.any(Date),
+        publishedAt,
+        author: { id: 'g1', firstName: 'Miloš', lastInitial: 'J', avatarUrl: null },
+        tags: [],
+        reply: { content: 'Hvala!', createdAt: replyAt },
+      },
+    ]);
+    expect(JSON.stringify(reviews)).not.toContain('Jovanović');
+  });
+});
+
 describe('ReviewsService#getBookingReviewStatus (Dizajn 39)', () => {
   const booking = { id: 'b1', guestId: 'g1', ownerId: 'o1', status: 'COMPLETED' };
 

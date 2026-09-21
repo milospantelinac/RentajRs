@@ -500,12 +500,13 @@ let ListingsService = class ListingsService {
         const categoryNames = await this.taxonomy.getCategoryNames([listing.categoryId]);
         const canBook = listing.subscription?.package?.hasBookings ?? false;
         const canMessage = listing.subscription?.package?.hasMessaging ?? false;
-        const { phone, ...ownerRest } = listing.user;
+        const { phone, lastName, ...ownerRest } = listing.user;
         const ownerListingCount = await this.prisma.listing.count({
             where: { userId: listing.userId, status: client_1.ListingStatus.ACTIVE },
         });
         const publicListing = this.serialize(listing);
-        delete publicListing.address;
+        for (const field of PRIVATE_LISTING_FIELDS)
+            delete publicListing[field];
         return {
             ...publicListing,
             photos: listing.photos,
@@ -515,7 +516,12 @@ let ListingsService = class ListingsService {
             region: listing.region,
             city: listing.city,
             cityArea: listing.cityArea,
-            owner: { ...ownerRest, phone: canMessage ? undefined : phone, listingCount: ownerListingCount },
+            owner: {
+                ...ownerRest,
+                lastInitial: lastName?.trim().charAt(0) || null,
+                phone: canMessage ? undefined : phone,
+                listingCount: ownerListingCount,
+            },
             attributes: attributes.map((a) => ({ ...a, value: valueMap.get(a.id) ?? null })),
             canBook,
             canMessage,
@@ -821,6 +827,17 @@ exports.ListingsService = ListingsService = __decorate([
         nestjs_i18n_1.I18nService,
         event_emitter_1.EventEmitter2])
 ], ListingsService);
+const PRIVATE_LISTING_FIELDS = [
+    'address',
+    'user',
+    'subscription',
+    'subscriptionId',
+    'icalExportToken',
+    'wizardStep',
+    'pendingCategoryAssignment',
+    'deletedAt',
+    'viewCount',
+];
 const RESUBMITTABLE_SUBSCRIPTION_STATUSES = ['PENDING_ACTIVATION', 'ACTIVE'];
 function slugify(input) {
     return input

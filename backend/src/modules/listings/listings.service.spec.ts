@@ -173,3 +173,74 @@ describe('ListingsService#deleteListing', () => {
     expect(prisma.listing.update).not.toHaveBeenCalled();
   });
 });
+
+describe('ListingsService#getPublicBySlug (found in Dizajn 39)', () => {
+  const owner = {
+    id: 'u1',
+    firstName: 'Marko',
+    lastName: 'Petrović',
+    avatarUrl: null,
+    profileSlug: 'marko-petrovic',
+    avgResponseTimeMinutes: 30,
+    verified: true,
+    createdAt: new Date('2024-03-01T00:00:00Z'),
+    phone: '064 123 4567',
+  };
+  const taxonomy = {
+    resolveAttributesForCategory: jest.fn().mockResolvedValue([]),
+    getCategoryNames: jest.fn().mockResolvedValue(new Map([['c1', 'Igraonice']])),
+  };
+
+  function setup(hasMessaging: boolean) {
+    const row = listingRow({
+      address: 'Njegoševa 12',
+      icalExportToken: 'secret-token',
+      subscriptionId: 's1',
+      wizardStep: 9,
+      viewCount: 120,
+      deletedAt: null,
+      faqs: [],
+      extraServices: [],
+      region: null,
+      user: owner,
+      subscription: { package: { hasBookings: true, hasMessaging } },
+    });
+    const prisma = {
+      listing: {
+        findUnique: jest.fn().mockResolvedValue(row),
+        count: jest.fn().mockResolvedValue(3),
+        update: jest.fn().mockResolvedValue({}),
+      },
+      listingAttribute: { findMany: jest.fn().mockResolvedValue([]) },
+      listingViewStat: { upsert: jest.fn().mockResolvedValue({}) },
+    };
+    return makeService(prisma, taxonomy);
+  }
+
+  it('sends the owner as the page names them and nothing the page does not show', async () => {
+    const page: any = await setup(true).getPublicBySlug('igraonica');
+    expect(page.owner).toEqual({
+      id: 'u1',
+      firstName: 'Marko',
+      lastInitial: 'P',
+      avatarUrl: null,
+      profileSlug: 'marko-petrovic',
+      avgResponseTimeMinutes: 30,
+      verified: true,
+      createdAt: owner.createdAt,
+      phone: undefined,
+      listingCount: 3,
+    });
+    for (const field of ['user', 'address', 'icalExportToken', 'subscription', 'subscriptionId', 'wizardStep', 'viewCount', 'deletedAt', 'pendingCategoryAssignment']) {
+      expect(page).not.toHaveProperty(field);
+    }
+    expect(JSON.stringify(page)).not.toContain('Petrović');
+    expect(page).toMatchObject({ title: 'Igraonica', canBook: true, canMessage: true, price: 3500 });
+  });
+
+  it('still gives the phone when the package has no messaging (R108)', async () => {
+    const page: any = await setup(false).getPublicBySlug('igraonica');
+    expect(page.owner.phone).toBe('064 123 4567');
+    expect(page.canMessage).toBe(false);
+  });
+});
