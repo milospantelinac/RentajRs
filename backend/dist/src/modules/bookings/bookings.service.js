@@ -59,6 +59,10 @@ const guest_capacity_1 = require("../../common/utils/guest-capacity");
 const guest_cancellation_1 = require("../../common/utils/guest-cancellation");
 const short_name_1 = require("../../common/utils/short-name");
 const OPEN_STATUS_ORDER = ['REQUESTED', 'AWAITING_PAYMENT', 'CONFIRMED'];
+const OPEN_DISPUTE_STATUSES = ['NEW', 'IN_PROGRESS'];
+function openPaymentReportWhere(bookingId) {
+    return { bookingId, type: 'UNCONFIRMED_PAYMENT', status: { in: OPEN_DISPUTE_STATUSES } };
+}
 let BookingsService = class BookingsService {
     constructor(prisma, availability, i18n, events, taxonomy) {
         this.prisma = prisma;
@@ -341,7 +345,7 @@ let BookingsService = class BookingsService {
             throw new common_1.BadRequestException(this.i18n.t('bookings.TOO_EARLY_FOR_NO_SHOW'));
         }
         await this.availability.releaseTermsForBooking(booking.id);
-        const updated = await this.applyStatus(booking, 'NO_SHOW', ownerId);
+        const updated = await this.applyStatus(booking, 'NO_SHOW', ownerId, { noShowDisputed: false });
         this.events.emit('booking.no_show', { bookingId: booking.id });
         return updated;
     }
@@ -364,9 +368,14 @@ let BookingsService = class BookingsService {
     }
     async disputeNoShow(guestId, bookingId, dto) {
         const booking = await this.assertGuestAccess(guestId, bookingId, ['NO_SHOW']);
-        const [, dispute] = await this.prisma.$transaction([
-            this.prisma.booking.update({ where: { id: booking.id }, data: { noShowDisputed: true } }),
-            this.prisma.dispute.create({
+        const dispute = await this.prisma.$transaction(async (tx) => {
+            const flagged = await tx.booking.updateMany({
+                where: { id: booking.id, noShowDisputed: false },
+                data: { noShowDisputed: true },
+            });
+            if (flagged.count === 0)
+                throw new common_1.BadRequestException(this.i18n.t('bookings.NO_SHOW_ALREADY_DISPUTED'));
+            return tx.dispute.create({
                 data: {
                     type: 'DISPUTED_NO_SHOW',
                     bookingId: booking.id,
@@ -374,8 +383,8 @@ let BookingsService = class BookingsService {
                     submittedByUserId: guestId,
                     description: dto.explanation,
                 },
-            }),
-        ]);
+            });
+        });
         this.events.emit('booking.no_show_disputed', { bookingId: booking.id, disputeId: dispute.id });
         return { message: this.i18n.t('common.SUCCESS') };
     }
@@ -396,14 +405,20 @@ let BookingsService = class BookingsService {
     }
     async disputeUnconfirmedPayment(guestId, bookingId) {
         const booking = await this.assertGuestAccess(guestId, bookingId, ['AWAITING_PAYMENT']);
-        await this.prisma.dispute.create({
-            data: {
-                type: 'UNCONFIRMED_PAYMENT',
-                bookingId: booking.id,
-                listingId: booking.listingId,
-                submittedByUserId: guestId,
-                description: 'Guest reports payment was sent but not confirmed by the owner',
-            },
+        await this.prisma.$transaction(async (tx) => {
+            await tx.$queryRaw `SELECT "id" FROM "Booking" WHERE "id" = ${booking.id}::uuid FOR UPDATE`;
+            if ((await tx.dispute.count({ where: openPaymentReportWhere(booking.id) })) > 0) {
+                throw new common_1.BadRequestException(this.i18n.t('bookings.PAYMENT_ALREADY_REPORTED'));
+            }
+            await tx.dispute.create({
+                data: {
+                    type: 'UNCONFIRMED_PAYMENT',
+                    bookingId: booking.id,
+                    listingId: booking.listingId,
+                    submittedByUserId: guestId,
+                    description: 'Guest reports payment was sent but not confirmed by the owner',
+                },
+            });
         });
         this.events.emit('booking.payment_disputed', { bookingId: booking.id });
         return { message: this.i18n.t('common.SUCCESS') };
@@ -467,11 +482,14 @@ let BookingsService = class BookingsService {
         }
         const { listing } = booking;
         const isOwnerViewing = booking.ownerId === userId;
-        const [guestUnits, guestCapacity, categoryNames, messaging] = await Promise.all([
+        const [guestUnits, guestCapacity, categoryNames, messaging, openPaymentReports] = await Promise.all([
             (0, guest_capacity_1.getGuestUnits)(this.taxonomy, [listing.categoryId]),
             this.getGuestCapacity(booking.listingId, listing.maxGuests),
             this.taxonomy.getCategoryNames([listing.categoryId]),
             isOwnerViewing ? null : this.getGuestMessaging(booking),
+            !isOwnerViewing && booking.status === 'AWAITING_PAYMENT'
+                ? this.prisma.dispute.count({ where: openPaymentReportWhere(booking.id) })
+                : 0,
         ]);
         const serialized = this.serialize(booking, userId);
         return {
@@ -498,7 +516,12 @@ let BookingsService = class BookingsService {
             ...(isOwnerViewing
                 ? { guestShortName: (0, short_name_1.shortName)(booking.guest) }
                 :
-                    { ownerShortName: (0, short_name_1.shortName)(booking.owner), canCancel: (0, guest_cancellation_1.canGuestCancel)(booking), messaging }),
+                    {
+                        ownerShortName: (0, short_name_1.shortName)(booking.owner),
+                        canCancel: (0, guest_cancellation_1.canGuestCancel)(booking),
+                        messaging,
+                        paymentDisputed: openPaymentReports > 0,
+                    }),
             ...(cancellation ? { cancellation } : {}),
             ...(bankTransferDetails ? { bankTransferDetails } : {}),
             ...(awaitingPaymentSince ? { awaitingPaymentSince } : {}),

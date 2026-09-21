@@ -9,5 +9,7 @@
   "INVALID_STATE": "Booking is not in a valid state ({status})",
   "TERM_NO_LONGER_AVAILABLE": "Those dates were booked in the meantime — this can't be undone",
   "PAYMENT_METHOD_REQUIRED": "Choose a payment method — cash or online",
-  "GUEST_CANCELLATION_CLOSED": "You can no longer cancel this booking yourself. Arrange the cancellation with the owner."
+  "GUEST_CANCELLATION_CLOSED": "You can no longer cancel this booking yourself. Arrange the cancellation with the owner.",
+  "PAYMENT_ALREADY_REPORTED": "You have already reported that this payment is not confirmed. An administrator is looking into it.",
+  "NO_SHOW_ALREADY_DISPUTED": "You have already disputed the no-show mark. An administrator is looking into it."
 }

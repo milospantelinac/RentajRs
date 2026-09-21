@@ -121,7 +121,7 @@ function getNoteText(t, booking) {
     case 'REQUESTED':
       return t('guestBooking.note.requested')
     case 'AWAITING_PAYMENT':
-      return t('guestBooking.note.awaitingPayment')
+      return t(booking.paymentDisputed ? 'guestBooking.note.paymentReported' : 'guestBooking.note.awaitingPayment')
     case 'CONFIRMED':
       if (cash) return t(booking.canCancel ? 'guestBooking.note.cash' : 'guestBooking.note.cashWithOwner')
       return t('guestBooking.note.transferWithOwner')
@@ -142,7 +142,8 @@ function getNoteText(t, booking) {
 
 // 528:761: the guest's own actions, the danger one first as the frame has it.
 // T94: the unconfirmed payment can be reported from halfway through the
-// payment window, when the deadline reminder also goes out.
+// payment window, when the deadline reminder also goes out, and not again
+// while the admin still has the report open.
 function getActions(t, booking, now) {
   const actions = []
   if (booking.canCancel) {
@@ -152,7 +153,12 @@ function getActions(t, booking, now) {
       label: booking.status === 'REQUESTED' ? t('booking.withdrawRequest') : t('booking.cancelBooking'),
     })
   }
-  if (booking.status === 'AWAITING_PAYMENT' && booking.awaitingPaymentSince && booking.paymentDeadline) {
+  if (
+    booking.status === 'AWAITING_PAYMENT' &&
+    !booking.paymentDisputed &&
+    booking.awaitingPaymentSince &&
+    booking.paymentDeadline
+  ) {
     const start = new Date(booking.awaitingPaymentSince).getTime()
     const end = new Date(booking.paymentDeadline).getTime()
     if (now >= start + (end - start) / 2) {

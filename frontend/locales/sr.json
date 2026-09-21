@@ -2159,6 +2159,7 @@
     "note": {
       "requested": "Termin je privremeno blokiran za vas dok vlasnik ne odgovori. Ako ne odgovori u roku, zahtev ističe i termin se oslobađa.",
       "awaitingPayment": "Vlasnik je odobrio zahtev. Uplatite iznos do roka preko QR koda ili podataka ispod; rezervacija je potvrđena kada vlasnik potvrdi uplatu.",
+      "paymentReported": "Prijavili ste da vlasnik nije potvrdio uplatu. Administrator proverava prijavu; rezervacija je potvrđena kada vlasnik potvrdi uplatu.",
       "cash": "Rezervacija se plaća gotovinski prilikom dolaska. Detalji rezervacije poslati su vam na e-mail.",
       "cashWithOwner": "Rezervacija se plaća gotovinski prilikom dolaska. Ako ne možete da dođete, otkazivanje dogovorite direktno sa vlasnikom.",
       "transfer": "Uplata je potvrđena. Detalji rezervacije poslati su vam na e-mail.",

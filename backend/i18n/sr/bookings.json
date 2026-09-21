@@ -9,5 +9,7 @@
   "INVALID_STATE": "Rezervacija nije u odgovarajućem stanju ({status})",
   "TERM_NO_LONGER_AVAILABLE": "Termin je u međuvremenu zauzet — poništavanje nije moguće",
   "PAYMENT_METHOD_REQUIRED": "Izaberite način plaćanja — gotovina ili online",
-  "GUEST_CANCELLATION_CLOSED": "Ovu rezervaciju više ne možete sami da otkažete. Otkazivanje dogovorite sa vlasnikom."
+  "GUEST_CANCELLATION_CLOSED": "Ovu rezervaciju više ne možete sami da otkažete. Otkazivanje dogovorite sa vlasnikom.",
+  "PAYMENT_ALREADY_REPORTED": "Već ste prijavili da uplata nije potvrđena. Administrator proverava prijavu.",
+  "NO_SHOW_ALREADY_DISPUTED": "Oznaku nedolaska ste već osporili. Administrator proverava prigovor."
 }

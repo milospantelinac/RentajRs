@@ -391,3 +391,290 @@ describe('BookingsService#cancelByGuest (Dizajn 39)', () => {
     await expect(service.cancelByGuest('g1', 'b1', {})).rejects.toThrow('bookings.INVALID_STATE');
   });
 });
+
+describe('BookingsService#disputeUnconfirmedPayment (one open report per booking)', () => {
+  type DisputeRow = { id: string; type: string; bookingId: string; status: string };
+
+  // Reads the where as Prisma does: a field it leaves out matches any row.
+  const matches = (row: DisputeRow, where: any) =>
+    (where.bookingId === undefined || row.bookingId === where.bookingId) &&
+    (where.type === undefined || row.type === where.type) &&
+    (where.status?.in === undefined || where.status.in.includes(row.status));
+
+  function setup(overrides: Record<string, unknown> = {}, existing: DisputeRow[] = []) {
+    const booking = { id: 'b1', guestId: 'g1', ownerId: 'o1', listingId: 'l1', status: 'AWAITING_PAYMENT', ...overrides };
+    const disputes: DisputeRow[] = [...existing];
+    const steps: string[] = [];
+    // Like the row lock in Postgres: a second transaction waits at the lock
+    // until the first one has finished.
+    let lockQueue = Promise.resolve();
+    const prisma: any = {
+      booking: { findUnique: jest.fn(async () => ({ ...booking })) },
+      dispute: {
+        count: jest.fn(async ({ where }: any) => {
+          steps.push('count');
+          return disputes.filter((row) => matches(row, where)).length;
+        }),
+        create: jest.fn(async ({ data }: any) => {
+          steps.push('create');
+          const row = { id: `d${disputes.length + 1}`, status: 'NEW', ...data };
+          disputes.push(row);
+          return row;
+        }),
+      },
+      $transaction: jest.fn(async (work: (tx: any) => Promise<unknown>) => {
+        let release: () => void = () => {};
+        const tx = {
+          ...prisma,
+          $queryRaw: jest.fn(async () => {
+            const previous = lockQueue;
+            lockQueue = new Promise<void>((resolve) => (release = () => resolve()));
+            await previous;
+            steps.push('lock');
+            return [{ id: booking.id }];
+          }),
+        };
+        try {
+          return await work(tx);
+        } finally {
+          release();
+        }
+      }),
+    };
+    const i18n = { t: jest.fn((key: string) => key) };
+    const events = { emit: jest.fn() };
+    const service = new BookingsService(prisma, {} as any, i18n as any, events as any, {} as any);
+    return { service, prisma, events, disputes, steps };
+  }
+
+  it('files the first report and tells the admins once', async () => {
+    const { service, events, disputes, steps } = setup();
+    await expect(service.disputeUnconfirmedPayment('g1', 'b1')).resolves.toEqual({ message: 'common.SUCCESS' });
+    expect(disputes).toEqual([
+      expect.objectContaining({ type: 'UNCONFIRMED_PAYMENT', bookingId: 'b1', listingId: 'l1', submittedByUserId: 'g1' }),
+    ]);
+    // The booking row is locked before the open reports are counted.
+    expect(steps).toEqual(['lock', 'count', 'create']);
+    expect(events.emit).toHaveBeenCalledTimes(1);
+    expect(events.emit).toHaveBeenCalledWith('booking.payment_disputed', { bookingId: 'b1' });
+  });
+
+  it('refuses another report while the admin has the first one open', async () => {
+    const { service, events, disputes } = setup();
+    await service.disputeUnconfirmedPayment('g1', 'b1');
+    for (const status of ['NEW', 'IN_PROGRESS']) {
+      disputes[0].status = status;
+      await expect(service.disputeUnconfirmedPayment('g1', 'b1')).rejects.toThrow('bookings.PAYMENT_ALREADY_REPORTED');
+    }
+    expect(disputes).toHaveLength(1);
+    expect(events.emit).toHaveBeenCalledTimes(1);
+  });
+
+  it('files one report when two are sent at once', async () => {
+    const { service, events, disputes } = setup();
+    const results = await Promise.allSettled([
+      service.disputeUnconfirmedPayment('g1', 'b1'),
+      service.disputeUnconfirmedPayment('g1', 'b1'),
+    ]);
+    expect(results.map((result) => result.status)).toEqual(['fulfilled', 'rejected']);
+    expect(disputes).toHaveLength(1);
+    expect(events.emit).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['RESOLVED', 'DISMISSED'])('takes a new report once the admin has marked the last one %s', async (status) => {
+    const { service, events, disputes } = setup({}, [{ id: 'd0', type: 'UNCONFIRMED_PAYMENT', bookingId: 'b1', status }]);
+    await service.disputeUnconfirmedPayment('g1', 'b1');
+    expect(disputes).toHaveLength(2);
+    expect(events.emit).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores the booking's other disputes and other bookings' reports", async () => {
+    const { service, disputes } = setup({}, [
+      { id: 'd0', type: 'TERM_CONFLICT', bookingId: 'b1', status: 'NEW' },
+      { id: 'd1', type: 'UNCONFIRMED_PAYMENT', bookingId: 'b2', status: 'NEW' },
+    ]);
+    await expect(service.disputeUnconfirmedPayment('g1', 'b1')).resolves.toEqual({ message: 'common.SUCCESS' });
+    expect(disputes).toHaveLength(3);
+  });
+
+  it('refuses a booking that no longer waits for the payment, as before', async () => {
+    const { service, prisma } = setup({ status: 'CONFIRMED' });
+    await expect(service.disputeUnconfirmedPayment('g1', 'b1')).rejects.toThrow('bookings.INVALID_STATE');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+});
+
+describe('BookingsService#getOne paymentDisputed', () => {
+  function setup(overrides: Record<string, unknown> = {}, openReports = 0) {
+    const booking = {
+      id: 'b1',
+      guestId: 'g1',
+      ownerId: 'o1',
+      listingId: 'l1',
+      status: 'AWAITING_PAYMENT',
+      paymentMethod: 'BANK_TRANSFER',
+      phoneUnlocked: false,
+      startsAt: new Date(Date.UTC(2026, 9, 10, 12)),
+      endsAt: new Date(Date.UTC(2026, 9, 12, 10)),
+      createdAt: new Date(Date.UTC(2026, 8, 20, 10)),
+      cancellationPolicyType: 'FREE_UNTIL_DAYS',
+      cancellationThreshold: 5,
+      pricePerUnit: 1000000n,
+      unitCount: 2,
+      totalAmount: 2000000n,
+      amountDue: 2000000n,
+      fees: null,
+      listing: {
+        title: 'Soba 22',
+        slug: 'soba-22',
+        address: 'Suvo Rudište bb',
+        paymentMethod: 'BANK_TRANSFER',
+        maxGuests: 2,
+        categoryId: 'room',
+        status: 'ACTIVE',
+        pickupTime: null,
+        returnTime: null,
+        city: { name: 'Kopaonik' },
+        cityArea: null,
+        subscription: { package: { hasMessaging: true } },
+      },
+      guest: { firstName: 'Ivana', lastName: 'Marković', phone: null },
+      owner: { firstName: 'Dragan', lastName: 'Simić', phone: null, bankAccount: '160-0000000000000-00', anonymizedAt: null },
+      ...overrides,
+    };
+    const prisma = {
+      booking: { findUnique: jest.fn().mockResolvedValue(booking) },
+      bookingHistory: { findFirst: jest.fn().mockResolvedValue({ changedAt: new Date(Date.UTC(2026, 8, 21, 10)) }) },
+      listingAttribute: { findMany: jest.fn().mockResolvedValue([]) },
+      conversation: { findMany: jest.fn().mockResolvedValue([]) },
+      dispute: { count: jest.fn().mockResolvedValue(openReports) },
+    };
+    const taxonomy = {
+      resolveAttributesForCategory: jest.fn().mockResolvedValue([]),
+      getCategoryTree: jest.fn().mockResolvedValue([]),
+      getCategoryNames: jest.fn().mockResolvedValue(new Map()),
+    };
+    const service = new BookingsService(prisma as any, {} as any, {} as any, {} as any, taxonomy as any);
+    return { service, prisma };
+  }
+
+  it('tells the guest a report of the payment is open', async () => {
+    const { service, prisma } = setup({}, 1);
+    await expect(service.getOne('g1', 'b1')).resolves.toMatchObject({ paymentDisputed: true });
+    expect(prisma.dispute.count).toHaveBeenCalledWith({
+      where: { bookingId: 'b1', type: 'UNCONFIRMED_PAYMENT', status: { in: ['NEW', 'IN_PROGRESS'] } },
+    });
+  });
+
+  it('says no while nothing is open', async () => {
+    const { service } = setup({}, 0);
+    await expect(service.getOne('g1', 'b1')).resolves.toMatchObject({ paymentDisputed: false });
+  });
+
+  it('stops looking once the booking no longer waits for the payment', async () => {
+    const { service, prisma } = setup({ status: 'CONFIRMED', paymentConfirmedAt: new Date(), phoneUnlocked: true }, 1);
+    await expect(service.getOne('g1', 'b1')).resolves.toMatchObject({ paymentDisputed: false });
+    expect(prisma.dispute.count).not.toHaveBeenCalled();
+  });
+
+  it("keeps it out of the owner's view", async () => {
+    const { service, prisma } = setup({}, 1);
+    const view = await service.getOne('o1', 'b1');
+    expect(view).not.toHaveProperty('paymentDisputed');
+    expect(prisma.dispute.count).not.toHaveBeenCalled();
+  });
+});
+
+describe('BookingsService#disputeNoShow (one objection per mark)', () => {
+  function setup(alreadyDisputed = false) {
+    const booking = { id: 'b1', guestId: 'g1', ownerId: 'o1', listingId: 'l1', status: 'NO_SHOW', noShowDisputed: alreadyDisputed };
+    const disputes: Array<Record<string, unknown>> = [];
+    const prisma: any = {
+      booking: {
+        findUnique: jest.fn(async () => ({ ...booking })),
+        // Changes the row only while it still matches, as the database does.
+        updateMany: jest.fn(async ({ where, data }: any) => {
+          if (where.id !== booking.id || where.noShowDisputed !== booking.noShowDisputed) return { count: 0 };
+          Object.assign(booking, data);
+          return { count: 1 };
+        }),
+      },
+      dispute: {
+        create: jest.fn(async ({ data }: any) => {
+          const row = { id: `d${disputes.length + 1}`, ...data };
+          disputes.push(row);
+          return row;
+        }),
+      },
+      $transaction: jest.fn(async (work: (tx: any) => Promise<unknown>) => work(prisma)),
+    };
+    const i18n = { t: jest.fn((key: string) => key) };
+    const events = { emit: jest.fn() };
+    const service = new BookingsService(prisma, {} as any, i18n as any, events as any, {} as any);
+    return { service, booking, disputes, events };
+  }
+
+  it('files the objection and marks the booking disputed', async () => {
+    const { service, booking, disputes, events } = setup();
+    await expect(service.disputeNoShow('g1', 'b1', { explanation: 'Stigli smo u 14:00.' })).resolves.toEqual({
+      message: 'common.SUCCESS',
+    });
+    expect(booking.noShowDisputed).toBe(true);
+    expect(disputes).toEqual([
+      expect.objectContaining({ type: 'DISPUTED_NO_SHOW', bookingId: 'b1', description: 'Stigli smo u 14:00.' }),
+    ]);
+    expect(events.emit).toHaveBeenCalledWith('booking.no_show_disputed', { bookingId: 'b1', disputeId: 'd1' });
+  });
+
+  it('refuses a second objection to the same mark', async () => {
+    const { service, disputes, events } = setup(true);
+    await expect(service.disputeNoShow('g1', 'b1', { explanation: 'Opet.' })).rejects.toThrow('bookings.NO_SHOW_ALREADY_DISPUTED');
+    expect(disputes).toHaveLength(0);
+    expect(events.emit).not.toHaveBeenCalled();
+  });
+
+  it('files one objection when two are sent at once', async () => {
+    const { service, disputes, events } = setup();
+    const results = await Promise.allSettled([
+      service.disputeNoShow('g1', 'b1', { explanation: 'Prvi.' }),
+      service.disputeNoShow('g1', 'b1', { explanation: 'Drugi.' }),
+    ]);
+    expect(results.map((result) => result.status)).toEqual(['fulfilled', 'rejected']);
+    expect(disputes).toHaveLength(1);
+    expect(events.emit).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('BookingsService#markNoShow', () => {
+  it('clears an earlier objection, so a mark set again after an overturn can be disputed', async () => {
+    const booking = {
+      id: 'b1',
+      guestId: 'g1',
+      ownerId: 'o1',
+      listingId: 'l1',
+      status: 'CONFIRMED',
+      noShowDisputed: true,
+      startsAt: new Date(Date.now() - 3_600_000),
+      endsAt: new Date(Date.now() + 3_600_000),
+      pricePerUnit: 1000000n,
+      unitCount: 1,
+      totalAmount: 1000000n,
+      amountDue: 1000000n,
+      fees: null,
+    };
+    const prisma = {
+      booking: {
+        findUnique: jest.fn().mockResolvedValue(booking),
+        update: jest.fn(async ({ data }: any) => ({ ...booking, ...data })),
+      },
+      bookingHistory: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const availability = { releaseTermsForBooking: jest.fn().mockResolvedValue(undefined) };
+    const i18n = { t: jest.fn((key: string) => key) };
+    const events = { emit: jest.fn() };
+    const service = new BookingsService(prisma as any, availability as any, i18n as any, events as any, {} as any);
+
+    await expect(service.markNoShow('o1', 'b1')).resolves.toMatchObject({ status: 'NO_SHOW', noShowDisputed: false });
+    expect(prisma.booking.update).toHaveBeenCalledWith({ where: { id: 'b1' }, data: { status: 'NO_SHOW', noShowDisputed: false } });
+  });
+});

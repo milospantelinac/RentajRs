@@ -2,7 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { I18nContext, I18nService } from 'nestjs-i18n';
-import { Booking, BookingStatus, ListingStatus, Prisma, PriceUnit } from '@prisma/client';
+import { Booking, BookingStatus, ListingStatus, Prisma, PriceUnit, ProcessingStatus } from '@prisma/client';
 import * as QRCode from 'qrcode';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AvailabilityService, PriceKind, PricedUnit } from '../availability/availability.service';
@@ -47,6 +47,13 @@ interface StoredFees {
 // waiting for payment, then confirmed stays, each soonest first; everything
 // else follows, the latest term first.
 const OPEN_STATUS_ORDER: BookingStatus[] = ['REQUESTED', 'AWAITING_PAYMENT', 'CONFIRMED'];
+
+// A dispute the admin has not closed yet (RESOLVED or DISMISSED).
+const OPEN_DISPUTE_STATUSES: ProcessingStatus[] = ['NEW', 'IN_PROGRESS'];
+
+function openPaymentReportWhere(bookingId: string): Prisma.DisputeWhereInput {
+  return { bookingId, type: 'UNCONFIRMED_PAYMENT', status: { in: OPEN_DISPUTE_STATUSES } };
+}
 
 @Injectable()
 export class BookingsService {
@@ -479,7 +486,9 @@ export class BookingsService {
     // T88 — a no-show still frees whatever nights/months remain on the term;
     // the guest not arriving shouldn't cost the owner the rest of the stay too.
     await this.availability.releaseTermsForBooking(booking.id);
-    const updated = await this.applyStatus(booking, 'NO_SHOW', ownerId);
+    // A mark the admin overturned (T90) may be set again; the guest can object
+    // to the new one, which disputeNoShow reads from this flag.
+    const updated = await this.applyStatus(booking, 'NO_SHOW', ownerId, { noShowDisputed: false });
     this.events.emit('booking.no_show', { bookingId: booking.id });
     return updated;
   }
@@ -513,11 +522,21 @@ export class BookingsService {
     return updated;
   }
 
+  /**
+   * One objection per no-show mark. The page hides the button once the mark
+   * is disputed, but the API used to file another dispute (and mail every
+   * admin again) on each call. The flag is set only while it is still clear,
+   * so of two calls at once one files the dispute and the other is refused.
+   */
   async disputeNoShow(guestId: string, bookingId: string, dto: DisputeNoShowDto) {
     const booking = await this.assertGuestAccess(guestId, bookingId, ['NO_SHOW']);
-    const [, dispute] = await this.prisma.$transaction([
-      this.prisma.booking.update({ where: { id: booking.id }, data: { noShowDisputed: true } }),
-      this.prisma.dispute.create({
+    const dispute = await this.prisma.$transaction(async (tx) => {
+      const flagged = await tx.booking.updateMany({
+        where: { id: booking.id, noShowDisputed: false },
+        data: { noShowDisputed: true },
+      });
+      if (flagged.count === 0) throw new BadRequestException(this.i18n.t('bookings.NO_SHOW_ALREADY_DISPUTED'));
+      return tx.dispute.create({
         data: {
           type: 'DISPUTED_NO_SHOW',
           bookingId: booking.id,
@@ -525,8 +544,8 @@ export class BookingsService {
           submittedByUserId: guestId,
           description: dto.explanation,
         },
-      }),
-    ]);
+      });
+    });
     this.events.emit('booking.no_show_disputed', { bookingId: booking.id, disputeId: dispute.id });
     return { message: this.i18n.t('common.SUCCESS') };
   }
@@ -555,16 +574,29 @@ export class BookingsService {
     return updated;
   }
 
+  /**
+   * T94: one open report per booking. The button used to stay after a
+   * report, so every press filed another dispute and mailed every admin
+   * again. Once the admin closes it, a booking still waiting for the payment
+   * can be reported again. The booking row is locked first, so two reports
+   * sent at once take turns and the second one finds the first.
+   */
   async disputeUnconfirmedPayment(guestId: string, bookingId: string) {
     const booking = await this.assertGuestAccess(guestId, bookingId, ['AWAITING_PAYMENT']);
-    await this.prisma.dispute.create({
-      data: {
-        type: 'UNCONFIRMED_PAYMENT',
-        bookingId: booking.id,
-        listingId: booking.listingId,
-        submittedByUserId: guestId,
-        description: 'Guest reports payment was sent but not confirmed by the owner',
-      },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "Booking" WHERE "id" = ${booking.id}::uuid FOR UPDATE`;
+      if ((await tx.dispute.count({ where: openPaymentReportWhere(booking.id) })) > 0) {
+        throw new BadRequestException(this.i18n.t('bookings.PAYMENT_ALREADY_REPORTED'));
+      }
+      await tx.dispute.create({
+        data: {
+          type: 'UNCONFIRMED_PAYMENT',
+          bookingId: booking.id,
+          listingId: booking.listingId,
+          submittedByUserId: guestId,
+          description: 'Guest reports payment was sent but not confirmed by the owner',
+        },
+      });
     });
     this.events.emit('booking.payment_disputed', { bookingId: booking.id });
     return { message: this.i18n.t('common.SUCCESS') };
@@ -644,11 +676,15 @@ export class BookingsService {
 
     const { listing } = booking;
     const isOwnerViewing = booking.ownerId === userId;
-    const [guestUnits, guestCapacity, categoryNames, messaging] = await Promise.all([
+    const [guestUnits, guestCapacity, categoryNames, messaging, openPaymentReports] = await Promise.all([
       getGuestUnits(this.taxonomy, [listing.categoryId]),
       this.getGuestCapacity(booking.listingId, listing.maxGuests),
       this.taxonomy.getCategoryNames([listing.categoryId]),
       isOwnerViewing ? null : this.getGuestMessaging(booking),
+      // The guest's page drops "Prijavi da uplata nije potvrđena" while a report is open.
+      !isOwnerViewing && booking.status === 'AWAITING_PAYMENT'
+        ? this.prisma.dispute.count({ where: openPaymentReportWhere(booking.id) })
+        : 0,
     ]);
     const serialized = this.serialize(booking, userId);
 
@@ -682,7 +718,12 @@ export class BookingsService {
         ? { guestShortName: shortName(booking.guest) }
         : // The guest already sees "Dragan S." on the listing's page; the full
           // name, phone and address still wait for phoneUnlocked (serialize).
-          { ownerShortName: shortName(booking.owner), canCancel: canGuestCancel(booking), messaging }),
+          {
+            ownerShortName: shortName(booking.owner),
+            canCancel: canGuestCancel(booking),
+            messaging,
+            paymentDisputed: openPaymentReports > 0,
+          }),
       ...(cancellation ? { cancellation } : {}),
       ...(bankTransferDetails ? { bankTransferDetails } : {}),
       ...(awaitingPaymentSince ? { awaitingPaymentSince } : {}),

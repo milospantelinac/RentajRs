@@ -2159,6 +2159,7 @@
     "note": {
       "requested": "The time is held for you until the owner replies. If they do not reply in time, the request expires and the time is released.",
       "awaitingPayment": "The owner approved your request. Pay the amount before the deadline using the QR code or the details below; the booking is confirmed once the owner confirms the payment.",
+      "paymentReported": "You reported that the owner has not confirmed your payment. An administrator is looking into it; the booking is confirmed once the owner confirms the payment.",
       "cash": "The booking is paid in cash on arrival. The booking details have been sent to your email.",
       "cashWithOwner": "The booking is paid in cash on arrival. If you cannot come, arrange the cancellation directly with the owner.",
       "transfer": "The payment is confirmed. The booking details have been sent to your email.",
