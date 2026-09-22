@@ -4,6 +4,7 @@
       <div class="hero-shell">
         <div class="hero-card">
           <img src="/images/hero-logo-mark.svg" alt="" aria-hidden="true" class="hero-logo-mark" />
+          <img src="/images/home/hero-logo-mark-mobile.svg" alt="" aria-hidden="true" class="hero-logo-mark-phone" />
           <div class="hero-card-content">
           <h1 class="hero-title">
             <span>{{ t('home.heroTitleLine1') }}</span>
@@ -17,7 +18,14 @@
           <div class="hero-search-full">
             <div class="hero-search-field">
               <label class="hero-search-label">{{ t('home.searchWhatLabel') }}</label>
-              <input v-model="searchQuery" type="text" :placeholder="t('home.searchWhatPlaceholder')" class="hero-search-input" />
+              <input
+                v-model="searchQuery"
+                type="text"
+                enterkeyhint="search"
+                :placeholder="t('home.searchWhatPlaceholder')"
+                class="hero-search-input"
+                @keydown.enter="submitSearch"
+              />
             </div>
             <div class="hero-search-divider" aria-hidden="true" />
             <div class="hero-search-field">
@@ -58,22 +66,23 @@
           </div>
           </div>
 
-          <!-- Compact search + "Filteri" sheet trigger — mobile only -->
+          <!-- Compact search + "Filteri" sheet trigger, below lg (Figma 26:3091) -->
           <div class="hero-search-compact">
             <div class="hero-search-compact-bar">
               <input
                 v-model="searchQuery"
                 type="text"
+                enterkeyhint="search"
                 :placeholder="t('home.searchBarPlaceholder')"
                 class="hero-search-compact-input"
-                @keyup.enter="filtersOpen = false"
+                @keydown.enter="submitSearch"
               />
               <NuxtLink :to="searchLink" class="hero-search-compact-submit" :aria-label="t('common.search')">
-                <FontAwesomeIcon icon="magnifying-glass" />
+                <img src="/images/icons/search.svg" alt="" class="hero-search-compact-icon" />
               </NuxtLink>
             </div>
             <button type="button" class="hero-filters-btn" @click="filtersOpen = true">
-              <FontAwesomeIcon icon="sliders" />
+              <img src="/images/icons/filter-20.svg" alt="" class="hero-filters-icon" />
               {{ t('home.filtersButton') }}
             </button>
           </div>
@@ -89,8 +98,16 @@
                   </div>
 
                   <div class="filters-sheet-field">
-                    <label class="filters-sheet-label">{{ t('home.searchWhatLabel') }}</label>
-                    <input v-model="searchQuery" type="text" :placeholder="t('home.searchWhatPlaceholder')" class="filters-sheet-input" />
+                    <label class="filters-sheet-label" for="filters-sheet-query">{{ t('home.searchWhatLabel') }}</label>
+                    <input
+                      id="filters-sheet-query"
+                      v-model="searchQuery"
+                      type="text"
+                      enterkeyhint="search"
+                      :placeholder="t('home.searchWhatPlaceholder')"
+                      class="filters-sheet-input"
+                      @keydown.enter="submitSearch"
+                    />
                   </div>
                   <div class="filters-sheet-field">
                     <span class="filters-sheet-label">{{ t('home.searchLocationLabel') }}</span>
@@ -98,6 +115,7 @@
                       v-model="searchCityId"
                       :options="cityOptions"
                       :placeholder="t('home.searchCityAny')"
+                      variant="bare"
                       :aria-label="t('home.searchLocationLabel')"
                     />
                   </div>
@@ -107,6 +125,7 @@
                       v-model="searchCategorySlug"
                       :options="categoryOptions"
                       :placeholder="t('home.searchCategoryAny')"
+                      variant="bare"
                       :aria-label="t('home.searchCategoryLabel')"
                     />
                   </div>
@@ -116,11 +135,12 @@
                       v-model="searchPriceBucket"
                       :options="priceBuckets"
                       :placeholder="t('home.searchPriceLabel')"
+                      variant="bare"
                       :aria-label="t('home.searchPriceLabel')"
                     />
                   </div>
 
-                  <NuxtLink :to="searchLink" class="btn btn-primary-flat btn-block filters-sheet-submit" @click="filtersOpen = false">
+                  <NuxtLink :to="searchLink" class="filters-sheet-submit" @click="filtersOpen = false">
                     {{ t('home.filtersSubmit') }}
                   </NuxtLink>
                 </div>
@@ -145,12 +165,14 @@
 
     <section class="container featured-section">
       <div class="featured-header">
-        <h2 class="section-title">
-          <span class="section-title-strong">{{ t('home.featuredTitleStrong') }}</span>&nbsp;<span class="section-title-light">{{ t('home.featuredTitleLight') }}</span>
+        <!-- A plain space, so the phone frame's break before "ponude" can happen. -->
+        <h2 class="section-title featured-title">
+          <span class="section-title-strong">{{ t('home.featuredTitleStrong') }}</span> <span class="section-title-light">{{ t('home.featuredTitleLight') }}</span>
         </h2>
         <NuxtLink to="/pretraga" class="featured-see-all">
           {{ t('home.seeAllListings') }}
           <img src="/images/icons/arrow.svg" alt="" class="featured-see-all-arrow" />
+          <img src="/images/icons/arrow-right-brand-sm.svg" alt="" class="featured-see-all-arrow-phone" />
         </NuxtLink>
       </div>
 
@@ -175,53 +197,65 @@
             :key="feature.titleKey"
             class="possibility-item"
             :class="{ 'possibility-item-active': activeFeature === index }"
+            :style="{ '--possibility-order': index * 2 }"
+            :aria-expanded="activeFeature === index"
             @click="activeFeature = index"
           >
             <span class="possibility-head">
               <span class="possibility-number">{{ String(index + 1).padStart(2, '0') }}</span>
               <span class="possibility-title">{{ t(feature.titleKey) }}</span>
+              <img
+                :src="activeFeature === index ? '/images/icons/chevron-up-12-brand.svg' : '/images/icons/chevron-up-12.svg'"
+                alt=""
+                class="possibility-chevron"
+              />
             </span>
             <span v-if="activeFeature === index" class="possibility-text">{{ t(feature.textKey) }}</span>
           </button>
         </div>
 
-        <div class="possibilities-showcase">
-          <span class="possibilities-showcase-watermark">{{ String(activeFeature + 1).padStart(2, '0') }}</span>
-          <span class="possibilities-showcase-icon">
-            <img :src="features[activeFeature].icon" alt="" width="32" height="32" />
-          </span>
-          <p class="possibilities-showcase-title">{{ t(features[activeFeature].titleKey) }}</p>
-          <!-- The card carries its own, shorter copy in Figma — not the list's. -->
-          <p class="possibilities-showcase-text">{{ t(features[activeFeature].cardTextKey) }}</p>
+        <!-- On a phone (94:27) the card sits inside the open row: the list
+             unwraps and this frame is ordered right after the active item,
+             drawing the rest of its outline. Above md it has no box at all. -->
+        <div class="possibilities-showcase-frame" :style="{ '--possibility-order': activeFeature * 2 + 1 }">
+          <div class="possibilities-showcase">
+            <span class="possibilities-showcase-watermark">{{ String(activeFeature + 1).padStart(2, '0') }}</span>
+            <span class="possibilities-showcase-icon">
+              <img :src="features[activeFeature].icon" alt="" width="32" height="32" />
+            </span>
+            <p class="possibilities-showcase-title">{{ t(features[activeFeature].titleKey) }}</p>
+            <!-- The card carries its own, shorter copy in Figma — not the list's. -->
+            <p class="possibilities-showcase-text">{{ t(features[activeFeature].cardTextKey) }}</p>
 
-          <div class="possibilities-mockup">
-            <div class="possibilities-mockup-header">
-              <img src="/images/home/guest-avatar.png" alt="" class="possibilities-mockup-avatar" />
-              <div class="possibilities-mockup-header-text">
-                <p class="possibilities-mockup-name">{{ t('home.mockupGuestName') }}</p>
-                <p class="possibilities-mockup-label">{{ t('home.mockupGuestPayment') }}</p>
+            <div class="possibilities-mockup">
+              <div class="possibilities-mockup-header">
+                <img src="/images/home/guest-avatar.png" alt="" class="possibilities-mockup-avatar" />
+                <div class="possibilities-mockup-header-text">
+                  <p class="possibilities-mockup-name">{{ t('home.mockupGuestName') }}</p>
+                  <p class="possibilities-mockup-label">{{ t('home.mockupGuestPayment') }}</p>
+                </div>
+                <span class="possibilities-mockup-status">
+                  <img src="/images/icons/check-circle.svg" alt="" class="possibilities-mockup-status-icon" />
+                  {{ t('home.mockupStatus') }}
+                </span>
               </div>
-              <span class="possibilities-mockup-status">
-                <img src="/images/icons/check-circle.svg" alt="" class="possibilities-mockup-status-icon" />
-                {{ t('home.mockupStatus') }}
-              </span>
-            </div>
-            <div class="possibilities-mockup-body">
-              <div class="possibilities-mockup-body-text">
-                <p class="possibilities-mockup-amount">{{ t('home.mockupAmount') }}</p>
-                <p class="possibilities-mockup-note">{{ t('home.mockupAmountNote') }}</p>
+              <div class="possibilities-mockup-body">
+                <div class="possibilities-mockup-body-text">
+                  <p class="possibilities-mockup-amount">{{ t('home.mockupAmount') }}</p>
+                  <p class="possibilities-mockup-note">{{ t('home.mockupAmountNote') }}</p>
+                </div>
+                <span class="possibilities-mockup-commission">{{ t('home.mockupCommission') }}</span>
               </div>
-              <span class="possibilities-mockup-commission">{{ t('home.mockupCommission') }}</span>
             </div>
-          </div>
 
-          <div class="possibilities-dots">
-            <span
-              v-for="(feature, index) in features"
-              :key="feature.titleKey"
-              class="possibilities-dot"
-              :class="{ 'possibilities-dot-active': activeFeature === index }"
-            />
+            <div class="possibilities-dots">
+              <span
+                v-for="(feature, index) in features"
+                :key="feature.titleKey"
+                class="possibilities-dot"
+                :class="{ 'possibilities-dot-active': activeFeature === index }"
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -321,6 +355,13 @@ function resetFilters() {
   searchCategorySlug.value = ''
   searchCityId.value = ''
   searchPriceBucket.value = ''
+}
+
+// Enter in any search field runs the same search as the magnifier button.
+function submitSearch(event) {
+  if (event?.isComposing) return
+  filtersOpen.value = false
+  navigateTo(searchLink.value)
 }
 
 // Fixed 6-tile quick-links strip from the Figma homepage design — a curated
@@ -537,6 +578,42 @@ useHead({
   position: relative;
 }
 
+// Dizajn 42 (94:27, first column): on a phone the card is the frame's 343x637
+// with its own export of the artwork (26:3081 crops and mirrors the image
+// differently from the desktop), radius 20, the text 92 below its top and 161
+// under the search frame, of which the categories frame covers 125.
+.hero-logo-mark-phone {
+  display: none;
+}
+
+@include mobile-only {
+  .hero {
+    padding-bottom: 0;
+  }
+
+  .hero-card {
+    background-image: url('/images/home/hero-bg-mobile.jpg');
+    border-radius: 20px;
+    padding: 92px 9.5px 161px;
+  }
+
+  .hero-logo-mark {
+    display: none;
+  }
+
+  // 26:3084: the whole mark, 494x497, from 118 left of the card and 36.5 above it.
+  .hero-logo-mark-phone {
+    display: block;
+    position: absolute;
+    top: -36.5px;
+    left: -118.39px;
+    width: 494.25px;
+    height: 496.87px;
+    max-width: none;
+    pointer-events: none;
+  }
+}
+
 // Figma 26:291 — 74/1.1 Regular, centred, pure white.
 .hero-title {
   display: flex;
@@ -571,6 +648,21 @@ useHead({
   .hero-subtitle {
     font-size: 20px;
     margin-top: 22px;
+  }
+}
+
+// Dizajn 42, 26:3105 / 26:3106: 44/1.1 and 16/1.1 in a 299 column.
+@include mobile-only {
+  .hero-title {
+    max-width: 299px;
+    margin: 0 auto;
+    font-size: 44px;
+  }
+
+  .hero-subtitle {
+    max-width: 299px;
+    margin: 10.8px auto 0;
+    font-size: 16px;
   }
 }
 
@@ -697,15 +789,21 @@ useHead({
   text-decoration: none;
 }
 
-// Compact search bar + "Filteri" button — mobile only. Below lg the full
-// 4-field row doesn't fit, so search collapses to one input here and the
-// rest of the fields move into the .filters-sheet bottom sheet.
+// Compact search bar + "Filteri" button, below lg. The full 4-field row
+// doesn't fit there, so search collapses to one input and the rest of the
+// fields move into the .filters-sheet bottom sheet.
+// Dizajn 42 (26:3091): a tinted frame with the desktop row's inset shadow
+// holding two white 47px rows, radius 7, 10 apart.
 .hero-search-compact {
   display: flex;
   flex-direction: column;
   gap: 10px;
   max-width: 900px;
   margin: 0 auto 40px;
+  padding: 6px 6px 8px;
+  border-radius: 10px;
+  background: $color-background;
+  box-shadow: inset 0 5px 10px rgba(32, 113, 161, 0.25);
 }
 
 @include respond-above(lg) {
@@ -714,23 +812,34 @@ useHead({
   }
 }
 
+@include mobile-only {
+  .hero-search-compact {
+    margin: 74.8px 0 0;
+  }
+}
+
 .hero-search-compact-bar {
   display: flex;
   align-items: center;
   gap: 8px;
+  height: 47px;
+  padding: 0 7px 0 11px;
   background: $color-surface;
-  border-radius: $radius-input;
-  padding: 4px 4px 4px 16px;
+  border-radius: 7px;
 }
 
+// Typed text stays at 16px so iOS doesn't zoom into the field on focus; the
+// empty field shows the frame's 12px Medium ink label (26:3108).
 .hero-search-compact-input {
   flex: 1;
+  min-width: 0;
   border: none;
   background: none;
-  padding: 12px 0;
-  font-size: $font-size-body;
+  padding: 0 0 2px;
+  font-family: $font-family-base;
+  font-size: 16px;
+  font-weight: 500;
   color: $color-text;
-  min-width: 0;
 }
 
 .hero-search-compact-input:focus {
@@ -738,49 +847,70 @@ useHead({
 }
 
 .hero-search-compact-input::placeholder {
-  color: $color-text-muted;
+  font-size: 12px;
+  color: $color-text;
+  opacity: 1;
 }
 
+// 26:3107: a 33px white tile, radius 4, on a soft grey shadow.
 .hero-search-compact-submit {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: $radius-button;
-  background: $color-primary;
-  color: $color-surface;
+  width: 33px;
+  height: 33px;
   flex-shrink: 0;
+  border-radius: 4px;
+  background: $color-surface;
+  box-shadow: 0 2px 10px rgba(207, 207, 207, 0.5);
 }
 
 .hero-search-compact-submit:hover {
   text-decoration: none;
-  background: $color-dark;
+}
+
+.hero-search-compact-icon {
+  display: block;
+  width: 14.69px;
+  height: 14.49px;
 }
 
 .hero-filters-btn {
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 10px;
   width: 100%;
-  padding: 12px;
+  height: 47px;
+  padding: 0 11px;
   border: none;
-  border-radius: $radius-input;
+  border-radius: 7px;
   background: $color-surface;
   color: $color-text;
-  font-weight: 600;
-  font-size: $font-size-body;
+  font-family: $font-family-base;
+  font-weight: 500;
+  font-size: 12px;
+  line-height: normal;
+  text-align: left;
   cursor: pointer;
 }
 
+.hero-filters-icon {
+  display: block;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
 // Filters bottom sheet -------------------------------------------------
+// Dizajn 42 (26:4371): the page dims and blurs behind a plain white sheet;
+// fields are 76 apart with a faint rule under each, labels 12 Medium ink.
 .filters-sheet-backdrop {
   position: fixed;
   inset: 0;
   display: flex;
   align-items: flex-end;
-  background: rgba(6, 27, 49, 0.45);
+  background: rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(3.5px);
   z-index: $z-modal;
 }
 
@@ -788,19 +918,18 @@ useHead({
   width: 100%;
   max-height: 85vh;
   overflow-y: auto;
-  padding: 10px 20px calc(20px + env(safe-area-inset-bottom));
+  padding: 12px 16px calc(31px + env(safe-area-inset-bottom));
   background: $color-surface;
   border-radius: 20px 20px 0 0;
-  box-shadow: 0 -8px 24px rgba(15, 27, 51, 0.12);
 }
 
 .filters-sheet-handle {
   display: block;
-  width: 36px;
+  width: 34px;
   height: 4px;
-  margin: 4px auto 16px;
-  border-radius: $radius-pill;
-  background: $color-border;
+  margin: 0 auto 21px;
+  border-radius: 10px;
+  background: #ced6de;
 }
 
 .filters-sheet-header {
@@ -812,41 +941,56 @@ useHead({
 
 .filters-sheet-title {
   font-size: 18px;
-  font-weight: 600;
+  font-weight: 500;
+  line-height: normal;
   color: $color-text;
   margin: 0;
 }
 
+// 26:4653: the brand gradient runs through the letters.
 .filters-sheet-reset {
+  padding: 0;
   border: none;
-  background: none;
-  color: $color-primary;
+  background: linear-gradient(152.08deg, $color-gradient-start 0%, $color-gradient-mid 55%, $color-gradient-end 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-family: $font-family-base;
   font-weight: 500;
-  font-size: $font-size-muted;
+  font-size: 14px;
+  line-height: 18px;
   cursor: pointer;
 }
 
 .filters-sheet-field {
-  padding: 14px 0;
-  border-top: 1px solid $color-border;
+  padding: 20px 0 13.6px;
+  border-bottom: 1px solid rgba(195, 207, 219, 0.2);
 }
 
 .filters-sheet-label {
   display: block;
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
   text-transform: uppercase;
   letter-spacing: -0.02em;
-  color: $color-text-muted;
-  margin-bottom: 6px;
+  color: $color-text;
+  margin-bottom: 10px;
 }
 
+// 16px while typing (no iOS zoom); the box keeps the 15.4 row of the frame's
+// 14/1.1 value, so the placeholder sits where the select values do.
 .filters-sheet-input {
+  display: block;
+  width: 100%;
+  height: 19px;
+  margin: -1.8px 0;
+  padding: 0;
   border: none;
   background: none;
-  padding: 0;
-  width: 100%;
-  font-size: $font-size-body;
+  font-family: $font-family-base;
+  font-size: 16px;
+  line-height: 19px;
   color: $color-text;
 }
 
@@ -855,15 +999,30 @@ useHead({
 }
 
 .filters-sheet-input::placeholder {
+  font-size: 14px;
   color: $color-text-muted;
+  opacity: 1;
 }
 
-.filters-sheet-select {
-  appearance: none;
-}
-
+// 26:4664: a 44px page-grey button, radius 7, 13.4 Medium ink.
 .filters-sheet-submit {
-  margin-top: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 44px;
+  margin-top: 15px;
+  border-radius: 7px;
+  background: $color-background;
+  color: $color-text;
+  font-weight: 500;
+  font-size: 13.42px;
+  line-height: normal;
+}
+
+.filters-sheet-submit:hover {
+  text-decoration: none;
+  color: $color-text;
+  background: $color-border;
 }
 
 .sheet-enter-active,
@@ -979,6 +1138,46 @@ useHead({
   }
 }
 
+// Dizajn 42 (26:3117 / 26:3118): on a phone the white frame sits 10 inside the
+// hero's edges and 125 up over it, a 16/14/11 ring round a 12-radius panel;
+// the tiles are the desktop ones at 0.928 (61x63 boxes, 27.8 icons, 18.6
+// labels) on a 152 row step. The frame puts the pair of columns 4px left of
+// the panel's middle; here they are centred.
+@include mobile-only {
+  .hero-categories-frame {
+    max-width: none;
+    margin: -125px 10px 0;
+    padding: 16px 14px 11px;
+    border-radius: 15px;
+    box-shadow: none;
+  }
+
+  .hero-categories-panel {
+    gap: 49.59px 0;
+    padding: 43px 11px 38.86px;
+  }
+
+  .hero-category-tile {
+    gap: 19.07px;
+  }
+
+  .hero-category-icon-wrap {
+    width: 61.25px;
+    height: 62.84px;
+    border-radius: 10.21px;
+    box-shadow: 0 5.1px 25.52px rgba(207, 207, 207, 0.5);
+  }
+
+  .hero-category-icon {
+    width: 27.84px;
+    height: 27.84px;
+  }
+
+  .hero-category-name {
+    font-size: 18.56px;
+  }
+}
+
 // Section titles reused across the page ----------------------------------
 // Figma (node 26:139 and siblings): Funnel Sans Regular 48/56, -1.68px
 // tracking. Mobile steps down but keeps the same 1.167 line-height ratio.
@@ -1070,6 +1269,77 @@ useHead({
   .featured-grid {
     grid-template-columns: repeat(4, 280px);
     gap: 32px;
+  }
+}
+
+// Dizajn 42 (26:3152, 706:1892): on a phone the heading is 28/1.2 Medium in a
+// 201 column (the frame sets it in Inter, the only Inter text on the page and
+// a font the site never loads, so it stays Funnel Sans) with the link on its
+// last line, and the cards are one 253-wide row that scrolls sideways, 16
+// apart, the second cut by the screen edge. The scroll box keeps room for
+// the cards' shadow.
+.featured-see-all-arrow-phone {
+  display: none;
+}
+
+@include mobile-only {
+  .featured-section {
+    padding-top: 44px;
+    padding-bottom: 13px;
+  }
+
+  // The heading's 201 box runs up to the link, as in the frame.
+  .featured-header {
+    align-items: flex-end;
+    gap: 0;
+    margin-bottom: 9px;
+  }
+
+  .featured-title {
+    max-width: 201px;
+    font-size: 28px;
+    font-weight: 500;
+    line-height: 1.2;
+    letter-spacing: 0;
+  }
+
+  .featured-see-all {
+    flex-shrink: 0;
+    gap: 5px;
+    font-size: 14px;
+    line-height: 18px;
+    color: #101a30;
+  }
+
+  .featured-see-all-arrow {
+    display: none;
+  }
+
+  .featured-see-all-arrow-phone {
+    display: block;
+    width: 14px;
+    height: 14px;
+  }
+
+  .featured-grid {
+    display: flex;
+    gap: 16px;
+    margin: 0 -16px;
+    padding: 16px 16px 32px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x mandatory;
+    scroll-padding-inline: 16px;
+    scrollbar-width: none;
+  }
+
+  .featured-grid::-webkit-scrollbar {
+    display: none;
+  }
+
+  .featured-grid-item {
+    flex: 0 0 253px;
+    scroll-snap-align: start;
   }
 }
 
@@ -1180,18 +1450,108 @@ useHead({
   color: $color-primary;
 }
 
-@include respond-below(md) {
+.possibility-chevron {
+  display: none;
+}
+
+// Above md the showcase frame draws no box of its own.
+.possibilities-showcase-frame {
+  display: contents;
+}
+
+// Dizajn 42 (94:27): on a phone the list is an accordion. The rows follow the
+// clean second column (26:3355), since the first one draws its numbers across
+// the rules and its arrows 20px above the text: 65.4 a row with the number 15
+// down, a 0.74px rule under it and a 12x6 arrow on the right, a few px under
+// the text's middle. The open row is a page-grey card with a 1px blue outline,
+// number 21 in and text 259 wide; the list unwraps so its showcase can follow
+// inside the same outline (.possibilities-showcase-frame, ordered after it).
+@include mobile-only {
+  .possibilities-section {
+    padding-top: 35px;
+    padding-bottom: 0;
+  }
+
+  .possibilities-title {
+    align-items: center;
+    margin-bottom: 24px;
+    font-size: 38px;
+    line-height: 56px;
+    text-align: center;
+  }
+
+  .possibilities-grid {
+    gap: 0;
+  }
+
+  .possibilities-list {
+    display: contents;
+  }
+
+  .possibility-item {
+    order: var(--possibility-order);
+    min-height: 0;
+    padding: 15px 10.58px 13.37px 25px;
+    border: none;
+    border-bottom: 1px solid rgba(228, 235, 242, 0.74);
+    border-radius: 0;
+  }
+
+  .possibility-item:has(+ .possibility-item-active) {
+    border-bottom-color: transparent;
+  }
+
+  .possibility-head {
+    gap: 14.74px;
+  }
+
   .possibility-number {
+    width: 26.53px;
     font-size: 24px;
-    width: 30px;
   }
 
   .possibility-title {
-    font-size: 17px;
+    font-size: 16px;
+  }
+
+  .possibility-chevron {
+    display: block;
+    width: 12px;
+    height: 6.28px;
+    margin-left: auto;
+    flex-shrink: 0;
+    transform: translateY(3.4px) scaleY(-1);
+  }
+
+  .possibility-item-active {
+    padding: 14.38px 27px 0 20px;
+    border: 1px solid $color-primary;
+    border-bottom: none;
+    border-radius: 10px 10px 0 0;
+  }
+
+  .possibility-item-active .possibility-head {
+    gap: 10.47px;
+  }
+
+  .possibility-item-active .possibility-chevron {
+    transform: translateY(3.9px);
   }
 
   .possibility-text {
-    font-size: $font-size-body;
+    max-width: 259px;
+    margin-top: 8.52px;
+    font-size: 14px;
+  }
+
+  .possibilities-showcase-frame {
+    display: block;
+    order: var(--possibility-order);
+    padding: 22px 8.5px 12.4px;
+    background: $color-background;
+    border: 1px solid $color-primary;
+    border-top: none;
+    border-radius: 0 0 10px 10px;
   }
 }
 
@@ -1400,6 +1760,127 @@ useHead({
   background: $color-surface;
 }
 
+// Dizajn 42 (26:3199): on a phone the card is 324 wide inside the open row,
+// radius 8, with the desktop parts at about half size except the 16px title
+// and 12px text. The first column lays that title 7px over the icon; here it
+// sits 2px under it, as on the desktop.
+@include mobile-only {
+  .possibilities-showcase {
+    padding: 19.3px 19.57px 45.68px;
+    border-radius: 8px;
+    box-shadow: 0 10.3px 20.6px rgba(0, 54, 246, 0.25);
+  }
+
+  .possibilities-showcase-watermark {
+    top: -47.38px;
+    left: 229.2px;
+    font-size: 95.63px;
+  }
+
+  // Both phone columns set the badge 2px right of the text below it.
+  .possibilities-showcase-icon {
+    width: 41.2px;
+    height: 41.2px;
+    margin-left: 2.06px;
+    border-radius: 7.73px;
+    border-color: rgba(255, 255, 255, 0.155);
+
+    img {
+      width: 16.48px;
+      height: 16.48px;
+    }
+  }
+
+  .possibilities-showcase-title {
+    font-size: 16px;
+  }
+
+  .possibilities-showcase-text {
+    max-width: 229px;
+    margin-top: 6.66px;
+    font-size: 12px;
+  }
+
+  .possibilities-mockup {
+    margin-top: 16.8px;
+    padding: 12.36px 11.33px 10.72px 12.36px;
+    border-radius: 7.73px;
+  }
+
+  // The frame's 0.5px rule takes no room; the 1px border here takes half from each side.
+  .possibilities-mockup-header {
+    gap: 5.15px;
+    padding-bottom: 4.65px;
+    border-bottom-color: rgba(0, 0, 0, 0.05);
+  }
+
+  .possibilities-mockup-avatar {
+    width: 25.24px;
+    height: 25.24px;
+  }
+
+  .possibilities-mockup-name {
+    font-size: 10px;
+  }
+
+  .possibilities-mockup-label {
+    margin-top: 1.88px;
+    font-size: 8px;
+  }
+
+  .possibilities-mockup-status {
+    gap: 3.97px;
+    width: 56.66px;
+    height: 20.6px;
+    padding: 0 7.89px 0 5.15px;
+    font-size: 8px;
+  }
+
+  .possibilities-mockup-status-icon {
+    width: 12.13px;
+    height: 12.13px;
+  }
+
+  .possibilities-mockup-body {
+    gap: 6px;
+    padding-top: 4.65px;
+  }
+
+  .possibilities-mockup-body-text {
+    padding-left: 1.55px;
+  }
+
+  .possibilities-mockup-amount {
+    margin-bottom: 3.14px;
+    font-size: 14px;
+  }
+
+  .possibilities-mockup-note {
+    font-size: 8px;
+  }
+
+  .possibilities-mockup-commission {
+    height: 14.94px;
+    padding: 0 3.24px;
+    font-size: 8px;
+  }
+
+  .possibilities-dots {
+    gap: 1.03px;
+    margin-top: 30.75px;
+  }
+
+  .possibilities-dot {
+    width: 15.45px;
+    height: 2.06px;
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .possibilities-dot-active {
+    background: $color-surface;
+  }
+}
+
 // Video section -------------------------------------------------------------
 // Figma (nodes 26:137–26:142): the frame is 1293x653 with 46px corners, wider
 // than the 1216 content column, so this section carries its own wrapper.
@@ -1434,10 +1915,22 @@ useHead({
   justify-content: center;
 }
 
-@include respond-below(md) {
+// Dizajn 42 (26:3262 / 26:3264): on a phone the frame keeps the desktop's
+// 1293/653 shape (343x173) with radius 15, 27 under a 38/56 heading that
+// starts 78 below the last accordion rule.
+@include mobile-only {
+  .video-section {
+    padding: 78.13px 16px 0;
+  }
+
+  .video-title {
+    margin-bottom: 27px;
+    font-size: 38px;
+    line-height: 56px;
+  }
+
   .video-frame {
-    aspect-ratio: 16 / 9;
-    border-radius: 20px;
+    border-radius: 15px;
   }
 }
 
@@ -1492,15 +1985,17 @@ useHead({
   transform: scale(1.06);
 }
 
+// 26:3265: the desktop ring and disc at 0.362.
 @include respond-below(md) {
   .video-play-icon {
-    width: 96px;
-    height: 96px;
+    width: 55.79px;
+    height: 55.79px;
+    backdrop-filter: blur(3.42px);
   }
 
   .video-play-icon img {
-    width: 74px;
-    height: 74px;
+    width: 42.75px;
+    height: 42.75px;
   }
 }
 
@@ -1578,6 +2073,24 @@ useHead({
 
   .faq-section-grid > :deep(.faq-accordion) {
     flex: 0 0 728px;
+  }
+}
+
+// Dizajn 42 (26:3270): on a phone a 42/56 heading, the list 25 under it and
+// the CTA 30 under the list.
+@include mobile-only {
+  .faq-section {
+    padding-top: 55.8px;
+    padding-bottom: 30px;
+  }
+
+  .faq-section-grid {
+    gap: 25px;
+  }
+
+  .faq-section-grid > .section-title {
+    font-size: 42px;
+    line-height: 56px;
   }
 }
 
@@ -1720,5 +2233,78 @@ useHead({
 .cta-btn-icon svg {
   width: 7px;
   height: 11px;
+}
+
+// Dizajn 42 (26:3074 - 26:3305): on a phone the banner is 20-round with the
+// gradient running from the top right corner to the bottom left, the text 24
+// in, and the three discs (the desktop ones at 0.538) share a centre 68 in
+// from the right edge and 18 above the bottom, shaded from below. The button
+// is 140x44.6 with a 28px badge; the .btn border is inside its padding.
+@include mobile-only {
+  .cta-banner {
+    margin: 0 0 22.4px;
+    padding: 33px 24px 203.35px;
+    border-radius: 20px;
+    background: linear-gradient(
+      245.06deg,
+      $color-gradient-start 0%,
+      $color-gradient-mid 55%,
+      $color-gradient-end 100%
+    );
+  }
+
+  .cta-ring {
+    top: auto;
+    right: 68.3px;
+    bottom: 18.2px;
+    transform: translate(50%, 50%);
+    box-shadow: inset 0 -10.75px 21.5px rgba(0, 0, 0, 0.3);
+  }
+
+  .cta-ring-1 {
+    width: 410.74px;
+    height: 410.74px;
+  }
+
+  .cta-ring-2 {
+    width: 288.94px;
+    height: 288.94px;
+  }
+
+  .cta-ring-3 {
+    width: 165.11px;
+    height: 165.11px;
+  }
+
+  .cta-title {
+    max-width: 278px;
+    margin-bottom: 9px;
+    font-size: 40px;
+  }
+
+  .cta-text {
+    max-width: 251px;
+    margin-bottom: 16px;
+    font-size: 16px;
+  }
+
+  .cta-btn {
+    gap: 8.4px;
+    height: 44.65px;
+    padding: 0 12.6px 0 7.13px;
+    border-radius: 7.1px;
+    font-size: 14px;
+  }
+
+  .cta-btn-icon {
+    width: 28.13px;
+    height: 27.52px;
+    border-radius: 4.29px;
+  }
+
+  .cta-btn-icon svg {
+    width: 6.63px;
+    height: 10.38px;
+  }
 }
 </style>
