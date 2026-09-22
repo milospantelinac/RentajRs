@@ -203,6 +203,29 @@ describe('BookingsService price lines (Dizajn 34)', () => {
       { price: 8000000n, kind: 'SPECIAL', count: 1 },
     ]);
   });
+
+  it('quotes the same lines in RSD for the request page (Dizajn 40)', async () => {
+    const listing = pricingListing({ bookingModel: 'PER_STAY', slotSubmode: null, priceUnit: 'NIGHT', price: 650000n, mandatoryFees: null });
+    const quotePrisma = { ...prisma, listing: { findUniqueOrThrow: jest.fn().mockResolvedValue(listing) } };
+    const availability = {
+      getNightlyPrices: jest.fn().mockResolvedValue([
+        { price: 650000n, kind: 'BASE' },
+        { price: 800000n, kind: 'WEEKEND' },
+        { price: 650000n, kind: 'BASE' },
+      ]),
+    };
+    const service = new BookingsService(quotePrisma as any, availability as any, i18n as any, {} as any, {} as any);
+    const quote = await service.quotePrice('l1', {
+      startsAt: '2026-10-08T00:00:00.000Z',
+      endsAt: '2026-10-11T00:00:00.000Z',
+      guestCount: 2,
+    } as any);
+    expect(quote.priceLines).toEqual([
+      { count: 2, price: 6500, kind: 'BASE' },
+      { count: 1, price: 8000, kind: 'WEEKEND' },
+    ]);
+    expect(quote).toMatchObject({ unitCount: 3, unitPriceTotal: 21000, totalAmount: 21000 });
+  });
 });
 
 describe('BookingsService#serialize priceBreakdown (Dizajn 34)', () => {

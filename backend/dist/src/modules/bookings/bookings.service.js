@@ -258,6 +258,7 @@ let BookingsService = class BookingsService {
             priceUnit: listing.priceUnit,
             pricePerUnit: (0, money_1.paraToRsd)(pricePerUnit),
             unitCount,
+            priceLines: totals.priceLines.map((line) => ({ count: line.count, price: (0, money_1.paraToRsd)(line.price), kind: line.kind })),
             unitPriceTotal: (0, money_1.paraToRsd)(totals.unitPriceTotal),
             guestFee: (0, money_1.paraToRsd)(totals.guestFee),
             mandatoryFeesTotal: (0, money_1.paraToRsd)(totals.mandatoryFeesTotal),

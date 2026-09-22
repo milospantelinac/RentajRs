@@ -189,6 +189,7 @@ describe('ListingsService#getPublicBySlug (found in Dizajn 39)', () => {
   const taxonomy = {
     resolveAttributesForCategory: jest.fn().mockResolvedValue([]),
     getCategoryNames: jest.fn().mockResolvedValue(new Map([['c1', 'Igraonice']])),
+    getCategoryTree: jest.fn().mockResolvedValue([{ id: 'c1', slug: 'igraonice', children: [] }]),
   };
 
   function setup(hasMessaging: boolean) {
@@ -242,5 +243,14 @@ describe('ListingsService#getPublicBySlug (found in Dizajn 39)', () => {
     const page: any = await setup(false).getPublicBySlug('igraonica');
     expect(page.owner.phone).toBe('064 123 4567');
     expect(page.canMessage).toBe(false);
+  });
+
+  it('names what the guests are counted in for the request form (Dizajn 40)', async () => {
+    taxonomy.resolveAttributesForCategory.mockResolvedValueOnce([]).mockResolvedValueOnce([{ key: 'kapacitet_dece' }]);
+    const page: any = await setup(true).getPublicBySlug('igraonica');
+    expect(page.guestUnit).toBe('children');
+
+    const plain: any = await setup(true).getPublicBySlug('igraonica');
+    expect(plain.guestUnit).toBe('guests');
   });
 });

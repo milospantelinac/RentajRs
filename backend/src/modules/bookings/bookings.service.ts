@@ -375,6 +375,8 @@ export class BookingsService {
       priceUnit: listing.priceUnit,
       pricePerUnit: paraToRsd(pricePerUnit),
       unitCount,
+      // Dizajn 40: the request page's "Cena" rows, the same lines the booking keeps (Dizajn 34).
+      priceLines: totals.priceLines.map((line) => ({ count: line.count, price: paraToRsd(line.price), kind: line.kind })),
       unitPriceTotal: paraToRsd(totals.unitPriceTotal),
       guestFee: paraToRsd(totals.guestFee),
       mandatoryFeesTotal: paraToRsd(totals.mandatoryFeesTotal),

@@ -112,7 +112,7 @@ export function formatBookingGuests(t, guestUnit, count) {
 }
 
 // "2 sata", "3 noći", "1 termin"; a booking priced per guest counts its guests.
-function formatUnits(t, booking, unit, count) {
+export function formatUnits(t, booking, unit, count) {
   if (unit === 'GUEST') return formatBookingGuests(t, booking.guestUnit, count)
   const key = COUNTED_UNITS.includes(unit) ? unit : 'SLOT'
   return t(`bookingRequests.units.${key}${srPluralCategory(count)}`, { count })
@@ -149,13 +149,16 @@ export function formatBookingTerm(t, booking) {
 export function formatBookingPriceBreakdown(t, booking) {
   const breakdown = booking.priceBreakdown
   if (!breakdown?.lines?.length) return formatUnits(t, booking, booking.priceUnit, booking.unitCount)
-  const parts = breakdown.lines.map((line) => {
-    const text = `${formatUnits(t, booking, booking.priceUnit, line.count)} × ${formatRsd(line.price)}`
-    const kind = PRICE_KIND_KEYS[line.kind]
-    return kind ? `${text} ${t(`bookingRequests.priceKind.${kind}`)}` : text
-  })
+  const parts = breakdown.lines.map((line) => formatPriceLine(t, booking, line))
   if (breakdown.extras) parts.push(t('bookingRequests.priceExtras', { amount: formatRsd(breakdown.extras) }))
   return parts.join(' + ')
+}
+
+// One of those parts, "2 dana × 9.000 RSD" on the request page too (369:424).
+export function formatPriceLine(t, booking, line) {
+  const text = `${formatUnits(t, booking, booking.priceUnit, line.count)} × ${formatRsd(line.price)}`
+  const kind = PRICE_KIND_KEYS[line.kind]
+  return kind ? `${text} ${t(`bookingRequests.priceKind.${kind}`)}` : text
 }
 
 // 378:511: the listing, who booked it and for how many, the day and hours,

@@ -1,21 +1,33 @@
 <template>
-  <div class="range-picker">
+  <div class="range-picker" :class="{ 'is-request': isRequest }">
     <div class="range-picker-months">
       <div v-for="(m, i) in visibleMonths" :key="i" class="range-picker-month">
         <div class="range-picker-nav">
-          <button v-if="i === 0" type="button" class="btn btn-tertiary btn-sm" :disabled="!canGoBack" @click="shiftMonth(-1)">←</button>
-          <span v-else />
+          <button
+            v-if="i === 0"
+            type="button"
+            :class="isRequest ? 'range-picker-arrow' : 'btn btn-tertiary btn-sm'"
+            :disabled="!canGoBack"
+            :aria-label="isRequest ? t('booking.calendarPrevMonth') : undefined"
+            @click="shiftMonth(-1)"
+          >
+            <img v-if="isRequest" src="/images/icons/chevron-left-18.svg" alt="" />
+            <template v-else>←</template>
+          </button>
+          <span v-else class="range-picker-arrow-spacer" />
           <span class="range-picker-month-label">{{ m.label }}</span>
           <button
             v-if="i === visibleMonths.length - 1"
             type="button"
-            class="btn btn-tertiary btn-sm"
+            :class="isRequest ? 'range-picker-arrow' : 'btn btn-tertiary btn-sm'"
             :disabled="!canGoForward"
+            :aria-label="isRequest ? t('booking.calendarNextMonth') : undefined"
             @click="shiftMonth(1)"
           >
-            →
+            <img v-if="isRequest" src="/images/icons/chevron-right-18.svg" alt="" />
+            <template v-else>→</template>
           </button>
-          <span v-else />
+          <span v-else class="range-picker-arrow-spacer" />
         </div>
         <div class="range-picker-grid">
           <span v-for="d in weekdayLabels" :key="d" class="range-picker-weekday">{{ d }}</span>
@@ -27,6 +39,8 @@
             class="range-picker-cell"
             :class="cellClasses(cell)"
             :disabled="cell.disabled"
+            :aria-label="formatLongDate(cell.date)"
+            :aria-pressed="isRequest ? isSelectedCell(cell) : undefined"
             @click="selectDate(cell)"
           >
             <span class="range-picker-cell-day">{{ cell.day }}</span>
@@ -41,7 +55,8 @@
       <span><i class="rp-legend-dot rp-legend-dot-selected"></i>{{ t('booking.rangePickerSelected') }}</span>
     </div>
 
-    <p class="range-picker-summary">
+    <!-- Dizajn 40: the request page names the chosen dates in its own box (373:604). -->
+    <p v-if="!isRequest" class="range-picker-summary">
       <template v-if="singleDate">
         <template v-if="rangeStart">{{ formatDate(rangeStart) }}</template>
         <template v-else>{{ t('booking.rangePickerPickStart') }}</template>
@@ -52,7 +67,7 @@
       <template v-else-if="rangeStart">{{ t('booking.rangePickerPickEnd') }}</template>
       <template v-else>{{ t('booking.rangePickerPickStart') }}</template>
     </p>
-    <p v-if="minDurationViolation" class="form-error range-picker-error mb-0 mt-1">{{ minDurationMessage }}</p>
+    <p v-if="minDurationViolation && !isRequest" class="form-error range-picker-error mb-0 mt-1">{{ minDurationMessage }}</p>
   </div>
 </template>
 
@@ -96,12 +111,19 @@ const props = defineProps({
   initialEnd: { type: String, default: '' },
   // Dizajn 22: the availability step's date fields open it in a narrow popover.
   monthCount: { type: Number, default: 2 },
+  // Dizajn 40: 'request' is the request page's calendar (373:408), a grey
+  // panel with white free days and arrow buttons; the page itself names the
+  // chosen dates and a stay that is too short.
+  variant: { type: String, default: 'default' },
 })
 
-const emit = defineEmits(['update:range'])
+// `select` reports the dates as picked, also a stay still too short, which
+// `update:range` holds back.
+const emit = defineEmits(['update:range', 'select'])
 
 const { t } = useI18n()
 const api = useApi()
+const isRequest = computed(() => props.variant === 'request')
 
 const today = new Date()
 today.setHours(0, 0, 0, 0)
@@ -232,18 +254,25 @@ const visibleMonths = computed(() =>
   ),
 )
 
+function isSelectedCell(cell) {
+  return (!!rangeStart.value && cell.key === toKey(rangeStart.value)) || (!!rangeEnd.value && cell.key === toKey(rangeEnd.value))
+}
+
 function cellClasses(cell) {
   const inRange =
     rangeStart.value && rangeEnd.value && cell.date > rangeStart.value && cell.date < rangeEnd.value
   return {
     'range-picker-cell-taken': cell.disabled,
-    'range-picker-cell-selected': (rangeStart.value && cell.key === toKey(rangeStart.value)) || (rangeEnd.value && cell.key === toKey(rangeEnd.value)),
+    'range-picker-cell-selected': isSelectedCell(cell),
     'range-picker-cell-in-range': inRange,
   }
 }
 
 function formatDate(d) {
   return d.toLocaleDateString(t('listing.calendarLocale'), { day: 'numeric', month: 'short' })
+}
+function formatLongDate(d) {
+  return d.toLocaleDateString(t('listing.calendarLocale'), { day: 'numeric', month: 'long', year: 'numeric' })
 }
 function formatPrice(v) {
   return `${new Intl.NumberFormat('sr-Latn-RS').format(v)} RSD`
@@ -302,9 +331,21 @@ watch(
       startsAt: rangeStart.value ? toKey(rangeStart.value) : null,
       endsAt: endValid ? toKey(rangeEnd.value) : null,
     })
+    emit('select', {
+      startsAt: rangeStart.value ? toKey(rangeStart.value) : null,
+      endsAt: rangeEnd.value ? toKey(rangeEnd.value) : null,
+      tooShort: minDurationViolation.value,
+    })
   },
   { immediate: true },
 )
+
+// Dizajn 40: "Promeni" in the request page's box starts the choice over.
+function clear() {
+  rangeStart.value = null
+  rangeEnd.value = null
+}
+defineExpose({ clear })
 
 async function loadAvailability() {
   const from = new Date(baseMonth.value)
@@ -455,5 +496,180 @@ watch(baseMonth, loadAvailability, { immediate: true })
   margin: 12px 0 0;
   font-weight: 600;
   font-size: $font-size-body;
+}
+
+// Dizajn 40, the request page's calendar (373:408): a grey panel with 18 18 16
+// padding, two months 24 apart and the legend 16 below them.
+.range-picker.is-request {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 18px 18px 16px;
+  border: 0;
+  border-radius: 16px;
+  background: $color-background;
+}
+
+.is-request .range-picker-months {
+  gap: 24px;
+}
+
+// 373:410: navigation, weekdays and days 12 apart.
+.is-request .range-picker-month {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1 1 270px;
+  min-width: 0;
+}
+
+.is-request .range-picker-nav {
+  height: 30px;
+  margin-bottom: 0;
+}
+
+// 373:415
+.is-request .range-picker-month-label {
+  font-size: 15px;
+  font-weight: 500;
+  line-height: normal;
+  color: $color-text;
+}
+
+// 373:412: white 30px buttons with a 1px border.
+.range-picker-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid $color-border;
+  border-radius: 8px;
+  background: $color-surface;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.range-picker-arrow img {
+  width: 18px;
+  height: 18px;
+}
+
+.range-picker-arrow:hover:not(:disabled) {
+  border-color: $color-primary;
+}
+
+.range-picker-arrow:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.is-request .range-picker-arrow-spacer {
+  width: 30px;
+  height: 30px;
+}
+
+// 373:417 and 373:432: the weekday row is 14 tall and sits 12 above the days,
+// which are 38 tall and 2 apart.
+.is-request .range-picker-grid {
+  gap: 2px;
+  grid-template-rows: 24px;
+  grid-auto-rows: 38px;
+}
+
+.is-request .range-picker-weekday {
+  align-self: start;
+  height: 14px;
+  padding: 0;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 14px;
+  color: $color-text-muted;
+}
+
+// 373:441: a free day is white; 373:436: a closed one keeps only its struck
+// through number (#b5bfcc, the frame's own "text-muted").
+.is-request .range-picker-cell {
+  aspect-ratio: auto;
+  min-height: 0;
+  height: 38px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: $color-surface;
+  color: $color-text;
+  font-family: $font-family-base;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: normal;
+  transition: box-shadow 0.15s ease;
+}
+
+.is-request .range-picker-cell-day {
+  font-size: 13px;
+}
+
+.is-request .range-picker-cell:hover:not(:disabled) {
+  box-shadow: inset 0 0 0 1px $color-primary;
+}
+
+.is-request .range-picker-cell-empty {
+  background: transparent;
+}
+
+.is-request .range-picker-cell-taken {
+  background: transparent;
+  color: #b5bfcc;
+  opacity: 1;
+  text-decoration-skip-ink: none;
+  cursor: default;
+}
+
+// 373:458
+.is-request .range-picker-cell-selected {
+  background: $color-primary;
+  color: $color-surface;
+  font-weight: 500;
+}
+
+.is-request .range-picker-cell-selected:hover:not(:disabled) {
+  box-shadow: none;
+}
+
+// The frame picks two neighbouring days; the days between a longer stay's
+// first and last take the selected tint.
+.is-request .range-picker-cell-in-range {
+  border-radius: 8px;
+  background: $color-accent-tint;
+  color: $color-primary;
+}
+
+// 373:597: round 12px marks, 8 from their words and 18 apart.
+.is-request .range-picker-legend {
+  align-items: center;
+  gap: 18px;
+  margin-top: 0;
+  font-size: 12px;
+  font-weight: 300;
+  line-height: normal;
+  color: $color-text-muted;
+}
+
+.is-request .range-picker-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.is-request .rp-legend-dot {
+  width: 12px;
+  height: 12px;
+  margin-right: 0;
+  border-radius: 8px;
+}
+
+.is-request .rp-legend-dot-taken {
+  background: #e0e5ed;
 }
 </style>

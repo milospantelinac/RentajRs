@@ -23,6 +23,7 @@ const taxonomy_service_1 = require("../taxonomy/taxonomy.service");
 const users_service_1 = require("../users/users.service");
 const contact_detector_1 = require("../../common/utils/contact-detector");
 const ical_availability_1 = require("../../common/utils/ical-availability");
+const guest_capacity_1 = require("../../common/utils/guest-capacity");
 const money_1 = require("../../common/utils/money");
 const subscription_renewal_1 = require("../../common/utils/subscription-renewal");
 const taxonomy_service_2 = require("../taxonomy/taxonomy.service");
@@ -498,6 +499,7 @@ let ListingsService = class ListingsService {
         const values = await this.prisma.listingAttribute.findMany({ where: { listingId: listing.id } });
         const valueMap = new Map(values.map((v) => [v.attributeId, v]));
         const categoryNames = await this.taxonomy.getCategoryNames([listing.categoryId]);
+        const guestUnits = await (0, guest_capacity_1.getGuestUnits)(this.taxonomy, [listing.categoryId]);
         const canBook = listing.subscription?.package?.hasBookings ?? false;
         const canMessage = listing.subscription?.package?.hasMessaging ?? false;
         const { phone, lastName, ...ownerRest } = listing.user;
@@ -523,6 +525,7 @@ let ListingsService = class ListingsService {
                 listingCount: ownerListingCount,
             },
             attributes: attributes.map((a) => ({ ...a, value: valueMap.get(a.id) ?? null })),
+            guestUnit: guestUnits.get(listing.categoryId) ?? 'guests',
             canBook,
             canMessage,
         };

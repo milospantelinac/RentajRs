@@ -16,6 +16,7 @@ import { TaxonomyService } from '../taxonomy/taxonomy.service';
 import { UsersService } from '../users/users.service';
 import { containsContactInfo } from '../../common/utils/contact-detector';
 import { getIcalAvailability } from '../../common/utils/ical-availability';
+import { getGuestUnits } from '../../common/utils/guest-capacity';
 import { rsdToPara, paraToRsd } from '../../common/utils/money';
 import { DAY_MS } from '../../common/utils/subscription-renewal';
 import { CreateListingDto } from './dto/create-listing.dto';
@@ -685,6 +686,9 @@ export class ListingsService {
     // search results the same way) — the raw `category: true` include below
     // only carries slug/id, so the breadcrumb rendered blank without this.
     const categoryNames = await this.taxonomy.getCategoryNames([listing.categoryId]);
+    // Dizajn 40: the request form asks for "Broj dece" or "Broj gostiju" by the
+    // same rule the booking rows follow (Dizajn 31/34/39).
+    const guestUnits = await getGuestUnits(this.taxonomy, [listing.categoryId]);
 
     // Ch.11.2/R108 — a listing's package can lack the booking system and/or
     // internal messaging (Osnovni/BASIC has neither). The guest-facing page
@@ -729,6 +733,7 @@ export class ListingsService {
         listingCount: ownerListingCount,
       },
       attributes: attributes.map((a: any) => ({ ...a, value: valueMap.get(a.id) ?? null })),
+      guestUnit: guestUnits.get(listing.categoryId) ?? 'guests',
       canBook,
       canMessage,
     };
