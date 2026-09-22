@@ -110,9 +110,10 @@ const STEP_TEXT = {
   bankAccount: 'dashboard.onboardingBankAccount',
 }
 
-// 357:505: the review reminders continue something already started, the
-// rest ask the user to look at something (357:503).
-const CONTINUE_ITEMS = ['pending_reviews_owner', 'pending_reviews_guest']
+// 357:505: the review reminder continues something already started, the
+// rest ask the user to look at something (357:503). Only guests review
+// since Dizajn 43.
+const CONTINUE_ITEMS = ['pending_reviews_guest']
 
 const thingsWaitingText = computed(() => {
   const count = dashboard.value.attentionItems.length

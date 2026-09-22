@@ -38,61 +38,9 @@
         <button type="button" class="booking-state-button" @click="refresh()">{{ t('errorPage.tryAgain') }}</button>
       </section>
 
-      <template v-else-if="booking">
-        <OwnerRequestCard :booking="booking" :busy="acting" :notice="actionNotice" @action="act" />
-
-        <!-- The owner reviews the guest once the stay is over; the guest's side is in GuestBookingView. -->
-        <div v-if="booking.status === 'COMPLETED'" class="booking-panel booking-review">
-          <template v-if="reviewStatus?.canReview">
-            <h2 class="text-section-title mb-3">{{ t('reviews.leaveReview') }}</h2>
-            <div class="form-group mb-3">
-              <label class="form-label">{{ t('reviews.rating') }}</label>
-              <div class="rating-stars">
-                <button
-                  v-for="n in 5"
-                  :key="n"
-                  type="button"
-                  class="rating-star"
-                  :class="{ 'rating-star-filled': n <= reviewForm.rating }"
-                  @click="reviewForm.rating = n"
-                >★</button>
-              </div>
-            </div>
-            <div v-if="reviewStatus.direction === 'OWNER_TO_GUEST'" class="form-group mb-3">
-              <label class="form-label">{{ t('reviews.tagsTitle') }}</label>
-              <div class="tag-options">
-                <button
-                  v-for="tag in guestTags"
-                  :key="tag"
-                  type="button"
-                  class="btn btn-sm"
-                  :class="reviewForm.tags.includes(tag) ? 'btn-primary-flat' : 'btn-tertiary'"
-                  @click="toggleTag(tag)"
-                >{{ t(`reviews.tags.${tag}`) }}</button>
-              </div>
-            </div>
-            <div class="form-group mb-3">
-              <label class="form-label">{{ t('reviews.comment') }}</label>
-              <textarea v-model="reviewForm.comment" class="form-control" rows="3" :placeholder="t('reviews.commentPlaceholder')" maxlength="2000"></textarea>
-            </div>
-            <p v-if="reviewError" class="form-error mb-2">{{ reviewError }}</p>
-            <button class="btn btn-primary-flat" :disabled="!reviewForm.rating || submittingReview" @click="submitReview">
-              {{ t('reviews.submit') }}
-            </button>
-          </template>
-          <template v-else-if="reviewStatus?.myReview">
-            <h2 class="text-section-title mb-2">{{ t('reviews.yourReview') }}</h2>
-            <p class="rating-display mb-2">{{ '★'.repeat(reviewStatus.myReview.rating) }}{{ '☆'.repeat(5 - reviewStatus.myReview.rating) }}</p>
-            <p v-if="reviewStatus.myReview.comment" class="text-body mb-3">{{ reviewStatus.myReview.comment }}</p>
-            <p v-if="!reviewStatus.counterpartReview" class="text-muted">{{ t('reviews.waitingForCounterpart') }}</p>
-            <template v-else>
-              <h3 class="text-label mt-3 mb-1">{{ t('reviews.counterpartReview') }}</h3>
-              <p class="rating-display mb-2">{{ '★'.repeat(reviewStatus.counterpartReview.rating) }}{{ '☆'.repeat(5 - reviewStatus.counterpartReview.rating) }}</p>
-              <p v-if="reviewStatus.counterpartReview.comment" class="text-body">{{ reviewStatus.counterpartReview.comment }}</p>
-            </template>
-          </template>
-        </div>
-      </template>
+      <!-- Dizajn 43: owners no longer rate guests, so a completed booking
+           shows the card alone. -->
+      <OwnerRequestCard v-else-if="booking" :booking="booking" :busy="acting" :notice="actionNotice" @action="act" />
     </div>
   </div>
 </template>
@@ -131,7 +79,8 @@ const { data, error, refresh } = await useAsyncData(`booking-${bookingId}`, asyn
   const asGuest = booking.guestId === auth.user?.id
   const [qr, reviewStatus] = await Promise.all([
     asGuest && booking.status === 'AWAITING_PAYMENT' ? api.get(`/bookings/${bookingId}/qr`) : null,
-    booking.status === 'COMPLETED' ? api.get(`/bookings/${bookingId}/reviews`) : null,
+    // Dizajn 43: only the guest reviews.
+    asGuest && booking.status === 'COMPLETED' ? api.get(`/bookings/${bookingId}/reviews`) : null,
   ])
   return { booking, qrDataUrl: qr?.dataUrl ?? null, reviewStatus }
 })
@@ -177,35 +126,6 @@ function goBack(event) {
 // T82: a booking by whole days shows only the date.
 function formatCheckDate(value) {
   return formatBookingMoment(booking.value, value)
-}
-
-const reviewForm = reactive({ rating: 0, comment: '', tags: [] })
-const reviewError = ref('')
-const submittingReview = ref(false)
-const guestTags = ['ARRIVED_ON_TIME', 'RETURNED_NEATLY', 'COMMUNICATIVE', 'LATE', 'DAMAGE', 'NO_SHOW']
-
-function toggleTag(tag) {
-  const i = reviewForm.tags.indexOf(tag)
-  if (i === -1) reviewForm.tags.push(tag)
-  else reviewForm.tags.splice(i, 1)
-}
-
-async function submitReview() {
-  reviewError.value = ''
-  submittingReview.value = true
-  try {
-    await api.post('/reviews', {
-      bookingId,
-      rating: reviewForm.rating,
-      comment: reviewForm.comment || undefined,
-      tags: reviewStatus.value?.direction === 'OWNER_TO_GUEST' && reviewForm.tags.length ? reviewForm.tags : undefined,
-    })
-    await refresh()
-  } catch (e) {
-    reviewError.value = extractErrorMessage(e, t('auth.genericError'))
-  } finally {
-    submittingReview.value = false
-  }
 }
 
 // T89: the actions that can't be undone, or that reach the other side at
@@ -421,37 +341,6 @@ useSeoMeta({
 
 .booking-state-button:hover {
   color: $color-primary;
-}
-
-.rating-stars {
-  display: flex;
-  gap: 4px;
-}
-
-.rating-star {
-  font-size: 28px;
-  line-height: 1;
-  color: $color-border;
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-}
-
-.rating-star-filled {
-  color: $color-warning;
-}
-
-.rating-display {
-  font-size: 20px;
-  color: $color-warning;
-  letter-spacing: 2px;
-}
-
-.tag-options {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
 }
 
 @include mobile-only {

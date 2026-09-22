@@ -125,13 +125,8 @@ let DashboardService = class DashboardService {
             items.push({ urgency: 'critical', title: 'payment_deadline', actionUrl: '/kontrolna-tabla/rezervacije?role=guest&status=AWAITING_PAYMENT', count: awaitingPayment });
         }
         const pendingReviews = await this.reviews.getMyPendingReviews(userId);
-        const ownerReviews = pendingReviews.filter((r) => r.direction === 'OWNER_TO_GUEST').length;
-        const guestReviews = pendingReviews.length - ownerReviews;
-        if (ownerReviews) {
-            items.push({ urgency: 'info', title: 'pending_reviews_owner', actionUrl: '/kontrolna-tabla/rezervacije?role=owner&status=COMPLETED', count: ownerReviews });
-        }
-        if (guestReviews) {
-            items.push({ urgency: 'info', title: 'pending_reviews_guest', actionUrl: '/kontrolna-tabla/rezervacije?role=guest&status=COMPLETED', count: guestReviews });
+        if (pendingReviews.length) {
+            items.push({ urgency: 'info', title: 'pending_reviews_guest', actionUrl: '/kontrolna-tabla/rezervacije?role=guest&status=COMPLETED', count: pendingReviews.length });
         }
         const unreadAsGuest = await this.prisma.conversation.count({ where: { guestId: userId, unreadGuestCount: { gt: 0 } } });
         if (unreadAsGuest) {

@@ -86,8 +86,9 @@
           </div>
         </section>
 
+        <!-- Dizajn 43: the form while the review window lasts, the review once posted. -->
         <GuestReviewPanel
-          v-if="booking.status === 'COMPLETED' && reviewStatus"
+          v-if="booking.status === 'COMPLETED' && (reviewStatus?.canReview || reviewStatus?.myReview)"
           :booking-id="booking.id"
           :status="reviewStatus"
           @saved="emit('review-saved')"

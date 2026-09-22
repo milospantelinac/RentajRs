@@ -98,23 +98,18 @@ describe('DashboardService#getOnboarding (R106 new-owner checklist)', () => {
 });
 
 describe('DashboardService attention items (Dizajn 31)', () => {
-  it('splits the review reminder by side and links each to its completed bookings', async () => {
+  it("links the review reminder to the guest's completed bookings (only guests review since Dizajn 43)", async () => {
     const prisma = {
       booking: { count: jest.fn().mockResolvedValue(0) },
       conversation: { count: jest.fn().mockResolvedValue(0) },
     };
     const reviews = {
-      getMyPendingReviews: jest.fn().mockResolvedValue([
-        { bookingId: 'b1', direction: 'OWNER_TO_GUEST' },
-        { bookingId: 'b2', direction: 'OWNER_TO_GUEST' },
-        { bookingId: 'b3', direction: 'GUEST_TO_OWNER' },
-      ]),
+      getMyPendingReviews: jest.fn().mockResolvedValue([{ bookingId: 'b1' }, { bookingId: 'b3' }]),
     };
     const service = new DashboardService(prisma as any, reviews as any, {} as any, {} as any);
 
     await expect((service as any).getGuestAttention('user1')).resolves.toEqual([
-      { urgency: 'info', title: 'pending_reviews_owner', actionUrl: '/kontrolna-tabla/rezervacije?role=owner&status=COMPLETED', count: 2 },
-      { urgency: 'info', title: 'pending_reviews_guest', actionUrl: '/kontrolna-tabla/rezervacije?role=guest&status=COMPLETED', count: 1 },
+      { urgency: 'info', title: 'pending_reviews_guest', actionUrl: '/kontrolna-tabla/rezervacije?role=guest&status=COMPLETED', count: 2 },
     ]);
   });
 

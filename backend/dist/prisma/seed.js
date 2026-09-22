@@ -152,7 +152,8 @@ async function seedSettings() {
         },
         { key: 'daily_new_conversation_limit', value: 10, description: 'R77' },
         { key: 'listing_index_threshold', value: 3, description: 'R135' },
-        { key: 'review_window_days', value: 14, description: 'R96' },
+        { key: 'review_window_days', value: 14, description: 'Dizajn 43: days after a booking completes in which its guest can leave a review' },
+        { key: 'review_edit_days', value: 7, description: 'Dizajn 43: days after a review goes public in which its author can change it' },
         { key: 'default_payment_deadline_hours', value: 48, description: 'R59' },
         {
             key: 'booking_request_response_hours',

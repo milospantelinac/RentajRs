@@ -98,7 +98,7 @@ export class UsersService {
     return candidate;
   }
 
-  /** Public owner profile — §13.3: never exposes contact info or reviews the owner wrote about guests. */
+  /** Public owner profile (§13.3): never exposes contact info. Its reviews are the guests' reviews of the owner's listings. */
   async getPublicProfile(slug: string) {
     const user = await this.prisma.user.findUnique({
       where: { profileSlug: slug },
@@ -125,7 +125,7 @@ export class UsersService {
           },
         },
         reviewsReceived: {
-          where: { published: true, direction: 'GUEST_TO_OWNER', hiddenByAdmin: false },
+          where: { hiddenByAdmin: false },
           orderBy: { publishedAt: 'desc' },
           take: 20,
           select: {

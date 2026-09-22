@@ -494,29 +494,32 @@ export const emailTemplates: EmailTemplateSeed[] = [
     sr: {
       subject: 'Kako je prošlo? Ocenite {oglas}',
       heading: 'Kako je prošlo?',
-      bodyText: 'Vaša rezervacija za "{oglas}" je realizovana. Ostavite recenziju — pomaže drugima da odaberu, a vidljiva je tek kada obe strane ocene.',
+      // Dizajn 43: to the guest only. {rok} is the last day of the review
+      // window and ends with its own period in Serbian.
+      bodyText: 'Vaša rezervacija za "{oglas}" je realizovana. Ostavite recenziju: pomaže drugim gostima da izaberu i odmah se objavljuje na oglasu. Možete je ostaviti do {rok}',
       buttonLabel: 'Ostavi recenziju',
     },
     en: {
       subject: 'How did it go? Rate {oglas}',
       heading: 'How did it go?',
-      bodyText: 'Your booking for "{oglas}" is complete. Leave a review — it helps others choose, and only becomes visible once both sides have reviewed.',
+      bodyText: 'Your booking for "{oglas}" is complete. Leave a review: it helps other guests choose and is published on the listing right away. You can leave it until {rok}.',
       buttonLabel: 'Leave a review',
     },
   },
   {
+    // Dizajn 43: to the owner, the moment a guest's review goes public.
     key: 'reviews_published',
     sr: {
-      subject: 'Ocene su objavljene',
-      heading: 'Recenzije za "{oglas}" su objavljene',
-      bodyText: 'Obe strane su ostavile recenziju, pa su sada obe javno vidljive.',
-      buttonLabel: 'Pogledaj recenzije',
+      subject: 'Nova recenzija za {oglas}',
+      heading: 'Gost je ostavio recenziju',
+      bodyText: 'Gost je ocenio vaš oglas "{oglas}". Recenzija je objavljena na oglasu.',
+      buttonLabel: 'Pogledaj recenziju',
     },
     en: {
-      subject: 'Reviews are published',
-      heading: 'Reviews for "{oglas}" are published',
-      bodyText: 'Both sides have left a review, so both are now publicly visible.',
-      buttonLabel: 'View reviews',
+      subject: 'New review for {oglas}',
+      heading: 'A guest left a review',
+      bodyText: 'A guest reviewed your listing "{oglas}". The review is published on the listing.',
+      buttonLabel: 'View review',
     },
   },
   {
@@ -524,13 +527,13 @@ export const emailTemplates: EmailTemplateSeed[] = [
     sr: {
       subject: 'Podsećamo: ocenite {oglas}',
       heading: 'Podsetnik za ocenu',
-      bodyText: 'Prošlo je 7 dana od realizacije rezervacije za "{oglas}", a još niste ostavili recenziju. Ostavite je pre nego što prođe 14 dana.',
+      bodyText: 'Prošlo je 7 dana od realizacije rezervacije za "{oglas}", a još niste ostavili recenziju. Možete je ostaviti do {rok}',
       buttonLabel: 'Ostavi recenziju',
     },
     en: {
       subject: 'Reminder: rate {oglas}',
       heading: 'Review reminder',
-      bodyText: 'It’s been 7 days since your booking for "{oglas}" was completed and you haven’t left a review yet. Leave one before the 14-day window closes.',
+      bodyText: 'It’s been 7 days since your booking for "{oglas}" was completed and you haven’t left a review yet. You can leave one until {rok}.',
       buttonLabel: 'Leave a review',
     },
   },

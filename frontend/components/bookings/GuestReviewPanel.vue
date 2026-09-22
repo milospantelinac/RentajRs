@@ -1,6 +1,6 @@
 <template>
   <section class="guestreview" :aria-labelledby="titleId">
-    <!-- 568:673: the form, also for changing a review that is not published yet. -->
+    <!-- 568:673: the form, also for changing a review while its window lasts. -->
     <template v-if="showForm">
       <h2 :id="titleId" class="guestreview-title">{{ editing ? t('reviews.yourReview') : t('reviews.leaveReview') }}</h2>
 
@@ -43,11 +43,11 @@
 
       <p class="guestreview-note is-info">
         <img src="/images/icons/info-circle.svg" alt="" width="16" height="16" class="guestreview-note-icon" />
-        <span>{{ editing ? pendingText : formNote }}</span>
+        <span>{{ editing ? t('reviews.editNote', { date: editableUntilText }) : t('reviews.formNote') }}</span>
       </p>
     </template>
 
-    <!-- 568:857: the review as posted. -->
+    <!-- 568:857: the review as posted, public at once (585:515). -->
     <template v-else-if="mine">
       <h2 :id="titleId" class="guestreview-title">{{ t('reviews.yourReview') }}</h2>
       <p class="guestreview-rating" role="img" :aria-label="t('reviews.starLabel', { count: mine.rating })">
@@ -61,37 +61,20 @@
         />
       </p>
       <p v-if="mine.comment" class="guestreview-comment">{{ mine.comment }}</p>
-      <p class="guestreview-note" :class="mine.published ? 'is-success' : 'is-info'" role="status">
-        {{ mine.published ? t('reviews.publishedNote') : pendingText }}
+      <p class="guestreview-note is-success" role="status">
+        {{ mine.editable ? t('reviews.publishedEditableNote', { date: editableUntilText }) : t('reviews.publishedNote') }}
       </p>
       <button v-if="mine.editable" type="button" class="guestreview-link" @click="startEditing">{{ t('reviews.edit') }}</button>
     </template>
-
-    <!-- What the owner wrote about the guest, once the pair is published (R96). -->
-    <div v-if="counterpart && !showForm" class="guestreview-counterpart">
-      <p class="guestreview-label">{{ t('reviews.ownerReview') }}</p>
-      <p class="guestreview-rating" role="img" :aria-label="t('reviews.starLabel', { count: counterpart.rating })">
-        <img
-          v-for="n in 5"
-          :key="n"
-          :src="n <= counterpart.rating ? '/images/icons/star-full-22.svg' : '/images/icons/star-empty-22.svg'"
-          alt=""
-          width="22"
-          height="22"
-        />
-      </p>
-      <p v-if="counterpart.comment" class="guestreview-comment">{{ counterpart.comment }}</p>
-    </div>
   </section>
 </template>
 
 <script setup>
-// Dizajn 39: the guest's review of a completed booking, inside the booking's
-// card. 568:673 draws the form and 568:698 the posted review. Both sides'
-// reviews still go public together (R96), and until then the guest can change
-// theirs.
+// Dizajn 39 and 43: the guest's review of a completed booking, inside the
+// booking's card. 568:673 draws the form and 568:698 the posted review. A
+// review is public the moment it is sent, and the guest can change it until
+// the day the note names (review_edit_days, a week by default, 585:515).
 import { formatBookingDate } from '~/utils/bookingRequests'
-import { getReviewFormNote } from '~/utils/guestBooking'
 
 const props = defineProps({
   bookingId: { type: String, required: true },
@@ -107,7 +90,6 @@ const ratingLabelId = `${uid}-rating`
 const commentId = `${uid}-comment`
 
 const mine = computed(() => props.status.myReview)
-const counterpart = computed(() => props.status.counterpartReview)
 
 const editing = ref(false)
 const showForm = computed(() => props.status.canReview || editing.value)
@@ -117,10 +99,8 @@ const hovered = ref(0)
 const saving = ref(false)
 const error = ref('')
 
-const formNote = computed(() => getReviewFormNote(t, props.status.windowDays))
-const pendingText = computed(() =>
-  mine.value?.publishesBy ? t('reviews.pendingNote', { date: formatBookingDate(mine.value.publishesBy) }) : '',
-)
+// "28. 9. 2026.", the last day the review can change.
+const editableUntilText = computed(() => (mine.value?.editableUntil ? formatBookingDate(mine.value.editableUntil) : ''))
 
 function startEditing() {
   form.rating = mine.value.rating
@@ -158,7 +138,8 @@ async function save() {
     emit('saved')
   } catch (e) {
     error.value = extractErrorMessage(e, t('auth.genericError'))
-    // A review published in the meantime shows as it now is.
+    // A change refused because its week ran out meanwhile: the reload takes
+    // the edit link away, while the form keeps saying why.
     if (editing.value && e?.response?.status === 400) emit('saved')
   } finally {
     saving.value = false
@@ -366,15 +347,6 @@ $guestreview-success: #0f731f;
   color: $color-text;
   overflow-wrap: anywhere;
   white-space: pre-line;
-}
-
-.guestreview-counterpart {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  width: 100%;
-  padding-top: 18px;
-  box-shadow: inset 0 1px 0 $color-border;
 }
 
 @include mobile-only {

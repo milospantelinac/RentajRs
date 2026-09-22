@@ -147,7 +147,7 @@ let UsersService = class UsersService {
                     },
                 },
                 reviewsReceived: {
-                    where: { published: true, direction: 'GUEST_TO_OWNER', hiddenByAdmin: false },
+                    where: { hiddenByAdmin: false },
                     orderBy: { publishedAt: 'desc' },
                     take: 20,
                     select: {

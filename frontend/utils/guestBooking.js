@@ -2,7 +2,6 @@
 // confirmed booking (528:514) and a completed one with the review form
 // (568:514) and with the review posted (568:698); the other states use the
 // same parts. Dates are read in Belgrade time through bookingRequests.js.
-import { srPluralCategory } from './pluralize'
 import {
   formatBookingDate,
   formatBookingGuests,
@@ -270,10 +269,4 @@ export function buildGuestBookingView(t, booking, now = Date.now()) {
     actions: getActions(t, booking, now),
     contact: getContact(t, booking),
   }
-}
-
-// 568:692: the form's note names the review window ("najkasnije za 14 dana").
-export function getReviewFormNote(t, windowDays) {
-  const count = windowDays || 14
-  return t(`reviews.formNote${srPluralCategory(count)}`, { count })
 }

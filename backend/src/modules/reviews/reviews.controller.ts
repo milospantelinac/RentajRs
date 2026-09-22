@@ -16,7 +16,7 @@ export class ReviewsController {
     return this.reviewsService.createReview(userId, dto);
   }
 
-  // Dizajn 39: the author's change, until the review is published (R96).
+  // Dizajn 43: the author's change, for review_edit_days after it went public.
   @Patch('reviews/:id')
   update(@CurrentUser('id') userId: string, @Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateReviewDto) {
     return this.reviewsService.updateReview(userId, id, dto);
