@@ -13,6 +13,7 @@ import { toBelgradeHHMM } from '../../common/utils/timezone';
 import { GUEST_CAPACITY_ATTRIBUTE_KEYS, getGuestUnits } from '../../common/utils/guest-capacity';
 import { canGuestCancel, getFreeCancellationUntil } from '../../common/utils/guest-cancellation';
 import { OPEN_PAYMENT_REPORT, isHeldByPaymentReport } from '../../common/utils/payment-report';
+import { readRequestResponseHours } from '../../common/utils/request-expiry';
 import { shortName } from '../../common/utils/short-name';
 import { CreateBookingRequestDto } from './dto/create-booking-request.dto';
 import { CancelBookingDto, DisputeNoShowDto, RejectBookingDto } from './dto/booking-actions.dto';
@@ -443,11 +444,8 @@ export class BookingsService {
       referenceNumber: booking.id.replace(/-/g, '').slice(0, 20),
     });
 
-    const updated = await this.prisma.booking.update({
-      where: { id: booking.id },
-      data: { status: 'AWAITING_PAYMENT', paymentDeadline, ipsQrData: qrPayload },
-    });
-    await this.recordHistory(booking.id, booking.status, 'AWAITING_PAYMENT', null, true);
+    const updated = await this.changeStatus(booking, 'AWAITING_PAYMENT', null, { paymentDeadline, ipsQrData: qrPayload }, true);
+    if (!updated) throw new BadRequestException(this.i18n.t('bookings.STATE_CHANGED'));
     this.events.emit('booking.awaiting_payment', { bookingId: booking.id });
     return this.serialize(updated);
   }
@@ -728,6 +726,8 @@ export class BookingsService {
           // name, phone and address still wait for phoneUnlocked (serialize).
           { ownerShortName: shortName(booking.owner), canCancel: canGuestCancel(booking), messaging }),
       ...(cancellation ? { cancellation } : {}),
+      // Dizajn 41: a request nobody answered expires too, not only an unpaid booking.
+      ...(booking.status === 'EXPIRED' && statusEntry?.oldStatus ? { expiredFrom: statusEntry.oldStatus } : {}),
       ...(bankTransferDetails ? { bankTransferDetails } : {}),
       ...(awaitingPaymentSince ? { awaitingPaymentSince } : {}),
     };
@@ -812,9 +812,34 @@ export class BookingsService {
     });
     for (const booking of overdue) {
       if (isHeldByPaymentReport(booking, now)) continue;
+      // An owner who confirmed the payment meanwhile keeps the booking and its term.
+      if (!(await this.changeStatus(booking, 'EXPIRED', null, {}, true))) continue;
       await this.availability.releaseTermsForBooking(booking.id);
-      await this.applyStatus(booking, 'EXPIRED', null, {}, true);
       this.events.emit('booking.expired', { bookingId: booking.id });
+    }
+  }
+
+  /**
+   * Dizajn 41: a request the owner has not answered expires once its hours
+   * are up (Setting booking_request_response_hours), or when its term begins
+   * if that comes first (getRequestExpiresAt). The term is free again and
+   * both sides are told.
+   */
+  @Cron(CronExpression.EVERY_MINUTE)
+  async expireUnansweredRequests() {
+    const now = Date.now();
+    const hours = await readRequestResponseHours(this.prisma);
+    const due = await this.prisma.booking.findMany({
+      where: {
+        status: 'REQUESTED',
+        OR: [{ createdAt: { lte: new Date(now - hours * 3600_000) } }, { startsAt: { lte: new Date(now) } }],
+      },
+    });
+    for (const booking of due) {
+      // An owner who answered, or a guest who withdrew, meanwhile keeps that answer.
+      if (!(await this.changeStatus(booking, 'EXPIRED', null, {}, true))) continue;
+      await this.availability.releaseTermsForBooking(booking.id);
+      this.events.emit('booking.request_expired', { bookingId: booking.id });
     }
   }
 
@@ -826,7 +851,7 @@ export class BookingsService {
       where: { status: 'CONFIRMED', endsAt: { lt: cutoff } },
     });
     for (const booking of due) {
-      await this.applyStatus(booking, 'COMPLETED', null, {}, true);
+      if (!(await this.changeStatus(booking, 'COMPLETED', null, {}, true))) continue;
       this.events.emit('booking.completed', { bookingId: booking.id });
     }
   }
@@ -926,12 +951,36 @@ export class BookingsService {
     extra: Record<string, unknown> = {},
     automatic = false,
   ) {
-    const updated = await this.prisma.booking.update({
-      where: { id: booking.id },
-      data: { status: newStatus, ...extra },
-    });
-    await this.recordHistory(booking.id, booking.status, newStatus, changedByUserId, automatic);
+    const updated = await this.changeStatus(booking, newStatus, changedByUserId, extra, automatic);
+    if (!updated) throw new BadRequestException(this.i18n.t('bookings.STATE_CHANGED'));
     return this.serialize(updated);
+  }
+
+  /**
+   * Moves a booking on only from the status it was read in, so two changes
+   * racing each other never overwrite one another (Dizajn 41: a request can
+   * now expire while its owner answers it). The later one finds nothing to
+   * change and gets null.
+   */
+  private async changeStatus(
+    booking: Booking,
+    newStatus: BookingStatus,
+    changedByUserId: string | null,
+    extra: Record<string, unknown> = {},
+    automatic = false,
+  ): Promise<Booking | null> {
+    let updated: Booking;
+    try {
+      updated = await this.prisma.booking.update({
+        where: { id: booking.id, status: booking.status },
+        data: { status: newStatus, ...extra },
+      });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') return null;
+      throw err;
+    }
+    await this.recordHistory(booking.id, booking.status, newStatus, changedByUserId, automatic);
+    return updated;
   }
 
   private async recordHistory(

@@ -132,7 +132,8 @@ function getNoteText(t, booking) {
     case 'REJECTED':
       return t('guestBooking.note.rejected')
     case 'EXPIRED':
-      return t('guestBooking.note.expired')
+      // Dizajn 41: a request nobody answered expires too.
+      return t(booking.expiredFrom === 'REQUESTED' ? 'guestBooking.note.requestExpired' : 'guestBooking.note.expired')
     case 'NO_SHOW':
       return t(booking.noShowDisputed ? 'guestBooking.note.noShowDisputed' : 'guestBooking.note.noShow')
     default:

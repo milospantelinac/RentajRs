@@ -154,6 +154,11 @@ async function seedSettings() {
         { key: 'listing_index_threshold', value: 3, description: 'R135' },
         { key: 'review_window_days', value: 14, description: 'R96' },
         { key: 'default_payment_deadline_hours', value: 48, description: 'R59' },
+        {
+            key: 'booking_request_response_hours',
+            value: 48,
+            description: 'Dizajn 41: hours an owner has to answer a booking request before it expires (sooner if the term starts first)',
+        },
         { key: 'moderation_sla_hours', value: 24, description: 'R30' },
         {
             key: 'admin_new_booking_notifications',

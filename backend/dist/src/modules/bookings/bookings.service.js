@@ -58,6 +58,7 @@ const timezone_1 = require("../../common/utils/timezone");
 const guest_capacity_1 = require("../../common/utils/guest-capacity");
 const guest_cancellation_1 = require("../../common/utils/guest-cancellation");
 const payment_report_1 = require("../../common/utils/payment-report");
+const request_expiry_1 = require("../../common/utils/request-expiry");
 const short_name_1 = require("../../common/utils/short-name");
 const OPEN_STATUS_ORDER = ['REQUESTED', 'AWAITING_PAYMENT', 'CONFIRMED'];
 function openPaymentReportWhere(bookingId) {
@@ -311,11 +312,9 @@ let BookingsService = class BookingsService {
             purpose: listing.title,
             referenceNumber: booking.id.replace(/-/g, '').slice(0, 20),
         });
-        const updated = await this.prisma.booking.update({
-            where: { id: booking.id },
-            data: { status: 'AWAITING_PAYMENT', paymentDeadline, ipsQrData: qrPayload },
-        });
-        await this.recordHistory(booking.id, booking.status, 'AWAITING_PAYMENT', null, true);
+        const updated = await this.changeStatus(booking, 'AWAITING_PAYMENT', null, { paymentDeadline, ipsQrData: qrPayload }, true);
+        if (!updated)
+            throw new common_1.BadRequestException(this.i18n.t('bookings.STATE_CHANGED'));
         this.events.emit('booking.awaiting_payment', { bookingId: booking.id });
         return this.serialize(updated);
     }
@@ -521,6 +520,7 @@ let BookingsService = class BookingsService {
                 :
                     { ownerShortName: (0, short_name_1.shortName)(booking.owner), canCancel: (0, guest_cancellation_1.canGuestCancel)(booking), messaging }),
             ...(cancellation ? { cancellation } : {}),
+            ...(booking.status === 'EXPIRED' && statusEntry?.oldStatus ? { expiredFrom: statusEntry.oldStatus } : {}),
             ...(bankTransferDetails ? { bankTransferDetails } : {}),
             ...(awaitingPaymentSince ? { awaitingPaymentSince } : {}),
         };
@@ -577,9 +577,26 @@ let BookingsService = class BookingsService {
         for (const booking of overdue) {
             if ((0, payment_report_1.isHeldByPaymentReport)(booking, now))
                 continue;
+            if (!(await this.changeStatus(booking, 'EXPIRED', null, {}, true)))
+                continue;
             await this.availability.releaseTermsForBooking(booking.id);
-            await this.applyStatus(booking, 'EXPIRED', null, {}, true);
             this.events.emit('booking.expired', { bookingId: booking.id });
+        }
+    }
+    async expireUnansweredRequests() {
+        const now = Date.now();
+        const hours = await (0, request_expiry_1.readRequestResponseHours)(this.prisma);
+        const due = await this.prisma.booking.findMany({
+            where: {
+                status: 'REQUESTED',
+                OR: [{ createdAt: { lte: new Date(now - hours * 3600_000) } }, { startsAt: { lte: new Date(now) } }],
+            },
+        });
+        for (const booking of due) {
+            if (!(await this.changeStatus(booking, 'EXPIRED', null, {}, true)))
+                continue;
+            await this.availability.releaseTermsForBooking(booking.id);
+            this.events.emit('booking.request_expired', { bookingId: booking.id });
         }
     }
     async autoCompleteBookings() {
@@ -588,7 +605,8 @@ let BookingsService = class BookingsService {
             where: { status: 'CONFIRMED', endsAt: { lt: cutoff } },
         });
         for (const booking of due) {
-            await this.applyStatus(booking, 'COMPLETED', null, {}, true);
+            if (!(await this.changeStatus(booking, 'COMPLETED', null, {}, true)))
+                continue;
             this.events.emit('booking.completed', { bookingId: booking.id });
         }
     }
@@ -667,12 +685,26 @@ let BookingsService = class BookingsService {
         return booking;
     }
     async applyStatus(booking, newStatus, changedByUserId, extra = {}, automatic = false) {
-        const updated = await this.prisma.booking.update({
-            where: { id: booking.id },
-            data: { status: newStatus, ...extra },
-        });
-        await this.recordHistory(booking.id, booking.status, newStatus, changedByUserId, automatic);
+        const updated = await this.changeStatus(booking, newStatus, changedByUserId, extra, automatic);
+        if (!updated)
+            throw new common_1.BadRequestException(this.i18n.t('bookings.STATE_CHANGED'));
         return this.serialize(updated);
+    }
+    async changeStatus(booking, newStatus, changedByUserId, extra = {}, automatic = false) {
+        let updated;
+        try {
+            updated = await this.prisma.booking.update({
+                where: { id: booking.id, status: booking.status },
+                data: { status: newStatus, ...extra },
+            });
+        }
+        catch (err) {
+            if (err instanceof client_1.Prisma.PrismaClientKnownRequestError && err.code === 'P2025')
+                return null;
+            throw err;
+        }
+        await this.recordHistory(booking.id, booking.status, newStatus, changedByUserId, automatic);
+        return updated;
     }
     async recordHistory(bookingId, oldStatus, newStatus, changedByUserId, automatic) {
         await this.prisma.bookingHistory.create({
@@ -706,6 +738,12 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], BookingsService.prototype, "expireUnpaidBookings", null);
+__decorate([
+    (0, schedule_1.Cron)(schedule_1.CronExpression.EVERY_MINUTE),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], BookingsService.prototype, "expireUnansweredRequests", null);
 __decorate([
     (0, schedule_1.Cron)(schedule_1.CronExpression.EVERY_10_MINUTES),
     __metadata("design:type", Function),

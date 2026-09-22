@@ -49,6 +49,7 @@ const event_emitter_1 = require("@nestjs/event-emitter");
 const QRCode = __importStar(require("qrcode"));
 const prisma_service_1 = require("../../../prisma/prisma.service");
 const email_service_1 = require("../../../common/email/email.service");
+const request_expiry_1 = require("../../../common/utils/request-expiry");
 const format_1 = require("../format");
 let BookingEmailListener = class BookingEmailListener {
     constructor(prisma, email, config) {
@@ -92,14 +93,38 @@ let BookingEmailListener = class BookingEmailListener {
         const b = await this.load(bookingId);
         if (!b)
             return;
+        const expiresAt = (0, request_expiry_1.getRequestExpiresAt)(b, await (0, request_expiry_1.readRequestResponseHours)(this.prisma));
         await this.email.send({
             key: 'booking_request_unopened_reminder',
             to: b.owner.email,
             language: b.owner.language,
             userId: b.owner.id,
-            context: { oglas: b.listing.title },
+            context: { oglas: b.listing.title, rok: (0, format_1.formatDateTime)(expiresAt, (0, format_1.localeFor)(b.owner.language)) },
             buttonUrl: this.bookingUrl(b.id),
         });
+    }
+    async onRequestExpired({ bookingId }) {
+        const b = await this.load(bookingId);
+        if (!b)
+            return;
+        await Promise.all([
+            this.email.send({
+                key: 'booking_request_expired_guest',
+                to: b.guest.email,
+                language: b.guest.language,
+                userId: b.guest.id,
+                context: { oglas: b.listing.title },
+                buttonUrl: `${this.frontendUrl}/oglasi/${b.listing.slug}`,
+            }),
+            this.email.send({
+                key: 'booking_request_expired_owner',
+                to: b.owner.email,
+                language: b.owner.language,
+                userId: b.owner.id,
+                context: { oglas: b.listing.title },
+                buttonUrl: this.bookingUrl(b.id),
+            }),
+        ]);
     }
     async onRejected({ bookingId }) {
         const b = await this.load(bookingId);
@@ -272,6 +297,12 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], BookingEmailListener.prototype, "onUnopenedReminder", null);
+__decorate([
+    (0, event_emitter_1.OnEvent)('booking.request_expired'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], BookingEmailListener.prototype, "onRequestExpired", null);
 __decorate([
     (0, event_emitter_1.OnEvent)('booking.rejected'),
     __metadata("design:type", Function),

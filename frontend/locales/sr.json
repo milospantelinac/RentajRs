@@ -2013,7 +2013,8 @@
     "detailLoadErrorTitle": "Rezervacija nije učitana",
     "notFoundTitle": "Rezervacija nije pronađena",
     "termHeader": "Termin",
-    "ownerMeta": "Vlasnik: {name}"
+    "ownerMeta": "Vlasnik: {name}",
+    "expiredUnanswered": "Zahtev je istekao bez odgovora"
   },
   "mySubscriptions": {
     "cardsLabel": "Pretplate",
@@ -2160,7 +2161,8 @@
       "rejected": "Vlasnik je odbio zahtev i termin je oslobođen. Možete poslati zahtev za drugi termin.",
       "expired": "Rok za uplatu je istekao, pa je rezervacija otkazana i termin oslobođen.",
       "noShow": "Vlasnik je označio da se niste pojavili. Ako to nije tačno, osporite oznaku.",
-      "noShowDisputed": "Osporili ste oznaku nedolaska. Administrator će proveriti i javiti vam odluku."
+      "noShowDisputed": "Osporili ste oznaku nedolaska. Administrator će proveriti i javiti vam odluku.",
+      "requestExpired": "Vlasnik nije odgovorio na vreme, pa je zahtev istekao i termin je oslobođen. Možete poslati zahtev za drugi termin."
     },
     "sendMessage": "Pošalji poruku vlasniku",
     "contactName": "Ime",

@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { BookingsService } from './bookings.service';
 
 describe('BookingsService#assertTermRules (min/max guests, R30-ish term rules)', () => {
@@ -810,6 +811,210 @@ describe('BookingsService#markNoShow', () => {
     const service = new BookingsService(prisma as any, availability as any, i18n as any, events as any, {} as any);
 
     await expect(service.markNoShow('o1', 'b1')).resolves.toMatchObject({ status: 'NO_SHOW', noShowDisputed: false });
-    expect(prisma.booking.update).toHaveBeenCalledWith({ where: { id: 'b1' }, data: { status: 'NO_SHOW', noShowDisputed: false } });
+    expect(prisma.booking.update).toHaveBeenCalledWith({
+      where: { id: 'b1', status: 'CONFIRMED' },
+      data: { status: 'NO_SHOW', noShowDisputed: false },
+    });
+  });
+});
+
+// What the database answers when a row no longer matches the status an update expects.
+const statusMovedOn = () => new Prisma.PrismaClientKnownRequestError('Record to update not found.', { code: 'P2025', clientVersion: 'test' });
+
+describe('BookingsService#expireUnansweredRequests (Dizajn 41)', () => {
+  const HOUR = 3_600_000;
+  const NOW = new Date(Date.UTC(2026, 8, 22, 12));
+
+  beforeEach(() => jest.useFakeTimers({ now: NOW }));
+  afterEach(() => jest.useRealTimers());
+
+  function setup(rows: Array<{ id: string; answeredMeanwhile?: boolean }>, setting: unknown = null) {
+    const bookings = rows.map(({ id }) => ({
+      id,
+      status: 'REQUESTED',
+      createdAt: new Date(NOW.getTime() - 50 * HOUR),
+      startsAt: new Date(NOW.getTime() + 10 * HOUR),
+      endsAt: new Date(NOW.getTime() + 12 * HOUR),
+      pricePerUnit: 1000000n,
+      unitCount: 1,
+      totalAmount: 1000000n,
+      amountDue: 1000000n,
+      fees: null,
+    }));
+    const answered = new Set(rows.filter((row) => row.answeredMeanwhile).map((row) => row.id));
+    const order: string[] = [];
+    const prisma = {
+      setting: { findUnique: jest.fn().mockResolvedValue(setting) },
+      booking: {
+        findMany: jest.fn().mockResolvedValue(bookings),
+        update: jest.fn(async ({ where, data }: any) => {
+          if (answered.has(where.id)) throw statusMovedOn();
+          order.push(`status ${where.id}`);
+          return { ...bookings.find((b) => b.id === where.id), ...data };
+        }),
+      },
+      bookingHistory: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const availability = {
+      releaseTermsForBooking: jest.fn(async (id: string) => {
+        order.push(`release ${id}`);
+      }),
+    };
+    const events = { emit: jest.fn() };
+    const service = new BookingsService(prisma as any, availability as any, {} as any, events as any, {} as any);
+    return { service, prisma, availability, events, order };
+  }
+
+  it('looks for requests left unanswered for 48 hours, or whose term has begun', async () => {
+    const { service, prisma } = setup([]);
+    await service.expireUnansweredRequests();
+    expect(prisma.booking.findMany).toHaveBeenCalledWith({
+      where: {
+        status: 'REQUESTED',
+        OR: [{ createdAt: { lte: new Date(NOW.getTime() - 48 * HOUR) } }, { startsAt: { lte: NOW } }],
+      },
+    });
+  });
+
+  it('takes the hours from the admin setting', async () => {
+    const { service, prisma } = setup([], { key: 'booking_request_response_hours', value: 24 });
+    await service.expireUnansweredRequests();
+    expect(prisma.booking.findMany.mock.calls[0][0].where.OR[0]).toEqual({ createdAt: { lte: new Date(NOW.getTime() - 24 * HOUR) } });
+  });
+
+  it('expires each one while it is still a request, then frees its term and tells both sides', async () => {
+    const { service, prisma, events, order } = setup([{ id: 'b1' }]);
+    await service.expireUnansweredRequests();
+    expect(prisma.booking.update).toHaveBeenCalledWith({ where: { id: 'b1', status: 'REQUESTED' }, data: { status: 'EXPIRED' } });
+    expect(prisma.bookingHistory.create).toHaveBeenCalledWith({
+      data: { bookingId: 'b1', oldStatus: 'REQUESTED', newStatus: 'EXPIRED', changedByUserId: null, automatic: true },
+    });
+    expect(order).toEqual(['status b1', 'release b1']);
+    expect(events.emit.mock.calls).toEqual([['booking.request_expired', { bookingId: 'b1' }]]);
+  });
+
+  it('leaves a request the owner answered meanwhile, with its term, and goes on with the rest', async () => {
+    const { service, availability, events, order } = setup([{ id: 'answered', answeredMeanwhile: true }, { id: 'open' }]);
+    await service.expireUnansweredRequests();
+    expect(order).toEqual(['status open', 'release open']);
+    expect(availability.releaseTermsForBooking).not.toHaveBeenCalledWith('answered');
+    expect(events.emit.mock.calls).toEqual([['booking.request_expired', { bookingId: 'open' }]]);
+  });
+});
+
+describe('BookingsService status changes that race (Dizajn 41)', () => {
+  function setup(paymentMethod: 'CASH' | 'BANK_TRANSFER') {
+    const booking = {
+      id: 'b1',
+      guestId: 'g1',
+      ownerId: 'o1',
+      listingId: 'l1',
+      status: 'REQUESTED',
+      paymentMethod,
+      startsAt: new Date(Date.now() + 86_400_000),
+      endsAt: new Date(Date.now() + 2 * 86_400_000),
+      pricePerUnit: 1000000n,
+      unitCount: 1,
+      totalAmount: 1000000n,
+      amountDue: 1000000n,
+      fees: null,
+    };
+    const prisma = {
+      booking: {
+        findUnique: jest.fn().mockResolvedValue(booking),
+        // The request expired between reading it and answering it.
+        update: jest.fn(async (_args: any) => {
+          throw statusMovedOn();
+        }),
+      },
+      listing: {
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'l1', userId: 'o1', title: 'Sala', paymentDeadlineHours: 24 }),
+      },
+      user: {
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'o1', firstName: 'Dragan', lastName: 'Simić', bankAccount: '160-0000000012345-67' }),
+      },
+      bookingHistory: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const i18n = { t: jest.fn((key: string) => key) };
+    const events = { emit: jest.fn() };
+    const service = new BookingsService(prisma as any, {} as any, i18n as any, events as any, {} as any);
+    return { service, prisma, events };
+  }
+
+  it.each(['CASH', 'BANK_TRANSFER'] as const)('refuses an approval (%s) once the request expired meanwhile', async (method) => {
+    const { service, prisma, events } = setup(method);
+    await expect(service.approveRequest('o1', 'b1')).rejects.toThrow('bookings.STATE_CHANGED');
+    expect(prisma.booking.update.mock.calls[0][0].where).toEqual({ id: 'b1', status: 'REQUESTED' });
+    expect(prisma.bookingHistory.create).not.toHaveBeenCalled();
+    expect(events.emit).not.toHaveBeenCalled();
+  });
+});
+
+describe('BookingsService#getOne expiredFrom (Dizajn 41)', () => {
+  function setup(status: string, history: Record<string, unknown>) {
+    const booking = {
+      id: 'b1',
+      guestId: 'g1',
+      ownerId: 'o1',
+      listingId: 'l1',
+      status,
+      paymentMethod: 'CASH',
+      phoneUnlocked: false,
+      startsAt: new Date(Date.UTC(2026, 9, 10, 12)),
+      endsAt: new Date(Date.UTC(2026, 9, 12, 10)),
+      createdAt: new Date(Date.UTC(2026, 8, 20, 10)),
+      cancellationPolicyType: null,
+      cancellationThreshold: null,
+      pricePerUnit: 1000000n,
+      unitCount: 2,
+      totalAmount: 2000000n,
+      amountDue: 2000000n,
+      fees: null,
+      listing: {
+        title: 'Sala',
+        slug: 'sala',
+        address: null,
+        paymentMethod: 'CASH',
+        maxGuests: 30,
+        categoryId: 'hall',
+        status: 'ACTIVE',
+        pickupTime: null,
+        returnTime: null,
+        city: { name: 'Beograd' },
+        cityArea: { name: 'Zvezdara' },
+        subscription: { package: { hasMessaging: false } },
+      },
+      guest: { firstName: 'Ivana', lastName: 'Marković', phone: null },
+      owner: { firstName: 'Dragan', lastName: 'Simić', phone: null, bankAccount: null, anonymizedAt: null },
+    };
+    const prisma = {
+      booking: { findUnique: jest.fn().mockResolvedValue(booking) },
+      bookingHistory: { findFirst: jest.fn().mockResolvedValue({ newStatus: status, changedAt: new Date(), ...history }) },
+      listingAttribute: { findMany: jest.fn().mockResolvedValue([]) },
+      conversation: { findMany: jest.fn().mockResolvedValue([]) },
+      dispute: { count: jest.fn().mockResolvedValue(0) },
+    };
+    const taxonomy = {
+      resolveAttributesForCategory: jest.fn().mockResolvedValue([]),
+      getCategoryTree: jest.fn().mockResolvedValue([]),
+      getCategoryNames: jest.fn().mockResolvedValue(new Map()),
+    };
+    return new BookingsService(prisma as any, {} as any, {} as any, {} as any, taxonomy as any);
+  }
+
+  it('says a request expired without an answer', async () => {
+    const service = setup('EXPIRED', { oldStatus: 'REQUESTED' });
+    await expect(service.getOne('g1', 'b1')).resolves.toMatchObject({ status: 'EXPIRED', expiredFrom: 'REQUESTED' });
+    await expect(service.getOne('o1', 'b1')).resolves.toMatchObject({ expiredFrom: 'REQUESTED' });
+  });
+
+  it('says an unpaid booking expired at its payment deadline', async () => {
+    const service = setup('EXPIRED', { oldStatus: 'AWAITING_PAYMENT' });
+    await expect(service.getOne('g1', 'b1')).resolves.toMatchObject({ expiredFrom: 'AWAITING_PAYMENT' });
+  });
+
+  it('adds nothing to a booking that did not expire', async () => {
+    const service = setup('REJECTED', { oldStatus: 'REQUESTED' });
+    await expect(service.getOne('g1', 'b1')).resolves.not.toHaveProperty('expiredFrom');
   });
 });

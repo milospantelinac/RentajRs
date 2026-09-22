@@ -255,13 +255,15 @@ export const emailTemplates: EmailTemplateSeed[] = [
     sr: {
       subject: 'Gost čeka odgovor — {oglas}',
       heading: 'Gost i dalje čeka odgovor',
-      bodyText: 'Prošlo je 6 časova otkako je stigao zahtev za "{oglas}", a još uvek niste odgovorili. Brz odgovor povećava šansu da rezervacija bude potvrđena.',
+      bodyText:
+        'Prošlo je 6 časova otkako je stigao zahtev za "{oglas}", a još uvek niste odgovorili. Brz odgovor povećava šansu da rezervacija bude potvrđena. Ako ne odgovorite do {rok}, zahtev ističe i termin se oslobađa.',
       buttonLabel: 'Odgovori',
     },
     en: {
       subject: 'Guest is waiting — {oglas}',
       heading: 'A guest is still waiting for a reply',
-      bodyText: 'It’s been 6 hours since a request came in for "{oglas}" and you haven’t responded yet. A quick reply improves your odds of confirming the booking.',
+      bodyText:
+        'It’s been 6 hours since a request came in for "{oglas}" and you haven’t responded yet. A quick reply improves your odds of confirming the booking. If you don’t respond by {rok}, the request expires and the term is released.',
       buttonLabel: 'Reply',
     },
   },
@@ -340,6 +342,37 @@ export const emailTemplates: EmailTemplateSeed[] = [
       heading: 'The booking for "{oglas}" has expired',
       bodyText: 'The payment deadline passed with no payment, so the booking was automatically cancelled and the term is available again.',
       buttonLabel: 'View listing',
+    },
+  },
+  // Dizajn 41: a request the owner did not answer in time (BookingsService.expireUnansweredRequests).
+  {
+    key: 'booking_request_expired_guest',
+    sr: {
+      subject: 'Zahtev je istekao',
+      heading: 'Zahtev za "{oglas}" je istekao',
+      bodyText: 'Vlasnik nije odgovorio na vaš zahtev na vreme, pa je zahtev istekao i termin je ponovo slobodan. Možete poslati novi zahtev.',
+      buttonLabel: 'Pogledaj oglas',
+    },
+    en: {
+      subject: 'Your request has expired',
+      heading: 'Your request for "{oglas}" has expired',
+      bodyText: 'The owner did not answer your request in time, so it has expired and the term is free again. You can send a new request.',
+      buttonLabel: 'View listing',
+    },
+  },
+  {
+    key: 'booking_request_expired_owner',
+    sr: {
+      subject: 'Zahtev je istekao bez odgovora',
+      heading: 'Zahtev za "{oglas}" je istekao',
+      bodyText: 'Niste odgovorili na zahtev na vreme, pa je istekao i termin je ponovo slobodan. Gost je obavešten.',
+      buttonLabel: 'Pogledaj zahtev',
+    },
+    en: {
+      subject: 'A request expired unanswered',
+      heading: 'The request for "{oglas}" has expired',
+      bodyText: 'You did not answer the request in time, so it has expired and the term is free again. The guest has been told.',
+      buttonLabel: 'View request',
     },
   },
   {

@@ -12,5 +12,6 @@
   "GUEST_CANCELLATION_CLOSED": "You can no longer cancel this booking yourself. Arrange the cancellation with the owner.",
   "PAYMENT_ALREADY_REPORTED": "You have already reported that this payment is not confirmed. An administrator is looking into it.",
   "PAYMENT_DEADLINE_PASSED": "The payment deadline has passed, so the payment can no longer be reported.",
-  "NO_SHOW_ALREADY_DISPUTED": "You have already disputed the no-show mark. An administrator is looking into it."
+  "NO_SHOW_ALREADY_DISPUTED": "You have already disputed the no-show mark. An administrator is looking into it.",
+  "STATE_CHANGED": "The booking changed in the meantime, so this action is no longer possible."
 }

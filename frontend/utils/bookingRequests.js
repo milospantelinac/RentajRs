@@ -260,8 +260,11 @@ function getOutcomeFact(t, booking) {
       if (by === 'GUEST') return fact(t('booking.cancelledByGuest'), t('bookingRequests.youWereNotified'))
       return fact(by === 'OWNER' ? t('booking.cancelledByOwner') : '', by === 'OWNER' ? t('bookingRequests.guestNotified') : '')
     }
-    case 'EXPIRED':
-      return fact(t('bookingRequests.expiredUnpaid'), t('bookingRequests.termReleased'))
+    case 'EXPIRED': {
+      // Dizajn 41: a request nobody answered expires too.
+      const why = booking.expiredFrom === 'REQUESTED' ? 'bookingRequests.expiredUnanswered' : 'bookingRequests.expiredUnpaid'
+      return fact(t(why), t('bookingRequests.termReleased'))
+    }
     case 'NO_SHOW':
       return fact(t('bookingRequests.noShowMarked'), t(booking.noShowDisputed ? 'bookingRequests.noShowDisputed' : 'bookingRequests.noShowDisputable'))
     default:
