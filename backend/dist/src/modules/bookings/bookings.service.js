@@ -61,6 +61,7 @@ const payment_report_1 = require("../../common/utils/payment-report");
 const request_expiry_1 = require("../../common/utils/request-expiry");
 const short_name_1 = require("../../common/utils/short-name");
 const OPEN_STATUS_ORDER = ['REQUESTED', 'AWAITING_PAYMENT', 'CONFIRMED'];
+const DEFAULT_PAYMENT_DEADLINE_HOURS = 48;
 function openPaymentReportWhere(bookingId) {
     return { bookingId, ...payment_report_1.OPEN_PAYMENT_REPORT };
 }
@@ -303,7 +304,7 @@ let BookingsService = class BookingsService {
         if (!owner.bankAccount) {
             throw new common_1.BadRequestException(this.i18n.t('bookings.OWNER_NO_BANK_ACCOUNT'));
         }
-        const deadlineHours = listing.paymentDeadlineHours ?? 48;
+        const deadlineHours = listing.paymentDeadlineHours ?? DEFAULT_PAYMENT_DEADLINE_HOURS;
         const paymentDeadline = new Date(Date.now() + deadlineHours * 3600_000);
         const qrPayload = (0, ips_qr_1.buildIpsQrPayload)({
             recipientAccount: owner.bankAccount,
@@ -441,9 +442,16 @@ let BookingsService = class BookingsService {
                         status: true,
                         pickupTime: true,
                         returnTime: true,
+                        paymentDeadlineHours: true,
                         city: { select: { name: true } },
                         cityArea: { select: { name: true } },
                         subscription: { select: { package: { select: { hasMessaging: true } } } },
+                        photos: {
+                            where: { pendingRemoval: false, versionId: null },
+                            orderBy: [{ isCover: 'desc' }, { displayOrder: 'asc' }],
+                            take: 1,
+                            select: { url: true },
+                        },
                     },
                 },
                 guest: { select: { firstName: true, lastName: true, phone: true } },
@@ -505,6 +513,8 @@ let BookingsService = class BookingsService {
                 area: listing.cityArea?.name ?? null,
                 pickupTime: listing.pickupTime,
                 returnTime: listing.returnTime,
+                coverPhotoUrl: listing.photos?.[0]?.url ?? null,
+                paymentDeadlineHours: listing.paymentDeadlineHours ?? DEFAULT_PAYMENT_DEADLINE_HOURS,
             },
             guestUnit: guestUnits.get(listing.categoryId),
             guestCapacity,
@@ -629,7 +639,7 @@ let BookingsService = class BookingsService {
         for (const booking of candidates) {
             if (!booking.paymentDeadline)
                 continue;
-            const totalHours = booking.listing.paymentDeadlineHours ?? 48;
+            const totalHours = booking.listing.paymentDeadlineHours ?? DEFAULT_PAYMENT_DEADLINE_HOURS;
             const deadlineMs = booking.paymentDeadline.getTime();
             const halfPointMs = deadlineMs - (totalHours / 2) * 3600_000;
             const finalDayStartMs = deadlineMs - 24 * 3600_000;

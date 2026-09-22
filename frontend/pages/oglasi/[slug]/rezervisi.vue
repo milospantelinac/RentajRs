@@ -679,7 +679,8 @@ async function submit() {
       paymentMethod: flow.value.accepts === 'BOTH' ? form.paymentMethod : undefined,
       guestMessage: form.guestMessage.trim() || undefined,
     })
-    await navigateTo(`/rezervacije/${booking.id}`)
+    // Dizajn 41: the confirmation, before the booking's own page.
+    await navigateTo(`/rezervacije/${booking.id}/poslato`)
   } catch (e) {
     const message = extractErrorMessage(e, t('auth.genericError'))
     // A term taken meanwhile turns grey (and is dropped) before the message shows.

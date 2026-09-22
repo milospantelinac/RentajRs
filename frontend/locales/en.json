@@ -2271,5 +2271,39 @@
       "flowInstant": "Until you pay, you can cancel the booking in My bookings.",
       "cancel": "The terms in force when you send the request apply, even if the owner changes them later."
     }
+  },
+  "requestSent": {
+    "title": "Request sent",
+    "subtitle": "The owner has been told. We will let you know the decision by email and in the app.",
+    "subtitlePayment": "The owner has been told. The booking is confirmed once the owner confirms your payment.",
+    "termSlot": "{weekday}, {day} {month} {year} · {times}",
+    "monthsShort": "Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec",
+    "advance": "Advance to confirm",
+    "advanceValue": "{amount} ({percent}%)",
+    "notePayment": "The time is held for you until the payment deadline. If you do not pay by then, the booking expires and the time is released.",
+    "deadline": "Payment deadline",
+    "deadlineValue": "{date} at {time}",
+    "qrAlt": "IPS QR code for the payment",
+    "steps": {
+      "answerTitle": "The owner approves or declines the request",
+      "answerText": "You will be notified as soon as they answer.",
+      "confirmedTitle": "The booking is confirmed",
+      "confirmedText": "Only then do you see the exact address and phone of the owner.",
+      "cashTitle": "You pay in cash on site",
+      "cashText": "Rentaj charges nothing and issues no QR code for this booking.",
+      "qrAdvanceTitle": "You get an IPS QR code for the advance",
+      "qrFullTitle": "You get an IPS QR code for the payment",
+      "qrText": "You have {hours} to pay; the time stays held until then.",
+      "ownerConfirmsTitle": "The owner confirms the payment",
+      "ownerConfirmsText": "Only then is the booking confirmed and you see the address and phone.",
+      "ownerConfirmsPaymentText": "You will be notified as soon as they confirm it.",
+      "payAdvanceTitle": "You pay the advance by IPS QR code",
+      "payFullTitle": "You pay the amount by IPS QR code",
+      "payText": "The amount and payment details also reach you by email."
+    },
+    "track": "Track the request",
+    "backToListing": "Back to the listing",
+    "backToSearch": "Back to search",
+    "pageTitle": "Request sent - {listing}"
   }
 }

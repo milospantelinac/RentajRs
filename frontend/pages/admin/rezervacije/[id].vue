@@ -51,7 +51,7 @@
 // T90 — read-only admin view of a single booking, linked from a dispute
 // card so the admin can tell which of a listing's several bookings a
 // dispute actually concerns. Deliberately separate from the guest/owner
-// rezervacije/[id].vue page (gated to those two parties) rather than
+// rezervacije/[id]/index.vue page (gated to those two parties) rather than
 // weakening that page's access control for admins.
 definePageMeta({ middleware: ['auth', 'admin'], layout: 'admin' })
 const { t } = useI18n()

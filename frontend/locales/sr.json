@@ -2271,5 +2271,39 @@
       "flowInstant": "Dok ne uplatite, rezervaciju možete otkazati u Mojim rezervacijama.",
       "cancel": "Važe uslovi iz trenutka slanja zahteva, i ako ih vlasnik kasnije promeni."
     }
+  },
+  "requestSent": {
+    "title": "Zahtev je poslat",
+    "subtitle": "Vlasnik je obavešten. O odluci vas obaveštavamo mejlom i u aplikaciji.",
+    "subtitlePayment": "Vlasnik je obavešten. Rezervacija je potvrđena kada vlasnik potvrdi vašu uplatu.",
+    "termSlot": "{weekday}, {day}. {month} {year}. · {times}",
+    "monthsShort": "jan,feb,mar,apr,maj,jun,jul,avg,sep,okt,nov,dec",
+    "advance": "Avans za potvrdu",
+    "advanceValue": "{amount} ({percent}%)",
+    "notePayment": "Termin je privremeno blokiran za vas do roka za uplatu. Ako ne uplatite do roka, rezervacija ističe i termin se oslobađa.",
+    "deadline": "Rok za uplatu",
+    "deadlineValue": "{date} u {time}",
+    "qrAlt": "IPS QR kod za uplatu",
+    "steps": {
+      "answerTitle": "Vlasnik odobrava ili odbija zahtev",
+      "answerText": "Dobićete obaveštenje čim odgovori.",
+      "confirmedTitle": "Rezervacija postaje potvrđena",
+      "confirmedText": "Tek tada vidite tačnu adresu i telefon vlasnika.",
+      "cashTitle": "Plaćate gotovinom na licu mesta",
+      "cashText": "Rentaj ne naplaćuje ništa i ne izdaje QR kod za ovu rezervaciju.",
+      "qrAdvanceTitle": "Dobijate IPS QR kod za avans",
+      "qrFullTitle": "Dobijate IPS QR kod za uplatu",
+      "qrText": "Rok za uplatu je {hours}; do tada termin ostaje blokiran.",
+      "ownerConfirmsTitle": "Vlasnik potvrđuje prijem uplate",
+      "ownerConfirmsText": "Tek tada rezervacija postaje potvrđena i vidite adresu i telefon.",
+      "ownerConfirmsPaymentText": "Dobićete obaveštenje čim potvrdi.",
+      "payAdvanceTitle": "Uplaćujete avans preko IPS QR koda",
+      "payFullTitle": "Uplaćujete iznos preko IPS QR koda",
+      "payText": "Iznos i podaci za uplatu stižu vam i mejlom."
+    },
+    "track": "Prati status zahteva",
+    "backToListing": "Nazad na oglas",
+    "backToSearch": "Nazad na pretragu",
+    "pageTitle": "Zahtev je poslat - {listing}"
   }
 }

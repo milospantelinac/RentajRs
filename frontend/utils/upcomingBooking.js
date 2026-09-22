@@ -5,7 +5,7 @@ const TIME_ZONE = 'Europe/Belgrade'
 const DAY_MS = 86_400_000
 
 // A NIGHT/DAY/MONTH booking starts and ends on whole days (T82 in
-// rezervacije/[id].vue), so its row names the last day instead of hours.
+// rezervacije/[id]/index.vue), so its row names the last day instead of hours.
 const DATE_ONLY_UNITS = ['NIGHT', 'DAY', 'MONTH', 'YEAR']
 
 const WEEKDAY_INDEX = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 }

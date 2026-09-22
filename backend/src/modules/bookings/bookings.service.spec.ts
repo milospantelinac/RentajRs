@@ -950,8 +950,8 @@ describe('BookingsService status changes that race (Dizajn 41)', () => {
   });
 });
 
-describe('BookingsService#getOne expiredFrom (Dizajn 41)', () => {
-  function setup(status: string, history: Record<string, unknown>) {
+describe('BookingsService#getOne for the sent request (Dizajn 41)', () => {
+  function setup(status: string, history: Record<string, unknown>, listingOverrides: Record<string, unknown> = {}) {
     const booking = {
       id: 'b1',
       guestId: 'g1',
@@ -983,6 +983,9 @@ describe('BookingsService#getOne expiredFrom (Dizajn 41)', () => {
         city: { name: 'Beograd' },
         cityArea: { name: 'Zvezdara' },
         subscription: { package: { hasMessaging: false } },
+        paymentDeadlineHours: null,
+        photos: [],
+        ...listingOverrides,
       },
       guest: { firstName: 'Ivana', lastName: 'Marković', phone: null },
       owner: { firstName: 'Dragan', lastName: 'Simić', phone: null, bankAccount: null, anonymizedAt: null },
@@ -1016,5 +1019,17 @@ describe('BookingsService#getOne expiredFrom (Dizajn 41)', () => {
   it('adds nothing to a booking that did not expire', async () => {
     const service = setup('REJECTED', { oldStatus: 'REQUESTED' });
     await expect(service.getOne('g1', 'b1')).resolves.not.toHaveProperty('expiredFrom');
+  });
+
+  it("gives the listing's cover photo and the hours to pay once a transfer is approved", async () => {
+    const service = setup('REQUESTED', {}, { photos: [{ url: 'http://uploads/sala.jpg' }], paymentDeadlineHours: 24 });
+    await expect(service.getOne('g1', 'b1')).resolves.toMatchObject({
+      listing: { coverPhotoUrl: 'http://uploads/sala.jpg', paymentDeadlineHours: 24, categoryName: null, city: 'Beograd' },
+    });
+  });
+
+  it('falls back to no photo and the 48 hours a listing gets by default', async () => {
+    const service = setup('REQUESTED', {});
+    await expect(service.getOne('g1', 'b1')).resolves.toMatchObject({ listing: { coverPhotoUrl: null, paymentDeadlineHours: 48 } });
   });
 });

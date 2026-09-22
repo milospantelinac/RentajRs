@@ -50,6 +50,9 @@ interface StoredFees {
 // else follows, the latest term first.
 const OPEN_STATUS_ORDER: BookingStatus[] = ['REQUESTED', 'AWAITING_PAYMENT', 'CONFIRMED'];
 
+/** R59: the hours a guest has to pay when the listing sets none. */
+const DEFAULT_PAYMENT_DEADLINE_HOURS = 48;
+
 function openPaymentReportWhere(bookingId: string): Prisma.DisputeWhereInput {
   return { bookingId, ...OPEN_PAYMENT_REPORT };
 }
@@ -433,7 +436,7 @@ export class BookingsService {
     if (!owner.bankAccount) {
       throw new BadRequestException(this.i18n.t('bookings.OWNER_NO_BANK_ACCOUNT'));
     }
-    const deadlineHours = listing.paymentDeadlineHours ?? 48;
+    const deadlineHours = listing.paymentDeadlineHours ?? DEFAULT_PAYMENT_DEADLINE_HOURS;
     const paymentDeadline = new Date(Date.now() + deadlineHours * 3600_000);
 
     const qrPayload = buildIpsQrPayload({
@@ -625,9 +628,16 @@ export class BookingsService {
             status: true,
             pickupTime: true,
             returnTime: true,
+            paymentDeadlineHours: true,
             city: { select: { name: true } },
             cityArea: { select: { name: true } },
             subscription: { select: { package: { select: { hasMessaging: true } } } },
+            photos: {
+              where: { pendingRemoval: false, versionId: null },
+              orderBy: [{ isCover: 'desc' }, { displayOrder: 'asc' }],
+              take: 1,
+              select: { url: true },
+            },
           },
         },
         guest: { select: { firstName: true, lastName: true, phone: true } },
@@ -710,6 +720,10 @@ export class BookingsService {
         area: listing.cityArea?.name ?? null,
         pickupTime: listing.pickupTime,
         returnTime: listing.returnTime,
+        // Dizajn 41 (391:543, 391:670): the photo on the sent request and the
+        // hours to pay once a transfer is approved.
+        coverPhotoUrl: listing.photos?.[0]?.url ?? null,
+        paymentDeadlineHours: listing.paymentDeadlineHours ?? DEFAULT_PAYMENT_DEADLINE_HOURS,
       },
       guestUnit: guestUnits.get(listing.categoryId),
       guestCapacity,
@@ -883,7 +897,7 @@ export class BookingsService {
     const now = Date.now();
     for (const booking of candidates) {
       if (!booking.paymentDeadline) continue;
-      const totalHours = booking.listing.paymentDeadlineHours ?? 48;
+      const totalHours = booking.listing.paymentDeadlineHours ?? DEFAULT_PAYMENT_DEADLINE_HOURS;
       const deadlineMs = booking.paymentDeadline.getTime();
       const halfPointMs = deadlineMs - (totalHours / 2) * 3600_000;
       const finalDayStartMs = deadlineMs - 24 * 3600_000;
