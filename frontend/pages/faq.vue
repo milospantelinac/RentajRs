@@ -28,7 +28,18 @@ useSeoMeta({ title: `${t('home.faqSectionTitleStrong')} ${t('home.faqSectionTitl
   padding: 56px 0 32px;
 }
 
+// Only the vertical padding, so on a phone the container keeps its own 16px
+// gutter and the panels sit 16 in from the edges, as on the homepage FAQ
+// (Dizajn 42). From md up this page has always run to the container's edge.
 .faq-page-body {
-  padding: 48px 0 64px;
+  padding-top: 48px;
+  padding-bottom: 64px;
+}
+
+@include respond-above(md) {
+  .faq-page-body {
+    padding-left: 0;
+    padding-right: 0;
+  }
 }
 </style>
