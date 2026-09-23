@@ -529,6 +529,29 @@ const CATEGORY_TREE: CategorySeed[] = [
     ],
   },
   {
+    name: 'Magacini i skladišta',
+    icon: 'warehouse',
+    shortDescription: 'Magacini, skladišta i hladnjače',
+    defaultBookingModel: BookingModel.PER_STAY,
+    allowedPriceUnits: [PriceUnit.MONTH],
+    defaultPriceUnit: PriceUnit.MONTH,
+    attributes: [
+      // T66 — kept as wizard/detail fields (required, showOnCard) but
+      // intentionally not a search filter — the document explicitly asked
+      // for these to be left out of the /pretraga panel for now.
+      // T40 — dropdown of preset values instead of free numeric input; the
+      // option's own name carries the unit since LIST rendering never
+      // appends `unit` the way NUMBER does.
+      { key: 'povrsina', name: 'Površina', type: AttributeType.LIST, required: true, showOnCard: true, options: opts(['20 m²', '50 m²', '100 m²', '200 m²', '300 m²', '500 m²', '1000 m²', 'Preko 1000 m²']) },
+      { key: 'visina_prostora', name: 'Visina prostora', type: AttributeType.LIST, required: true, showOnCard: true, options: opts(['2 m', '2.5 m', '3 m', '4 m', '5 m', '6 m', 'Preko 6 m']) },
+      { key: 'tip_prostora', name: 'Tip prostora', type: AttributeType.LIST, required: true, isFilter: true, filterType: FilterType.SELECT, showOnCard: true, options: opts(['Privatni magacin', 'Poslovni magacin', 'Industrijski magacin', 'Skladišni prostor', 'Hladnjača']) },
+      {
+        key: 'sadrzaji', name: 'Sadržaji', type: AttributeType.CHECKBOX_GROUP, isFilter: true, filterType: FilterType.SELECT,
+        options: opts(['Alarm / sigurnosni sistem', 'Video nadzor / kamere', 'Protivpožarni sistem', 'Grejanje', 'Klima', 'Paletni regali / police', 'Parking', 'Pristup kamionima', 'Rampa za utovar']),
+      },
+    ],
+  },
+  {
     name: 'Građevinske mašine',
     icon: 'excavator',
     shortDescription: 'Bageri, viljuškari, platforme',
@@ -600,29 +623,6 @@ const CATEGORY_TREE: CategorySeed[] = [
       { key: 'radni_domet_viljuskar', name: 'Radni domet', type: AttributeType.LIST, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'viljuskar', options: opts(['0.5 m', '1 m', '1.5 m', '2 m', 'Preko 2 m']) },
     ],
   },
-  {
-    name: 'Magacini i skladišta',
-    icon: 'warehouse',
-    shortDescription: 'Magacini, skladišta i hladnjače',
-    defaultBookingModel: BookingModel.PER_STAY,
-    allowedPriceUnits: [PriceUnit.MONTH],
-    defaultPriceUnit: PriceUnit.MONTH,
-    attributes: [
-      // T66 — kept as wizard/detail fields (required, showOnCard) but
-      // intentionally not a search filter — the document explicitly asked
-      // for these to be left out of the /pretraga panel for now.
-      // T40 — dropdown of preset values instead of free numeric input; the
-      // option's own name carries the unit since LIST rendering never
-      // appends `unit` the way NUMBER does.
-      { key: 'povrsina', name: 'Površina', type: AttributeType.LIST, required: true, showOnCard: true, options: opts(['20 m²', '50 m²', '100 m²', '200 m²', '300 m²', '500 m²', '1000 m²', 'Preko 1000 m²']) },
-      { key: 'visina_prostora', name: 'Visina prostora', type: AttributeType.LIST, required: true, showOnCard: true, options: opts(['2 m', '2.5 m', '3 m', '4 m', '5 m', '6 m', 'Preko 6 m']) },
-      { key: 'tip_prostora', name: 'Tip prostora', type: AttributeType.LIST, required: true, isFilter: true, filterType: FilterType.SELECT, showOnCard: true, options: opts(['Privatni magacin', 'Poslovni magacin', 'Industrijski magacin', 'Skladišni prostor', 'Hladnjača']) },
-      {
-        key: 'sadrzaji', name: 'Sadržaji', type: AttributeType.CHECKBOX_GROUP, isFilter: true, filterType: FilterType.SELECT,
-        options: opts(['Alarm / sigurnosni sistem', 'Video nadzor / kamere', 'Protivpožarni sistem', 'Grejanje', 'Klima', 'Paletni regali / police', 'Parking', 'Pristup kamionima', 'Rampa za utovar']),
-      },
-    ],
-  },
   // "Oprema" and "Usluge" (T03) were dropped from v1 scope entirely — see
   // pruneRemovedCategories() below, which deletes them (and any other
   // never-real leftover category) from the DB on every reseed rather than
@@ -653,6 +653,13 @@ async function seedCategoryNode(node: CategorySeed, parentId: string | null, ord
       defaultBookingModel: node.defaultBookingModel,
       allowedPriceUnits: node.allowedPriceUnits,
       defaultPriceUnit: node.defaultPriceUnit,
+      // Dizajn 46: CATEGORY_TREE is the one source of truth for which
+      // categories exist AND what order they appear in, everywhere they are
+      // listed (homepage, /pretraga tiles, footer, /oglasi/novi). Without
+      // this line an existing database kept whatever order it was first
+      // created with, and a reseed could never repair it, so the frontend
+      // carried a second hardcoded order to paper over the difference.
+      displayOrder: order,
     },
     create: {
       parentId,

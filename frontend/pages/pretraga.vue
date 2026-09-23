@@ -418,10 +418,12 @@ const sortOptions = computed(() => [
 ])
 
 // The tile row leads with "Sve" (no category) and then the six real
-// categories in the order the ticket spells out.
+// categories, in the endpoint's own order, since Dizajn 46 made the seed's
+// displayOrder the one place that order is written down. Subcategories stay
+// out of this row; they are the pills below it.
 const categoryTiles = computed(() => [
   { slug: '', iconSlug: ALL_CATEGORIES_SLUG, name: t('search.allCategories'), category: null },
-  ...sortSearchCategories(categories.value).map((c) => ({ slug: c.slug, iconSlug: c.slug, name: c.name, category: c })),
+  ...categories.value.map((c) => ({ slug: c.slug, iconSlug: c.slug, name: c.name, category: c })),
 ])
 
 // A subcategory keeps its parent's tile highlighted.

@@ -11,7 +11,7 @@
 
         <div class="category-pick-grid">
           <button
-            v-for="cat in orderedCategories"
+            v-for="cat in topCategories"
             :key="cat.id"
             type="button"
             class="category-card"
@@ -207,9 +207,10 @@ const changingListingId = computed(() => (typeof route.query.oglas === 'string' 
 
 const { data: categories } = await useAsyncData('wizard-categories', () => api.get('/categories'))
 
-// The frame puts Magacini i skladišta before Građevinske mašine — the search
-// tiles' order, and the reverse of the endpoint's displayOrder.
-const orderedCategories = computed(() => sortSearchCategories(categories.value || []))
+// The frame puts Magacini i skladišta before Građevinske mašine. That is the
+// endpoint's own order since Dizajn 46 made the seed's displayOrder the one
+// place the category order is written down, so nothing is re-sorted here.
+const topCategories = computed(() => categories.value || [])
 
 const iconMarkup = (slug) => getWizardCategoryIconMarkup(slug)
 

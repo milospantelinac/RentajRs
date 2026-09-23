@@ -371,9 +371,12 @@ function submitSearch(event) {
 // left in its prior relative order.
 // Dizajn 7 — "Prostori, Nekretnine, Igraonice, Vozila, Magacini, Mašine",
 // matching the Figma tile order exactly.
+// Dizajn 46: one order on every surface that lists categories, so the first
+// two tiles swap back to the taxonomy's own order (Nekretnine, then Prostori
+// za proslave); the strip itself stays a curated six, not the live list.
 const homeCategories = [
-  { slug: 'prostori-za-proslave', icon: '/images/categories/prostori.svg', labelKey: 'home.categoryProstori' },
   { slug: 'nekretnine', icon: '/images/categories/nekretnine.svg', labelKey: 'home.categoryNekretnine' },
+  { slug: 'prostori-za-proslave', icon: '/images/categories/prostori.svg', labelKey: 'home.categoryProstori' },
   { slug: 'igraonice', icon: '/images/categories/igraonice.svg', labelKey: 'home.categoryIgraonice' },
   { slug: 'vozila', icon: '/images/categories/vozila.svg', labelKey: 'home.categoryVozila' },
   { slug: 'magacini-i-skladista', icon: '/images/categories/magacini.svg', labelKey: 'home.categoryMagacini' },

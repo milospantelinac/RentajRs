@@ -20,29 +20,11 @@ const REGISTRY = Object.fromEntries(
 /** Slug of the "all categories" tile, which has no category row behind it. */
 export const ALL_CATEGORIES_SLUG = 'sve'
 
-/**
- * The order the tiles appear in, per the Dizajn 8 ticket. The categories
- * endpoint returns its own ordering, which differs (mašine before magacini),
- * so the row is sorted against this list and anything unlisted falls to the
- * end rather than disappearing.
- */
-export const SEARCH_CATEGORY_ORDER = [
-  'nekretnine',
-  'prostori-za-proslave',
-  'igraonice',
-  'vozila',
-  'magacini-i-skladista',
-  'gradjevinske-masine',
-]
+// Dizajn 46: the tile order used to be repeated here, because the categories
+// endpoint returned mašine before magacini. The seed now owns displayOrder and
+// re-syncs it on every reseed, so /categories already arrives in the one order
+// the ticket fixes, and this file is only about icons again.
 
 export function getSearchCategoryIconMarkup(slug) {
   return REGISTRY[slug] || REGISTRY[ALL_CATEGORIES_SLUG] || ''
-}
-
-export function sortSearchCategories(categories) {
-  const rank = (slug) => {
-    const index = SEARCH_CATEGORY_ORDER.indexOf(slug)
-    return index === -1 ? SEARCH_CATEGORY_ORDER.length : index
-  }
-  return [...categories].sort((a, b) => rank(a.slug) - rank(b.slug))
 }
