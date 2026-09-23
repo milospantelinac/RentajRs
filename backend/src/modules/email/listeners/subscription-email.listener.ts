@@ -1,9 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { OnEvent } from '@nestjs/event-emitter';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { EmailService } from '../../../common/email/email.service';
 import { formatDate, formatDateTime, formatRsd, localeFor } from '../format';
+
+type LoadedSubscription = Prisma.SubscriptionGetPayload<{ include: { user: true; package: true } }>;
+type Payment = Prisma.TransactionGetPayload<{ include: { invoices: true } }>;
 
 @Injectable()
 export class SubscriptionEmailListener {
@@ -25,6 +29,34 @@ export class SubscriptionEmailListener {
     return sub;
   }
 
+  private loadPayment(subscriptionId: string) {
+    return this.prisma.transaction.findFirst({
+      where: { subscriptionId, status: 'SUCCESSFUL' },
+      orderBy: { occurredAt: 'desc' },
+      include: { invoices: true },
+    });
+  }
+
+  /**
+   * "Obnovi" in the expiry emails opens the renewal of that package, reached from
+   * one of its listings (the renewal page lives under a listing); Moje pretplate
+   * when no listing is left on it.
+   */
+  private async renewUrl(subscriptionId: string, listingId?: string) {
+    const target =
+      listingId ??
+      (
+        await this.prisma.listing.findFirst({
+          where: { subscriptionId, status: { not: 'DELETED' } },
+          orderBy: { createdAt: 'asc' },
+          select: { id: true },
+        })
+      )?.id;
+    return target
+      ? `${this.frontendUrl}/oglasi/${target}/paket?obnova=${subscriptionId}`
+      : `${this.frontendUrl}/kontrolna-tabla/pretplate`;
+  }
+
   /**
    * Fires both "package activated" and, if an invoice exists, "your invoice"
    * (Ch.22.4 groups these under the same trigger). Both carry the actual
@@ -37,13 +69,8 @@ export class SubscriptionEmailListener {
     const sub = await this.loadSub(subscriptionId);
     if (!sub) return;
 
-    const transaction = await this.prisma.transaction.findFirst({
-      where: { subscriptionId, status: 'SUCCESSFUL' },
-      orderBy: { occurredAt: 'desc' },
-      include: { invoices: true },
-    });
+    const transaction = await this.loadPayment(subscriptionId);
     const locale = localeFor(sub.user.language);
-    const invoice = transaction?.invoices[0];
 
     await this.email.send({
       key: 'subscription_activated',
@@ -58,21 +85,52 @@ export class SubscriptionEmailListener {
       buttonUrl: `${this.frontendUrl}/kontrolna-tabla/pretplate`,
     });
 
-    if (invoice) {
-      await this.email.send({
-        key: 'subscription_invoice',
-        to: sub.user.email,
-        language: sub.user.language,
-        userId,
-        context: {
-          paket: sub.package.key,
-          iznos: formatRsd(sub.priceAtPurchase),
-          datum: formatDateTime(transaction?.occurredAt ?? sub.createdAt, locale),
-          broj: invoice.documentNumber,
-        },
-        buttonUrl: `${this.frontendUrl}/kontrolna-tabla/pretplate`,
-      });
-    }
+    await this.sendInvoice(sub, transaction, userId);
+  }
+
+  /** A paid renewal: the period it covers, then the invoice. */
+  @OnEvent('subscription.renewed')
+  async onRenewed({ userId, subscriptionId }: { userId: string; subscriptionId: string }) {
+    const sub = await this.loadSub(subscriptionId);
+    if (!sub) return;
+
+    const transaction = await this.loadPayment(subscriptionId);
+    const locale = localeFor(sub.user.language);
+
+    await this.email.send({
+      key: 'subscription_renewed',
+      to: sub.user.email,
+      language: sub.user.language,
+      userId,
+      context: {
+        paket: sub.package.key,
+        iznos: formatRsd(sub.priceAtPurchase),
+        datum: formatDateTime(transaction?.occurredAt ?? sub.createdAt, locale),
+        od: formatDate(sub.startsAt, locale),
+        do: formatDate(sub.expiresAt, locale),
+      },
+      buttonUrl: `${this.frontendUrl}/kontrolna-tabla/pretplate`,
+    });
+
+    await this.sendInvoice(sub, transaction, userId);
+  }
+
+  private async sendInvoice(sub: LoadedSubscription, transaction: Payment | null, userId: string) {
+    const invoice = transaction?.invoices[0];
+    if (!invoice) return;
+    await this.email.send({
+      key: 'subscription_invoice',
+      to: sub.user.email,
+      language: sub.user.language,
+      userId,
+      context: {
+        paket: sub.package.key,
+        iznos: formatRsd(sub.priceAtPurchase),
+        datum: formatDateTime(transaction.occurredAt ?? sub.createdAt, localeFor(sub.user.language)),
+        broj: invoice.documentNumber,
+      },
+      buttonUrl: `${this.frontendUrl}/kontrolna-tabla/pretplate`,
+    });
   }
 
   @OnEvent('subscription.pro_forma_issued')
@@ -99,12 +157,12 @@ export class SubscriptionEmailListener {
       language: sub.user.language,
       userId: sub.userId,
       context: { paket: sub.package.key, broj: daysLeft, datum: formatDate(sub.expiresAt, localeFor(sub.user.language)) },
-      buttonUrl: `${this.frontendUrl}/kontrolna-tabla/pretplate`,
+      buttonUrl: await this.renewUrl(sub.id),
     });
   }
 
   @OnEvent('subscription.expired')
-  async onExpired({ subscriptionId }: { subscriptionId: string }) {
+  async onExpired({ subscriptionId, listingIds }: { subscriptionId: string; listingIds?: string[] }) {
     const sub = await this.loadSub(subscriptionId);
     if (!sub) return;
     await this.email.send({
@@ -113,7 +171,7 @@ export class SubscriptionEmailListener {
       language: sub.user.language,
       userId: sub.userId,
       context: { paket: sub.package.key },
-      buttonUrl: `${this.frontendUrl}/kontrolna-tabla/pretplate`,
+      buttonUrl: await this.renewUrl(sub.id, listingIds?.[0]),
     });
   }
 }

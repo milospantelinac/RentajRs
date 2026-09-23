@@ -12,4 +12,9 @@ export class DashboardController {
   get(@CurrentUser('id') userId: string) {
     return this.dashboardService.getDashboard(userId);
   }
+
+  @Get('counts')
+  counts(@CurrentUser('id') userId: string) {
+    return this.dashboardService.getCounts(userId);
+  }
 }

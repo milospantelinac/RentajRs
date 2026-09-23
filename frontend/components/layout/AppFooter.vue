@@ -254,16 +254,70 @@ const { data: categories } = await useAsyncData('footer-categories', async () =>
   text-decoration: none;
 }
 
-// Three fixed-min-width columns don't fit a phone screen — stack them,
-// same pattern as .dashboard-body's mobile-only column stack.
+// Dizajn 42 (94:27, first column): on a phone the whole footer is one centred
+// column. Logo 130, the text 14/1.5 in 311, 45px social circles 9 apart, then
+// the three groups with every heading and link on a 43px step. The frame lays
+// two headings over their first links; the groups here just keep that step
+// and stand one empty step apart.
 @include mobile-only {
+  .footer-top {
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    text-align: center;
+  }
+
+  .footer-brand {
+    flex: none;
+    width: 100%;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .footer-tagline {
+    margin-top: 15.5px;
+    font-size: 14px;
+    max-width: 311px;
+  }
+
+  .footer-social {
+    margin-top: 16px;
+    gap: 9.14px;
+  }
+
+  .footer-social-btn {
+    width: 45px;
+    height: 45px;
+  }
+
+  .footer-social-btn svg {
+    width: 34.1px;
+    height: 34.1px;
+  }
+
+  .footer-social-btn-x svg {
+    width: 30.72px;
+    height: 30.72px;
+  }
+
   .footer-links {
-    flex-wrap: wrap;
-    gap: 32px;
+    flex: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 68px;
+    margin-top: 39px;
   }
 
   .footer-nav-group {
-    min-width: 100%;
+    min-width: 0;
+    align-items: center;
+    gap: 25px;
+  }
+
+  .footer-nav-title {
+    margin: 0;
   }
 }
 
@@ -313,19 +367,23 @@ const { data: categories } = await useAsyncData('footer-categories', async () =>
 .footer-payment-idcheck { height: 40px; } // 20 visible
 .footer-payment-visasecure { height: 49px; } // 42 visible
 
-// Phones can't fit eight marks in a row at full size — step them down but keep
-// the relative weighting.
+// Phones can't fit eight marks in a row at full size. Dizajn 42 (26:3352,
+// 26:3353): five marks, then the bank and the two checks in a second row,
+// each sized so its visible mark matches the frame.
 @include respond-below(md) {
-  .footer-payment-logo {
-    height: 20px;
+  .footer-payment-strip {
+    gap: 23.5px 30px;
+    padding-top: 31px;
   }
 
-  .footer-payment-dinacard,
-  .footer-payment-amex,
-  .footer-payment-intesa,
-  .footer-payment-visasecure {
-    height: 30px;
-  }
+  .footer-payment-maestro { height: 27px; }
+  .footer-payment-mastercard { height: 27px; }
+  .footer-payment-dinacard { height: 25.5px; }
+  .footer-payment-visa { height: 25px; }
+  .footer-payment-amex { height: 28px; }
+  .footer-payment-intesa { height: 29.2px; }
+  .footer-payment-idcheck { height: 21px; }
+  .footer-payment-visasecure { height: 28px; }
 }
 
 .footer-payment-link:hover .footer-payment-logo {

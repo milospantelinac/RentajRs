@@ -88,7 +88,7 @@ __decorate([
     (0, common_1.Get)('bookings/mine'),
     __param(0, (0, current_user_decorator_1.CurrentUser)('id')),
     __param(1, (0, common_1.Query)('role')),
-    __param(2, (0, common_1.Query)('status')),
+    __param(2, (0, common_1.Query)('status', new common_1.ParseEnumPipe(client_1.BookingStatus, { optional: true }))),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, String, String]),
     __metadata("design:returntype", void 0)

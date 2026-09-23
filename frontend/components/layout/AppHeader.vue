@@ -76,7 +76,8 @@
           :aria-label="t('nav.menu')"
           @click="mobileNavOpen = !mobileNavOpen"
         >
-          <FontAwesomeIcon :icon="mobileNavOpen ? 'xmark' : 'bars'" />
+          <img src="/images/icons/menu-22.svg" alt="" class="mobile-nav-toggle-lines" />
+          <FontAwesomeIcon :icon="mobileNavOpen ? 'xmark' : 'bars'" class="mobile-nav-toggle-fa" />
         </button>
         <div v-if="mobileNavOpen" class="mobile-nav-dropdown card">
           <NuxtLink
@@ -110,6 +111,25 @@
             @click="mobileNavOpen = false"
           >
             {{ t('nav.contact') }}
+          </NuxtLink>
+          <!-- Dizajn 42: the phone header keeps only the logo and this menu, so
+               the two header buttons move in here. -->
+          <NuxtLink
+            to="/oglasi/novi"
+            class="mobile-nav-dropdown-item mobile-nav-dropdown-item-phone"
+            active-class="mobile-nav-dropdown-item-active"
+            @click="mobileNavOpen = false"
+          >
+            {{ t('nav.addListing') }}
+          </NuxtLink>
+          <NuxtLink
+            v-if="!auth.isAuthenticated"
+            to="/prijava"
+            class="mobile-nav-dropdown-item mobile-nav-dropdown-item-phone"
+            active-class="mobile-nav-dropdown-item-active"
+            @click="mobileNavOpen = false"
+          >
+            {{ t('nav.login') }}
           </NuxtLink>
         </div>
       </div>
@@ -236,12 +256,17 @@ function handleLogout() {
   }
 }
 
-// Below md there's no slack left for a 4th 40-66px-wide action item next to
-// a 130px logo — tighten gaps and swap the CTA's padded rectangle for an
-// icon-sized circle (it's icon-only here anyway, text is d-none-mobile).
+// Dizajn 42 (94:27, first column): the phone header is 77 tall with only the
+// 112px logo and the menu lines. "Dodaj oglas" and "Prijava" move into the
+// menu; a signed-in user keeps the bell and the avatar next to it.
 @include mobile-only {
   .site-header-inner {
     gap: 12px;
+    height: 77px;
+  }
+
+  .site-logo-img {
+    width: 112px;
   }
 
   .site-header-actions {
@@ -289,15 +314,6 @@ function handleLogout() {
   background: $color-border;
 }
 
-@include mobile-only {
-  .site-header-cta-btn {
-    width: 44px;
-    height: 44px;
-    padding: 0;
-    justify-content: center;
-  }
-}
-
 .site-header-cta-icon {
   display: inline-flex;
   align-items: center;
@@ -312,6 +328,14 @@ function handleLogout() {
 .site-header-cta-icon svg {
   width: 7px;
   height: 11px;
+}
+
+// Dizajn 42: on a phone both buttons live in the menu instead.
+@include mobile-only {
+  .site-header-cta-btn,
+  .site-header-pill-btn {
+    display: none;
+  }
 }
 
 .user-menu {
@@ -441,6 +465,36 @@ function handleLogout() {
   background: $color-border;
 }
 
+.mobile-nav-toggle-lines {
+  display: none;
+}
+
+// 26:3103: the bare 22x16 lines, flush with the 16px gutter; the button keeps
+// a 44px tap area that grows to the left of them.
+@include mobile-only {
+  .mobile-nav-toggle {
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    justify-content: flex-end;
+    background: none;
+  }
+
+  .mobile-nav-toggle:hover {
+    background: none;
+  }
+
+  .mobile-nav-toggle-lines {
+    display: block;
+    width: 22.19px;
+    height: 15.72px;
+  }
+
+  .mobile-nav-toggle-fa {
+    display: none;
+  }
+}
+
 .mobile-nav-dropdown {
   position: absolute;
   top: 48px;
@@ -471,5 +525,15 @@ function handleLogout() {
   background: $color-background;
   color: $color-primary;
   font-weight: 600;
+}
+
+.mobile-nav-dropdown-item-phone {
+  display: none;
+}
+
+@include mobile-only {
+  .mobile-nav-dropdown-item-phone {
+    display: block;
+  }
 }
 </style>

@@ -22,13 +22,17 @@
         <ListingCard :listing="listing" />
       </div>
     </div>
-    <div v-else class="card">
-      <div class="card-body text-center">
-        <p class="text-body mb-2">{{ t('category.emptyTitle', { name: category.name }) }}</p>
-        <p class="text-muted mb-3">{{ t('category.emptySubtitle') }}</p>
-        <NuxtLink to="/oglasi/novi" class="btn btn-primary-flat">{{ t('nav.addListing') }}</NuxtLink>
-      </div>
-    </div>
+    <!-- Dizajn 44: the same empty state as everywhere else, in the card the
+         cards would fill. -->
+    <StateBlock
+      v-else
+      card
+      icon="listings"
+      :title="t('category.emptyTitle', { name: category.name })"
+      :text="t('category.emptySubtitle')"
+    >
+      <NuxtLink to="/oglasi/novi" class="state-block-action">{{ t('nav.addListing') }}</NuxtLink>
+    </StateBlock>
 
     <div v-if="cities.length" class="city-links mt-4">
       <h2 class="text-section-title mb-2">{{ t('category.browseByCity') }}</h2>
@@ -47,20 +51,21 @@
 </template>
 
 <script setup>
+// A segment with a dot is a file a browser or crawler asked for
+// (apple-touch-icon-precomposed.png, wp-login.php), never a category: it gets
+// its 404 before this page renders or asks the API anything.
+definePageMeta({ validate: (route) => !String(route.params.categorySlug).includes('.') })
+
 const { t } = useI18n()
 const api = useApi()
 const route = useRoute()
 const config = useRuntimeConfig()
 
-const { data: category } = await useAsyncData(`category-${route.params.categorySlug}`, async () => {
-  try {
-    return await api.get(`/categories/${route.params.categorySlug}`)
-  } catch {
-    return null
-  }
-})
+const { data: category, error: categoryError } = await useAsyncData(`category-${route.params.categorySlug}`, () =>
+  api.get(`/categories/${route.params.categorySlug}`),
+)
 
-if (!category.value) {
+if (categoryError.value || !category.value) {
   throw createError({ statusCode: 404, statusMessage: 'Category not found' })
 }
 

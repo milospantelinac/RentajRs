@@ -16,6 +16,7 @@ const cache_service_1 = require("../../common/cache/cache.service");
 const taxonomy_service_1 = require("../taxonomy/taxonomy.service");
 const money_1 = require("../../common/utils/money");
 const guest_capacity_1 = require("../../common/utils/guest-capacity");
+const listing_card_1 = require("../../common/utils/listing-card");
 const RELEVANCE_CANDIDATE_POOL = 200;
 const DEFAULT_PAGE_SIZE = 20;
 const RANKING_WEIGHTS_CACHE_KEY = 'settings:ranking_weights';
@@ -114,9 +115,8 @@ let SearchService = class SearchService {
                 include: this.resultInclude(),
             }),
         ]);
-        const categoryNames = await this.taxonomy.getCategoryNames(rows.map((r) => r.category.id));
-        const optionNames = await this.buildOptionNamesMap(rows);
-        const results = rows.map((r) => this.serializeResult(r, categoryNames, optionNames));
+        const { categoryNames, optionNames } = await (0, listing_card_1.loadListingCardNames)(this.taxonomy, rows);
+        const results = rows.map((r) => (0, listing_card_1.serializeListingCard)(r, categoryNames, optionNames));
         return { results, total, page, pageSize };
     }
     async searchWithRelevanceRanking(where, page, pageSize) {
@@ -149,20 +149,14 @@ let SearchService = class SearchService {
         });
         scored.sort((a, b) => b.score - a.score);
         const pageItems = scored.slice((page - 1) * pageSize, (page - 1) * pageSize + pageSize);
-        const categoryNames = await this.taxonomy.getCategoryNames(pageItems.map((s) => s.listing.category.id));
-        const optionNames = await this.buildOptionNamesMap(pageItems.map((s) => s.listing));
+        const pageListings = pageItems.map((s) => s.listing);
+        const { categoryNames, optionNames } = await (0, listing_card_1.loadListingCardNames)(this.taxonomy, pageListings);
         return {
-            results: pageItems.map((s) => this.serializeResult(s.listing, categoryNames, optionNames)),
+            results: pageListings.map((listing) => (0, listing_card_1.serializeListingCard)(listing, categoryNames, optionNames)),
             total,
             page,
             pageSize,
         };
-    }
-    async buildOptionNamesMap(listings) {
-        const optionIds = [...new Set(listings.flatMap((l) => l.attributes.flatMap((a) => a.valueOptionIds)))];
-        if (!optionIds.length)
-            return new Map();
-        return this.taxonomy.getOptionNames(optionIds);
     }
     async getRankingWeights() {
         return this.cache.getOrSet(RANKING_WEIGHTS_CACHE_KEY, 300, async () => {
@@ -333,18 +327,13 @@ let SearchService = class SearchService {
         }
         if (!rows.length)
             return { results: [] };
-        const categoryNames = await this.taxonomy.getCategoryNames(rows.map((r) => r.category.id));
-        const optionNames = await this.buildOptionNamesMap(rows);
-        return { results: rows.map((r) => this.serializeResult(r, categoryNames, optionNames)) };
+        const { categoryNames, optionNames } = await (0, listing_card_1.loadListingCardNames)(this.taxonomy, rows);
+        return { results: rows.map((r) => (0, listing_card_1.serializeListingCard)(r, categoryNames, optionNames)) };
     }
     resultInclude() {
         return {
-            photos: { where: { isCover: true, pendingRemoval: false, versionId: null }, take: 1 },
-            category: true,
-            city: true,
-            cityArea: true,
+            ...listing_card_1.LISTING_CARD_INCLUDE,
             user: { select: { avgResponseTimeMinutes: true } },
-            attributes: { include: { attribute: { select: { key: true, unit: true, type: true } } } },
         };
     }
     async getSitemapUrls() {
@@ -402,38 +391,6 @@ let SearchService = class SearchService {
     async getIndexThreshold() {
         const setting = await this.prisma.setting.findUnique({ where: { key: 'listing_index_threshold' } });
         return typeof setting?.value === 'number' ? setting.value : 3;
-    }
-    serializeResult(listing, categoryNames, optionNames) {
-        return {
-            id: listing.id,
-            slug: listing.slug,
-            title: listing.title,
-            price: (0, money_1.paraToRsd)(listing.price),
-            priceUnit: listing.priceUnit,
-            avgRating: listing.avgRating,
-            reviewCount: listing.reviewCount,
-            bookingModel: listing.bookingModel,
-            city: listing.city,
-            cityArea: listing.cityArea,
-            category: {
-                id: listing.category.id,
-                slug: listing.category.slug,
-                icon: listing.category.icon,
-                name: categoryNames.get(listing.category.id) ?? listing.category.slug,
-            },
-            coverPhoto: listing.photos[0] ?? null,
-            latitude: listing.latitude,
-            longitude: listing.longitude,
-            attributes: listing.attributes.map((a) => ({
-                key: a.attribute.key,
-                type: a.attribute.type,
-                unit: a.attribute.unit,
-                valueNumber: a.valueNumber !== null ? Number(a.valueNumber) : null,
-                valueText: a.valueText,
-                valueBoolean: a.valueBoolean,
-                optionNames: a.valueOptionIds.map((id) => optionNames.get(id)).filter(Boolean),
-            })),
-        };
     }
 };
 exports.SearchService = SearchService;

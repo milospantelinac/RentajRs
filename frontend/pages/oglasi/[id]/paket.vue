@@ -6,13 +6,24 @@
       <BackLink fallback="/kontrolna-tabla" />
 
       <header class="package-page-head">
-        <p class="package-page-eyebrow">{{ t('billing.choosePackageEyebrow') }}</p>
+        <p class="package-page-eyebrow">{{ copy.eyebrow }}</p>
         <h1 class="package-page-title">
-          {{ t('billing.choosePackageLead') }}
+          {{ copy.lead }}
           <span class="package-page-title-muted">{{ t('billing.choosePackageMuted') }}</span>
         </h1>
-        <p class="package-page-subtitle">{{ t('billing.choosePackageSubtitle') }}</p>
+        <p v-if="copy.subtitle" class="package-page-subtitle">{{ copy.subtitle }}</p>
       </header>
+
+      <!-- A renewal names the listings it carries, or says why this package can't be renewed. -->
+      <div v-if="mode === 'renew'" class="package-page-info">
+        <img src="/images/icons/info-circle.svg" alt="" class="package-page-info-icon" />
+        <div class="package-page-info-body">
+          <p class="package-page-info-text">{{ canRenew ? renewalCopy.covers : renewalBlockedText }}</p>
+          <NuxtLink v-if="!canRenew" to="/kontrolna-tabla/pretplate" class="package-page-info-action">
+            {{ t('billing.mySubscriptions') }}
+          </NuxtLink>
+        </div>
+      </div>
 
       <!-- Ticket §5 — the owner already has a PRO package with a free slot, so
            buying another one isn't the only way forward; same rule and same
@@ -31,22 +42,24 @@
       </div>
 
       <PackagePricingCards
+        v-if="mode !== 'renew' || canRenew"
         v-model:cycle="cycle"
         :packages="packages || []"
-        highlight-key="STANDARD"
+        :highlight-key="highlightKey"
         :disabled-keys="disabledKeys"
-        :disabled-reason="t('billing.osnovniDisabledForOnlineBooking')"
+        :disabled-reason="disabledReason"
         class="package-page-cards"
       >
         <template #cta="{ pkg }">
           <button type="button" class="package-cta-btn" @click="goToCheckout(pkg)">
-            {{ t('billing.selectPackage') }}
+            {{ mode === 'renew' ? t('billing.renewAction') : t('billing.selectPackage') }}
           </button>
         </template>
       </PackagePricingCards>
 
       <!-- Ticket §4 — which listing this purchase is for. -->
-      <p v-if="listing?.title" class="package-page-context">
+      <!-- A renewal names its listings above instead. -->
+      <p v-if="listing?.title && mode !== 'renew'" class="package-page-context">
         {{ t('billing.packageForListing') }} <strong>{{ listing.title }}</strong>
       </p>
     </div>
@@ -57,21 +70,16 @@
 // Dizajn 13 (Figma "Izaberite paket · Desktop 1440", node 563:514) — the same
 // offer as Cenovnik, so the same PackagePricingCards; only the framing around
 // it (back button, "korak pre objave" heading, listing context) is this page's.
-definePageMeta({ middleware: 'auth' })
+import { getPackagePurchaseMode, getRenewalCopy } from '~/utils/subscriptions'
+
+// The query decides what is being bought, so a new one builds the page again.
+definePageMeta({ middleware: 'auth', key: (route) => route.fullPath })
 const { t } = useI18n()
 const api = useApi()
 const route = useRoute()
 
 const { data: packages } = await useAsyncData('packages', () => api.get('/packages'))
 const { data: listing } = await useAsyncData(`listing-${route.params.id}`, () => api.get(`/listings/${route.params.id}`))
-const cycle = ref('MONTHLY')
-
-// DODATNA LOGIKA za pakete — Osnovni (paketi bez rezervacionog sistema) nije
-// dostupan za oglase koji koriste online rezervacije (PER_STAY/PER_SLOT).
-const disabledKeys = computed(() => {
-  if (!listing.value || listing.value.bookingModel === 'NO_BOOKING') return []
-  return (packages.value || []).filter((p) => !p.hasBookings).map((p) => p.key)
-})
 
 // T42 — an active PRO subscription with fewer listings than its limit has a
 // free slot. Only offered for a listing that isn't on a package yet — the
@@ -79,6 +87,67 @@ const disabledKeys = computed(() => {
 const { data: mySubscriptions } = await useAsyncData('my-subscriptions-for-package', () =>
   api.get('/subscriptions/mine').catch(() => []),
 )
+
+// ?obnova=<subscription>: paying the next period of a package the listing is on.
+const renewId = typeof route.query.obnova === 'string' ? route.query.obnova : ''
+const { data: renewal } = await useAsyncData(`package-renewal-${renewId}`, () =>
+  renewId
+    ? api.get(`/subscriptions/${renewId}/renewal`).catch(() => ({ renewable: false, reason: 'NOT_FOUND', listings: [] }))
+    : Promise.resolve(false),
+)
+
+const currentPackageKey = computed(
+  () => (mySubscriptions.value || []).find((s) => s.id === listing.value?.subscriptionId)?.package?.key,
+)
+// An expired listing, or a live one already on Pro, has nothing to buy here but its package's next period.
+if (!renewId && listing.value?.subscriptionId && (listing.value.status === 'EXPIRED' || (listing.value.status === 'ACTIVE' && currentPackageKey.value === 'PRO'))) {
+  await navigateTo({ path: route.path, query: { obnova: listing.value.subscriptionId } }, { replace: true })
+}
+
+const mode = computed(() => getPackagePurchaseMode(listing.value, renewal.value || null))
+const canRenew = computed(() => !!renewal.value?.renewable)
+const renewalCopy = computed(() => (canRenew.value ? getRenewalCopy(t, renewal.value) : null))
+const renewalBlockedText = computed(() =>
+  t(renewal.value?.reason === 'ALREADY_RENEWED' ? 'billing.renewAlreadyPaid' : 'billing.renewNotAllowed'),
+)
+
+const copy = computed(() => {
+  if (mode.value === 'renew') {
+    return { eyebrow: t('billing.renewEyebrow'), lead: t('billing.renewLead'), subtitle: renewalCopy.value?.subtitle || '' }
+  }
+  if (mode.value === 'upgrade') {
+    return { eyebrow: t('billing.upgradeEyebrow'), lead: t('billing.choosePackageLead'), subtitle: t('billing.upgradeSubtitle') }
+  }
+  return { eyebrow: t('billing.choosePackageEyebrow'), lead: t('billing.choosePackageLead'), subtitle: t('billing.choosePackageSubtitle') }
+})
+
+const cycle = ref(renewal.value?.billingCycle === 'YEARLY' ? 'YEARLY' : 'MONTHLY')
+
+const highlightKey = computed(() => {
+  if (mode.value === 'renew') return renewal.value?.package?.key
+  return mode.value === 'upgrade' ? 'PRO' : 'STANDARD'
+})
+
+// DODATNA LOGIKA za pakete — Osnovni (paketi bez rezervacionog sistema) nije
+// dostupan za oglase koji koriste online rezervacije (PER_STAY/PER_SLOT).
+const bookingDisabledKeys = computed(() => {
+  if (!listing.value || listing.value.bookingModel === 'NO_BOOKING') return []
+  return (packages.value || []).filter((p) => !p.hasBookings).map((p) => p.key)
+})
+
+// A renewal keeps its package; a live listing only moves up to Pro here.
+const disabledKeys = computed(() => {
+  const keys = (packages.value || []).map((p) => p.key)
+  if (mode.value === 'renew') return keys.filter((key) => key !== renewal.value?.package?.key)
+  if (mode.value === 'upgrade') return keys.filter((key) => key !== 'PRO')
+  return bookingDisabledKeys.value
+})
+
+const disabledReason = computed(() => {
+  if (mode.value === 'renew') return t('billing.renewSamePackage')
+  if (mode.value === 'upgrade') return t('billing.upgradeProOnly')
+  return t('billing.osnovniDisabledForOnlineBooking')
+})
 const freeSlotSubscription = computed(() => {
   if (!listing.value || listing.value.subscriptionId) return null
   return (mySubscriptions.value || []).find(
@@ -107,11 +176,11 @@ async function attachToFreeSlot() {
 function goToCheckout(pkg) {
   navigateTo({
     path: `/oglasi/${route.params.id}/checkout`,
-    query: { packageId: pkg.id, billingCycle: cycle.value },
+    query: { packageId: pkg.id, billingCycle: cycle.value, ...(mode.value === 'renew' ? { obnova: renewId } : {}) },
   })
 }
 
-useSeoMeta({ title: t('billing.choosePackage') })
+useSeoMeta({ title: mode.value === 'renew' ? t('billing.renewEyebrow') : t('billing.choosePackage') })
 </script>
 
 <style lang="scss" scoped>

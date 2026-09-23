@@ -14,12 +14,32 @@ const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../../prisma/prisma.service");
 const reviews_service_1 = require("../reviews/reviews.service");
 const users_service_1 = require("../users/users.service");
+const taxonomy_service_1 = require("../taxonomy/taxonomy.service");
 const money_1 = require("../../common/utils/money");
+const ical_availability_1 = require("../../common/utils/ical-availability");
+const subscription_renewal_1 = require("../../common/utils/subscription-renewal");
+const guest_capacity_1 = require("../../common/utils/guest-capacity");
+const short_name_1 = require("../../common/utils/short-name");
+const payment_report_1 = require("../../common/utils/payment-report");
+const NEW_LISTING_URL = '/oglasi/novi';
+const MY_LISTINGS_URL = '/kontrolna-tabla/oglasi';
+const UPCOMING_STATUSES = ['REQUESTED', 'AWAITING_PAYMENT', 'CONFIRMED'];
+function availabilityUrl(listingIds, emptyUrl = NEW_LISTING_URL) {
+    if (!listingIds.length)
+        return emptyUrl;
+    return listingIds.length === 1 ? `/oglasi/${listingIds[0]}/uredi?korak=availability` : MY_LISTINGS_URL;
+}
+function icalUrl(listingIds, emptyUrl = NEW_LISTING_URL) {
+    if (!listingIds.length)
+        return emptyUrl;
+    return listingIds.length === 1 ? `${MY_LISTINGS_URL}/${listingIds[0]}/ical` : MY_LISTINGS_URL;
+}
 let DashboardService = class DashboardService {
-    constructor(prisma, reviews, users) {
+    constructor(prisma, reviews, users, taxonomy) {
         this.prisma = prisma;
         this.reviews = reviews;
         this.users = users;
+        this.taxonomy = taxonomy;
     }
     async getDashboard(userId) {
         const isOwner = await this.users.isOwner(userId);
@@ -38,6 +58,20 @@ let DashboardService = class DashboardService {
             upcomingBookings: upcoming,
         };
     }
+    async getCounts(userId) {
+        const [bookingRequests, unreadConversations] = await Promise.all([
+            this.prisma.booking.count({ where: { ownerId: userId, status: 'REQUESTED' } }),
+            this.prisma.conversation.count({
+                where: {
+                    OR: [
+                        { ownerId: userId, unreadOwnerCount: { gt: 0 } },
+                        { guestId: userId, unreadGuestCount: { gt: 0 } },
+                    ],
+                },
+            }),
+        ]);
+        return { bookingRequests, unreadConversations };
+    }
     async getOwnerAttention(userId) {
         const items = [];
         const awaitingConfirmation = await this.prisma.booking.count({
@@ -46,23 +80,35 @@ let DashboardService = class DashboardService {
         if (awaitingConfirmation) {
             items.push({ urgency: 'critical', title: 'payment_confirmation', actionUrl: '/kontrolna-tabla/rezervacije?role=owner&status=AWAITING_PAYMENT', count: awaitingConfirmation });
         }
-        const termConflicts = await this.prisma.dispute.count({ where: { type: 'TERM_CONFLICT', status: 'NEW', listing: { userId } } });
-        if (termConflicts) {
-            items.push({ urgency: 'critical', title: 'term_conflict', actionUrl: '/kontrolna-tabla/kalendar', count: termConflicts });
+        const termConflicts = await this.prisma.dispute.findMany({
+            where: { type: 'TERM_CONFLICT', status: 'NEW', listing: { userId } },
+            select: { listingId: true },
+        });
+        if (termConflicts.length) {
+            const listingIds = [...new Set(termConflicts.map((d) => d.listingId))];
+            items.push({ urgency: 'critical', title: 'term_conflict', actionUrl: availabilityUrl(listingIds, MY_LISTINGS_URL), count: termConflicts.length });
+        }
+        const failingFeeds = await this.prisma.icalSource.findMany({
+            where: { active: true, failureCount: { gte: ical_availability_1.ICAL_FAILURE_ALERT_THRESHOLD }, listing: { userId, status: { not: 'DELETED' } } },
+            select: { listingId: true },
+        });
+        if (failingFeeds.length) {
+            const listingIds = [...new Set(failingFeeds.map((feed) => feed.listingId))];
+            items.push({ urgency: 'critical', title: 'ical_sync_failed', actionUrl: icalUrl(listingIds, MY_LISTINGS_URL), count: failingFeeds.length });
         }
         const newRequests = await this.prisma.booking.count({ where: { ownerId: userId, status: 'REQUESTED' } });
         if (newRequests) {
             items.push({ urgency: 'decision', title: 'new_requests', actionUrl: '/kontrolna-tabla/rezervacije?role=owner&status=REQUESTED', count: newRequests });
         }
         const expiringSoon = await this.prisma.subscription.count({
-            where: { userId, status: 'ACTIVE', expiresAt: { lt: new Date(Date.now() + 7 * 86_400_000) } },
+            where: { ...subscription_renewal_1.PACKAGE_ENDING_WITHOUT_RENEWAL, userId, expiresAt: { lt: new Date(Date.now() + 7 * 86_400_000) } },
         });
         if (expiringSoon) {
             items.push({ urgency: 'decision', title: 'subscription_expiring', actionUrl: '/kontrolna-tabla/pretplate', count: expiringSoon });
         }
         const rejectedListings = await this.prisma.listing.count({ where: { userId, status: 'REJECTED' } });
         if (rejectedListings) {
-            items.push({ urgency: 'decision', title: 'rejected_listings', actionUrl: '/kontrolna-tabla/oglasi', count: rejectedListings });
+            items.push({ urgency: 'decision', title: 'rejected_listings', actionUrl: `${MY_LISTINGS_URL}?status=REJECTED`, count: rejectedListings });
         }
         const unreadAsOwner = await this.prisma.conversation.count({ where: { ownerId: userId, unreadOwnerCount: { gt: 0 } } });
         if (unreadAsOwner) {
@@ -72,13 +118,15 @@ let DashboardService = class DashboardService {
     }
     async getGuestAttention(userId) {
         const items = [];
-        const awaitingPayment = await this.prisma.booking.count({ where: { guestId: userId, status: 'AWAITING_PAYMENT' } });
+        const awaitingPayment = await this.prisma.booking.count({
+            where: { guestId: userId, status: 'AWAITING_PAYMENT', disputes: { none: payment_report_1.OPEN_PAYMENT_REPORT } },
+        });
         if (awaitingPayment) {
             items.push({ urgency: 'critical', title: 'payment_deadline', actionUrl: '/kontrolna-tabla/rezervacije?role=guest&status=AWAITING_PAYMENT', count: awaitingPayment });
         }
         const pendingReviews = await this.reviews.getMyPendingReviews(userId);
         if (pendingReviews.length) {
-            items.push({ urgency: 'info', title: 'pending_reviews', actionUrl: '/kontrolna-tabla/rezervacije', count: pendingReviews.length });
+            items.push({ urgency: 'info', title: 'pending_reviews_guest', actionUrl: '/kontrolna-tabla/rezervacije?role=guest&status=COMPLETED', count: pendingReviews.length });
         }
         const unreadAsGuest = await this.prisma.conversation.count({ where: { guestId: userId, unreadGuestCount: { gt: 0 } } });
         if (unreadAsGuest) {
@@ -94,7 +142,7 @@ let DashboardService = class DashboardService {
             return { listingCount: 0, bookingCount: guestBookingCount, confirmedValue: 0, avgRating: null };
         }
         const [listingCount, bookings, listings] = await Promise.all([
-            this.prisma.listing.count({ where: { userId, status: { not: 'DELETED' } } }),
+            this.prisma.listing.count({ where: { userId, status: 'ACTIVE' } }),
             this.prisma.booking.findMany({ where: { ownerId: userId, status: { in: ['CONFIRMED', 'COMPLETED'] } }, select: { totalAmount: true } }),
             this.prisma.listing.findMany({ where: { userId, reviewCount: { gt: 0 } }, select: { avgRating: true, reviewCount: true } }),
         ]);
@@ -106,43 +154,84 @@ let DashboardService = class DashboardService {
         return { listingCount, bookingCount: bookings.length + guestBookingCount, confirmedValue, avgRating };
     }
     async getOnboarding(userId) {
-        const [listingCount, workingHoursCount, blockedTermCount, icalCount, user] = await Promise.all([
-            this.prisma.listing.count({ where: { userId, status: { not: 'DELETED' } } }),
+        const [listings, workingHoursCount, definedSlotCount, blockedTermCount, icalCount, user] = await Promise.all([
+            this.prisma.listing.findMany({
+                where: { userId, status: { not: 'DELETED' } },
+                orderBy: { createdAt: 'asc' },
+                select: { id: true, bookingModel: true, priceUnit: true },
+            }),
             this.prisma.workingHours.count({ where: { listing: { userId } } }),
+            this.prisma.definedSlot.count({ where: { listing: { userId } } }),
             this.prisma.blockedTerm.count({ where: { listing: { userId } } }),
             this.prisma.icalSource.count({ where: { listing: { userId } } }),
-            this.prisma.user.findUniqueOrThrow({ where: { id: userId } }),
+            this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { bankAccount: true } }),
         ]);
-        const hasListing = listingCount > 0;
-        const hasAvailability = workingHoursCount > 0 || blockedTermCount > 0;
-        const hasIcal = icalCount > 0;
-        const hasBankAccount = !!user.bankAccount;
-        return {
-            hasListing,
-            hasAvailability,
-            hasIcal,
-            hasBankAccount,
-            allDone: hasListing && hasAvailability && hasIcal && hasBankAccount,
-        };
+        const bookable = listings.filter((l) => l.bookingModel !== 'NO_BOOKING').map((l) => l.id);
+        const icalCapable = listings.filter((l) => l.bookingModel === 'PER_STAY' && l.priceUnit !== 'MONTH').map((l) => l.id);
+        const noListing = listings.length === 0;
+        const steps = [{ key: 'listing', done: !noListing, actionUrl: NEW_LISTING_URL }];
+        if (noListing || bookable.length) {
+            const done = workingHoursCount + definedSlotCount + blockedTermCount > 0;
+            steps.push({ key: 'availability', done, actionUrl: availabilityUrl(bookable) });
+        }
+        if (noListing || icalCapable.length) {
+            steps.push({ key: 'ical', done: icalCount > 0, actionUrl: icalUrl(icalCapable) });
+        }
+        steps.push({ key: 'bankAccount', done: !!user.bankAccount, actionUrl: '/kontrolna-tabla/podesavanja' });
+        return { steps, allDone: steps.every((step) => step.done) };
     }
     async getUpcoming(userId) {
+        const now = Date.now();
         const bookings = await this.prisma.booking.findMany({
             where: {
                 OR: [{ guestId: userId }, { ownerId: userId }],
-                status: 'CONFIRMED',
-                startsAt: { lt: new Date(Date.now() + 7 * 86_400_000) },
-                endsAt: { gte: new Date() },
+                status: { in: UPCOMING_STATUSES },
+                startsAt: { lt: new Date(now + 7 * 86_400_000) },
+                endsAt: { gte: new Date(now) },
             },
             orderBy: { startsAt: 'asc' },
-            include: { listing: { select: { title: true, slug: true } } },
+            select: {
+                id: true,
+                status: true,
+                startsAt: true,
+                endsAt: true,
+                priceUnit: true,
+                guestCount: true,
+                guestId: true,
+                listing: {
+                    select: {
+                        title: true,
+                        slug: true,
+                        categoryId: true,
+                        city: { select: { name: true } },
+                        cityArea: { select: { name: true } },
+                    },
+                },
+                guest: { select: { firstName: true, lastName: true } },
+                owner: { select: { firstName: true, lastName: true } },
+            },
             take: 10,
         });
-        return bookings.map((b) => ({
-            ...b,
-            pricePerUnit: (0, money_1.paraToRsd)(b.pricePerUnit),
-            totalAmount: (0, money_1.paraToRsd)(b.totalAmount),
-            amountDue: (0, money_1.paraToRsd)(b.amountDue),
-        }));
+        const guestUnits = await (0, guest_capacity_1.getGuestUnits)(this.taxonomy, bookings.map((b) => b.listing.categoryId));
+        return bookings.map((b) => {
+            const asGuest = b.guestId === userId;
+            return {
+                id: b.id,
+                status: b.status,
+                startsAt: b.startsAt,
+                endsAt: b.endsAt,
+                priceUnit: b.priceUnit,
+                guestCount: b.guestCount,
+                guestUnit: guestUnits.get(b.listing.categoryId),
+                role: asGuest ? 'guest' : 'owner',
+                listing: {
+                    title: b.listing.title,
+                    slug: b.listing.slug,
+                    place: b.listing.cityArea?.name ?? b.listing.city?.name ?? null,
+                },
+                counterpartName: (0, short_name_1.shortName)(asGuest ? b.owner : b.guest),
+            };
+        });
     }
 };
 exports.DashboardService = DashboardService;
@@ -150,6 +239,7 @@ exports.DashboardService = DashboardService = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
         reviews_service_1.ReviewsService,
-        users_service_1.UsersService])
+        users_service_1.UsersService,
+        taxonomy_service_1.TaxonomyService])
 ], DashboardService);
 //# sourceMappingURL=dashboard.service.js.map

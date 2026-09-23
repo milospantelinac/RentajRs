@@ -25,3 +25,27 @@ export function toBelgradeDateOnly(date: Date): Date {
 export function toBelgradeISODayOfWeek(date: Date): number {
   return ((toBelgradeDateOnly(date).getUTCDay() + 6) % 7) + 1;
 }
+
+/**
+ * The instant Belgrade's calendar day year-month-day begins. Belgrade runs
+ * on UTC+1 in winter and UTC+2 in summer and never changes its clock at
+ * midnight, so exactly one of the two offsets reads 00:00 there.
+ */
+export function belgradeDayStart(year: number, month: number, day: number): Date {
+  const utcMidnight = Date.UTC(year, month - 1, day);
+  for (const offsetHours of [1, 2]) {
+    const candidate = new Date(utcMidnight - offsetHours * 3_600_000);
+    if (toBelgradeHHMM(candidate) === '00:00') return candidate;
+  }
+  return new Date(utcMidnight - 3_600_000);
+}
+
+/**
+ * The last instant of the Belgrade calendar day `days` days after the one
+ * `from` falls on, so a window "until 29. 9." holds for all of that day.
+ */
+export function endOfBelgradeDayAfter(from: Date, days: number): Date {
+  const [year, month, day] = from.toLocaleDateString('en-CA', { timeZone: BELGRADE_TZ }).split('-').map(Number);
+  const next = new Date(Date.UTC(year, month - 1, day + days + 1));
+  return new Date(belgradeDayStart(next.getUTCFullYear(), next.getUTCMonth() + 1, next.getUTCDate()).getTime() - 1);
+}

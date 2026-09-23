@@ -2,16 +2,60 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { I18nContext, I18nService } from 'nestjs-i18n';
-import { Booking, BookingStatus, Prisma, PriceUnit } from '@prisma/client';
+import { Booking, BookingStatus, ListingStatus, Prisma, PriceUnit } from '@prisma/client';
 import * as QRCode from 'qrcode';
 import { PrismaService } from '../../prisma/prisma.service';
-import { AvailabilityService } from '../availability/availability.service';
+import { AvailabilityService, PriceKind, PricedUnit } from '../availability/availability.service';
+import { TaxonomyService } from '../taxonomy/taxonomy.service';
 import { buildIpsQrPayload } from '../../common/utils/ips-qr';
 import { paraToRsd, rsdToPara } from '../../common/utils/money';
 import { toBelgradeHHMM } from '../../common/utils/timezone';
-import { GUEST_CAPACITY_ATTRIBUTE_KEYS } from '../../common/utils/guest-capacity';
+import { GUEST_CAPACITY_ATTRIBUTE_KEYS, getGuestUnits } from '../../common/utils/guest-capacity';
+import { canGuestCancel, getFreeCancellationUntil } from '../../common/utils/guest-cancellation';
+import { OPEN_PAYMENT_REPORT, isHeldByPaymentReport } from '../../common/utils/payment-report';
+import { readRequestResponseHours } from '../../common/utils/request-expiry';
+import { shortName } from '../../common/utils/short-name';
 import { CreateBookingRequestDto } from './dto/create-booking-request.dto';
 import { CancelBookingDto, DisputeNoShowDto, RejectBookingDto } from './dto/booking-actions.dto';
+
+/** Dizajn 34: "2 sata × 4.200 RSD (vikend cena)", one line per price and rule. */
+interface PriceLine extends PricedUnit {
+  count: number;
+}
+
+/** The listing fields a term is priced with. */
+interface PricingListing {
+  id: string;
+  priceUnit: PriceUnit;
+  price: bigint;
+  weekendPrice: bigint | null;
+  pricePerGuest: bigint | null;
+  mandatoryFees: unknown;
+  bookingModel: string;
+  slotSubmode: string | null;
+  advancePercent: number | null;
+}
+
+/** What createRequest keeps in Booking.fees; the last two keys since Dizajn 34. */
+interface StoredFees {
+  mandatory?: string;
+  guestFee?: string;
+  extraServices?: unknown[];
+  extraServicesTotal?: string;
+  priceLines?: Array<{ count: number; price: string; kind: PriceKind }>;
+}
+
+// Dizajn 34: requests the owner still has to answer come first, then the ones
+// waiting for payment, then confirmed stays, each soonest first; everything
+// else follows, the latest term first.
+const OPEN_STATUS_ORDER: BookingStatus[] = ['REQUESTED', 'AWAITING_PAYMENT', 'CONFIRMED'];
+
+/** R59: the hours a guest has to pay when the listing sets none. */
+const DEFAULT_PAYMENT_DEADLINE_HOURS = 48;
+
+function openPaymentReportWhere(bookingId: string): Prisma.DisputeWhereInput {
+  return { bookingId, ...OPEN_PAYMENT_REPORT };
+}
 
 @Injectable()
 export class BookingsService {
@@ -20,6 +64,7 @@ export class BookingsService {
     private availability: AvailabilityService,
     private i18n: I18nService,
     private events: EventEmitter2,
+    private taxonomy: TaxonomyService,
   ) {}
 
   // -- Guest: create request -----------------------------------------
@@ -50,22 +95,12 @@ export class BookingsService {
     }
 
     const { startsAt, endsAt, slotPrice } = await this.resolveRequestedTerm(listing, dto);
-    // "Kapacitet ljudi" (Nekretnine, Prostori za proslave) and "Kapacitet dece"
-    // (Igraonice) from wizard step 6 are CategoryAttributes separate from the
-    // maxGuests set in step 4. Dizajn 23: both cap the guests, so the lower applies.
-    const capacityAttrs = await this.prisma.listingAttribute.findMany({
-      where: { listingId, attribute: { key: { in: GUEST_CAPACITY_ATTRIBUTE_KEYS } }, valueNumber: { not: null } },
-      select: { valueNumber: true },
-    });
-    const guestCaps = [listing.maxGuests, ...capacityAttrs.map((attr) => Number(attr.valueNumber))].filter(
-      (cap): cap is number => cap != null && cap > 0,
-    );
-    const effectiveMaxGuests = guestCaps.length ? Math.min(...guestCaps) : null;
+    const effectiveMaxGuests = await this.getGuestCapacity(listingId, listing.maxGuests);
     this.assertTermRules({ ...listing, maxGuests: effectiveMaxGuests }, startsAt, endsAt, dto.guestCount);
 
     const pricePerUnit = slotPrice ?? listing.price;
     const unitCount = resolvePricingUnitCount(listing.priceUnit, startsAt, endsAt, dto);
-    const { unitPriceTotal, guestFee, mandatoryFeesTotal, extraServicesTotal, totalAmount, amountDue } =
+    const { priceLines, guestFee, mandatoryFeesTotal, extraServicesTotal, totalAmount, amountDue } =
       await this.computeTotals(listing, startsAt, endsAt, pricePerUnit, unitCount, slotPrice, dto);
 
     // T76 — a listing set to "Oba" never actually asked the guest which
@@ -94,10 +129,14 @@ export class BookingsService {
         priceUnit: listing.priceUnit,
         pricePerUnit,
         unitCount,
+        // Dizajn 34: the priced lines and the extras total let the owner's
+        // request card explain the total later, whatever the prices are by then.
         fees: {
           mandatory: mandatoryFeesTotal.toString(),
           extraServices: dto.extraServices ?? [],
+          extraServicesTotal: extraServicesTotal.toString(),
           guestFee: guestFee.toString(),
+          priceLines: priceLines.map((line) => ({ count: line.count, price: line.price.toString(), kind: line.kind })),
         } as unknown as Prisma.InputJsonValue,
         totalAmount,
         amountDue,
@@ -107,6 +146,8 @@ export class BookingsService {
           listing.cancellationThreshold,
           guest.language,
         ),
+        cancellationPolicyType: listing.cancellationPolicyType,
+        cancellationThreshold: listing.cancellationThreshold,
       },
     });
 
@@ -239,17 +280,7 @@ export class BookingsService {
    * Every other combination keeps the flat unitPrice x unitCount calculation.
    */
   private async computeTotals(
-    listing: {
-      id: string;
-      priceUnit: PriceUnit;
-      price: bigint;
-      weekendPrice: bigint | null;
-      pricePerGuest: bigint | null;
-      mandatoryFees: unknown;
-      bookingModel: string;
-      slotSubmode: string | null;
-      advancePercent: number | null;
-    },
+    listing: PricingListing,
     startsAt: Date,
     endsAt: Date,
     pricePerUnit: bigint,
@@ -261,46 +292,77 @@ export class BookingsService {
     const mandatoryFeesTotal = sumMandatoryFees(listing.mandatoryFees);
     const guestFee = listing.pricePerGuest && dto.guestCount ? listing.pricePerGuest * BigInt(dto.guestCount) : 0n;
 
-    const unitPriceTotal =
-      !slotPrice && (listing.priceUnit === 'NIGHT' || listing.priceUnit === 'DAY')
-        ? (await this.availability.getNightlyPrices(listing.id, startsAt, endsAt, listing.price, listing.weekendPrice)).reduce(
-            (sum, p) => sum + p,
-            0n,
-          )
-        : !slotPrice && listing.priceUnit === 'MONTH' && dto.monthCount
-          ? (await this.availability.getMonthlyPrices(listing.id, startsAt, dto.monthCount, listing.price)).reduce(
-              (sum, p) => sum + p,
-              0n,
-            )
-          : // T111 — GUEST-priced WORKING_HOURS listings still resolve the
-            // owner's hourly rate windows/exceptions for the per-unit price
-            // (per the decision: those apply to the per-guest rate exactly
-            // like they apply to the per-hour rate) — only unitCount (guests,
-            // not hours, via resolvePricingUnitCount) differs from HOUR.
-            !slotPrice &&
-              listing.bookingModel === 'PER_SLOT' &&
-              listing.slotSubmode === 'WORKING_HOURS' &&
-              (listing.priceUnit === 'HOUR' || listing.priceUnit === 'GUEST')
-            ? (await this.availability.resolveHourlyPrice(
-                listing.id,
-                startsAt,
-                toBelgradeHHMM(startsAt),
-                listing.price,
-                // Dizajn 21: the wizard offers a weekend price for the hourly rate, not the per-guest one.
-                listing.priceUnit === 'HOUR' ? listing.weekendPrice : null,
-              )) * BigInt(unitCount)
-            : // Dizajn 21: a stay billed by the hour prices each hour the way a night is priced.
-              !slotPrice && listing.bookingModel === 'PER_STAY' && listing.priceUnit === 'HOUR'
-              ? (await this.availability.getHourlyStayPrices(listing.id, startsAt, endsAt, listing.price, listing.weekendPrice)).reduce(
-                  (sum, p) => sum + p,
-                  0n,
-                )
-              : pricePerUnit * BigInt(unitCount);
+    const priceLines = await this.resolvePriceLines(listing, startsAt, endsAt, pricePerUnit, unitCount, slotPrice, dto.monthCount);
+    const unitPriceTotal = priceLines.reduce((sum, line) => sum + line.price * BigInt(line.count), 0n);
 
     const totalAmount = unitPriceTotal + guestFee + mandatoryFeesTotal + extraServicesTotal;
     const amountDue = listing.advancePercent ? (totalAmount * BigInt(listing.advancePercent)) / 100n : totalAmount;
 
-    return { unitPriceTotal, guestFee, mandatoryFeesTotal, extraServicesTotal, totalAmount, amountDue };
+    return { unitPriceTotal, priceLines, guestFee, mandatoryFeesTotal, extraServicesTotal, totalAmount, amountDue };
+  }
+
+  /**
+   * The price of each unit the booking covers and the rule that set it,
+   * grouped into "count × price" lines (Dizajn 34). Summed, they are what
+   * computeTotals charges for the term itself.
+   */
+  private async resolvePriceLines(
+    listing: PricingListing,
+    startsAt: Date,
+    endsAt: Date,
+    pricePerUnit: bigint,
+    unitCount: number,
+    slotPrice: bigint | undefined,
+    monthCount: number | undefined,
+  ): Promise<PriceLine[]> {
+    if (slotPrice) return [{ count: unitCount, price: pricePerUnit, kind: 'BASE' }];
+    if (listing.priceUnit === 'NIGHT' || listing.priceUnit === 'DAY') {
+      return groupPriceLines(await this.availability.getNightlyPrices(listing.id, startsAt, endsAt, listing.price, listing.weekendPrice));
+    }
+    if (listing.priceUnit === 'MONTH' && monthCount) {
+      return groupPriceLines(await this.availability.getMonthlyPrices(listing.id, startsAt, monthCount, listing.price));
+    }
+    // T111: GUEST-priced WORKING_HOURS listings still resolve the owner's
+    // hourly rate windows/exceptions for the per-unit price (per the
+    // decision: those apply to the per-guest rate exactly like they apply to
+    // the per-hour rate); only unitCount (guests, not hours, via
+    // resolvePricingUnitCount) differs from HOUR.
+    if (
+      listing.bookingModel === 'PER_SLOT' &&
+      listing.slotSubmode === 'WORKING_HOURS' &&
+      (listing.priceUnit === 'HOUR' || listing.priceUnit === 'GUEST')
+    ) {
+      const unit = await this.availability.resolveHourlyPrice(
+        listing.id,
+        startsAt,
+        toBelgradeHHMM(startsAt),
+        listing.price,
+        // Dizajn 21: the wizard offers a weekend price for the hourly rate, not the per-guest one.
+        listing.priceUnit === 'HOUR' ? listing.weekendPrice : null,
+      );
+      return [{ count: unitCount, ...unit }];
+    }
+    // Dizajn 21: a stay billed by the hour prices each hour the way a night is priced.
+    if (listing.bookingModel === 'PER_STAY' && listing.priceUnit === 'HOUR') {
+      return groupPriceLines(await this.availability.getHourlyStayPrices(listing.id, startsAt, endsAt, listing.price, listing.weekendPrice));
+    }
+    return [{ count: unitCount, price: pricePerUnit, kind: 'BASE' }];
+  }
+
+  /**
+   * "Kapacitet ljudi" (Nekretnine, Prostori za proslave) and "Kapacitet dece"
+   * (Igraonice) from wizard step 6 are CategoryAttributes separate from the
+   * maxGuests set in step 4. Dizajn 23: both cap the guests, so the lower applies.
+   */
+  private async getGuestCapacity(listingId: string, maxGuests: number | null): Promise<number | null> {
+    const capacityAttrs = await this.prisma.listingAttribute.findMany({
+      where: { listingId, attribute: { key: { in: GUEST_CAPACITY_ATTRIBUTE_KEYS } }, valueNumber: { not: null } },
+      select: { valueNumber: true },
+    });
+    const guestCaps = [maxGuests, ...capacityAttrs.map((attr) => Number(attr.valueNumber))].filter(
+      (cap): cap is number => cap != null && cap > 0,
+    );
+    return guestCaps.length ? Math.min(...guestCaps) : null;
   }
 
   /** T83 — live total for whatever the guest currently has selected, before they submit. Reads only, nothing persisted. */
@@ -317,6 +379,8 @@ export class BookingsService {
       priceUnit: listing.priceUnit,
       pricePerUnit: paraToRsd(pricePerUnit),
       unitCount,
+      // Dizajn 40: the request page's "Cena" rows, the same lines the booking keeps (Dizajn 34).
+      priceLines: totals.priceLines.map((line) => ({ count: line.count, price: paraToRsd(line.price), kind: line.kind })),
       unitPriceTotal: paraToRsd(totals.unitPriceTotal),
       guestFee: paraToRsd(totals.guestFee),
       mandatoryFeesTotal: paraToRsd(totals.mandatoryFeesTotal),
@@ -372,7 +436,7 @@ export class BookingsService {
     if (!owner.bankAccount) {
       throw new BadRequestException(this.i18n.t('bookings.OWNER_NO_BANK_ACCOUNT'));
     }
-    const deadlineHours = listing.paymentDeadlineHours ?? 48;
+    const deadlineHours = listing.paymentDeadlineHours ?? DEFAULT_PAYMENT_DEADLINE_HOURS;
     const paymentDeadline = new Date(Date.now() + deadlineHours * 3600_000);
 
     const qrPayload = buildIpsQrPayload({
@@ -383,11 +447,8 @@ export class BookingsService {
       referenceNumber: booking.id.replace(/-/g, '').slice(0, 20),
     });
 
-    const updated = await this.prisma.booking.update({
-      where: { id: booking.id },
-      data: { status: 'AWAITING_PAYMENT', paymentDeadline, ipsQrData: qrPayload },
-    });
-    await this.recordHistory(booking.id, booking.status, 'AWAITING_PAYMENT', null, true);
+    const updated = await this.changeStatus(booking, 'AWAITING_PAYMENT', null, { paymentDeadline, ipsQrData: qrPayload }, true);
+    if (!updated) throw new BadRequestException(this.i18n.t('bookings.STATE_CHANGED'));
     this.events.emit('booking.awaiting_payment', { bookingId: booking.id });
     return this.serialize(updated);
   }
@@ -426,7 +487,9 @@ export class BookingsService {
     // T88 — a no-show still frees whatever nights/months remain on the term;
     // the guest not arriving shouldn't cost the owner the rest of the stay too.
     await this.availability.releaseTermsForBooking(booking.id);
-    const updated = await this.applyStatus(booking, 'NO_SHOW', ownerId);
+    // A mark the admin overturned (T90) may be set again; the guest can object
+    // to the new one, which disputeNoShow reads from this flag.
+    const updated = await this.applyStatus(booking, 'NO_SHOW', ownerId, { noShowDisputed: false });
     this.events.emit('booking.no_show', { bookingId: booking.id });
     return updated;
   }
@@ -444,20 +507,37 @@ export class BookingsService {
 
   // -- Guest actions -----------------------------------------------------
 
-  /** R "gost otkaze posle uplate -> blokirano": self-service cancellation stops once CONFIRMED. */
+  /**
+   * R "gost otkaze posle uplate -> blokirano": a paid booking is never the
+   * guest's to cancel. Dizajn 39 lets them cancel a confirmed cash booking
+   * while its free cancellation lasts (canGuestCancel).
+   */
   async cancelByGuest(guestId: string, bookingId: string, dto: CancelBookingDto) {
-    const booking = await this.assertGuestAccess(guestId, bookingId, ['REQUESTED', 'AWAITING_PAYMENT']);
+    const booking = await this.assertGuestAccess(guestId, bookingId, ['REQUESTED', 'AWAITING_PAYMENT', 'CONFIRMED']);
+    if (!canGuestCancel(booking)) {
+      throw new BadRequestException(this.i18n.t('bookings.GUEST_CANCELLATION_CLOSED'));
+    }
     await this.availability.releaseTermsForBooking(booking.id);
     const updated = await this.applyStatus(booking, 'CANCELLED', guestId, { cancellationReason: dto.reason });
     this.events.emit('booking.cancelled_by_guest', { bookingId: booking.id });
     return updated;
   }
 
+  /**
+   * One objection per no-show mark. The page hides the button once the mark
+   * is disputed, but the API used to file another dispute (and mail every
+   * admin again) on each call. The flag is set only while it is still clear,
+   * so of two calls at once one files the dispute and the other is refused.
+   */
   async disputeNoShow(guestId: string, bookingId: string, dto: DisputeNoShowDto) {
     const booking = await this.assertGuestAccess(guestId, bookingId, ['NO_SHOW']);
-    const [, dispute] = await this.prisma.$transaction([
-      this.prisma.booking.update({ where: { id: booking.id }, data: { noShowDisputed: true } }),
-      this.prisma.dispute.create({
+    const dispute = await this.prisma.$transaction(async (tx) => {
+      const flagged = await tx.booking.updateMany({
+        where: { id: booking.id, noShowDisputed: false },
+        data: { noShowDisputed: true },
+      });
+      if (flagged.count === 0) throw new BadRequestException(this.i18n.t('bookings.NO_SHOW_ALREADY_DISPUTED'));
+      return tx.dispute.create({
         data: {
           type: 'DISPUTED_NO_SHOW',
           bookingId: booking.id,
@@ -465,8 +545,8 @@ export class BookingsService {
           submittedByUserId: guestId,
           description: dto.explanation,
         },
-      }),
-    ]);
+      });
+    });
     this.events.emit('booking.no_show_disputed', { bookingId: booking.id, disputeId: dispute.id });
     return { message: this.i18n.t('common.SUCCESS') };
   }
@@ -495,16 +575,37 @@ export class BookingsService {
     return updated;
   }
 
+  /**
+   * T94: one open report per booking. The button used to stay after a
+   * report, so every press filed another dispute and mailed every admin
+   * again. Once the admin closes it, a booking still waiting for the payment
+   * can be reported again. The booking row is locked first, so two reports
+   * sent at once take turns and the second one finds the first.
+   *
+   * An open report holds the booking past its deadline (expireUnpaidBookings),
+   * so a new report has to come in before the deadline. That also keeps a
+   * guest from holding an overdue booking again by reporting anew once the
+   * admin has closed the last report.
+   */
   async disputeUnconfirmedPayment(guestId: string, bookingId: string) {
     const booking = await this.assertGuestAccess(guestId, bookingId, ['AWAITING_PAYMENT']);
-    await this.prisma.dispute.create({
-      data: {
-        type: 'UNCONFIRMED_PAYMENT',
-        bookingId: booking.id,
-        listingId: booking.listingId,
-        submittedByUserId: guestId,
-        description: 'Guest reports payment was sent but not confirmed by the owner',
-      },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "Booking" WHERE "id" = ${booking.id}::uuid FOR UPDATE`;
+      if ((await tx.dispute.count({ where: openPaymentReportWhere(booking.id) })) > 0) {
+        throw new BadRequestException(this.i18n.t('bookings.PAYMENT_ALREADY_REPORTED'));
+      }
+      if (booking.paymentDeadline && booking.paymentDeadline.getTime() <= Date.now()) {
+        throw new BadRequestException(this.i18n.t('bookings.PAYMENT_DEADLINE_PASSED'));
+      }
+      await tx.dispute.create({
+        data: {
+          type: 'UNCONFIRMED_PAYMENT',
+          bookingId: booking.id,
+          listingId: booking.listingId,
+          submittedByUserId: guestId,
+          description: 'Guest reports payment was sent but not confirmed by the owner',
+        },
+      });
     });
     this.events.emit('booking.payment_disputed', { bookingId: booking.id });
     return { message: this.i18n.t('common.SUCCESS') };
@@ -516,9 +617,31 @@ export class BookingsService {
     const booking = await this.prisma.booking.findUnique({
       where: { id: bookingId },
       include: {
-        listing: { select: { title: true, slug: true, address: true } },
+        listing: {
+          select: {
+            title: true,
+            slug: true,
+            address: true,
+            paymentMethod: true,
+            maxGuests: true,
+            categoryId: true,
+            status: true,
+            pickupTime: true,
+            returnTime: true,
+            paymentDeadlineHours: true,
+            city: { select: { name: true } },
+            cityArea: { select: { name: true } },
+            subscription: { select: { package: { select: { hasMessaging: true } } } },
+            photos: {
+              where: { pendingRemoval: false, versionId: null },
+              orderBy: [{ isCover: 'desc' }, { displayOrder: 'asc' }],
+              take: 1,
+              select: { url: true },
+            },
+          },
+        },
         guest: { select: { firstName: true, lastName: true, phone: true } },
-        owner: { select: { firstName: true, lastName: true, phone: true, bankAccount: true } },
+        owner: { select: { firstName: true, lastName: true, phone: true, bankAccount: true, anonymizedAt: true } },
       },
     });
     if (!booking) throw new NotFoundException();
@@ -527,18 +650,23 @@ export class BookingsService {
     // T79 — "ko je otkazao i kada", for both CANCELLED and REJECTED: the
     // BookingHistory row for the transition into the current status already
     // has changedByUserId/changedAt, it just was never surfaced to the client.
+    // Dizajn 34: the same row dates every state on the owner's card
+    // ("Potvrđena 9. 9. 2026.").
+    const statusEntry = await this.prisma.bookingHistory.findFirst({
+      where: { bookingId: booking.id, newStatus: booking.status },
+      orderBy: { changedAt: 'desc' },
+    });
     let cancellation: { by: 'GUEST' | 'OWNER' | null; at: Date } | null = null;
-    if (booking.status === 'CANCELLED' || booking.status === 'REJECTED') {
-      const entry = await this.prisma.bookingHistory.findFirst({
-        where: { bookingId: booking.id, newStatus: booking.status },
-        orderBy: { changedAt: 'desc' },
-      });
-      if (entry) {
-        cancellation = {
-          by: entry.changedByUserId === booking.guestId ? 'GUEST' : entry.changedByUserId === booking.ownerId ? 'OWNER' : null,
-          at: entry.changedAt,
-        };
-      }
+    if ((booking.status === 'CANCELLED' || booking.status === 'REJECTED') && statusEntry) {
+      cancellation = {
+        by:
+          statusEntry.changedByUserId === booking.guestId
+            ? 'GUEST'
+            : statusEntry.changedByUserId === booking.ownerId
+              ? 'OWNER'
+              : null,
+        at: statusEntry.changedAt,
+      };
     }
 
     // T91 — the QR already encodes these exact fields (see moveToAwaitingPayment);
@@ -559,16 +687,61 @@ export class BookingsService {
           referenceNumber: booking.id.replace(/-/g, '').slice(0, 20),
         };
       }
-      const entry = await this.prisma.bookingHistory.findFirst({
-        where: { bookingId: booking.id, newStatus: 'AWAITING_PAYMENT' },
-        orderBy: { changedAt: 'desc' },
-      });
-      awaitingPaymentSince = entry?.changedAt ?? null;
+      awaitingPaymentSince = statusEntry?.changedAt ?? null;
     }
 
+    const { listing } = booking;
+    const isOwnerViewing = booking.ownerId === userId;
+    const [guestUnits, guestCapacity, categoryNames, messaging, openPaymentReports] = await Promise.all([
+      getGuestUnits(this.taxonomy, [listing.categoryId]),
+      this.getGuestCapacity(booking.listingId, listing.maxGuests),
+      this.taxonomy.getCategoryNames([listing.categoryId]),
+      isOwnerViewing ? null : this.getGuestMessaging(booking),
+      // While a report is open the guest's page drops "Prijavi da uplata nije
+      // potvrđena", and both sides are told the booking waits past its deadline.
+      booking.status === 'AWAITING_PAYMENT' ? this.prisma.dispute.count({ where: openPaymentReportWhere(booking.id) }) : 0,
+    ]);
+    const serialized = this.serialize(booking, userId);
+
     return {
-      ...this.serialize(booking, userId),
+      ...serialized,
+      // Dizajn 34: the card's title reads "Igraonica Balončići - Vračar", and
+      // "gost je izabrao keš" only when the listing offered both methods.
+      // Dizajn 39 (528:514): "Sobe · Kopaonik, Suvo Rudište" under the guest's
+      // title, a link to the listing only while it is live, and a vehicle's
+      // fixed pickup and return times under the two dates.
+      listing: {
+        ...serialized.listing,
+        place: listing.cityArea?.name ?? listing.city?.name ?? null,
+        acceptsBothPaymentMethods: listing.paymentMethod === 'BOTH',
+        status: listing.status,
+        categoryName: categoryNames.get(listing.categoryId) ?? null,
+        city: listing.city?.name ?? null,
+        area: listing.cityArea?.name ?? null,
+        pickupTime: listing.pickupTime,
+        returnTime: listing.returnTime,
+        // Dizajn 41 (391:543, 391:670): the photo on the sent request and the
+        // hours to pay once a transfer is approved.
+        coverPhotoUrl: listing.photos?.[0]?.url ?? null,
+        paymentDeadlineHours: listing.paymentDeadlineHours ?? DEFAULT_PAYMENT_DEADLINE_HOURS,
+      },
+      guestUnit: guestUnits.get(listing.categoryId),
+      guestCapacity,
+      statusChangedAt: statusEntry?.changedAt ?? booking.createdAt,
+      cancellationPolicy: {
+        type: booking.cancellationPolicyType,
+        threshold: booking.cancellationThreshold,
+        freeUntil: getFreeCancellationUntil(booking),
+      },
+      paymentDisputed: openPaymentReports > 0,
+      ...(isOwnerViewing
+        ? { guestShortName: shortName(booking.guest) }
+        : // The guest already sees "Dragan S." on the listing's page; the full
+          // name, phone and address still wait for phoneUnlocked (serialize).
+          { ownerShortName: shortName(booking.owner), canCancel: canGuestCancel(booking), messaging }),
       ...(cancellation ? { cancellation } : {}),
+      // Dizajn 41: a request nobody answered expires too, not only an unpaid booking.
+      ...(booking.status === 'EXPIRED' && statusEntry?.oldStatus ? { expiredFrom: statusEntry.oldStatus } : {}),
       ...(bankTransferDetails ? { bankTransferDetails } : {}),
       ...(awaitingPaymentSince ? { awaitingPaymentSince } : {}),
     };
@@ -580,24 +753,107 @@ export class BookingsService {
         ...(role === 'guest' ? { guestId: userId } : { ownerId: userId }),
         ...(status ? { status } : {}),
       },
-      orderBy: { createdAt: 'desc' },
-      include: { listing: { select: { title: true, slug: true } } },
+      include: {
+        listing: {
+          select: {
+            title: true,
+            slug: true,
+            categoryId: true,
+            city: { select: { name: true } },
+            cityArea: { select: { name: true } },
+          },
+        },
+        guest: { select: { firstName: true, lastName: true } },
+        owner: { select: { firstName: true, lastName: true } },
+      },
     });
-    return bookings.map((b) => this.serialize(b));
+    const guestUnits = await getGuestUnits(this.taxonomy, bookings.map((b) => b.listing.categoryId));
+
+    // Dizajn 34: a row names the listing with its area and, for the owner,
+    // the guest ("Milica J. · 18 dece"); Dizajn 39 (380:671) names the owner
+    // on the guest's rows ("Vlasnik: Dragan S."), as the listing's page does.
+    return bookings.sort(compareForList).map(({ guest, owner, listing, ...booking }) => ({
+      ...this.serialize(booking),
+      listing: { title: listing.title, slug: listing.slug, place: listing.cityArea?.name ?? listing.city?.name ?? null },
+      guestUnit: guestUnits.get(listing.categoryId),
+      ...(role === 'owner' ? { guestShortName: shortName(guest) } : { ownerShortName: shortName(owner) }),
+    }));
+  }
+
+  /**
+   * Dizajn 39: "Pošalji poruku vlasniku" opens the guest's thread about this
+   * listing, the one about this booking first, or starts one where
+   * MessagingService.startConversation would accept it (a live listing whose
+   * package has messaging, an owner whose account still exists).
+   */
+  private async getGuestMessaging(booking: {
+    id: string;
+    listingId: string;
+    guestId: string;
+    listing: { status: ListingStatus; subscription: { package: { hasMessaging: boolean } } | null };
+    owner: { anonymizedAt: Date | null };
+  }) {
+    const threads = await this.prisma.conversation.findMany({
+      where: { listingId: booking.listingId, guestId: booking.guestId },
+      select: { id: true, bookingId: true },
+      orderBy: { lastMessageAt: { sort: 'desc', nulls: 'last' } },
+    });
+    const thread = threads.find((t) => t.bookingId === booking.id) ?? threads[0] ?? null;
+    return {
+      conversationId: thread?.id ?? null,
+      canStart:
+        !thread &&
+        booking.listing.status === ListingStatus.ACTIVE &&
+        !!booking.listing.subscription?.package.hasMessaging &&
+        !booking.owner.anonymizedAt,
+    };
   }
 
   // -- Scheduled jobs --------------------------------------------------
 
-  /** R59/status table — payment window closed, term released, guest+owner notified. */
+  /**
+   * R59/status table: payment window closed, term released, guest and owner notified.
+   * A guest's open report that the owner has not confirmed the payment holds
+   * the booking until the admin closes the report, at most seven days past
+   * the deadline (isHeldByPaymentReport); the next run after that expires it.
+   */
   @Cron(CronExpression.EVERY_MINUTE)
   async expireUnpaidBookings() {
-    const expired = await this.prisma.booking.findMany({
-      where: { status: 'AWAITING_PAYMENT', paymentDeadline: { lt: new Date() } },
+    const now = Date.now();
+    const overdue = await this.prisma.booking.findMany({
+      where: { status: 'AWAITING_PAYMENT', paymentDeadline: { lt: new Date(now) } },
+      include: { disputes: { where: OPEN_PAYMENT_REPORT, select: { id: true } } },
     });
-    for (const booking of expired) {
+    for (const booking of overdue) {
+      if (isHeldByPaymentReport(booking, now)) continue;
+      // An owner who confirmed the payment meanwhile keeps the booking and its term.
+      if (!(await this.changeStatus(booking, 'EXPIRED', null, {}, true))) continue;
       await this.availability.releaseTermsForBooking(booking.id);
-      await this.applyStatus(booking, 'EXPIRED', null, {}, true);
       this.events.emit('booking.expired', { bookingId: booking.id });
+    }
+  }
+
+  /**
+   * Dizajn 41: a request the owner has not answered expires once its hours
+   * are up (Setting booking_request_response_hours), or when its term begins
+   * if that comes first (getRequestExpiresAt). The term is free again and
+   * both sides are told.
+   */
+  @Cron(CronExpression.EVERY_MINUTE)
+  async expireUnansweredRequests() {
+    const now = Date.now();
+    const hours = await readRequestResponseHours(this.prisma);
+    const due = await this.prisma.booking.findMany({
+      where: {
+        status: 'REQUESTED',
+        OR: [{ createdAt: { lte: new Date(now - hours * 3600_000) } }, { startsAt: { lte: new Date(now) } }],
+      },
+    });
+    for (const booking of due) {
+      // An owner who answered, or a guest who withdrew, meanwhile keeps that answer.
+      if (!(await this.changeStatus(booking, 'EXPIRED', null, {}, true))) continue;
+      await this.availability.releaseTermsForBooking(booking.id);
+      this.events.emit('booking.request_expired', { bookingId: booking.id });
     }
   }
 
@@ -609,7 +865,7 @@ export class BookingsService {
       where: { status: 'CONFIRMED', endsAt: { lt: cutoff } },
     });
     for (const booking of due) {
-      await this.applyStatus(booking, 'COMPLETED', null, {}, true);
+      if (!(await this.changeStatus(booking, 'COMPLETED', null, {}, true))) continue;
       this.events.emit('booking.completed', { bookingId: booking.id });
     }
   }
@@ -627,17 +883,21 @@ export class BookingsService {
     }
   }
 
-  /** Ch.22.4 "Podsetnik na pola roka" / "Podsetnik pred istek" — one nudge at the halfway point, one on the last day. */
+  /**
+   * Ch.22.4 "Podsetnik na pola roka" / "Podsetnik pred istek": one nudge at the halfway point, one on the last day.
+   * None while the guest's report of an unconfirmed payment is open: they say
+   * they paid, and the booking does not expire at the deadline meanwhile.
+   */
   @Cron(CronExpression.EVERY_10_MINUTES)
   async sendPaymentDeadlineReminders() {
     const candidates = await this.prisma.booking.findMany({
-      where: { status: 'AWAITING_PAYMENT', paymentDeadline: { not: null } },
+      where: { status: 'AWAITING_PAYMENT', paymentDeadline: { not: null }, disputes: { none: OPEN_PAYMENT_REPORT } },
       include: { listing: { select: { paymentDeadlineHours: true } } },
     });
     const now = Date.now();
     for (const booking of candidates) {
       if (!booking.paymentDeadline) continue;
-      const totalHours = booking.listing.paymentDeadlineHours ?? 48;
+      const totalHours = booking.listing.paymentDeadlineHours ?? DEFAULT_PAYMENT_DEADLINE_HOURS;
       const deadlineMs = booking.paymentDeadline.getTime();
       const halfPointMs = deadlineMs - (totalHours / 2) * 3600_000;
       const finalDayStartMs = deadlineMs - 24 * 3600_000;
@@ -705,12 +965,36 @@ export class BookingsService {
     extra: Record<string, unknown> = {},
     automatic = false,
   ) {
-    const updated = await this.prisma.booking.update({
-      where: { id: booking.id },
-      data: { status: newStatus, ...extra },
-    });
-    await this.recordHistory(booking.id, booking.status, newStatus, changedByUserId, automatic);
+    const updated = await this.changeStatus(booking, newStatus, changedByUserId, extra, automatic);
+    if (!updated) throw new BadRequestException(this.i18n.t('bookings.STATE_CHANGED'));
     return this.serialize(updated);
+  }
+
+  /**
+   * Moves a booking on only from the status it was read in, so two changes
+   * racing each other never overwrite one another (Dizajn 41: a request can
+   * now expire while its owner answers it). The later one finds nothing to
+   * change and gets null.
+   */
+  private async changeStatus(
+    booking: Booking,
+    newStatus: BookingStatus,
+    changedByUserId: string | null,
+    extra: Record<string, unknown> = {},
+    automatic = false,
+  ): Promise<Booking | null> {
+    let updated: Booking;
+    try {
+      updated = await this.prisma.booking.update({
+        where: { id: booking.id, status: booking.status },
+        data: { status: newStatus, ...extra },
+      });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') return null;
+      throw err;
+    }
+    await this.recordHistory(booking.id, booking.status, newStatus, changedByUserId, automatic);
+    return updated;
   }
 
   private async recordHistory(
@@ -755,6 +1039,7 @@ export class BookingsService {
       pricePerUnit: paraToRsd(booking.pricePerUnit),
       totalAmount: paraToRsd(booking.totalAmount),
       amountDue: paraToRsd(booking.amountDue),
+      priceBreakdown: readPriceBreakdown(booking),
       ...(isOwnerViewing ? { guestName: `${guest!.firstName} ${guest!.lastName}` } : {}),
       ...(showGuestPhone ? { guestPhone: guest!.phone } : {}),
       ...(showOwnerContact ? { ownerName: `${owner!.firstName} ${owner!.lastName}`, ownerPhone: owner!.phone } : {}),
@@ -780,6 +1065,61 @@ function resolvePricingUnitCount(
   if (dto.monthCount) return dto.monthCount;
   if (priceUnit === 'GUEST') return Math.max(1, dto.guestCount || 1);
   return computeUnitCount(priceUnit, startsAt, endsAt);
+}
+
+/** Dizajn 34: units with the same price and rule become one line, in the order they first appear. */
+function groupPriceLines(units: PricedUnit[]): PriceLine[] {
+  const lines: PriceLine[] = [];
+  for (const unit of units) {
+    const line = lines.find((l) => l.price === unit.price && l.kind === unit.kind);
+    if (line) line.count += 1;
+    else lines.push({ ...unit, count: 1 });
+  }
+  return lines;
+}
+
+/**
+ * Dizajn 34: the lines under a booking's total and what fees and extra
+ * services added to them, in RSD. A booking made before the lines were kept
+ * gets one line only when its unit price times the count is exactly what its
+ * units cost; otherwise `lines` is null and the card names the units alone.
+ * `extras` is null when extra services were chosen and their total wasn't kept.
+ */
+function readPriceBreakdown(booking: Pick<Booking, 'fees' | 'totalAmount' | 'pricePerUnit' | 'unitCount'>) {
+  const fees = (booking.fees ?? {}) as StoredFees;
+  const extras = toPara(fees.mandatory) + toPara(fees.guestFee) + toPara(fees.extraServicesTotal);
+  if (fees.priceLines) {
+    return {
+      lines: fees.priceLines.map((line) => ({ count: line.count, price: paraToRsd(BigInt(line.price)), kind: line.kind })),
+      extras: paraToRsd(extras),
+    };
+  }
+  if (fees.extraServicesTotal === undefined && fees.extraServices?.length) return { lines: null, extras: null };
+  const exact = booking.pricePerUnit * BigInt(booking.unitCount) + extras === booking.totalAmount;
+  return {
+    lines: exact ? [{ count: booking.unitCount, price: paraToRsd(booking.pricePerUnit), kind: 'BASE' as PriceKind }] : null,
+    extras: paraToRsd(extras),
+  };
+}
+
+function toPara(value: string | undefined): bigint {
+  return value ? BigInt(value) : 0n;
+}
+
+/** OPEN_STATUS_ORDER first, soonest term first; the rest after them, latest term first. */
+function compareForList(
+  a: Pick<Booking, 'status' | 'startsAt' | 'createdAt'>,
+  b: Pick<Booking, 'status' | 'startsAt' | 'createdAt'>,
+): number {
+  const rank = (status: BookingStatus) => {
+    const index = OPEN_STATUS_ORDER.indexOf(status);
+    return index === -1 ? OPEN_STATUS_ORDER.length : index;
+  };
+  const byStatus = rank(a.status) - rank(b.status);
+  if (byStatus) return byStatus;
+  const soonestFirst = a.startsAt.getTime() - b.startsAt.getTime();
+  const byTerm = rank(a.status) < OPEN_STATUS_ORDER.length ? soonestFirst : -soonestFirst;
+  return byTerm || b.createdAt.getTime() - a.createdAt.getTime();
 }
 
 /** Dizajn 23: a defined slot carries its own length, so the duration and gap rules skip it. */

@@ -34,7 +34,14 @@
         </div>
 
         <h2 class="text-section-title mt-4 mb-3">{{ t('listing.reviewsHeading') }}</h2>
-        <p v-if="!profile.reviewsReceived?.length" class="text-muted">{{ t('reviews.noReviewsYet') }}</p>
+        <!-- Dizajn 44, where the reviews would be. -->
+        <StateBlock
+          v-if="!profile.reviewsReceived?.length"
+          card
+          icon="reviews"
+          :title="t('reviews.emptyTitle')"
+          :text="t('reviews.ownerEmptyText')"
+        />
         <div v-for="review in profile.reviewsReceived" :key="review.id" class="mb-3 card">
           <div class="card-body-sm">
             <p class="text-body">★ {{ review.rating }}/5 — {{ review.author?.firstName }}</p>

@@ -156,7 +156,11 @@ Conventions:
 
 **Editing copy**: `/admin/email-sabloni` (admin panel) — every template, both languages, subject/heading/body/button-label, live.
 
-**New cron jobs added to wire this up** that didn't previously exist: booking unopened-request reminder (6h), payment-deadline reminders (half-point and final-day), day-before-stay reminder, subscription-expiring-soon (−7/−3/−1 days, autoRenew-off subscriptions only), and a price-drop-on-favorite check. Booking reminders are deduplicated via `Booking.remindersSent String[]`; the price-drop check via `Favorite.priceDropNotifiedAt`.
+**New cron jobs added to wire this up** that didn't previously exist: booking unopened-request reminder (6h), payment-deadline reminders (half-point and final-day), day-before-stay reminder, subscription-expiring-soon (−7/−3/−1 days, only for packages whose end takes a listing out of search and whose next period isn't paid for yet), and a price-drop-on-favorite check. Booking reminders are deduplicated via `Booking.remindersSent String[]`; the price-drop check via `Favorite.priceDropNotifiedAt`.
+
+**Renewing a package**: packages never renew by themselves. The owner pays for the next period of the same package at `/oglasi/:id/paket?obnova=<subscriptionId>` (the checkout sends `renewSubscriptionId`; `GET /subscriptions/:id/renewal` says what the renewal carries and when it starts). Paid while the package still runs, the renewal is stored as `SCHEDULED` with `renewsSubscriptionId` pointing at that package, and the 3 AM sweep (`expireOverdueSubscriptions`) hands the listings over to it instead of taking them offline. Paid after the package ended, it starts at payment and the expired listings are back in search at once (one that was never approved goes to review instead), and a running window of carried-over days (ADR-005) is kept for after the new period. A Pro renewal carries every listing on the package. Otherwise a live listing only buys Pro through the package page (`SUBSCRIPTION_UPGRADE_PRO_ONLY`), since buying its own package again used to start a second period at once and drop the days left on the first. The expiry emails link straight to the renewal.
+
+**Reviews** (Dizajn 43): only the guest of a COMPLETED booking reviews it, one review per booking, and it is public the moment it is sent (`reviews_published` tells the owner). Owners don't rate guests. The guest has `review_window_days` (Setting, default 14) from the automatic COMPLETED transition to write it, which the invitation and the 7-day reminder name as `{rok}`, and `review_edit_days` (default 7) after it went public to change it (`PATCH /reviews/:id`). Both windows run to the end of their last Belgrade day (`common/utils/review-window.ts`). The owner can answer once, from their public profile (R101).
 
 **Account deletion** (Ch.22.4 "Zahtev za brisanje naloga", R175 — must be confirmed from the registered inbox) is a two-step, token-gated flow that didn't exist before this pass: `POST /users/me/deletion/request` emails a confirmation link; `POST /users/deletion/confirm` (public, token-only — the confirmation may be opened on a device with no active session) performs the actual anonymize-and-cancel. Admin-initiated deletion (`AdminService.deleteUserAsAdmin`) bypasses this gate and calls the underlying `UsersService.executeDeletion()` directly, since the admin already carries that authority.
 
@@ -183,6 +187,7 @@ Never cached: bookings, messages, availability, anything user-specific or money-
 - Google OAuth2 is wired but requires real credentials (`GOOGLE_CLIENT_ID`/`SECRET`) to function — unconfigured, the button reaches Google's own "OAuth client not found" error page, not a bug in this codebase.
 - `@nestjs/throttler` global rate limiting; Helmet; CORS locked to the frontend origin; every DTO validated with `class-validator` and the global pipe set to `whitelist: true` (unknown properties rejected) — this caught a real bug during this build (see §14).
 - Anti-bot: honeypot field + rate-limit heuristic on registration and first-message-in-a-conversation (R177), documented as swappable for hCaptcha/Turnstile later.
+- Outbound requests to addresses users type in (iCal feeds, on add and in the hourly sync) go through `fetchUserUrl()` in `backend/src/common/utils/outbound-fetch.ts`: http and https only, the host is resolved first and refused if any of its addresses is loopback, private, link-local, unique-local, unspecified, shared (carrier-grade NAT), multicast or reserved, and redirects are followed by hand (at most three) with the same check on every hop. A refused address reads as "unreachable" to the owner, so the answers can't be used to map the internal network. See `ICAL_ALLOW_PRIVATE_ADDRESSES` in §12 for local development.
 - Money never touches this platform (ADR-002) — no card data is ever stored; the mock payment/fiscalization providers exist behind an interface specifically so a real Banca Intesa/Sparkom VP integration is a provider swap, not a rewrite, once those integrations are contracted (Product Bible open items O22/O23).
 
 ---
@@ -223,6 +228,7 @@ Never cached: bookings, messages, availability, anything user-specific or money-
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM_NAME`, `MAIL_FROM_ADDRESS` | Email delivery (MailDev by default) |
 | `UPLOADS_DIR`, `UPLOADS_BASE_URL`, `MAX_PHOTO_SIZE_MB`, `MAX_PHOTOS_PER_LISTING` | Photo storage |
 | `GEOCODING_PROVIDER`, `GOOGLE_MAPS_API_KEY` | `nominatim` (default, free, no key) or `google` |
+| `ICAL_ALLOW_PRIVATE_ADDRESSES` | Whether an owner's iCal feed address may point at a loopback, private, link-local or unique-local host. Unset: allowed unless `NODE_ENV=production` (local development reads test feeds from `127.0.0.1`). Set it to `false` on every internet-facing server that doesn't run with `NODE_ENV=production` (the docker-compose setup runs `development`), and `true` only where a trusted internal feed has to be read |
 | `PAYMENT_PROVIDER`, `BANCA_INTESA_*` | `mock` (default) or real Banca Intesa credentials |
 | `FISCALIZATION_PROVIDER`, `SPARKOM_VP_*` | `mock` (default) or real Sparkom VP credentials |
 | `ANTI_BOT_HONEYPOT_FIELD`, `RATE_LIMIT_TTL_SECONDS`, `RATE_LIMIT_MAX_REQUESTS` | Abuse prevention |
@@ -234,7 +240,7 @@ Never cached: bookings, messages, availability, anything user-specific or money-
 |---|---|
 | `NUXT_PUBLIC_API_BASE` | Backend URL reachable from the **visitor's browser** |
 | `NUXT_API_BASE_INTERNAL` | Backend URL reachable from **this process** (SSR fetches). Same host as above for non-Docker runs; `docker-compose.yml` overrides it to `http://backend:3001/api/v1` so the frontend container reaches the backend container by service name |
-| `NUXT_PUBLIC_SITE_URL` | Canonical URL, used in sitemap/structured data |
+| `NUXT_PUBLIC_SITE_URL` | Canonical URL, used in sitemap/structured data and as the address of each listing's iCal export feed (`/ical/<token>.ics`, which `frontend/server/routes/ical/[file].ts` passes on to the backend) |
 | `NUXT_PUBLIC_GOOGLE_MAPS_API_KEY` | Optional — only needed if `GEOCODING_PROVIDER=google` |
 
 ---

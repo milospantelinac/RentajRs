@@ -146,6 +146,7 @@ enum OccupancySource {
 enum SubscriptionStatus {
   AWAITING_PAYMENT // created at checkout, before the NestPay redirect resolves — see nestpay callback handlers
   PENDING_ACTIVATION
+  SCHEDULED // a paid renewal waiting for the subscription it renews to end, see renewsSubscriptionId
   ACTIVE
   EXPIRED
   CANCELLED
@@ -182,20 +183,6 @@ enum BookingStatus {
   CANCELLED
   REJECTED
   EXPIRED
-  NO_SHOW
-}
-
-enum ReviewDirection {
-  GUEST_TO_OWNER
-  OWNER_TO_GUEST
-}
-
-enum ReviewTag {
-  ARRIVED_ON_TIME
-  RETURNED_NEATLY
-  COMMUNICATIVE
-  LATE
-  DAMAGE
   NO_SHOW
 }
 
@@ -960,16 +947,24 @@ model Subscription {
   // before the NestPay callback confirms payment and ListingsService.markPendingApproval()
   // takes over as the authoritative link (Listing.subscriptionId). Not used afterwards.
   pendingListingId    String?            @db.Uuid
+  // A renewal: the subscription whose listings this one takes over. Bought while
+  // that one still runs, it waits as SCHEDULED and starts where the other ends
+  // (SubscriptionsService.expireOverdueSubscriptions); bought after it ended, it
+  // starts at payment. Kept afterwards as the chain of paid periods.
+  renewsSubscriptionId String?           @db.Uuid
   createdAt           DateTime           @default(now()) @db.Timestamptz
 
-  user     User      @relation(fields: [userId], references: [id])
-  package  Package   @relation(fields: [packageId], references: [id])
+  user     User          @relation(fields: [userId], references: [id])
+  package  Package       @relation(fields: [packageId], references: [id])
+  renews   Subscription? @relation("SubscriptionRenewals", fields: [renewsSubscriptionId], references: [id], onDelete: SetNull)
+  renewals Subscription[] @relation("SubscriptionRenewals")
   listings Listing[]
 
   transactions Transaction[]
 
   @@index([userId])
   @@index([status])
+  @@index([renewsSubscriptionId])
 }
 
 /// ADR-005: paid days transfer, never refund or expire. See
@@ -1122,6 +1117,10 @@ model Booking {
   paymentConfirmedAt        DateTime?     @db.Timestamptz
   phoneUnlocked             Boolean       @default(false) // guest phone visible to owner after acceptance
   cancellationTermsSnapshot String?
+  /// Dizajn 39: the same policy as data, frozen with the text above, so the
+  /// guest's free-cancellation deadline never follows a later edit.
+  cancellationPolicyType    CancellationPolicyType?
+  cancellationThreshold     Int?
   cancellationReason        String?
   noShowDisputed            Boolean       @default(false)
   /// Which time-based email reminders already went out for this booking —
@@ -1137,7 +1136,7 @@ model Booking {
   history       BookingHistory[]
   blockedTerms  BlockedTerm[]
   conversations Conversation[]
-  reviews       Review[]
+  review        Review?
   disputes      Dispute[]
 
   @@index([listingId, status])
@@ -1218,43 +1217,34 @@ model MessageAttachment {
 // Reviews (§11)
 // ---------------------------------------------------------------------------
 
-/// Both directions are written independently and held back (published=false)
-/// until the counterpart also writes theirs, or 14 days pass — whichever is
-/// first (R96). See ReviewsService.tryPublishPair().
+/// Dizajn 43: the guest's review of a completed booking, one per booking and
+/// public the moment it is sent. Owners no longer rate guests, so the old
+/// double-blind pair (R96) and the quick tags about guests (R100) are gone.
+/// The guest writes it within review_window_days of completion and may
+/// change it for review_edit_days after it went public
+/// (common/utils/review-window.ts).
 model Review {
-  id            String          @id @default(uuid()) @db.Uuid
-  bookingId     String          @db.Uuid
-  authorId      String          @db.Uuid
-  recipientId   String          @db.Uuid
-  listingId     String          @db.Uuid // kept even if listing is later deleted (R148)
-  direction     ReviewDirection
+  id            String   @id @default(uuid()) @db.Uuid
+  bookingId     String   @unique @db.Uuid
+  authorId      String   @db.Uuid // the booking's guest
+  recipientId   String   @db.Uuid // the listing's owner
+  listingId     String   @db.Uuid // kept even if listing is later deleted (R148)
   rating        Int
   comment       String?
-  published     Boolean         @default(false)
-  publishedAt   DateTime?       @db.Timestamptz
-  writtenAt     DateTime        @default(now()) @db.Timestamptz
-  hiddenByAdmin Boolean         @default(false)
+  writtenAt     DateTime @default(now()) @db.Timestamptz
+  // The same moment as writtenAt since Dizajn 43; older reviews waited for
+  // the other side's before going public.
+  publishedAt   DateTime @default(now()) @db.Timestamptz
+  hiddenByAdmin Boolean  @default(false)
 
   booking   Booking @relation(fields: [bookingId], references: [id])
   author    User    @relation("ReviewAuthor", fields: [authorId], references: [id])
   recipient User    @relation("ReviewRecipient", fields: [recipientId], references: [id])
   listing   Listing @relation(fields: [listingId], references: [id])
 
-  tags  ReviewTagRow[]
   reply ReviewReply?
 
-  @@unique([bookingId, direction])
-  @@index([recipientId, published])
-}
-
-/// Guest-only tags (R100 — "brze oznake za gosta").
-model ReviewTagRow {
-  reviewId String    @db.Uuid
-  tag      ReviewTag
-
-  review Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
-
-  @@id([reviewId, tag])
+  @@index([recipientId])
 }
 
 /// At most one per review, never edited after posting (R101).

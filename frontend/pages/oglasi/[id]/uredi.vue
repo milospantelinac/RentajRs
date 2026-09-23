@@ -246,7 +246,13 @@
 
           <div v-if="form.priceUnit !== 'MONTH'" class="form-group mt-4">
             <label class="form-label">{{ t('listing.icalSectionTitle') }}</label>
-            <IcalSyncPanel v-if="listing?.status === 'ACTIVE'" :listing-id="listingId" :ical-export-token="listing?.icalExportToken" />
+            <!-- Dizajn 33: the feed and the connected calendars have their own page. -->
+            <div v-if="listing?.status === 'ACTIVE'" class="ical-open">
+              <p class="text-muted mb-0">{{ t('listing.icalPageHint') }}</p>
+              <NuxtLink :to="`/kontrolna-tabla/oglasi/${listingId}/ical`" class="btn btn-tertiary btn-sm">
+                {{ t('listing.icalPageOpen') }}
+              </NuxtLink>
+            </div>
             <div v-else class="ical-locked">
               <span class="ical-locked-icon" aria-hidden="true">🔒</span>
               <p class="text-muted mb-0">{{ t('listing.icalLockedHint') }}</p>
@@ -605,152 +611,227 @@
         <p v-if="!detailsBlocks.length" class="details-empty">{{ t('listing.noAttributesForCategory') }}</p>
       </div>
 
-      <!-- Lokacija -->
-      <div v-else-if="steps[currentStep].key === 'location'">
-        <div class="form-group mb-3">
-          <label class="form-label">{{ t('listing.region') }} *</label>
-          <select v-model="location.regionId" class="form-control form-select" @change="onRegionChange">
-            <option value="">—</option>
-            <option v-for="r in regions" :key="r.id" :value="r.id">{{ r.name }}</option>
-          </select>
-        </div>
-        <div class="form-group mb-3">
-          <label class="form-label">{{ t('listing.city') }} *</label>
-          <select v-model="location.cityId" class="form-control form-select" @change="onCityChange">
-            <option value="">—</option>
-            <option v-for="c in citiesInRegion" :key="c.id" :value="c.id">{{ c.name }}</option>
-          </select>
-        </div>
-        <div v-if="cityAreas.length" class="form-group mb-3">
-          <label class="form-label">{{ t('listing.cityArea') }} *</label>
-          <select v-model="location.cityAreaId" class="form-control form-select">
-            <option value="">—</option>
-            <option v-for="a in cityAreas" :key="a.id" :value="a.id">{{ a.name }}</option>
-          </select>
-        </div>
-        <div class="form-group mb-3">
-          <label class="form-label">{{ t('listing.address') }} *</label>
-          <input v-model="location.address" type="text" class="form-control" @blur="previewLocationOnMap" />
+      <!-- Dizajn 26: Lokacija, the Forma column of 275:287 (275:345). -->
+      <div v-else-if="steps[currentStep].key === 'location'" class="location">
+        <!-- 277:287 -->
+        <div class="location-row">
+          <div class="location-field">
+            <label for="location-region" class="location-label">
+              {{ t('listing.region') }} <span class="basics-required">*</span>
+            </label>
+            <div class="location-select" :class="{ 'is-empty': !location.regionId, 'is-invalid': locationErrors.regionId }">
+              <select id="location-region" v-model="location.regionId" class="location-select-control" @change="onRegionChange">
+                <option value="">{{ t('listing.detailsSelectPlaceholder') }}</option>
+                <option v-for="r in regions" :key="r.id" :value="r.id">{{ r.name }}</option>
+              </select>
+              <img src="/images/icons/chevron-down.svg" alt="" class="location-select-chevron" />
+            </div>
+            <p v-if="locationErrors.regionId" class="rules-error">
+              <img src="/images/icons/field-error.svg" alt="" />{{ locationErrors.regionId }}
+            </p>
+          </div>
+          <div class="location-field">
+            <label for="location-city" class="location-label">
+              {{ t('listing.city') }} <span class="basics-required">*</span>
+            </label>
+            <div class="location-select" :class="{ 'is-empty': !location.cityId, 'is-invalid': locationErrors.cityId }">
+              <select
+                id="location-city"
+                v-model="location.cityId"
+                class="location-select-control"
+                :disabled="!location.regionId"
+                @change="onCityChange"
+              >
+                <option value="">{{ t('listing.detailsSelectPlaceholder') }}</option>
+                <option v-for="c in citiesInRegion" :key="c.id" :value="c.id">{{ c.name }}</option>
+              </select>
+              <img src="/images/icons/chevron-down.svg" alt="" class="location-select-chevron" />
+            </div>
+            <p v-if="locationErrors.cityId" class="rules-error">
+              <img src="/images/icons/field-error.svg" alt="" />{{ locationErrors.cityId }}
+            </p>
+          </div>
+          <!-- Required only when the city has areas; most cities have none. -->
+          <div class="location-field">
+            <label for="location-area" class="location-label">
+              {{ t('listing.cityArea') }} <span v-if="!location.cityId || cityAreas.length" class="basics-required">*</span>
+            </label>
+            <div class="location-select" :class="{ 'is-empty': !location.cityAreaId, 'is-invalid': locationErrors.cityAreaId }">
+              <select
+                id="location-area"
+                v-model="location.cityAreaId"
+                class="location-select-control"
+                :disabled="!cityAreas.length"
+                @change="locationErrors.cityAreaId = ''"
+              >
+                <option value="">
+                  {{ location.cityId && !cityAreas.length ? t('listing.cityAreaNone') : t('listing.detailsSelectPlaceholder') }}
+                </option>
+                <option v-for="a in cityAreas" :key="a.id" :value="a.id">{{ a.name }}</option>
+              </select>
+              <img src="/images/icons/chevron-down.svg" alt="" class="location-select-chevron" />
+            </div>
+            <p v-if="locationErrors.cityAreaId" class="rules-error">
+              <img src="/images/icons/field-error.svg" alt="" />{{ locationErrors.cityAreaId }}
+            </p>
+          </div>
         </div>
 
-        <div class="form-group mb-3">
-          <label class="form-label">{{ t('listing.mapPinLabel') }}</label>
-          <p class="text-muted mb-2">{{ t('listing.mapPinHint') }}</p>
-          <LocationPickerMap
-            :latitude="location.latitude"
-            :longitude="location.longitude"
-            @update:position="onPinDragged"
-          />
+        <!-- 277:309 -->
+        <div class="location-field">
+          <label for="location-address" class="location-label">
+            {{ t('listing.address') }} <span class="basics-required">*</span>
+          </label>
+          <div class="location-input" :class="{ 'is-invalid': locationErrors.address }" @click="$event.currentTarget.querySelector('input').focus()">
+            <img src="/images/icons/address-pin.svg" alt="" class="location-input-icon" />
+            <input
+              id="location-address"
+              v-model="location.address"
+              type="text"
+              class="location-input-control"
+              @input="locationErrors.address = ''"
+              @blur="previewLocationOnMap"
+            />
+          </div>
+          <p v-if="locationErrors.address" class="rules-error">
+            <img src="/images/icons/field-error.svg" alt="" />{{ locationErrors.address }}
+          </p>
+          <p v-else class="location-hint">
+            {{ t(location.cityId && !cityAreas.length ? 'listing.locationAddressHintNoArea' : 'listing.locationAddressHint') }}
+          </p>
         </div>
 
-        <div class="form-group mb-3">
-          <label class="form-label">{{ t('listing.googlePlaceIdLabel') }}</label>
-          <p class="text-muted mb-2">{{ t('listing.googlePlaceIdHint') }}</p>
-          <input v-model="location.googlePlaceId" type="text" class="form-control" placeholder="ChIJ..." />
+        <!-- 277:318 -->
+        <div class="location-field location-map-field">
+          <p class="location-label">{{ t('listing.mapPinLabel') }}</p>
+          <p class="location-hint location-map-hint">{{ t('listing.mapPinHint') }}</p>
+          <LocationPickerMap :latitude="location.latitude" :longitude="location.longitude" @update:position="onPinDragged" />
+        </div>
+
+        <!-- 277:346 -->
+        <div class="location-field">
+          <label for="location-place-id" class="location-label">
+            {{ t('listing.googlePlaceIdLabel') }}<span class="location-optional">{{ t('common.optional') }}</span>
+          </label>
+          <div class="location-input" @click="$event.currentTarget.querySelector('input').focus()">
+            <input
+              id="location-place-id"
+              v-model="location.googlePlaceId"
+              type="text"
+              class="location-input-control"
+              maxlength="200"
+              placeholder="ChIJ..."
+            />
+          </div>
+          <p class="location-hint">{{ t('listing.googlePlaceIdHint') }}</p>
         </div>
       </div>
 
       <!-- Fotografije -->
-      <div v-else-if="steps[currentStep].key === 'photos'">
-        <p class="text-muted mb-3">{{ t('listing.photoCountRecommendation') }}</p>
-        <div
-          class="dropzone"
-          :class="{ 'dropzone-active': dropzoneActive }"
-          @click="fileInput.click()"
-          @dragover.prevent="dropzoneActive = true"
-          @dragleave.prevent="dropzoneActive = false"
-          @drop.prevent="onDropFiles"
-        >
-          <div class="dropzone-icon">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 16V4M12 4l-4 4M12 4l4 4" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /><path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="white" stroke-width="2" stroke-linecap="round" /></svg>
-          </div>
-          <strong>{{ t('listing.dropzoneTitle') }}</strong>
-          <span>{{ t('listing.dropzoneHint') }}</span>
-          <input ref="fileInput" type="file" accept="image/*" multiple class="d-none" @change="onFileInputChange" />
-        </div>
+      <!-- 283:287 to 283:319: the blue recommendation, the grid of uploaded photos with the
+           "Dodaj još" tile, the dropzone, then the note about the order. -->
+      <div v-else-if="steps[currentStep].key === 'photos'" class="photos">
+        <!-- 283:287 -->
+        <p class="photos-notice">{{ t('listing.photoCountRecommendation') }}</p>
 
-        <div class="photo-grid">
+        <!-- 283:290 -->
+        <div v-if="photos.length" class="photos-grid">
           <div
             v-for="(photo, index) in photos"
             :key="photo.id"
-            class="photo"
+            class="photos-item"
             draggable="true"
             @dragstart="onPhotoDragStart(index)"
             @dragover.prevent
             @drop.prevent="onPhotoDrop(index)"
           >
-            <img :src="photo.url" :alt="photo.altText || ''" />
+            <img :src="photo.url" :alt="photo.altText || ''" class="photos-image" />
+            <!-- 283:292: the pill only labels the first photo — the cover follows the order,
+                 which the owner changes by dragging (283:320). -->
+            <span v-if="index === 0" class="photos-cover">{{ t('listing.coverPhotoBadge') }}</span>
+            <!-- 283:294 -->
             <button
-              class="photo-badge"
-              :class="{ 'photo-badge-inactive': index !== 0 }"
-              :title="index === 0 ? t('listing.coverPhotoBadge') : t('listing.setCoverPhotoHint')"
-              @click.stop="setCoverPhoto(index)"
+              type="button"
+              class="photos-remove"
+              :aria-label="t('listing.removePhoto')"
+              @click.stop="removePhoto(photo.id)"
             >
-              ★ {{ index === 0 ? t('listing.coverPhotoBadge') : '' }}
+              <img src="/images/icons/photo-remove-x.svg" alt="" />
             </button>
-            <button class="photo-remove" :aria-label="t('listing.removePhoto')" @click.stop="removePhoto(photo.id)">✕</button>
-            <span class="photo-drag" aria-hidden="true">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><circle cx="8" cy="6" r="1.6" fill="#334155" /><circle cx="16" cy="6" r="1.6" fill="#334155" /><circle cx="8" cy="12" r="1.6" fill="#334155" /><circle cx="16" cy="12" r="1.6" fill="#334155" /><circle cx="8" cy="18" r="1.6" fill="#334155" /><circle cx="16" cy="18" r="1.6" fill="#334155" /></svg>
-            </span>
           </div>
-          <div class="photo photo-add" @click="fileInput.click()">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="#0957df" stroke-width="2.2" stroke-linecap="round" /></svg>
+
+          <!-- 283:309 -->
+          <button v-if="!photosAtLimit" type="button" class="photos-add" @click="fileInput.click()">
+            <img src="/images/icons/plus-muted.svg" alt="" class="photos-add-icon" />
             {{ t('listing.addMorePhotos') }}
-          </div>
+          </button>
         </div>
 
-        <div v-if="photos.length > 1" class="grid-hint">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2" /><path d="M12 8v5M12 16h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg>
-          {{ t('listing.setCoverPhotoHint') }}
+        <!-- 283:313 -->
+        <div
+          v-if="!photosAtLimit"
+          class="photos-dropzone"
+          :class="{ 'is-active': dropzoneActive }"
+          @click="fileInput.click()"
+          @dragover.prevent="dropzoneActive = true"
+          @dragleave.prevent="dropzoneActive = false"
+          @drop.prevent="onDropFiles"
+        >
+          <img src="/images/icons/upload-brand.svg" alt="" class="photos-dropzone-icon" />
+          <strong class="photos-dropzone-title">{{ t('listing.dropzoneTitle') }}</strong>
+          <span class="photos-dropzone-hint">{{ t('listing.dropzoneHint', { max: PHOTO_MAX_SIZE_MB }) }}</span>
         </div>
+        <p v-else class="photos-limit">{{ t('listing.photoLimitReached', { max: PHOTO_MAX_COUNT }) }}</p>
+
+        <input ref="fileInput" type="file" :accept="PHOTO_ACCEPT" multiple class="d-none" @change="onFileInputChange" />
+
+        <!-- 283:319: the frame always has photos; with none there is nothing to drag. -->
+        <p v-if="photos.length" class="photos-order-note">{{ t('listing.photosOrderNote') }}</p>
       </div>
 
       <!-- Pregled -->
-      <div v-else-if="steps[currentStep].key === 'review'">
-        <ul class="wizard-checklist mb-4">
-          <li v-for="(ok, key) in readiness?.checklist" :key="key" :class="ok ? 'text-success' : 'text-error'">
-            {{ ok ? '✓' : '✗' }} {{ t(`listing.checklist.${key}`) }}
-            <NuxtLink v-if="!ok && key === 'hasPhone'" to="/kontrolna-tabla/podesavanja">{{ t('common.edit') }} →</NuxtLink>
-            <!-- T33 — name the specific missing attribute(s) instead of leaving
-                 the owner to guess which of the category's fields is empty. -->
-            <span v-if="!ok && key === 'requiredAttributesFilled' && readiness?.missingAttributeNames?.length" class="text-muted">
-              ({{ t('listing.missingAttributesPrefix') }}: {{ readiness.missingAttributeNames.join(', ') }})
-            </span>
-          </li>
-        </ul>
-        <p v-if="!readiness?.ready" class="text-muted mb-3">{{ t('listing.notReadyYet') }}</p>
+      <!-- 289:317: the readiness card, then one summary card per step (289:360 and the
+           seven after it). The frame draws Igraonice; a listing only gets the sections
+           and rows its own steps really have. -->
+      <div v-else-if="steps[currentStep].key === 'review'" class="review">
+        <!-- 289:317 -->
+        <section class="review-readiness" :class="{ 'is-ready': !reviewMissingCount }">
+          <p class="review-readiness-head">
+            <span class="review-readiness-mark"><img src="/images/icons/check-review-24.svg" alt="" /></span>
+            {{ reviewHeadline }}
+          </p>
+          <ul class="review-checks">
+            <!-- 499:514: the row names what is missing and leads to the step that fixes
+                 it (289:357); the phone and the bank account live in the profile. -->
+            <li v-for="item in reviewChecklist" :key="item.key" class="review-check" :class="{ 'is-missing': !item.ok }">
+              <span class="review-check-mark" aria-hidden="true">{{ item.ok ? '✓' : '!' }}</span>
+              <NuxtLink v-if="item.to" :to="item.to" class="review-check-label">{{ item.label }}</NuxtLink>
+              <button v-else-if="item.step" type="button" class="review-check-label" @click="goToStepKey(item.step)">
+                {{ item.label }}
+              </button>
+              <span v-else class="review-check-label is-plain">{{ item.label }}</span>
+              <span v-if="item.note" class="review-check-note">{{ item.note }}</span>
+              <NuxtLink v-if="!item.ok && item.to" :to="item.to" class="review-check-link">{{ t('listing.reviewFillProfile') }}</NuxtLink>
+            </li>
+          </ul>
+          <!-- 289:356 -->
+          <p class="review-note">
+            {{ t('listing.reviewChecklistNote') }}
+            <img src="/images/icons/info-circle.svg" alt="" />
+          </p>
+        </section>
 
-        <div class="review-actions">
-          <NuxtLink :to="`/oglasi/${listingId}/pregled`" class="btn btn-tertiary">{{ t('listing.previewListing') }}</NuxtLink>
-          <NuxtLink v-if="!listing?.subscriptionId" to="/kontrolna-tabla/oglasi" class="btn btn-tertiary">{{ t('listing.saveAsDraft') }}</NuxtLink>
-          <!-- T41 — a listing that already has a package attached (editing an
-               existing/published listing) never needs to go through package
-               selection again; every step already saved as the owner went,
-               so "finishing" here is just a confirmation, no purchase. -->
-          <button
-            v-if="readiness?.ready && listing?.subscriptionId"
-            class="btn btn-primary-flat"
-            :disabled="finishing"
-            @click="finishEditing"
-          >
-            {{ finishing ? t('common.loading') : t('listing.saveChanges') }}
-          </button>
-          <!-- T42 — a brand-new listing whose owner already has an active PRO
-               subscription with a free slot attaches to it directly instead
-               of detouring through a package purchase they don't need. -->
-          <button
-            v-else-if="readiness?.ready && freeSlotSubscription"
-            class="btn btn-primary-flat"
-            :disabled="finishing"
-            @click="publishWithFreeSlot"
-          >
-            {{ finishing ? t('common.loading') : t('listing.publishWithExistingPackage') }}
-          </button>
-          <NuxtLink v-else-if="readiness?.ready" :to="`/oglasi/${listingId}/paket`" class="btn btn-primary-flat">
-            {{ t('listing.goToPackages') }}
-          </NuxtLink>
-        </div>
-        <p class="text-muted mt-2">{{ t('listing.draftSavedExplain') }}</p>
+        <!-- 289:360 -->
+        <section v-for="section in reviewSections" :key="section.key" class="review-card">
+          <div class="review-card-head">
+            <span class="review-card-title">{{ section.title }}</span>
+            <button type="button" class="review-card-edit" @click="goToStepKey(section.key)">{{ t('common.edit') }}</button>
+          </div>
+          <div v-for="row in section.rows" :key="row.key" class="review-row">
+            <span class="review-row-label">{{ row.label }}</span>
+            <span class="review-row-value">{{ row.value }}</span>
+          </div>
+        </section>
       </div>
 
       <p v-if="error" class="wizard-error" role="alert"><img src="/images/icons/field-error.svg" alt="" />{{ error }}</p>
@@ -945,6 +1026,43 @@
       </section>
     </aside>
 
+    <!-- 275:441: step 7's guest view and tips, in the grid's 400 column beside the form. -->
+    <aside v-if="steps[currentStep].key === 'location'" class="wizard-aside">
+      <!-- 279:287 -->
+      <section class="wizard-aside-card">
+        <p class="wizard-aside-title">
+          {{ t('listing.locationGuestViewTitle') }}
+          <img src="/images/icons/info-circle.svg" alt="" />
+        </p>
+        <!-- 279:292: what the card and the listing page show, then what a confirmed booking adds. -->
+        <dl class="location-states">
+          <div class="location-state">
+            <dt class="location-state-label">{{ t('listing.locationGuestViewBefore') }}</dt>
+            <dd class="location-state-value">{{ locationPublicText }}</dd>
+          </div>
+          <div class="location-state">
+            <dt class="location-state-label">{{ t('listing.locationGuestViewAfter') }}</dt>
+            <dd class="location-state-value">{{ locationConfirmedText }}</dd>
+          </div>
+        </dl>
+        <p class="wizard-aside-caption location-caption">{{ t('listing.locationGuestViewCaption') }}</p>
+      </section>
+
+      <!-- 279:300 -->
+      <section class="wizard-aside-card">
+        <p class="wizard-aside-title">
+          {{ t('listing.stepTipsTitle') }}
+          <img src="/images/icons/info-circle.svg" alt="" />
+        </p>
+        <ul class="wizard-aside-tips">
+          <li v-for="tip in locationTips" :key="tip" class="wizard-aside-tip">
+            <img src="/images/icons/check-brand-tips.svg" alt="" />
+            <span>{{ tip }}</span>
+          </li>
+        </ul>
+      </section>
+    </aside>
+
     <!-- 266:476, 545:668: step 6's preview of the listing's Detalji section and the tips, in the
          grid's 400 column beside the form. -->
     <aside v-if="steps[currentStep].key === 'attributes'" class="wizard-aside">
@@ -986,6 +1104,66 @@
       </section>
     </aside>
 
+    <!-- 281:412: step 8's live preview of the search card and the tips, in the grid's 400
+         column beside the form. -->
+    <aside v-if="steps[currentStep].key === 'photos'" class="wizard-aside">
+      <!-- 285:287 -->
+      <section class="wizard-aside-card">
+        <p class="wizard-aside-title">
+          {{ t('listing.photosCardPreviewTitle') }}
+          <img src="/images/icons/info-circle.svg" alt="" />
+        </p>
+        <!-- 680:1879 is the Dizajn 3 card itself; here it only shows what the cover photo
+             does to the card, so nothing inside it is clickable. -->
+        <div class="photos-card" aria-hidden="true">
+          <ListingCard :listing="cardPreviewListing" />
+        </div>
+        <p class="wizard-aside-caption photos-card-caption">{{ t('listing.photosCardPreviewCaption') }}</p>
+      </section>
+
+      <!-- 285:309 -->
+      <section class="wizard-aside-card">
+        <p class="wizard-aside-title">
+          {{ t('listing.stepTipsTitle') }}
+          <img src="/images/icons/info-circle.svg" alt="" />
+        </p>
+        <ul class="wizard-aside-tips">
+          <li v-for="tip in photosTips" :key="tip" class="wizard-aside-tip">
+            <img src="/images/icons/check-brand-tips.svg" alt="" />
+            <span>{{ tip }}</span>
+          </li>
+        </ul>
+      </section>
+    </aside>
+
+    <!-- 285:426: step 9's live search card and the checks to run before sending. -->
+    <aside v-if="steps[currentStep].key === 'review'" class="wizard-aside">
+      <!-- 291:317 -->
+      <section class="wizard-aside-card">
+        <p class="wizard-aside-title">
+          {{ t('listing.reviewCardPreviewTitle') }}
+          <img src="/images/icons/info-circle.svg" alt="" />
+        </p>
+        <div class="photos-card" aria-hidden="true">
+          <ListingCard :listing="cardPreviewListing" />
+        </div>
+      </section>
+
+      <!-- 291:344 -->
+      <section class="wizard-aside-card">
+        <p class="wizard-aside-title">
+          {{ t('listing.reviewTipsTitle') }}
+          <img src="/images/icons/info-circle.svg" alt="" />
+        </p>
+        <ul class="wizard-aside-tips">
+          <li v-for="tip in reviewTips" :key="tip" class="wizard-aside-tip">
+            <img src="/images/icons/check-brand-tips.svg" alt="" />
+            <span>{{ tip }}</span>
+          </li>
+        </ul>
+      </section>
+    </aside>
+
     <!-- 228:376 -->
     <div class="wizard-actions">
       <div class="wizard-actions-back">
@@ -995,8 +1173,27 @@
         </button>
         <span class="wizard-count">{{ t('listing.wizardStepsProgress', { current: currentStep + 1, total: steps.length }) }}</span>
       </div>
+      <!-- 499:552: only step 9 offers the guest's view, between the two buttons. -->
+      <NuxtLink
+        v-if="steps[currentStep].key === 'review'"
+        :to="`/oglasi/${listingId}/pregled`"
+        class="wizard-preview-link"
+      >
+        {{ t('listing.previewListing') }}
+      </NuxtLink>
       <button v-if="currentStep < steps.length - 1" type="button" class="wizard-next" :disabled="saving" @click="saveCurrentStep">
         {{ saving ? t('common.loading') : t('listing.saveAndContinue') }}
+        <img src="/images/icons/arrow-right-white.svg" alt="" />
+      </button>
+      <!-- 285:467: the last step's own button. It says what the click really does: the
+           listing goes to the admin only when it already has a package (T41/T42) or a
+           free slot to attach to; otherwise the package still has to be picked first. -->
+      <NuxtLink v-else-if="readiness?.ready && reviewCta.to" :to="reviewCta.to" class="wizard-next">
+        {{ reviewCta.label }}
+        <img src="/images/icons/arrow-right-white.svg" alt="" />
+      </NuxtLink>
+      <button v-else type="button" class="wizard-next" :disabled="!readiness?.ready || finishing" @click="reviewCta.run()">
+        {{ finishing ? t('common.loading') : reviewCta.label }}
         <img src="/images/icons/arrow-right-white.svg" alt="" />
       </button>
     </div>
@@ -1034,6 +1231,12 @@ const cityAreas = ref([])
 const fileInput = ref(null)
 const dropzoneActive = ref(false)
 const draggedPhotoIndex = ref(null)
+// What the upload endpoint really accepts: UploadsService's ALLOWED_MIME_TYPES and
+// MAX_PHOTO_SIZE_MB, and ListingsService's MAX_PHOTOS. The frame's hint says "JPG, PNG do
+// 10MB", which would let the owner pick a file the API then rejects.
+const PHOTO_ACCEPT = 'image/jpeg,image/png,image/webp'
+const PHOTO_MAX_SIZE_MB = 8
+const PHOTO_MAX_COUNT = 20
 const mySubscriptions = ref([])
 const finishing = ref(false)
 // Dizajn 20 (228:325, 228:334): the counters' limits, the same as UpdateListingDto's.
@@ -1072,22 +1275,8 @@ const form = reactive({
   cancellationThreshold: null,
 })
 
-// Dodavanje Oglasa spec's KONAČNI FLOW — a fixed 9-step order (basics
-// first, then price+booking-method combined, then availability/rules/
-// payment, which are the only steps "Bez rezervacije" ever skips), rather
-// than the old free-choice bookingModel step 0 + a separate pricing step 5.
-const ALL_STEPS = [
-  { key: 'basics', labelKey: 'listing.stepBasics', descKey: 'listing.stepBasicsDesc' },
-  { key: 'pricing', labelKey: 'listing.stepPricing', descKey: 'listing.stepPricingDesc' },
-  { key: 'availability', labelKey: 'listing.stepAvailability', descKey: 'listing.stepAvailabilityDesc', skipIfNoBooking: true },
-  { key: 'rules', labelKey: 'listing.stepRules', descKey: 'listing.stepRulesDesc', skipIfNoBooking: true },
-  { key: 'payment', labelKey: 'listing.stepPayment', descKey: 'listing.stepPaymentDesc', skipIfNoBooking: true },
-  { key: 'attributes', labelKey: 'listing.stepAttributes', descKey: 'listing.stepAttributesDesc' },
-  { key: 'location', labelKey: 'listing.stepLocation', descKey: 'listing.stepLocationDesc' },
-  { key: 'photos', labelKey: 'listing.stepPhotos', descKey: 'listing.stepPhotosDesc' },
-  { key: 'review', labelKey: 'listing.stepReview', descKey: 'listing.stepReviewDesc' },
-]
-const steps = computed(() => ALL_STEPS.filter((s) => !s.skipIfNoBooking || form.bookingModel !== 'NO_BOOKING'))
+// The fixed step order lives in utils/wizardSteps.js, where Moji oglasi counts it too.
+const steps = computed(() => getWizardSteps(form.bookingModel))
 
 // Toggling "bez rezervacije" removes 3 steps from the array — keep the user
 // on a valid index instead of landing on whatever step now shares that slot.
@@ -1117,8 +1306,25 @@ const freeSlotSubscription = computed(() =>
 watch(currentStep, async (step) => {
   if (step === steps.value.length - 1) {
     readiness.value = await api.get(`/listings/${listingId}/readiness`)
+    if (form.bookingModel !== 'NO_BOOKING') await loadAvailabilitySummary()
   }
 })
+
+// Dizajn 28 (289:389): the owner payload carries no hours, slots or blocks, so the
+// availability summary reads the same endpoint the step 3 editors do.
+const availability = ref(null)
+async function loadAvailabilitySummary() {
+  const from = new Date()
+  const to = new Date(Date.now() + 1000 * 60 * 60 * 24 * 365)
+  availability.value = await api
+    .get(`/listings/${listingId}/availability`, { query: { from: from.toISOString(), to: to.toISOString() } })
+    .catch(() => null)
+}
+
+function goToStepKey(key) {
+  const index = steps.value.findIndex((s) => s.key === key)
+  if (index >= 0) currentStep.value = index
+}
 
 // "Način rezervacije" (Dodavanje Oglasa spec §0/§2) — the owner never picks
 // PER_STAY vs PER_SLOT directly; that always comes from the category. This
@@ -1790,6 +1996,33 @@ const detailsTips = computed(() => {
   )
 })
 
+// Dizajn 27 (283:309, 283:313): at 20 photos the API refuses another one, so the tile and
+// the dropzone give way to a line that says why.
+const photosAtLimit = computed(() => photos.value.length >= PHOTO_MAX_COUNT)
+
+// 285:314: five tips a category, three for a category added later — the same split as
+// step 6's, and off the same category kind.
+const photosTips = computed(() => {
+  const kind = detailsCopyKind.value
+  return Array.from({ length: kind === 'default' ? 3 : 5 }, (_, i) => t(`listing.photosTips.${kind}.tip${i + 1}`))
+})
+
+// 680:1879: the real search card, fed the values the wizard holds right now — the cover is
+// photos[0], so a new first photo shows up in the preview straight away.
+const cardPreviewListing = computed(() => ({
+  id: listingId,
+  slug: listing.value?.slug || '',
+  title: form.title.trim() || t('listing.photosCardPreviewNoTitle'),
+  coverPhoto: photos.value[0] || null,
+  category: listing.value?.category || null,
+  city: locationCity.value || listing.value?.city || null,
+  cityArea: locationArea.value || listing.value?.cityArea || null,
+  avgRating: listing.value?.avgRating ?? null,
+  price: form.price,
+  priceUnit: form.priceUnit,
+  attributes: detailsPreviewAttributes.value.map(flattenListingAttribute),
+}))
+
 const location = reactive({ regionId: '', cityId: '', cityAreaId: '', address: '', latitude: null, longitude: null, googlePlaceId: '' })
 
 async function previewLocationOnMap() {
@@ -1810,6 +2043,383 @@ async function previewLocationOnMap() {
 function onPinDragged({ latitude, longitude }) {
   location.latitude = latitude
   location.longitude = longitude
+}
+
+// Dizajn 26 (279:292): before a booking the guest sees the city and its area, the way
+// ListingCard writes them; the address comes with the confirmed booking.
+const locationCity = computed(() => cities.value.find((c) => c.id === location.cityId))
+const locationArea = computed(() => cityAreas.value.find((a) => a.id === location.cityAreaId))
+const locationPublicText = computed(() => {
+  if (!locationCity.value) return t('listing.locationGuestViewNoCity')
+  return [locationCity.value.name, locationArea.value?.name].filter(Boolean).join(' · ')
+})
+const locationConfirmedText = computed(() => {
+  const address = location.address?.trim()
+  if (!address) return t('listing.locationGuestViewNoAddress')
+  const place = locationArea.value?.name || locationCity.value?.name
+  return place ? `${address}, ${place}` : address
+})
+const locationTips = computed(() => Array.from({ length: 5 }, (_, i) => t(`listing.locationTips.tip${i + 1}`)))
+
+// Dizajn 28: step 9's body, read off 285:392 (Forma) and 285:426 (Saveti) ---------------
+
+const SETTINGS_PATH = '/kontrolna-tabla/podesavanja'
+// 289:357: every check leads to the step that fixes it. The phone and the bank account
+// are profile fields, so those two rows leave the wizard instead.
+const REVIEW_CHECK_STEPS = {
+  hasTitle: 'basics',
+  hasDescription: 'basics',
+  hasPhotos: 'photos',
+  hasLocation: 'location',
+  hasPrice: 'pricing',
+  hasPaymentMethod: 'payment',
+  requiredAttributesFilled: 'attributes',
+}
+const REVIEW_PROFILE_CHECKS = ['hasPhone', 'hasBankAccountIfNeeded']
+
+// 289:323: the readiness endpoint's own checks, in its own order.
+const reviewChecklist = computed(() =>
+  Object.entries(readiness.value?.checklist || {}).map(([key, ok]) => {
+    // A defined-slot listing carries its prices on the slots, so "Cena" is fixed in
+    // step 3, not step 2.
+    const stepKey = key === 'hasPrice' && isDefinedSlotsModel.value ? 'availability' : REVIEW_CHECK_STEPS[key]
+    let note = ''
+    if (key === 'hasBankAccountIfNeeded' && form.paymentMethod === 'CASH') note = t('listing.reviewBankNotNeeded')
+    // T33: name the specific missing attribute(s) instead of leaving the owner to
+    // guess which of the category's fields is empty.
+    if (key === 'requiredAttributesFilled' && !ok && readiness.value?.missingAttributeNames?.length) {
+      note = `${t('listing.missingAttributesPrefix')}: ${readiness.value.missingAttributeNames.join(', ')}`
+    }
+    return {
+      key,
+      ok,
+      label: t(`listing.checklist.${key}`),
+      note,
+      to: REVIEW_PROFILE_CHECKS.includes(key) ? SETTINGS_PATH : '',
+      step: steps.value.some((s) => s.key === stepKey) ? stepKey : '',
+    }
+  }),
+)
+
+const reviewMissingCount = computed(() => reviewChecklist.value.filter((item) => !item.ok).length)
+// 289:322
+const reviewHeadline = computed(() =>
+  reviewMissingCount.value
+    ? t(`listing.reviewMissing${srPluralCategory(reviewMissingCount.value)}`, { count: reviewMissingCount.value })
+    : t('listing.reviewAllDone'),
+)
+
+const REVIEW_DAY_KEYS = ['dayMon', 'dayTue', 'dayWed', 'dayThu', 'dayFri', 'daySat', 'daySun']
+// 289:395: consecutive days read as a range ("Ponedeljak - subota"), and only the first
+// day keeps its capital, the way the frame writes it.
+function reviewDayRange(days) {
+  const sorted = [...new Set(days)].sort((a, b) => a - b)
+  const name = (day, first) => {
+    const label = t(`listing.${REVIEW_DAY_KEYS[day - 1]}`)
+    return first ? label : label.toLocaleLowerCase('sr-RS')
+  }
+  if (sorted.length > 2 && sorted.every((day, i) => i === 0 || day === sorted[i - 1] + 1)) {
+    return `${name(sorted[0], true)} - ${name(sorted[sorted.length - 1])}`
+  }
+  return sorted.map((day, i) => name(day, i === 0)).join(', ')
+}
+
+function reviewDateCount(dates) {
+  const count = new Set(dates.map((date) => String(date).slice(0, 10))).size
+  return t(`listing.reviewDates${srPluralCategory(count)}`, { count })
+}
+
+// 289:393: what step 3 saved, in the words its own fields use.
+const reviewAvailabilityRows = computed(() => {
+  const data = availability.value
+  const notSelected = t('listing.reviewNotSelected')
+  const manualBlocks = (data?.blocked || []).filter((block) => block.source === 'MANUAL')
+  if (isDefinedSlotsModel.value) {
+    const slots = data?.definedSlots || []
+    return [
+      {
+        key: 'slots',
+        label: t('listing.dsExistingSlots'),
+        value: t(`listing.reviewSlots${srPluralCategory(slots.length)}`, { count: slots.length }),
+      },
+      { key: 'blocked', label: t('listing.reviewRowBlockedDates'), value: reviewDateCount(manualBlocks.map((b) => b.startsAt)) },
+    ]
+  }
+  if (form.bookingModel === 'PER_SLOT') {
+    const hours = data?.workingHours || []
+    const times = new Set(hours.map((h) => `${h.startsAt} - ${h.endsAt}`))
+    const ranges = data?.hourlyPriceRanges || []
+    const exceptions = [...manualBlocks.map((b) => b.startsAt), ...(data?.slotPriceOverrides || []).map((o) => o.date)]
+    return [
+      { key: 'days', label: t('listing.whAvailableDays'), value: hours.length ? reviewDayRange(hours.map((h) => h.dayOfWeek)) : notSelected },
+      {
+        key: 'hours',
+        label: t('listing.whWorkingHours'),
+        value: times.size === 1 ? [...times][0] : times.size ? t('listing.reviewHoursPerDay') : notSelected,
+      },
+      {
+        key: 'ranges',
+        label: t('listing.whHourlyRanges'),
+        value: t(`listing.reviewIntervals${srPluralCategory(ranges.length)}`, { count: ranges.length }),
+      },
+      { key: 'exceptions', label: t('listing.whExceptions'), value: reviewDateCount(exceptions) },
+    ]
+  }
+  // A stay keeps a calendar of blocked dates and per-date prices instead of hours.
+  return [
+    { key: 'blocked', label: t('listing.reviewRowBlockedDates'), value: reviewDateCount(manualBlocks.map((b) => b.startsAt)) },
+    {
+      key: 'prices',
+      label: t('listing.reviewRowDatePrices'),
+      value: reviewDateCount((data?.datePriceOverrides || []).map((o) => o.date)),
+    },
+  ]
+})
+
+// 289:409: the same rules as step 4, each in the unit that step uses.
+const reviewRulesRows = computed(() => {
+  const noLimit = t('listing.rulesSummaryNoLimit')
+  const rows = []
+  if (!isDefinedSlotsModel.value) {
+    const unit = rulesDurationUnit.value
+    const withUnit = (count) => `${count} ${srDurationUnitWord(unit, count)}`
+    const { minDuration: min, maxDuration: max } = form
+    let value = noLimit
+    if (min && max) value = `${min} - ${withUnit(max)}`
+    else if (min) value = t('listing.rulesSummaryAtLeast', { value: withUnit(min) })
+    else if (max) value = t('listing.rulesSummaryAtMost', { value: withUnit(max) })
+    rows.push({ key: 'duration', label: rulesDurationTitle.value, value })
+  }
+  rows.push({
+    key: 'notice',
+    label: t('listing.reviewRowNotice'),
+    value: form.earliestBookingHours ? termCount('termHours', form.earliestBookingHours) : t('listing.rulesSummaryUntilStart'),
+  })
+  rows.push({
+    key: 'horizon',
+    label: t('listing.termHorizon'),
+    value: form.maxAdvanceBookingDays ? termCount('termDays', form.maxAdvanceBookingDays) : noLimit,
+  })
+  if (showGuestCount.value) {
+    const min = form.minGuests || 1
+    const max = rulesGuestCap.value
+    // The unit follows the number it stands after, the way step 6 declines its own units.
+    const kind = rulesChildren.value ? 'children' : 'guests'
+    const unit = t(`listing.detailsUnit.${kind}${srPluralCategory(max || min)}`)
+    let value = noLimit
+    if (max && min > 1) value = `${min} - ${max} ${unit}`
+    else if (max) value = t('listing.rulesSummaryAtMost', { value: `${max} ${unit}` })
+    else if (min > 1) value = t('listing.rulesSummaryAtLeast', { value: `${min} ${unit}` })
+    rows.push({ key: 'guests', label: t('listing.rulesGuestsTitle'), value })
+  }
+  if (showGapAfter.value) {
+    rows.push({
+      key: 'gap',
+      label: t('listing.gapAfterMinutes'),
+      value: form.gapAfterMinutes
+        ? t('listing.rulesSummaryMinutes', { count: form.gapAfterMinutes })
+        : t('listing.rulesSummaryNoGap'),
+    })
+  }
+  if (showVehicleTimes.value) {
+    const byArrangement = t('listing.rulesSummaryByArrangement')
+    rows.push({ key: 'pickup', label: t('listing.pickupTime'), value: form.pickupTime || byArrangement })
+    rows.push({ key: 'return', label: t('listing.returnTime'), value: form.returnTime || byArrangement })
+  }
+  return rows
+})
+
+// 289:437: cash has no advance and no deadline, so those rows only show with a QR code.
+const reviewPaymentRows = computed(() => {
+  const rows = [
+    {
+      key: 'method',
+      label: t('listing.paymentMethod'),
+      value:
+        form.paymentMethod === 'BOTH'
+          ? t('listing.reviewPaymentBoth')
+          : t(PAYMENT_METHOD_TITLES[form.paymentMethod] || PAYMENT_METHOD_TITLES.CASH),
+    },
+  ]
+  if (paymentUsesQr.value) {
+    rows.push({
+      key: 'advance',
+      label: t('listing.reviewRowAdvance'),
+      value: form.advancePercent
+        ? t('listing.reviewAdvance', {
+            percent: form.advancePercent,
+            deadline: termCount('termHours', form.paymentDeadlineHours || 48),
+          })
+        : t('listing.reviewNoAdvance'),
+    })
+  }
+  rows.push({
+    key: 'handling',
+    label: t('listing.reviewRowHandling'),
+    value: t(form.requiresApproval ? 'listing.requestHandlingApproval' : 'listing.requestHandlingInstant'),
+  })
+  const threshold = form.cancellationThreshold
+  const freePolicy = FREE_CANCELLATION_POLICIES.includes(form.cancellationPolicyType) && threshold
+  rows.push({
+    key: 'cancellation',
+    label: t('listing.reviewRowCancellation'),
+    value: freePolicy
+      ? t('listing.reviewCancellationFree', {
+          value: termCount(form.cancellationPolicyType === 'FREE_UNTIL_DAYS' ? 'termDays' : 'termHours', threshold),
+        })
+      : t('listing.cancellationNone'),
+  })
+  return rows
+})
+
+// 289:457: the address row shows what the owner typed; the guest only gets it with a
+// confirmed booking (Dizajn 26).
+const reviewLocationRows = computed(() => {
+  const region = regions.value.find((r) => r.id === location.regionId)
+  const city = locationCity.value
+  return [
+    {
+      key: 'city',
+      label: t('listing.reviewRowRegionCity'),
+      value: region && city ? `${region.name} · ${city.name}` : t('listing.reviewNotSelected'),
+    },
+    {
+      key: 'area',
+      label: t('listing.cityArea'),
+      value: locationArea.value ? locationArea.value.name : cityAreas.value.length ? t('listing.reviewNotSelected') : t('listing.cityAreaNone'),
+    },
+    { key: 'address', label: t('listing.address'), value: location.address || t('listing.reviewNotEnteredF') },
+    { key: 'placeId', label: t('listing.reviewRowPlaceId'), value: location.googlePlaceId || t('listing.reviewNotEnteredM') },
+  ]
+})
+
+// 289:473
+const reviewPhotoRows = computed(() => [
+  { key: 'count', label: t('listing.reviewRowPhotoCount'), value: String(photos.value.length) },
+  {
+    key: 'cover',
+    label: t('listing.coverPhotoBadge'),
+    value: t(photos.value.length ? 'listing.reviewCoverSet' : 'listing.reviewCoverMissing'),
+  },
+])
+
+// 289:360 and the seven cards after it, in the wizard's own step order. A listing only
+// gets the sections its steps really have.
+const reviewSections = computed(() => {
+  const chars = (form.description || '').length
+  const notEnteredM = t('listing.reviewNotEnteredM')
+  const sections = [
+    {
+      key: 'basics',
+      title: t('listing.stepBasics'),
+      rows: [
+        { key: 'title', label: t('listing.title'), value: form.title || notEnteredM },
+        {
+          key: 'description',
+          label: t('listing.description'),
+          value: chars ? t(`listing.reviewCharacters${srPluralCategory(chars)}`, { count: chars }) : notEnteredM,
+        },
+        // 289:372 prints the link without its scheme.
+        { key: 'video', label: t('listing.videoSection'), value: form.videoUrl.replace(/^https?:\/\//, '') || notEnteredM },
+      ],
+    },
+  ]
+
+  const pricingRows = [
+    {
+      key: 'booking',
+      label: t('listing.reservationMethod'),
+      value: bookingOptions.value.find((option) => option.value === bookingChoice.value)?.title || '',
+    },
+  ]
+  if (form.bookingModel === 'PER_SLOT') {
+    pricingRows.push({
+      key: 'submode',
+      label: t('listing.slotCreationMethod'),
+      value: slotSubmodeOptions.value.find((option) => option.value === form.slotSubmode)?.title || t('listing.reviewNotSelected'),
+    })
+  }
+  if (showFlatPriceFields.value) {
+    pricingRows.push({
+      key: 'price',
+      label: t('listing.price'),
+      value: form.price ? `${previewPrice.value} ${previewUnit.value}`.trim() : t('listing.reviewNotEnteredF'),
+    })
+  }
+  if (showWeekendPrice.value) {
+    pricingRows.push({
+      key: 'weekend',
+      label: t('listing.weekendPrice'),
+      value: form.weekendPrice
+        ? `${rsdFormatter.format(Math.round(form.weekendPrice))} RSD ${previewUnit.value}`.trim()
+        : t('listing.reviewNotEnteredF'),
+    })
+  }
+  sections.push({ key: 'pricing', title: t('listing.stepPricing'), rows: pricingRows })
+
+  if (form.bookingModel !== 'NO_BOOKING') {
+    sections.push({ key: 'availability', title: t('listing.stepAvailability'), rows: reviewAvailabilityRows.value })
+    sections.push({ key: 'rules', title: t('listing.stepRules'), rows: reviewRulesRows.value })
+    sections.push({ key: 'payment', title: t('listing.stepPayment'), rows: reviewPaymentRows.value })
+  }
+  sections.push({
+    key: 'attributes',
+    title: t('listing.stepAttributes'),
+    rows: detailsPreviewRows.value.length
+      ? detailsPreviewRows.value
+      : [{ key: 'empty', label: t('listing.reviewRowFilled'), value: t('listing.reviewNotEntered') }],
+  })
+  sections.push({ key: 'location', title: t('listing.stepLocation'), rows: reviewLocationRows.value })
+  sections.push({ key: 'photos', title: t('listing.stepPhotos'), rows: reviewPhotoRows.value })
+  return sections
+})
+
+// 291:350: five checks to run before sending, each about a step this listing has.
+const reviewTips = computed(() => {
+  const tips = [t('listing.reviewTipName'), t(showWeekendPrice.value ? 'listing.reviewTipPriceWeekend' : 'listing.reviewTipPrice')]
+  if (form.bookingModel !== 'NO_BOOKING') {
+    const kind = isDefinedSlotsModel.value ? 'definedSlots' : form.bookingModel === 'PER_SLOT' ? 'workingHours' : 'stay'
+    tips.push(t(`listing.reviewTipAvailability.${kind}`))
+  }
+  tips.push(t(`listing.reviewTipCover.${detailsCopyKind.value}`))
+  if (form.bookingModel !== 'NO_BOOKING') tips.push(t('listing.reviewTipCancellation'))
+  return tips
+})
+
+// 285:467: the frame's single "Pošalji na odobrenje" covers three real outcomes, so the
+// button says which one this listing gets (T41, T42).
+const reviewCta = computed(() => {
+  // Dizajn 29: a rejected listing goes back to review on its own package while that
+  // package is still waiting or running; an ended one needs a new package.
+  if (listing.value?.status === 'REJECTED' && listing.value.subscriptionId) {
+    const subscription = (mySubscriptions.value || []).find((s) => s.id === listing.value.subscriptionId)
+    if (['PENDING_ACTIVATION', 'ACTIVE'].includes(subscription?.status)) {
+      return { label: t('listing.resubmitForApproval'), to: '', run: resubmitForApproval }
+    }
+    return { label: t('listing.goToPackages'), to: `/oglasi/${listingId}/paket`, run: () => {} }
+  }
+  // An expired listing is back in search once its package is renewed.
+  if (listing.value?.status === 'EXPIRED' && listing.value.subscriptionId) {
+    return { label: t('listing.renewPackage'), to: `/oglasi/${listingId}/paket?obnova=${listing.value.subscriptionId}`, run: () => {} }
+  }
+  if (listing.value?.subscriptionId) return { label: t('listing.saveChanges'), to: '', run: finishEditing }
+  if (freeSlotSubscription.value) return { label: t('listing.reviewSubmit'), to: '', run: publishWithFreeSlot }
+  return { label: t('listing.goToPackages'), to: `/oglasi/${listingId}/paket`, run: () => {} }
+})
+
+// Dizajn 6 errors under the required fields. The area counts only when the city has
+// areas, the rule updateLocation enforces too. Focuses the first field that needs attention.
+const LOCATION_FIELD_IDS = { regionId: 'location-region', cityId: 'location-city', cityAreaId: 'location-area', address: 'location-address' }
+const locationErrors = reactive({ regionId: '', cityId: '', cityAreaId: '', address: '' })
+function validateLocation() {
+  const required = t('validation.required')
+  locationErrors.regionId = location.regionId ? '' : required
+  locationErrors.cityId = location.cityId ? '' : required
+  locationErrors.cityAreaId = cityAreas.value.length && !location.cityAreaId ? required : ''
+  locationErrors.address = location.address?.trim() ? '' : required
+  const first = Object.keys(LOCATION_FIELD_IDS).find((key) => locationErrors[key])
+  if (first) document.getElementById(LOCATION_FIELD_IDS[first])?.focus()
+  return !first
 }
 const attributeValues = reactive({})
 const hasBankAccount = computed(() => !!auth.user?.bankAccount)
@@ -2032,9 +2642,7 @@ function isAttributeValueFilled(attr, v) {
 // owner can actually fix it.
 function validateCurrentStep() {
   const step = steps.value[currentStep.value].key
-  if (step === 'location') {
-    if (!location.regionId || !location.cityId || !location.address?.trim()) return t('listing.validationLocationRequired')
-  } else if (step === 'photos') {
+  if (step === 'photos') {
     if (!photos.value.length) return t('listing.validationPhotosRequired')
   } else if (step === 'availability') {
     // T26 — the "*" on Cena (RSD) inside the defined-slots editor did
@@ -2136,16 +2744,28 @@ async function loadListing() {
   const resumeStep = Math.min(listing.value.wizardStep || 0, steps.value.length - 1)
   currentStep.value = resumeStep
   maxStepReached.value = Math.max(maxStepReached.value, resumeStep)
+  // Dizajn 31: a listing past the draft stage has been through every step,
+  // whatever wizardStep says (listings saved before it existed hold 0), so
+  // links such as the dashboard's ?korak=availability can open any of them.
+  if (listing.value.status !== 'DRAFT') maxStepReached.value = steps.value.length - 1
+  // Dizajn 29: "Izmeni oglas" on a rejected listing opens the step its reason points at.
+  if (route.query.korak) {
+    const index = steps.value.findIndex((s) => s.key === route.query.korak)
+    if (index >= 0 && index <= maxStepReached.value) currentStep.value = index
+  }
 }
 
 async function onRegionChange() {
   location.cityId = ''
   location.cityAreaId = ''
   cityAreas.value = []
+  locationErrors.regionId = ''
 }
 
 async function onCityChange() {
   location.cityAreaId = ''
+  locationErrors.cityId = ''
+  locationErrors.cityAreaId = ''
   const city = cities.value.find((c) => c.id === location.cityId)
   cityAreas.value = city ? await api.get(`/locations/cities/${city.slug}/areas`) : []
 }
@@ -2185,24 +2805,44 @@ async function downscaleImage(file) {
   }
 }
 
+// A rejected upload (wrong format, too large, 20 already there) used to throw out of the
+// handler and leave the step looking as if nothing happened; it now stops the batch and
+// says so in the step's own error line.
 async function uploadFile(rawFile) {
   const file = await downscaleImage(rawFile)
   const formData = new FormData()
   formData.append('file', file)
-  const photo = await api.post(`/listings/${listingId}/photos`, formData)
-  photos.value.push(photo)
+  try {
+    const photo = await api.post(`/listings/${listingId}/photos`, formData)
+    photos.value.push(photo)
+    return true
+  } catch (err) {
+    error.value = err?.data?.message || t('listing.photosUploadFailed')
+    return false
+  }
+}
+
+async function uploadFiles(files) {
+  error.value = ''
+  for (const file of files) {
+    if (photosAtLimit.value) {
+      error.value = t('listing.photoLimitReached', { max: PHOTO_MAX_COUNT })
+      break
+    }
+    if (!(await uploadFile(file))) break
+  }
 }
 
 async function onFileInputChange(evt) {
   const files = Array.from(evt.target.files || [])
   evt.target.value = ''
-  for (const file of files) await uploadFile(file)
+  await uploadFiles(files)
 }
 
 async function onDropFiles(evt) {
   dropzoneActive.value = false
-  const files = Array.from(evt.dataTransfer?.files || []).filter((f) => f.type.startsWith('image/'))
-  for (const file of files) await uploadFile(file)
+  const files = Array.from(evt.dataTransfer?.files || []).filter((f) => PHOTO_ACCEPT.includes(f.type))
+  await uploadFiles(files)
 }
 
 async function removePhoto(photoId) {
@@ -2228,14 +2868,6 @@ function onPhotoDrop(targetIndex) {
   persistPhotoOrder()
 }
 
-function setCoverPhoto(index) {
-  if (index === 0) return
-  const arr = [...photos.value]
-  const [moved] = arr.splice(index, 1)
-  arr.unshift(moved)
-  photos.value = arr
-  persistPhotoOrder()
-}
 
 async function saveCurrentStep() {
   error.value = ''
@@ -2244,6 +2876,7 @@ async function saveCurrentStep() {
   if (steps.value[currentStep.value].key === 'rules' && !validateRules()) return
   if (steps.value[currentStep.value].key === 'payment' && !validatePayment()) return
   if (steps.value[currentStep.value].key === 'attributes' && !validateDetails()) return
+  if (steps.value[currentStep.value].key === 'location' && !validateLocation()) return
   const validationError = validateCurrentStep()
   if (validationError) {
     error.value = validationError
@@ -2355,6 +2988,19 @@ async function publishWithFreeSlot() {
       listingId,
       existingSubscriptionId: freeSlotSubscription.value.id,
     })
+    await navigateTo(`/oglasi/${listingId}/poslato`)
+  } catch (e) {
+    error.value = extractErrorMessage(e, t('auth.genericError'))
+  } finally {
+    finishing.value = false
+  }
+}
+
+async function resubmitForApproval() {
+  error.value = ''
+  finishing.value = true
+  try {
+    await api.post(`/listings/${listingId}/resubmit`)
     await navigateTo(`/oglasi/${listingId}/poslato`)
   } catch (e) {
     error.value = extractErrorMessage(e, t('auth.genericError'))
@@ -3233,6 +3879,227 @@ $field-danger-border: #f43f5e;
   flex-shrink: 0;
   width: 16px;
   height: 16px;
+}
+
+// Dizajn 26: step 7's body, read off 275:345 (Forma) and 275:441 (Saveti). The field
+// states are Dizajn 6's (214:429, 214:436).
+.location {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+// 277:287: three equal columns 16 apart, one under another on a phone.
+.location-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.location-row .location-field {
+  flex: 1 1 200px;
+}
+
+// 277:309: the label 8 above its field, the hint 8 below it.
+.location-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+// 277:318: 10 between the label, the hint and the map.
+.location-map-field {
+  gap: 10px;
+}
+
+// 277:290: the asterisk after a space.
+.location-label {
+  display: block;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: normal;
+  color: $color-text;
+}
+
+// 277:349: 8 after the label.
+.location-optional {
+  margin-left: 8px;
+  font-size: 13px;
+  font-weight: 300;
+  color: $color-text-muted;
+}
+
+// 277:317: Light 12; 277:321 puts it on 18px lines.
+.location-hint {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 300;
+  line-height: normal;
+  color: $color-text-muted;
+}
+
+.location-map-hint {
+  line-height: 18px;
+}
+
+.location-select {
+  position: relative;
+}
+
+// 277:291: 48 tall, the text 18 from the left, the 16 chevron 16 from the right.
+.location-select-control {
+  display: block;
+  width: 100%;
+  height: 48px;
+  margin: 0;
+  padding: 0 40px 0 18px;
+  border: 0;
+  border-radius: $radius-input;
+  outline: none;
+  background-color: $color-background;
+  color: $color-text;
+  font-family: $font-family-base;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: normal;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  appearance: none;
+  transition:
+    background-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.location-select.is-empty .location-select-control {
+  color: $color-text-muted;
+}
+
+.location-select-control option {
+  color: $color-text;
+}
+
+.location-select-control:focus {
+  background-color: $color-surface;
+  box-shadow: inset 0 0 0 1.5px $color-primary;
+}
+
+.location-select-control:disabled {
+  cursor: default;
+}
+
+.location-select.is-invalid .location-select-control {
+  background-color: $field-danger-bg;
+  box-shadow: inset 0 0 0 1.5px $field-danger-border;
+}
+
+.location-select-chevron {
+  position: absolute;
+  top: 50%;
+  right: 16px;
+  width: 16px;
+  height: 16px;
+  margin-top: -8px;
+  pointer-events: none;
+}
+
+// 277:312: 49 tall, the 18 pin 18 from the left and 10 before the text.
+.location-input {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 49px;
+  padding: 0 18px;
+  border-radius: $radius-input;
+  background-color: $color-background;
+  cursor: text;
+  transition:
+    background-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.location-input:focus-within {
+  background-color: $color-surface;
+  box-shadow: inset 0 0 0 1.5px $color-primary;
+}
+
+.location-input.is-invalid {
+  background-color: $field-danger-bg;
+  box-shadow: inset 0 0 0 1.5px $field-danger-border;
+}
+
+.location-input-icon {
+  display: block;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+}
+
+.location-input-control {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: $color-text;
+  font-family: $font-family-base;
+  font-size: 15px;
+  line-height: normal;
+}
+
+.location-input-control::placeholder {
+  color: $color-text-muted;
+  opacity: 1;
+}
+
+// 279:292: two rows on the page grey with a line between them, drawn inside the row.
+.location-states {
+  margin: 0;
+  border-radius: $radius-input;
+  background: $color-background;
+  overflow: hidden;
+}
+
+.location-state {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 12px 16px;
+}
+
+.location-state + .location-state {
+  padding-top: 11px;
+  border-top: 1px solid $color-border;
+}
+
+// 279:294
+.location-state-label {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: normal;
+  letter-spacing: 0.3px;
+  color: $color-text-muted;
+}
+
+// 279:295
+.location-state-value {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: normal;
+  color: $color-text;
+  overflow-wrap: anywhere;
+}
+
+// 279:299
+.location-caption {
+  line-height: 18px;
 }
 
 // 237:300
@@ -4440,6 +5307,32 @@ $field-danger-border: #f43f5e;
   white-space: nowrap;
 }
 
+// 499:552: step 9's middle button, white with a 1px stroke inside a 12 radius.
+.wizard-preview-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 15px 19px;
+  border: 1px solid $color-border;
+  border-radius: $radius-input;
+  background: $color-surface;
+  color: $color-text;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 19px;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: border-color 0.15s ease;
+}
+
+.wizard-preview-link:hover {
+  border-color: $color-primary;
+}
+
+.wizard-preview-link:focus-visible {
+  outline: 2px solid rgba($color-primary, 0.35);
+  outline-offset: 2px;
+}
+
 // 228:383: left to right, three stops.
 .wizard-next {
   display: inline-flex;
@@ -4530,192 +5423,209 @@ $field-danger-border: #f43f5e;
   }
 }
 
-// ===== Dropzone =====
-.dropzone {
-  border: 2px dashed #c9d4ee;
-  border-radius: $radius-card;
-  background: #fafbff;
-  padding: 38px 24px;
+// Dizajn 27: step 8's body, read off 283:287 (Forma) and 285:287 (Saveti).
+
+// 281:345
+.photos {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease;
-  margin-bottom: 28px;
+  gap: 20px;
 }
 
-.dropzone:hover,
-.dropzone-active {
-  border-color: $color-primary;
-  background: #f2f6ff;
-}
-
-.dropzone-icon {
-  width: 52px;
-  height: 52px;
-  border-radius: 16px;
-  background: $gradient-marketing;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 14px;
-  box-shadow: 0 10px 20px -8px rgba(9, 87, 223, 0.5);
-}
-
-.dropzone strong {
-  font-size: 15px;
-  font-weight: 700;
-  margin-bottom: 4px;
-  display: block;
-}
-
-.dropzone span {
+// 283:287
+.photos-notice {
+  margin: 0;
+  padding: 12px 16px;
+  border-radius: $radius-input;
+  background: $color-accent-tint;
   font-size: 13px;
-  color: $color-text-muted;
+  line-height: normal;
+  color: $color-primary;
 }
 
-// ===== Photo grid =====
-.photo-grid {
+// 283:290: three 245 tiles a row, 12 apart, the way the frame lays them out inside 760.
+.photos-grid {
   display: flex;
   flex-wrap: wrap;
-  margin: 0 -8px 14px;
+  gap: 12px;
 }
 
-.photo {
+// 283:291
+.photos-item {
   position: relative;
+  width: 245px;
+  height: 168px;
   border-radius: $radius-input;
   overflow: hidden;
-  height: 150px;
-  background: #eef1f7;
-  border: 1px solid $color-border;
   cursor: grab;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-  width: calc(50% - 16px);
-  margin: 0 8px 16px;
+  background: $color-background;
 }
 
-@include respond-above(sm) {
-  .photo {
-    width: calc(25% - 16px);
-  }
-}
-
-.photo:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 12px 24px -10px rgba(16, 29, 61, 0.25);
-}
-
-.photo img {
-  position: absolute;
-  inset: 0;
+.photos-image {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-.photo-badge {
+// 283:292
+.photos-cover {
   position: absolute;
-  top: 8px;
-  left: 8px;
-  background: $color-primary;
-  color: $color-surface;
-  font-size: 10.5px;
-  font-weight: 700;
-  padding: 4px 9px;
+  top: 10px;
+  left: 10px;
+  padding: 5px 10px;
   border-radius: $radius-pill;
+  background: $color-surface;
+  backdrop-filter: blur(4.725px);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: normal;
+  color: $color-text;
+}
+
+// 283:294
+.photos-remove {
+  position: absolute;
+  top: 10px;
+  right: 10px;
   display: flex;
-  align-items: center;
-  gap: 4px;
-  box-shadow: 0 4px 10px -2px rgba(9, 87, 223, 0.5);
+  width: 28px;
+  height: 28px;
+  padding: 0;
   border: none;
+  border-radius: $radius-pill;
+  background: $color-text;
   cursor: pointer;
 }
 
-.photo-badge-inactive {
-  background: rgba(15, 23, 42, 0.45);
-  opacity: 0;
-  transition: opacity 0.15s ease;
+.photos-remove img {
+  display: block;
+  width: 28px;
+  height: 28px;
 }
 
-.photo:hover .photo-badge-inactive {
-  opacity: 1;
-}
+// 283:309 and 283:313 — dashed #E4EBF2 over a 12 radius. As on novi.vue's unlock card
+// (174:347), the stroke is painted rather than set as a border: Figma's 1.5 inside stroke
+// takes no space and its dashes run about 6 on / 5 off, where a CSS dashed border snaps to
+// 1px and draws about 3 on / 2 off. The SVG strokes the edge 3 wide so 1.5 shows inside.
+$photos-dash-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='100%25' height='100%25' rx='12' fill='none' stroke='%23000' stroke-width='3' stroke-dasharray='6 5'/%3E%3C/svg%3E");
 
-.photo-remove {
+.photos-add::before,
+.photos-dropzone::before {
+  content: '';
   position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 24px;
-  height: 24px;
-  border-radius: $radius-pill;
-  background: rgba(15, 23, 42, 0.55);
-  color: $color-surface;
-  border: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 13px;
-  opacity: 0;
-  transition: opacity 0.15s ease;
-  cursor: pointer;
+  inset: 0;
+  background-color: $color-border;
+  -webkit-mask: $photos-dash-mask center / 100% 100% no-repeat;
+  mask: $photos-dash-mask center / 100% 100% no-repeat;
+  pointer-events: none;
+  transition: background-color 0.15s ease;
 }
 
-.photo:hover .photo-remove {
-  opacity: 1;
-}
-
-.photo-drag {
-  position: absolute;
-  bottom: 8px;
-  right: 8px;
-  width: 24px;
-  height: 24px;
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.9);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  transition: opacity 0.15s ease;
-}
-
-.photo:hover .photo-drag {
-  opacity: 1;
-}
-
-.photo-add {
+// 283:309
+.photos-add {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  border: 1.5px dashed #c9d4ee;
-  background: #fafbff;
-  color: $color-primary;
-  font-size: 12px;
-  font-weight: 600;
+  width: 245px;
+  height: 168px;
+  border: 0;
+  border-radius: $radius-input;
+  background: $color-background;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: normal;
+  color: $color-text-muted;
   cursor: pointer;
 }
 
-.photo-add:hover {
-  background: #f2f6ff;
-  border-color: $color-primary;
+.photos-add-icon {
+  display: block;
+  width: 24px;
+  height: 24px;
 }
 
-.grid-hint {
+.photos-add:hover::before,
+.photos-dropzone:hover::before,
+.photos-dropzone.is-active::before {
+  background-color: $color-primary;
+}
+
+// 283:313
+.photos-dropzone {
+  position: relative;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 8px;
-  font-size: 12.5px;
-  color: $color-text-muted;
-  margin-bottom: 12px;
+  justify-content: center;
+  gap: 6px;
+  padding: 34px 24px;
+  border: 0;
+  border-radius: $radius-input;
+  background: $color-background;
+  text-align: center;
+  cursor: pointer;
 }
 
-.grid-hint svg {
-  flex-shrink: 0;
-  color: $color-primary;
+.photos-dropzone-icon {
+  display: block;
+  width: 28px;
+  height: 28px;
+}
+
+// 283:317: the frame's two lines measure 19 and 16, which Chrome's own "normal" rounds up
+// past — stated so the zone keeps the frame's 143.
+.photos-dropzone-title {
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 19px;
+  color: $color-text;
+}
+
+// 283:318
+.photos-dropzone-hint {
+  font-size: 13px;
+  font-weight: 300;
+  line-height: 16px;
+  color: $color-text-muted;
+}
+
+.photos-limit {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 300;
+  line-height: normal;
+  color: $color-text-muted;
+}
+
+// 283:319
+.photos-order-note {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 300;
+  line-height: normal;
+  color: $color-text-muted;
+}
+
+// 680:1879 sits 280 wide inside the 352 the card's padding leaves, and only shows.
+.photos-card {
+  width: 280px;
+  max-width: 100%;
+  pointer-events: none;
+}
+
+// 285:308
+.photos-card-caption {
+  line-height: 18px;
+}
+
+@include respond-below(sm) {
+  .photos-item,
+  .photos-add {
+    width: calc(50% - 6px);
+  }
 }
 
 /* T29 — a 20-30+ item checkbox list (Sadržaji/Oprema/Priključci) in one
@@ -4727,18 +5637,278 @@ $field-danger-border: #f43f5e;
   gap: 6px 16px;
 }
 
-.wizard-checklist {
-  list-style: none;
-  padding: 0;
+// Dizajn 28: step 9's body, read off 285:392 (Forma) and 285:426 (Saveti). Figma's strokes
+// sit inside the box, so every padding here is a pixel short of the frame's.
+$review-ok-bg: #cdfad1;
+$review-ok-ink: #1db82b;
+
+.review {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 20px;
 }
 
-.review-actions {
+// 289:317
+.review-readiness {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 19px 21px;
+  border: 1px solid $color-border;
+  border-radius: $radius-card;
+  background: $color-surface;
+}
+
+// 289:318
+.review-readiness-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 24px;
+  color: $color-text;
+}
+
+.review-readiness-mark {
+  display: block;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: $radius-pill;
+  background: $color-warning-bg;
+}
+
+// The frame only draws the card with something still missing; with every check green the
+// mark takes the same tint as the green rows.
+.review-readiness.is-ready .review-readiness-mark {
+  background: $review-ok-bg;
+}
+
+.review-readiness-mark img {
+  display: block;
+  width: 24px;
+  height: 24px;
+}
+
+// 289:323
+.review-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+// 499:514
+.review-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 20px;
+}
+
+.review-check-mark {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: $radius-pill;
+  background: $review-ok-bg;
+  color: $review-ok-ink;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: normal;
+}
+
+// 499:544: an unfinished check is a warning, not an error; nothing is broken yet.
+.review-check.is-missing .review-check-mark {
+  background: $color-warning-bg;
+  color: $color-warning;
+}
+
+// 499:517: the label itself is the link to the step that fixes the check (289:357).
+.review-check-label {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: $color-text;
+  font-family: $font-family-base;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 18px;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.review-check-label.is-plain {
+  cursor: default;
+}
+
+.review-check-label:hover:not(.is-plain) {
+  color: $color-primary;
+}
+
+// 499:546
+.review-check.is-missing .review-check-label {
+  font-weight: 500;
+  color: $color-warning;
+}
+
+// 499:542
+.review-check-note {
+  font-size: 13px;
+  font-weight: 300;
+  line-height: 16px;
+  color: $color-text-muted;
+}
+
+// 499:547
+.review-check-link {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 16px;
+  color: $color-primary;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.review-check-link:hover {
+  text-decoration: underline;
+}
+
+// 289:356
+.review-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 300;
+  line-height: 16px;
+  color: $color-text-muted;
+}
+
+.review-note img {
+  display: block;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+}
+
+// 289:360
+.review-card {
+  overflow: hidden;
+  border: 1px solid $color-border;
+  border-radius: $radius-card;
+  background: $color-surface;
+}
+
+// 289:361
+.review-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  height: 45px;
+  padding: 0 19px;
+  background: $color-background;
+}
+
+.review-card-title {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 18px;
+  color: $color-text;
+}
+
+// 289:363
+.review-card-edit {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: $color-primary;
+  font-family: $font-family-base;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 16px;
+  cursor: pointer;
+}
+
+.review-card-edit:hover {
+  text-decoration: underline;
+}
+
+.review-check-label:focus-visible,
+.review-card-edit:focus-visible {
+  outline: 2px solid rgba($color-primary, 0.35);
+  outline-offset: 2px;
+}
+
+// 289:364
+.review-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 19px 11px;
+  border-top: 1px solid $color-border;
+  font-size: 13px;
+  line-height: 16px;
+}
+
+.review-row:last-child {
+  padding-bottom: 10px;
+}
+
+.review-row-label {
+  flex-shrink: 0;
+  width: 230px;
+  font-weight: 300;
+  color: $color-text-muted;
+}
+
+.review-row-value {
+  flex: 1 1 0;
+  min-width: 0;
+  color: $color-text;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+// The frame is drawn at 1440; on a phone the 230 label column would leave the value a
+// sliver, and a check with a note needs a second line.
+@include respond-below(sm) {
+  .review-row-label {
+    flex: 0 1 auto;
+    width: auto;
+    max-width: 45%;
+  }
+
+  .review-check {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: 20px;
+  }
+}
+
+.ical-open {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  padding: 14px 16px;
+  border: 1px solid $color-border;
+  border-radius: $radius-input;
+  background: $color-background;
 }
 
 .ical-locked {

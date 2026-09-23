@@ -1,12 +1,12 @@
 <template>
   <div v-if="listing && pkg" class="checkout-page">
     <div class="container">
-      <BackLink :fallback="`/oglasi/${route.params.id}/paket`" />
+      <BackLink :fallback="packagesUrl" />
 
       <header class="checkout-head">
-        <p class="checkout-eyebrow">{{ t('billing.choosePackageEyebrow') }}</p>
+        <p class="checkout-eyebrow">{{ copy.eyebrow }}</p>
         <h1 class="checkout-title">{{ t('billing.checkoutTitle') }}</h1>
-        <p class="checkout-subtitle">{{ t('billing.checkoutSubtitle') }}</p>
+        <p v-if="copy.subtitle" class="checkout-subtitle">{{ copy.subtitle }}</p>
       </header>
 
       <div class="checkout-split">
@@ -69,7 +69,7 @@
           <div class="checkout-item-meta">
             <p>{{ t('billing.pricePerListing') }}</p>
             <!-- Ticket §3 — which listing the package is for. -->
-            <p>{{ t('billing.packageForListing') }} <span class="checkout-item-listing">{{ listing.title }}</span></p>
+            <p>{{ copy.forListing }} <span class="checkout-item-listing">{{ copy.listings }}</span></p>
           </div>
 
           <div class="checkout-divider" />
@@ -82,7 +82,7 @@
           </div>
 
           <p class="checkout-note">{{ t('billing.threeDSecureNotice') }}</p>
-          <p class="checkout-note">{{ t('billing.afterPaymentNotice') }}</p>
+          <p v-if="copy.afterPayment" class="checkout-note">{{ copy.afterPayment }}</p>
 
           <label class="checkout-check checkout-check-terms">
             <input v-model="termsAccepted" type="checkbox" class="checkout-checkbox" />
@@ -97,10 +97,10 @@
 
           <p v-if="error" class="form-error mb-0">{{ error }}</p>
 
-          <button type="button" class="checkout-pay" :disabled="submitting || !termsAccepted" @click="submitCheckout">
-            {{ submitting ? t('common.loading') : t('billing.payAndPublish') }}
+          <button type="button" class="checkout-pay" :disabled="submitting || !termsAccepted || renewalBlocked" @click="submitCheckout">
+            {{ submitting ? t('common.loading') : copy.pay }}
           </button>
-          <NuxtLink :to="`/oglasi/${route.params.id}/paket`" class="checkout-back">
+          <NuxtLink :to="packagesUrl" class="checkout-back">
             ← {{ t('billing.backToPackages') }}
           </NuxtLink>
 
@@ -122,7 +122,10 @@
 // Dizajn 14 (Figma "Plaćanje paketa · Desktop 1440", node 563:660). Layout
 // only — the fields sent to /subscriptions/checkout/init, the validation and
 // the NestPay hand-off below are unchanged.
-definePageMeta({ middleware: 'auth' })
+import { getPackagePurchaseMode, getRenewalCopy } from '~/utils/subscriptions'
+
+// The query decides what is being paid for, so a new one builds the page again.
+definePageMeta({ middleware: 'auth', key: (route) => route.fullPath })
 const { t } = useI18n()
 const api = useApi()
 const auth = useAuthStore()
@@ -134,6 +137,49 @@ const packageId = route.query.packageId
 const { data: listing } = await useAsyncData(`checkout-listing-${route.params.id}`, () => api.get(`/listings/${route.params.id}`))
 const { data: packages } = await useAsyncData('checkout-packages', () => api.get('/packages'))
 const pkg = computed(() => packages.value?.find((p) => p.id === packageId))
+
+// ?obnova=<subscription>: the next period of a package the listing is already on.
+const renewId = typeof route.query.obnova === 'string' ? route.query.obnova : ''
+const { data: renewal } = await useAsyncData(`checkout-renewal-${renewId}`, () =>
+  renewId
+    ? api.get(`/subscriptions/${renewId}/renewal`).catch(() => ({ renewable: false, reason: 'NOT_FOUND', listings: [] }))
+    : Promise.resolve(false),
+)
+const mode = computed(() => getPackagePurchaseMode(listing.value, renewal.value || null))
+const renewalBlocked = computed(() => mode.value === 'renew' && !renewal.value?.renewable)
+const packagesUrl = computed(() => `/oglasi/${route.params.id}/paket${renewId ? `?obnova=${renewId}` : ''}`)
+
+// What the order says depends on what the payment does: publish, move up to Pro, or renew.
+const copy = computed(() => {
+  if (mode.value === 'renew') {
+    const renewalCopy = renewal.value?.renewable ? getRenewalCopy(t, renewal.value) : null
+    return {
+      eyebrow: t('billing.renewEyebrow'),
+      subtitle: renewalCopy?.subtitle || '',
+      forListing: renewalCopy?.forListing || t('billing.packageForListing'),
+      listings: renewalCopy?.listings || listing.value?.title,
+      afterPayment: renewalCopy?.afterPayment || '',
+      pay: t('billing.payAndRenew'),
+    }
+  }
+  const base = { forListing: t('billing.packageForListing'), listings: listing.value?.title }
+  if (mode.value === 'upgrade') {
+    return {
+      ...base,
+      eyebrow: t('billing.upgradeEyebrow'),
+      subtitle: t('billing.upgradeSubtitle'),
+      afterPayment: t('billing.upgradeAfterPayment'),
+      pay: t('billing.payAndUpgrade'),
+    }
+  }
+  return {
+    ...base,
+    eyebrow: t('billing.choosePackageEyebrow'),
+    subtitle: t('billing.checkoutSubtitle'),
+    afterPayment: t('billing.afterPaymentNotice'),
+    pay: t('billing.payAndPublish'),
+  }
+})
 const priceForCycle = computed(() => (pkg.value ? (cycle === 'YEARLY' ? pkg.value.priceYearly : pkg.value.priceMonthly) : 0))
 
 const form = reactive({
@@ -148,7 +194,10 @@ const form = reactive({
 })
 
 const submitting = ref(false)
-const error = ref('')
+// A renewal that can no longer be paid says why instead of sending the owner to the bank.
+const error = ref(
+  renewalBlocked.value ? t(renewal.value?.reason === 'ALREADY_RENEWED' ? 'billing.renewAlreadyPaid' : 'billing.renewNotAllowed') : '',
+)
 const nestpayForm = ref(null)
 const nestpayFormEl = ref(null)
 const termsAccepted = ref(false)
@@ -186,6 +235,7 @@ async function submitCheckout() {
       companyName: form.isCompany ? form.companyName : undefined,
       companyAddress: form.isCompany ? form.companyAddress : undefined,
       termsAccepted: termsAccepted.value,
+      renewSubscriptionId: renewId || undefined,
     })
     nestpayForm.value = result
     await nextTick()

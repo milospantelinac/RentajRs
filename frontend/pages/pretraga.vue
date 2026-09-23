@@ -242,45 +242,69 @@
             </button>
           </div>
 
-          <p v-if="loading && !results.length" class="text-muted">{{ t('common.loading') }}</p>
-
-          <div v-else-if="searchError" class="empty-results card">
-            <div class="card-body text-center">
-              <p class="form-error mb-0">{{ searchError }}</p>
-            </div>
+          <!-- Dizajn 44: a search that is still running draws the cards it is
+               about to show; a failed one and one that found nothing say so
+               where those cards would be. -->
+          <div v-if="showResultsSkeleton" class="results-grid" :class="{ 'mobile-hidden': mapOpenMobile }">
+            <ListingCardSkeleton v-for="index in SKELETON_CARDS" :key="`loading-${index}`" />
           </div>
+
+          <StateBlock
+            v-else-if="searchError"
+            error
+            icon="search"
+            class="results-state card"
+            :title="t('search.loadErrorTitle')"
+            :text="t('search.loadErrorText')"
+          >
+            <button type="button" class="state-block-action" @click="executeSearch()">{{ t('errorPage.tryAgain') }}</button>
+          </StateBlock>
 
           <template v-else-if="results.length">
             <div class="results-grid" :class="{ 'mobile-hidden': mapOpenMobile }">
               <ListingCard v-for="listing in results" :key="listing.id" :listing="listing" />
+              <!-- A further page arrives under the ones already read. -->
+              <template v-if="loadingMore">
+                <ListingCardSkeleton v-for="index in SKELETON_MORE_CARDS" :key="`more-${index}`" />
+              </template>
             </div>
 
             <div class="results-pagination" :class="{ 'mobile-hidden': mapOpenMobile }">
               <p class="results-shown">{{ t('search.shownOfTotal', { shown: results.length, total }) }}</p>
               <button v-if="results.length < total" type="button" class="results-load-more" :disabled="loading" @click="loadMore">
-                {{ loading ? t('common.loading') : t('search.loadMore') }}
+                {{ t('search.loadMore') }}
               </button>
             </div>
           </template>
 
-          <div v-else class="empty-results card">
-            <div class="card-body text-center">
-              <p class="text-body mb-3">{{ hasAnyFilter ? t('search.noResultsWithFilters') : t('search.noResults') }}</p>
-              <button class="btn btn-tertiary mb-3" @click="tryRelaxedSearch">{{ t('search.relaxSearch') }}</button>
-              <div class="form-row-inline notify-form">
-                <input v-model="notifyEmail" type="email" class="form-control" :placeholder="t('auth.email')" />
-                <button class="btn btn-primary-flat" @click="submitNotify">{{ t('search.notifyMe') }}</button>
-              </div>
-              <p v-if="notifySent" class="text-success mt-2">{{ t('search.notifySent') }}</p>
+          <StateBlock
+            v-else
+            icon="search"
+            class="results-state card"
+            :title="t('search.noResultsTitle')"
+            :text="hasAnyFilter ? t('search.noResultsWithFilters') : t('search.noResults')"
+          >
+            <button type="button" class="state-block-action" @click="tryRelaxedSearch">{{ t('search.relaxSearch') }}</button>
+
+            <p v-if="hasAnyFilter" class="results-state-hint">
+              {{ t('search.removeFilterHint') }}
+              <button type="button" class="results-state-clear" @click="clearAllFilters">{{ t('search.clearAllFilters') }}</button>
+            </p>
+
+            <div class="results-notify form-row-inline">
+              <input v-model="notifyEmail" type="email" class="form-control" :placeholder="t('auth.email')" />
+              <button type="button" class="btn btn-primary-flat" @click="submitNotify">{{ t('search.notifyMe') }}</button>
             </div>
-          </div>
+            <p v-if="notifySent" class="results-notify-sent text-success">{{ t('search.notifySent') }}</p>
+          </StateBlock>
         </section>
 
         <aside class="search-map-col" :class="{ 'mobile-hidden': !mapOpenMobile }">
           <div class="search-map-frame" :class="{ 'search-map-frame-expanded': mapExpanded }">
-            <ListingMap :listings="results" @bounds-change="onBoundsChange" />
+            <ListingMap :listings="results" @bounds-change="onBoundsChange" @ready="mapReady = true" />
 
-            <label class="map-live-toggle">
+            <!-- These three sit on top of the map, so they wait for it too. -->
+            <label v-if="mapReady" class="map-live-toggle">
               <input v-model="searchAsIMove" type="checkbox" class="map-live-checkbox" />
               <span>{{ t('search.searchAsIMove') }}</span>
             </label>
@@ -289,7 +313,7 @@
               {{ t('search.searchThisArea') }}
             </button>
 
-            <button type="button" class="map-expand-btn" @click="mapExpanded = !mapExpanded">
+            <button v-if="mapReady" type="button" class="map-expand-btn" @click="mapExpanded = !mapExpanded">
               {{ mapExpanded ? t('common.close') : t('search.expandMap') }}
             </button>
           </div>
@@ -327,9 +351,20 @@ const results = ref([])
 const total = ref(0)
 const loading = ref(false)
 const searchError = ref('')
+
+// Dizajn 44: the page runs its first search after it is on screen, so until
+// that one comes back there is nothing to show and nothing has been found
+// either - both are the loading state, drawn as the cards being fetched. A
+// further page keeps the cards already read and adds a row of them under.
+const SKELETON_CARDS = 6
+const SKELETON_MORE_CARDS = 2
+const searched = ref(false)
+const loadingMore = ref(false)
+const showResultsSkeleton = computed(() => !searched.value || (loading.value && !loadingMore.value))
 const panelOpen = ref(false)
 const mapOpenMobile = ref(false)
 const mapExpanded = ref(false)
+const mapReady = ref(false)
 const searchAsIMove = ref(false)
 const notifyEmail = ref('')
 const notifySent = ref(false)
@@ -383,10 +418,12 @@ const sortOptions = computed(() => [
 ])
 
 // The tile row leads with "Sve" (no category) and then the six real
-// categories in the order the ticket spells out.
+// categories, in the endpoint's own order, since Dizajn 46 made the seed's
+// displayOrder the one place that order is written down. Subcategories stay
+// out of this row; they are the pills below it.
 const categoryTiles = computed(() => [
   { slug: '', iconSlug: ALL_CATEGORIES_SLUG, name: t('search.allCategories'), category: null },
-  ...sortSearchCategories(categories.value).map((c) => ({ slug: c.slug, iconSlug: c.slug, name: c.name, category: c })),
+  ...categories.value.map((c) => ({ slug: c.slug, iconSlug: c.slug, name: c.name, category: c })),
 ])
 
 // A subcategory keeps its parent's tile highlighted.
@@ -782,6 +819,7 @@ function buildSearchBody() {
 async function executeSearch({ append = false } = {}) {
   syncUrlFromQuery()
   loading.value = true
+  loadingMore.value = append
   searchError.value = ''
   try {
     const response = await api.post('/search', buildSearchBody())
@@ -791,6 +829,8 @@ async function executeSearch({ append = false } = {}) {
     searchError.value = extractErrorMessage(e, t('auth.genericError'))
   } finally {
     loading.value = false
+    loadingMore.value = false
+    searched.value = true
   }
 }
 
@@ -1539,13 +1579,45 @@ useSeoMeta({ title: t('common.search') })
   cursor: pointer;
 }
 
-.empty-results {
-  padding: 32px;
+// Dizajn 44: the block stands where the grid would, in the card the results
+// column already used. The grid's own bottom spacing comes from the pagination
+// row, which an empty result has nothing to show in.
+.results-state {
+  margin-bottom: 90px;
 }
 
-.notify-form {
+// "Pokušajte da uklonite neki filter." with the text button that does it.
+.results-state-hint {
+  margin-top: 16px;
+  font-size: 13px;
+  font-weight: 300;
+  line-height: normal;
+  color: $color-text-muted;
+}
+
+.results-state-clear {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: $font-family-base;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: normal;
+  color: $color-primary;
+  cursor: pointer;
+}
+
+.results-state-clear:hover {
+  text-decoration: underline;
+}
+
+.results-notify {
   max-width: 360px;
-  margin: 0 auto;
+  margin-top: 20px;
   justify-content: center;
+}
+
+.results-notify-sent {
+  margin-top: 8px;
 }
 </style>

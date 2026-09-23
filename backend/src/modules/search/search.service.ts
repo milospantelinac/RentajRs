@@ -3,8 +3,9 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CacheService } from '../../common/cache/cache.service';
 import { TaxonomyService } from '../taxonomy/taxonomy.service';
-import { paraToRsd, rsdToPara } from '../../common/utils/money';
+import { rsdToPara } from '../../common/utils/money';
 import { GUEST_CAPACITY_ATTRIBUTE_KEYS } from '../../common/utils/guest-capacity';
+import { LISTING_CARD_INCLUDE, loadListingCardNames, serializeListingCard } from '../../common/utils/listing-card';
 import { SearchListingsDto } from './dto/search-listings.dto';
 
 const RELEVANCE_CANDIDATE_POOL = 200;
@@ -145,9 +146,8 @@ export class SearchService {
       }),
     ]);
 
-    const categoryNames = await this.taxonomy.getCategoryNames(rows.map((r) => r.category.id));
-    const optionNames = await this.buildOptionNamesMap(rows);
-    const results = rows.map((r) => this.serializeResult(r, categoryNames, optionNames));
+    const { categoryNames, optionNames } = await loadListingCardNames(this.taxonomy, rows);
+    const results = rows.map((r) => serializeListingCard(r, categoryNames, optionNames));
     return { results, total, page, pageSize };
   }
 
@@ -200,23 +200,14 @@ export class SearchService {
     scored.sort((a, b) => b.score - a.score);
     const pageItems = scored.slice((page - 1) * pageSize, (page - 1) * pageSize + pageSize);
 
-    const categoryNames = await this.taxonomy.getCategoryNames(pageItems.map((s) => s.listing.category.id));
-    const optionNames = await this.buildOptionNamesMap(pageItems.map((s) => s.listing));
+    const pageListings = pageItems.map((s) => s.listing);
+    const { categoryNames, optionNames } = await loadListingCardNames(this.taxonomy, pageListings);
     return {
-      results: pageItems.map((s) => this.serializeResult(s.listing, categoryNames, optionNames)),
+      results: pageListings.map((listing) => serializeListingCard(listing, categoryNames, optionNames)),
       total,
       page,
       pageSize,
     };
-  }
-
-  /** Dizajn 3/4 — resolves the AttributeOption ids stored on LIST/CHECKBOX_GROUP
-   * key-fact values into their display names, in one batched query across the
-   * whole result page rather than per listing. */
-  private async buildOptionNamesMap(listings: any[]): Promise<Map<string, string>> {
-    const optionIds = [...new Set(listings.flatMap((l) => l.attributes.flatMap((a: any) => a.valueOptionIds)))];
-    if (!optionIds.length) return new Map();
-    return this.taxonomy.getOptionNames(optionIds);
   }
 
   private async getRankingWeights(): Promise<{
@@ -447,25 +438,15 @@ export class SearchService {
 
     if (!rows.length) return { results: [] };
 
-    const categoryNames = await this.taxonomy.getCategoryNames(rows.map((r) => r.category.id));
-    const optionNames = await this.buildOptionNamesMap(rows);
-    return { results: rows.map((r) => this.serializeResult(r, categoryNames, optionNames)) };
+    const { categoryNames, optionNames } = await loadListingCardNames(this.taxonomy, rows);
+    return { results: rows.map((r) => serializeListingCard(r, categoryNames, optionNames)) };
   }
 
+  /** The card's own fields (common/utils/listing-card.ts) plus what relevance ranking reads. */
   private resultInclude() {
     return {
-      // Same last-approved-state guarantee as getPublicBySlug (R32) — a
-      // search card must never show a photo the listing's own page would
-      // hide because it's pending removal or still awaiting approval.
-      photos: { where: { isCover: true, pendingRemoval: false, versionId: null }, take: 1 },
-      category: true,
-      city: true,
-      cityArea: true,
+      ...LISTING_CARD_INCLUDE,
       user: { select: { avgResponseTimeMinutes: true } },
-      // Dizajn 3/4 — the search-result card's "traka ključnih činjenica"
-      // reads real attribute values; which 3 keys are shown and in what
-      // order is decided client-side per category (utils/keyFacts.js).
-      attributes: { include: { attribute: { select: { key: true, unit: true, type: true } } } },
     } satisfies Prisma.ListingInclude;
   }
 
@@ -533,40 +514,5 @@ export class SearchService {
   private async getIndexThreshold(): Promise<number> {
     const setting = await this.prisma.setting.findUnique({ where: { key: 'listing_index_threshold' } });
     return typeof setting?.value === 'number' ? setting.value : 3;
-  }
-
-  private serializeResult(listing: any, categoryNames: Map<string, string>, optionNames: Map<string, string>) {
-    return {
-      id: listing.id,
-      slug: listing.slug,
-      title: listing.title,
-      price: paraToRsd(listing.price),
-      priceUnit: listing.priceUnit,
-      avgRating: listing.avgRating,
-      reviewCount: listing.reviewCount,
-      bookingModel: listing.bookingModel,
-      city: listing.city,
-      cityArea: listing.cityArea,
-      category: {
-        id: listing.category.id,
-        slug: listing.category.slug,
-        icon: listing.category.icon,
-        name: categoryNames.get(listing.category.id) ?? listing.category.slug,
-      },
-      coverPhoto: listing.photos[0] ?? null,
-      latitude: listing.latitude,
-      longitude: listing.longitude,
-      // Dizajn 3/4 — raw values for the card's key-facts strip; utils/keyFacts.js
-      // on the frontend picks which 3 to show and formats them per category.
-      attributes: listing.attributes.map((a: any) => ({
-        key: a.attribute.key,
-        type: a.attribute.type,
-        unit: a.attribute.unit,
-        valueNumber: a.valueNumber !== null ? Number(a.valueNumber) : null,
-        valueText: a.valueText,
-        valueBoolean: a.valueBoolean,
-        optionNames: a.valueOptionIds.map((id: string) => optionNames.get(id)).filter(Boolean),
-      })),
-    };
   }
 }

@@ -47,19 +47,31 @@ const common_1 = require("@nestjs/common");
 const schedule_1 = require("@nestjs/schedule");
 const event_emitter_1 = require("@nestjs/event-emitter");
 const nestjs_i18n_1 = require("nestjs-i18n");
+const client_1 = require("@prisma/client");
 const QRCode = __importStar(require("qrcode"));
 const prisma_service_1 = require("../../prisma/prisma.service");
 const availability_service_1 = require("../availability/availability.service");
+const taxonomy_service_1 = require("../taxonomy/taxonomy.service");
 const ips_qr_1 = require("../../common/utils/ips-qr");
 const money_1 = require("../../common/utils/money");
 const timezone_1 = require("../../common/utils/timezone");
 const guest_capacity_1 = require("../../common/utils/guest-capacity");
+const guest_cancellation_1 = require("../../common/utils/guest-cancellation");
+const payment_report_1 = require("../../common/utils/payment-report");
+const request_expiry_1 = require("../../common/utils/request-expiry");
+const short_name_1 = require("../../common/utils/short-name");
+const OPEN_STATUS_ORDER = ['REQUESTED', 'AWAITING_PAYMENT', 'CONFIRMED'];
+const DEFAULT_PAYMENT_DEADLINE_HOURS = 48;
+function openPaymentReportWhere(bookingId) {
+    return { bookingId, ...payment_report_1.OPEN_PAYMENT_REPORT };
+}
 let BookingsService = class BookingsService {
-    constructor(prisma, availability, i18n, events) {
+    constructor(prisma, availability, i18n, events, taxonomy) {
         this.prisma = prisma;
         this.availability = availability;
         this.i18n = i18n;
         this.events = events;
+        this.taxonomy = taxonomy;
     }
     async createRequest(guestId, listingId, dto) {
         const listing = await this.prisma.listing.findUniqueOrThrow({
@@ -80,16 +92,11 @@ let BookingsService = class BookingsService {
             throw new common_1.ForbiddenException(this.i18n.t('errors.PACKAGE_FEATURE_NOT_INCLUDED'));
         }
         const { startsAt, endsAt, slotPrice } = await this.resolveRequestedTerm(listing, dto);
-        const capacityAttrs = await this.prisma.listingAttribute.findMany({
-            where: { listingId, attribute: { key: { in: guest_capacity_1.GUEST_CAPACITY_ATTRIBUTE_KEYS } }, valueNumber: { not: null } },
-            select: { valueNumber: true },
-        });
-        const guestCaps = [listing.maxGuests, ...capacityAttrs.map((attr) => Number(attr.valueNumber))].filter((cap) => cap != null && cap > 0);
-        const effectiveMaxGuests = guestCaps.length ? Math.min(...guestCaps) : null;
+        const effectiveMaxGuests = await this.getGuestCapacity(listingId, listing.maxGuests);
         this.assertTermRules({ ...listing, maxGuests: effectiveMaxGuests }, startsAt, endsAt, dto.guestCount);
         const pricePerUnit = slotPrice ?? listing.price;
         const unitCount = resolvePricingUnitCount(listing.priceUnit, startsAt, endsAt, dto);
-        const { unitPriceTotal, guestFee, mandatoryFeesTotal, extraServicesTotal, totalAmount, amountDue } = await this.computeTotals(listing, startsAt, endsAt, pricePerUnit, unitCount, slotPrice, dto);
+        const { priceLines, guestFee, mandatoryFeesTotal, extraServicesTotal, totalAmount, amountDue } = await this.computeTotals(listing, startsAt, endsAt, pricePerUnit, unitCount, slotPrice, dto);
         let resolvedPaymentMethod;
         if (listing.paymentMethod === 'BOTH') {
             if (dto.paymentMethod !== 'CASH' && dto.paymentMethod !== 'BANK_TRANSFER') {
@@ -116,12 +123,16 @@ let BookingsService = class BookingsService {
                 fees: {
                     mandatory: mandatoryFeesTotal.toString(),
                     extraServices: dto.extraServices ?? [],
+                    extraServicesTotal: extraServicesTotal.toString(),
                     guestFee: guestFee.toString(),
+                    priceLines: priceLines.map((line) => ({ count: line.count, price: line.price.toString(), kind: line.kind })),
                 },
                 totalAmount,
                 amountDue,
                 paymentMethod: resolvedPaymentMethod,
                 cancellationTermsSnapshot: formatCancellationPolicy(listing.cancellationPolicyType, listing.cancellationThreshold, guest.language),
+                cancellationPolicyType: listing.cancellationPolicyType,
+                cancellationThreshold: listing.cancellationThreshold,
             },
         });
         try {
@@ -202,23 +213,39 @@ let BookingsService = class BookingsService {
         const extraServicesTotal = await this.resolveExtraServicesTotal(listing.id, dto.extraServices);
         const mandatoryFeesTotal = sumMandatoryFees(listing.mandatoryFees);
         const guestFee = listing.pricePerGuest && dto.guestCount ? listing.pricePerGuest * BigInt(dto.guestCount) : 0n;
-        const unitPriceTotal = !slotPrice && (listing.priceUnit === 'NIGHT' || listing.priceUnit === 'DAY')
-            ? (await this.availability.getNightlyPrices(listing.id, startsAt, endsAt, listing.price, listing.weekendPrice)).reduce((sum, p) => sum + p, 0n)
-            : !slotPrice && listing.priceUnit === 'MONTH' && dto.monthCount
-                ? (await this.availability.getMonthlyPrices(listing.id, startsAt, dto.monthCount, listing.price)).reduce((sum, p) => sum + p, 0n)
-                :
-                    !slotPrice &&
-                        listing.bookingModel === 'PER_SLOT' &&
-                        listing.slotSubmode === 'WORKING_HOURS' &&
-                        (listing.priceUnit === 'HOUR' || listing.priceUnit === 'GUEST')
-                        ? (await this.availability.resolveHourlyPrice(listing.id, startsAt, (0, timezone_1.toBelgradeHHMM)(startsAt), listing.price, listing.priceUnit === 'HOUR' ? listing.weekendPrice : null)) * BigInt(unitCount)
-                        :
-                            !slotPrice && listing.bookingModel === 'PER_STAY' && listing.priceUnit === 'HOUR'
-                                ? (await this.availability.getHourlyStayPrices(listing.id, startsAt, endsAt, listing.price, listing.weekendPrice)).reduce((sum, p) => sum + p, 0n)
-                                : pricePerUnit * BigInt(unitCount);
+        const priceLines = await this.resolvePriceLines(listing, startsAt, endsAt, pricePerUnit, unitCount, slotPrice, dto.monthCount);
+        const unitPriceTotal = priceLines.reduce((sum, line) => sum + line.price * BigInt(line.count), 0n);
         const totalAmount = unitPriceTotal + guestFee + mandatoryFeesTotal + extraServicesTotal;
         const amountDue = listing.advancePercent ? (totalAmount * BigInt(listing.advancePercent)) / 100n : totalAmount;
-        return { unitPriceTotal, guestFee, mandatoryFeesTotal, extraServicesTotal, totalAmount, amountDue };
+        return { unitPriceTotal, priceLines, guestFee, mandatoryFeesTotal, extraServicesTotal, totalAmount, amountDue };
+    }
+    async resolvePriceLines(listing, startsAt, endsAt, pricePerUnit, unitCount, slotPrice, monthCount) {
+        if (slotPrice)
+            return [{ count: unitCount, price: pricePerUnit, kind: 'BASE' }];
+        if (listing.priceUnit === 'NIGHT' || listing.priceUnit === 'DAY') {
+            return groupPriceLines(await this.availability.getNightlyPrices(listing.id, startsAt, endsAt, listing.price, listing.weekendPrice));
+        }
+        if (listing.priceUnit === 'MONTH' && monthCount) {
+            return groupPriceLines(await this.availability.getMonthlyPrices(listing.id, startsAt, monthCount, listing.price));
+        }
+        if (listing.bookingModel === 'PER_SLOT' &&
+            listing.slotSubmode === 'WORKING_HOURS' &&
+            (listing.priceUnit === 'HOUR' || listing.priceUnit === 'GUEST')) {
+            const unit = await this.availability.resolveHourlyPrice(listing.id, startsAt, (0, timezone_1.toBelgradeHHMM)(startsAt), listing.price, listing.priceUnit === 'HOUR' ? listing.weekendPrice : null);
+            return [{ count: unitCount, ...unit }];
+        }
+        if (listing.bookingModel === 'PER_STAY' && listing.priceUnit === 'HOUR') {
+            return groupPriceLines(await this.availability.getHourlyStayPrices(listing.id, startsAt, endsAt, listing.price, listing.weekendPrice));
+        }
+        return [{ count: unitCount, price: pricePerUnit, kind: 'BASE' }];
+    }
+    async getGuestCapacity(listingId, maxGuests) {
+        const capacityAttrs = await this.prisma.listingAttribute.findMany({
+            where: { listingId, attribute: { key: { in: guest_capacity_1.GUEST_CAPACITY_ATTRIBUTE_KEYS } }, valueNumber: { not: null } },
+            select: { valueNumber: true },
+        });
+        const guestCaps = [maxGuests, ...capacityAttrs.map((attr) => Number(attr.valueNumber))].filter((cap) => cap != null && cap > 0);
+        return guestCaps.length ? Math.min(...guestCaps) : null;
     }
     async quotePrice(listingId, dto) {
         const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: listingId } });
@@ -233,6 +260,7 @@ let BookingsService = class BookingsService {
             priceUnit: listing.priceUnit,
             pricePerUnit: (0, money_1.paraToRsd)(pricePerUnit),
             unitCount,
+            priceLines: totals.priceLines.map((line) => ({ count: line.count, price: (0, money_1.paraToRsd)(line.price), kind: line.kind })),
             unitPriceTotal: (0, money_1.paraToRsd)(totals.unitPriceTotal),
             guestFee: (0, money_1.paraToRsd)(totals.guestFee),
             mandatoryFeesTotal: (0, money_1.paraToRsd)(totals.mandatoryFeesTotal),
@@ -276,7 +304,7 @@ let BookingsService = class BookingsService {
         if (!owner.bankAccount) {
             throw new common_1.BadRequestException(this.i18n.t('bookings.OWNER_NO_BANK_ACCOUNT'));
         }
-        const deadlineHours = listing.paymentDeadlineHours ?? 48;
+        const deadlineHours = listing.paymentDeadlineHours ?? DEFAULT_PAYMENT_DEADLINE_HOURS;
         const paymentDeadline = new Date(Date.now() + deadlineHours * 3600_000);
         const qrPayload = (0, ips_qr_1.buildIpsQrPayload)({
             recipientAccount: owner.bankAccount,
@@ -285,11 +313,9 @@ let BookingsService = class BookingsService {
             purpose: listing.title,
             referenceNumber: booking.id.replace(/-/g, '').slice(0, 20),
         });
-        const updated = await this.prisma.booking.update({
-            where: { id: booking.id },
-            data: { status: 'AWAITING_PAYMENT', paymentDeadline, ipsQrData: qrPayload },
-        });
-        await this.recordHistory(booking.id, booking.status, 'AWAITING_PAYMENT', null, true);
+        const updated = await this.changeStatus(booking, 'AWAITING_PAYMENT', null, { paymentDeadline, ipsQrData: qrPayload }, true);
+        if (!updated)
+            throw new common_1.BadRequestException(this.i18n.t('bookings.STATE_CHANGED'));
         this.events.emit('booking.awaiting_payment', { bookingId: booking.id });
         return this.serialize(updated);
     }
@@ -320,7 +346,7 @@ let BookingsService = class BookingsService {
             throw new common_1.BadRequestException(this.i18n.t('bookings.TOO_EARLY_FOR_NO_SHOW'));
         }
         await this.availability.releaseTermsForBooking(booking.id);
-        const updated = await this.applyStatus(booking, 'NO_SHOW', ownerId);
+        const updated = await this.applyStatus(booking, 'NO_SHOW', ownerId, { noShowDisputed: false });
         this.events.emit('booking.no_show', { bookingId: booking.id });
         return updated;
     }
@@ -332,7 +358,10 @@ let BookingsService = class BookingsService {
         return updated;
     }
     async cancelByGuest(guestId, bookingId, dto) {
-        const booking = await this.assertGuestAccess(guestId, bookingId, ['REQUESTED', 'AWAITING_PAYMENT']);
+        const booking = await this.assertGuestAccess(guestId, bookingId, ['REQUESTED', 'AWAITING_PAYMENT', 'CONFIRMED']);
+        if (!(0, guest_cancellation_1.canGuestCancel)(booking)) {
+            throw new common_1.BadRequestException(this.i18n.t('bookings.GUEST_CANCELLATION_CLOSED'));
+        }
         await this.availability.releaseTermsForBooking(booking.id);
         const updated = await this.applyStatus(booking, 'CANCELLED', guestId, { cancellationReason: dto.reason });
         this.events.emit('booking.cancelled_by_guest', { bookingId: booking.id });
@@ -340,9 +369,14 @@ let BookingsService = class BookingsService {
     }
     async disputeNoShow(guestId, bookingId, dto) {
         const booking = await this.assertGuestAccess(guestId, bookingId, ['NO_SHOW']);
-        const [, dispute] = await this.prisma.$transaction([
-            this.prisma.booking.update({ where: { id: booking.id }, data: { noShowDisputed: true } }),
-            this.prisma.dispute.create({
+        const dispute = await this.prisma.$transaction(async (tx) => {
+            const flagged = await tx.booking.updateMany({
+                where: { id: booking.id, noShowDisputed: false },
+                data: { noShowDisputed: true },
+            });
+            if (flagged.count === 0)
+                throw new common_1.BadRequestException(this.i18n.t('bookings.NO_SHOW_ALREADY_DISPUTED'));
+            return tx.dispute.create({
                 data: {
                     type: 'DISPUTED_NO_SHOW',
                     bookingId: booking.id,
@@ -350,8 +384,8 @@ let BookingsService = class BookingsService {
                     submittedByUserId: guestId,
                     description: dto.explanation,
                 },
-            }),
-        ]);
+            });
+        });
         this.events.emit('booking.no_show_disputed', { bookingId: booking.id, disputeId: dispute.id });
         return { message: this.i18n.t('common.SUCCESS') };
     }
@@ -372,14 +406,23 @@ let BookingsService = class BookingsService {
     }
     async disputeUnconfirmedPayment(guestId, bookingId) {
         const booking = await this.assertGuestAccess(guestId, bookingId, ['AWAITING_PAYMENT']);
-        await this.prisma.dispute.create({
-            data: {
-                type: 'UNCONFIRMED_PAYMENT',
-                bookingId: booking.id,
-                listingId: booking.listingId,
-                submittedByUserId: guestId,
-                description: 'Guest reports payment was sent but not confirmed by the owner',
-            },
+        await this.prisma.$transaction(async (tx) => {
+            await tx.$queryRaw `SELECT "id" FROM "Booking" WHERE "id" = ${booking.id}::uuid FOR UPDATE`;
+            if ((await tx.dispute.count({ where: openPaymentReportWhere(booking.id) })) > 0) {
+                throw new common_1.BadRequestException(this.i18n.t('bookings.PAYMENT_ALREADY_REPORTED'));
+            }
+            if (booking.paymentDeadline && booking.paymentDeadline.getTime() <= Date.now()) {
+                throw new common_1.BadRequestException(this.i18n.t('bookings.PAYMENT_DEADLINE_PASSED'));
+            }
+            await tx.dispute.create({
+                data: {
+                    type: 'UNCONFIRMED_PAYMENT',
+                    bookingId: booking.id,
+                    listingId: booking.listingId,
+                    submittedByUserId: guestId,
+                    description: 'Guest reports payment was sent but not confirmed by the owner',
+                },
+            });
         });
         this.events.emit('booking.payment_disputed', { bookingId: booking.id });
         return { message: this.i18n.t('common.SUCCESS') };
@@ -388,27 +431,51 @@ let BookingsService = class BookingsService {
         const booking = await this.prisma.booking.findUnique({
             where: { id: bookingId },
             include: {
-                listing: { select: { title: true, slug: true, address: true } },
+                listing: {
+                    select: {
+                        title: true,
+                        slug: true,
+                        address: true,
+                        paymentMethod: true,
+                        maxGuests: true,
+                        categoryId: true,
+                        status: true,
+                        pickupTime: true,
+                        returnTime: true,
+                        paymentDeadlineHours: true,
+                        city: { select: { name: true } },
+                        cityArea: { select: { name: true } },
+                        subscription: { select: { package: { select: { hasMessaging: true } } } },
+                        photos: {
+                            where: { pendingRemoval: false, versionId: null },
+                            orderBy: [{ isCover: 'desc' }, { displayOrder: 'asc' }],
+                            take: 1,
+                            select: { url: true },
+                        },
+                    },
+                },
                 guest: { select: { firstName: true, lastName: true, phone: true } },
-                owner: { select: { firstName: true, lastName: true, phone: true, bankAccount: true } },
+                owner: { select: { firstName: true, lastName: true, phone: true, bankAccount: true, anonymizedAt: true } },
             },
         });
         if (!booking)
             throw new common_1.NotFoundException();
         if (booking.guestId !== userId && booking.ownerId !== userId)
             throw new common_1.ForbiddenException();
+        const statusEntry = await this.prisma.bookingHistory.findFirst({
+            where: { bookingId: booking.id, newStatus: booking.status },
+            orderBy: { changedAt: 'desc' },
+        });
         let cancellation = null;
-        if (booking.status === 'CANCELLED' || booking.status === 'REJECTED') {
-            const entry = await this.prisma.bookingHistory.findFirst({
-                where: { bookingId: booking.id, newStatus: booking.status },
-                orderBy: { changedAt: 'desc' },
-            });
-            if (entry) {
-                cancellation = {
-                    by: entry.changedByUserId === booking.guestId ? 'GUEST' : entry.changedByUserId === booking.ownerId ? 'OWNER' : null,
-                    at: entry.changedAt,
-                };
-            }
+        if ((booking.status === 'CANCELLED' || booking.status === 'REJECTED') && statusEntry) {
+            cancellation = {
+                by: statusEntry.changedByUserId === booking.guestId
+                    ? 'GUEST'
+                    : statusEntry.changedByUserId === booking.ownerId
+                        ? 'OWNER'
+                        : null,
+                at: statusEntry.changedAt,
+            };
         }
         let bankTransferDetails = null;
         let awaitingPaymentSince = null;
@@ -422,15 +489,48 @@ let BookingsService = class BookingsService {
                     referenceNumber: booking.id.replace(/-/g, '').slice(0, 20),
                 };
             }
-            const entry = await this.prisma.bookingHistory.findFirst({
-                where: { bookingId: booking.id, newStatus: 'AWAITING_PAYMENT' },
-                orderBy: { changedAt: 'desc' },
-            });
-            awaitingPaymentSince = entry?.changedAt ?? null;
+            awaitingPaymentSince = statusEntry?.changedAt ?? null;
         }
+        const { listing } = booking;
+        const isOwnerViewing = booking.ownerId === userId;
+        const [guestUnits, guestCapacity, categoryNames, messaging, openPaymentReports] = await Promise.all([
+            (0, guest_capacity_1.getGuestUnits)(this.taxonomy, [listing.categoryId]),
+            this.getGuestCapacity(booking.listingId, listing.maxGuests),
+            this.taxonomy.getCategoryNames([listing.categoryId]),
+            isOwnerViewing ? null : this.getGuestMessaging(booking),
+            booking.status === 'AWAITING_PAYMENT' ? this.prisma.dispute.count({ where: openPaymentReportWhere(booking.id) }) : 0,
+        ]);
+        const serialized = this.serialize(booking, userId);
         return {
-            ...this.serialize(booking, userId),
+            ...serialized,
+            listing: {
+                ...serialized.listing,
+                place: listing.cityArea?.name ?? listing.city?.name ?? null,
+                acceptsBothPaymentMethods: listing.paymentMethod === 'BOTH',
+                status: listing.status,
+                categoryName: categoryNames.get(listing.categoryId) ?? null,
+                city: listing.city?.name ?? null,
+                area: listing.cityArea?.name ?? null,
+                pickupTime: listing.pickupTime,
+                returnTime: listing.returnTime,
+                coverPhotoUrl: listing.photos?.[0]?.url ?? null,
+                paymentDeadlineHours: listing.paymentDeadlineHours ?? DEFAULT_PAYMENT_DEADLINE_HOURS,
+            },
+            guestUnit: guestUnits.get(listing.categoryId),
+            guestCapacity,
+            statusChangedAt: statusEntry?.changedAt ?? booking.createdAt,
+            cancellationPolicy: {
+                type: booking.cancellationPolicyType,
+                threshold: booking.cancellationThreshold,
+                freeUntil: (0, guest_cancellation_1.getFreeCancellationUntil)(booking),
+            },
+            paymentDisputed: openPaymentReports > 0,
+            ...(isOwnerViewing
+                ? { guestShortName: (0, short_name_1.shortName)(booking.guest) }
+                :
+                    { ownerShortName: (0, short_name_1.shortName)(booking.owner), canCancel: (0, guest_cancellation_1.canGuestCancel)(booking), messaging }),
             ...(cancellation ? { cancellation } : {}),
+            ...(booking.status === 'EXPIRED' && statusEntry?.oldStatus ? { expiredFrom: statusEntry.oldStatus } : {}),
             ...(bankTransferDetails ? { bankTransferDetails } : {}),
             ...(awaitingPaymentSince ? { awaitingPaymentSince } : {}),
         };
@@ -441,19 +541,72 @@ let BookingsService = class BookingsService {
                 ...(role === 'guest' ? { guestId: userId } : { ownerId: userId }),
                 ...(status ? { status } : {}),
             },
-            orderBy: { createdAt: 'desc' },
-            include: { listing: { select: { title: true, slug: true } } },
+            include: {
+                listing: {
+                    select: {
+                        title: true,
+                        slug: true,
+                        categoryId: true,
+                        city: { select: { name: true } },
+                        cityArea: { select: { name: true } },
+                    },
+                },
+                guest: { select: { firstName: true, lastName: true } },
+                owner: { select: { firstName: true, lastName: true } },
+            },
         });
-        return bookings.map((b) => this.serialize(b));
+        const guestUnits = await (0, guest_capacity_1.getGuestUnits)(this.taxonomy, bookings.map((b) => b.listing.categoryId));
+        return bookings.sort(compareForList).map(({ guest, owner, listing, ...booking }) => ({
+            ...this.serialize(booking),
+            listing: { title: listing.title, slug: listing.slug, place: listing.cityArea?.name ?? listing.city?.name ?? null },
+            guestUnit: guestUnits.get(listing.categoryId),
+            ...(role === 'owner' ? { guestShortName: (0, short_name_1.shortName)(guest) } : { ownerShortName: (0, short_name_1.shortName)(owner) }),
+        }));
+    }
+    async getGuestMessaging(booking) {
+        const threads = await this.prisma.conversation.findMany({
+            where: { listingId: booking.listingId, guestId: booking.guestId },
+            select: { id: true, bookingId: true },
+            orderBy: { lastMessageAt: { sort: 'desc', nulls: 'last' } },
+        });
+        const thread = threads.find((t) => t.bookingId === booking.id) ?? threads[0] ?? null;
+        return {
+            conversationId: thread?.id ?? null,
+            canStart: !thread &&
+                booking.listing.status === client_1.ListingStatus.ACTIVE &&
+                !!booking.listing.subscription?.package.hasMessaging &&
+                !booking.owner.anonymizedAt,
+        };
     }
     async expireUnpaidBookings() {
-        const expired = await this.prisma.booking.findMany({
-            where: { status: 'AWAITING_PAYMENT', paymentDeadline: { lt: new Date() } },
+        const now = Date.now();
+        const overdue = await this.prisma.booking.findMany({
+            where: { status: 'AWAITING_PAYMENT', paymentDeadline: { lt: new Date(now) } },
+            include: { disputes: { where: payment_report_1.OPEN_PAYMENT_REPORT, select: { id: true } } },
         });
-        for (const booking of expired) {
+        for (const booking of overdue) {
+            if ((0, payment_report_1.isHeldByPaymentReport)(booking, now))
+                continue;
+            if (!(await this.changeStatus(booking, 'EXPIRED', null, {}, true)))
+                continue;
             await this.availability.releaseTermsForBooking(booking.id);
-            await this.applyStatus(booking, 'EXPIRED', null, {}, true);
             this.events.emit('booking.expired', { bookingId: booking.id });
+        }
+    }
+    async expireUnansweredRequests() {
+        const now = Date.now();
+        const hours = await (0, request_expiry_1.readRequestResponseHours)(this.prisma);
+        const due = await this.prisma.booking.findMany({
+            where: {
+                status: 'REQUESTED',
+                OR: [{ createdAt: { lte: new Date(now - hours * 3600_000) } }, { startsAt: { lte: new Date(now) } }],
+            },
+        });
+        for (const booking of due) {
+            if (!(await this.changeStatus(booking, 'EXPIRED', null, {}, true)))
+                continue;
+            await this.availability.releaseTermsForBooking(booking.id);
+            this.events.emit('booking.request_expired', { bookingId: booking.id });
         }
     }
     async autoCompleteBookings() {
@@ -462,7 +615,8 @@ let BookingsService = class BookingsService {
             where: { status: 'CONFIRMED', endsAt: { lt: cutoff } },
         });
         for (const booking of due) {
-            await this.applyStatus(booking, 'COMPLETED', null, {}, true);
+            if (!(await this.changeStatus(booking, 'COMPLETED', null, {}, true)))
+                continue;
             this.events.emit('booking.completed', { bookingId: booking.id });
         }
     }
@@ -478,14 +632,14 @@ let BookingsService = class BookingsService {
     }
     async sendPaymentDeadlineReminders() {
         const candidates = await this.prisma.booking.findMany({
-            where: { status: 'AWAITING_PAYMENT', paymentDeadline: { not: null } },
+            where: { status: 'AWAITING_PAYMENT', paymentDeadline: { not: null }, disputes: { none: payment_report_1.OPEN_PAYMENT_REPORT } },
             include: { listing: { select: { paymentDeadlineHours: true } } },
         });
         const now = Date.now();
         for (const booking of candidates) {
             if (!booking.paymentDeadline)
                 continue;
-            const totalHours = booking.listing.paymentDeadlineHours ?? 48;
+            const totalHours = booking.listing.paymentDeadlineHours ?? DEFAULT_PAYMENT_DEADLINE_HOURS;
             const deadlineMs = booking.paymentDeadline.getTime();
             const halfPointMs = deadlineMs - (totalHours / 2) * 3600_000;
             const finalDayStartMs = deadlineMs - 24 * 3600_000;
@@ -541,12 +695,26 @@ let BookingsService = class BookingsService {
         return booking;
     }
     async applyStatus(booking, newStatus, changedByUserId, extra = {}, automatic = false) {
-        const updated = await this.prisma.booking.update({
-            where: { id: booking.id },
-            data: { status: newStatus, ...extra },
-        });
-        await this.recordHistory(booking.id, booking.status, newStatus, changedByUserId, automatic);
+        const updated = await this.changeStatus(booking, newStatus, changedByUserId, extra, automatic);
+        if (!updated)
+            throw new common_1.BadRequestException(this.i18n.t('bookings.STATE_CHANGED'));
         return this.serialize(updated);
+    }
+    async changeStatus(booking, newStatus, changedByUserId, extra = {}, automatic = false) {
+        let updated;
+        try {
+            updated = await this.prisma.booking.update({
+                where: { id: booking.id, status: booking.status },
+                data: { status: newStatus, ...extra },
+            });
+        }
+        catch (err) {
+            if (err instanceof client_1.Prisma.PrismaClientKnownRequestError && err.code === 'P2025')
+                return null;
+            throw err;
+        }
+        await this.recordHistory(booking.id, booking.status, newStatus, changedByUserId, automatic);
+        return updated;
     }
     async recordHistory(bookingId, oldStatus, newStatus, changedByUserId, automatic) {
         await this.prisma.bookingHistory.create({
@@ -566,6 +734,7 @@ let BookingsService = class BookingsService {
             pricePerUnit: (0, money_1.paraToRsd)(booking.pricePerUnit),
             totalAmount: (0, money_1.paraToRsd)(booking.totalAmount),
             amountDue: (0, money_1.paraToRsd)(booking.amountDue),
+            priceBreakdown: readPriceBreakdown(booking),
             ...(isOwnerViewing ? { guestName: `${guest.firstName} ${guest.lastName}` } : {}),
             ...(showGuestPhone ? { guestPhone: guest.phone } : {}),
             ...(showOwnerContact ? { ownerName: `${owner.firstName} ${owner.lastName}`, ownerPhone: owner.phone } : {}),
@@ -579,6 +748,12 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], BookingsService.prototype, "expireUnpaidBookings", null);
+__decorate([
+    (0, schedule_1.Cron)(schedule_1.CronExpression.EVERY_MINUTE),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], BookingsService.prototype, "expireUnansweredRequests", null);
 __decorate([
     (0, schedule_1.Cron)(schedule_1.CronExpression.EVERY_10_MINUTES),
     __metadata("design:type", Function),
@@ -608,7 +783,8 @@ exports.BookingsService = BookingsService = __decorate([
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
         availability_service_1.AvailabilityService,
         nestjs_i18n_1.I18nService,
-        event_emitter_1.EventEmitter2])
+        event_emitter_1.EventEmitter2,
+        taxonomy_service_1.TaxonomyService])
 ], BookingsService);
 function resolvePricingUnitCount(priceUnit, startsAt, endsAt, dto) {
     if (dto.monthCount)
@@ -616,6 +792,49 @@ function resolvePricingUnitCount(priceUnit, startsAt, endsAt, dto) {
     if (priceUnit === 'GUEST')
         return Math.max(1, dto.guestCount || 1);
     return computeUnitCount(priceUnit, startsAt, endsAt);
+}
+function groupPriceLines(units) {
+    const lines = [];
+    for (const unit of units) {
+        const line = lines.find((l) => l.price === unit.price && l.kind === unit.kind);
+        if (line)
+            line.count += 1;
+        else
+            lines.push({ ...unit, count: 1 });
+    }
+    return lines;
+}
+function readPriceBreakdown(booking) {
+    const fees = (booking.fees ?? {});
+    const extras = toPara(fees.mandatory) + toPara(fees.guestFee) + toPara(fees.extraServicesTotal);
+    if (fees.priceLines) {
+        return {
+            lines: fees.priceLines.map((line) => ({ count: line.count, price: (0, money_1.paraToRsd)(BigInt(line.price)), kind: line.kind })),
+            extras: (0, money_1.paraToRsd)(extras),
+        };
+    }
+    if (fees.extraServicesTotal === undefined && fees.extraServices?.length)
+        return { lines: null, extras: null };
+    const exact = booking.pricePerUnit * BigInt(booking.unitCount) + extras === booking.totalAmount;
+    return {
+        lines: exact ? [{ count: booking.unitCount, price: (0, money_1.paraToRsd)(booking.pricePerUnit), kind: 'BASE' }] : null,
+        extras: (0, money_1.paraToRsd)(extras),
+    };
+}
+function toPara(value) {
+    return value ? BigInt(value) : 0n;
+}
+function compareForList(a, b) {
+    const rank = (status) => {
+        const index = OPEN_STATUS_ORDER.indexOf(status);
+        return index === -1 ? OPEN_STATUS_ORDER.length : index;
+    };
+    const byStatus = rank(a.status) - rank(b.status);
+    if (byStatus)
+        return byStatus;
+    const soonestFirst = a.startsAt.getTime() - b.startsAt.getTime();
+    const byTerm = rank(a.status) < OPEN_STATUS_ORDER.length ? soonestFirst : -soonestFirst;
+    return byTerm || b.createdAt.getTime() - a.createdAt.getTime();
 }
 function isDefinedSlots(listing) {
     return listing.bookingModel === 'PER_SLOT' && listing.slotSubmode === 'DEFINED_SLOTS';

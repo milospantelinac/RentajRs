@@ -46,6 +46,11 @@ exports.default = () => ({
         provider: process.env.GEOCODING_PROVIDER || 'nominatim',
         googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY,
     },
+    ical: {
+        allowPrivateAddresses: process.env.ICAL_ALLOW_PRIVATE_ADDRESSES
+            ? process.env.ICAL_ALLOW_PRIVATE_ADDRESSES === 'true'
+            : (process.env.NODE_ENV || 'development') !== 'production',
+    },
     payment: {
         provider: process.env.PAYMENT_PROVIDER || 'mock',
         bancaIntesa: {

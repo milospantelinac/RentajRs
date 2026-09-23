@@ -6,6 +6,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
 import { BookingsService } from '../bookings/bookings.service';
 import { paraToRsd } from '../../common/utils/money';
+import { OPEN_DISPUTE_STATUSES, PAYMENT_REPORT_HOLD_MS } from '../../common/utils/payment-report';
 import { PaymentSettingsService } from '../../common/payment/nestpay/payment-settings.service';
 import { UploadsService } from '../../common/uploads/uploads.service';
 import { UpdatePaymentSettingsDto } from '../../common/payment/nestpay/dto/payment-settings.dto';
@@ -103,7 +104,7 @@ export class AdminService {
   // -- Disputes ----------------------------------------------------------
 
   async listDisputes(status?: ProcessingStatus) {
-    return this.prisma.dispute.findMany({
+    const disputes = await this.prisma.dispute.findMany({
       where: status ? { status } : undefined,
       orderBy: { createdAt: 'desc' },
       include: {
@@ -111,9 +112,25 @@ export class AdminService {
         // T90 — startsAt/endsAt/guest let the admin tell apart which of a
         // listing's several bookings a dispute is actually about, without
         // needing to open the linked booking first.
-        booking: { select: { id: true, status: true, startsAt: true, endsAt: true, guest: { select: { firstName: true, lastName: true } } } },
+        booking: {
+          select: {
+            id: true,
+            status: true,
+            startsAt: true,
+            endsAt: true,
+            paymentDeadline: true,
+            guest: { select: { firstName: true, lastName: true } },
+          },
+        },
         submittedByUser: { select: { id: true, firstName: true, lastName: true } },
       },
+    });
+    // T94: an open payment report holds its unpaid booking past the payment
+    // deadline (BookingsService.expireUnpaidBookings), at most until this.
+    return disputes.map((dispute) => {
+      const deadline = dispute.booking?.status === 'AWAITING_PAYMENT' ? dispute.booking.paymentDeadline : null;
+      const open = dispute.type === 'UNCONFIRMED_PAYMENT' && OPEN_DISPUTE_STATUSES.includes(dispute.status);
+      return { ...dispute, paymentHeldUntil: open && deadline ? new Date(deadline.getTime() + PAYMENT_REPORT_HOLD_MS) : null };
     });
   }
 

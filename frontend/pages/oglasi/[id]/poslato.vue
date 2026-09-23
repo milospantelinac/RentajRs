@@ -1,54 +1,39 @@
 <template>
-  <div class="container py-6 text-center">
-    <h1 class="text-page-title mb-3">{{ t('billing.submittedTitle') }}</h1>
-    <p class="text-body mb-4">{{ t('billing.submittedMessage') }}</p>
-
-    <div v-if="receipt" class="card receipt-card mb-4">
-      <div class="card-body-sm">
-        <h2 class="text-section-title mb-3">{{ t('billing.receiptTitle') }}</h2>
-        <dl class="receipt-list">
-          <div class="receipt-row">
-            <dt class="text-muted">{{ t('billing.receiptPackage') }}</dt>
-            <dd class="text-body">
-              {{ receipt.package }} — {{ receipt.billingCycle === 'YEARLY' ? t('billing.yearly') : t('billing.monthly') }}
-            </dd>
-          </div>
-          <div class="receipt-row">
-            <dt class="text-muted">{{ t('billing.receiptAmount') }}</dt>
-            <dd class="text-body receipt-amount">{{ formattedAmount }} {{ receipt.currency }}</dd>
-          </div>
-          <div class="receipt-row">
-            <dt class="text-muted">{{ t('billing.receiptDate') }}</dt>
-            <dd class="text-body">{{ formattedDate }}</dd>
-          </div>
-          <div v-if="receipt.documentNumber" class="receipt-row">
-            <dt class="text-muted">{{ t('billing.receiptDocument') }}</dt>
-            <dd class="text-body">{{ receipt.documentNumber }}</dd>
-          </div>
-          <div v-if="receipt.bankReference" class="receipt-row">
-            <dt class="text-muted">{{ t('billing.receiptReference') }}</dt>
-            <dd class="text-body">{{ receipt.bankReference }}</dd>
-          </div>
-        </dl>
-      </div>
-    </div>
-
-    <NuxtLink to="/kontrolna-tabla" class="btn btn-primary-flat">{{ t('nav.dashboard') }}</NuxtLink>
-  </div>
+  <SubmissionOutcome
+    tone="success"
+    :title="t('submission.submittedTitle')"
+    :text="t('submission.submittedText', { hours: formatHours(t, slaHours, true) })"
+    :listing="outcome"
+    :rows="rows"
+    :note="t('submission.editWhilePending')"
+    :steps="steps"
+    :primary="{ label: t('nav.dashboard'), to: '/kontrolna-tabla' }"
+    :secondary="{ label: t('submission.viewListing'), to: `/oglasi/${listingId}/pregled` }"
+  />
 </template>
 
 <script setup>
+import { formatDateTime } from '~/utils/formatDateTime'
+import { formatHours, formatPackage } from '~/utils/submissionOutcome'
+
 definePageMeta({ middleware: 'auth' })
 const { t } = useI18n()
 const api = useApi()
 const route = useRoute()
+const listingId = route.params.id
 
-// Banca Intesa pilot checklist 2.7 — a real payment confirmation on the site,
-// not just a generic "submitted" message. The subscriptionId is only present
-// when we actually reached here from a successful NestPay checkout (see
-// SubscriptionsService.handleNestPaySuccess) — a listing that got here some
-// other way just shows the plain submitted message.
-const { data: receipt } = await useAsyncData('checkout-receipt', async () => {
+const { data: outcome } = await useAsyncData(`submission-${listingId}`, () =>
+  api.get(`/listings/${listingId}/submission`).catch(() => null),
+)
+if (outcome.value?.status === 'REJECTED') {
+  await navigateTo(`/oglasi/${listingId}/odbijeno`, { replace: true })
+}
+
+// Banca Intesa pilot checklist 2.7: a real payment confirmation on the site. The
+// subscriptionId is only there when we came back from a successful NestPay
+// checkout (SubscriptionsService.handleNestPaySuccess); a free slot or a
+// resubmission has no payment to show, only the package.
+const { data: receipt } = await useAsyncData(`checkout-receipt-${listingId}`, async () => {
   const subscriptionId = route.query.subscriptionId
   if (!subscriptionId) return null
   try {
@@ -58,49 +43,29 @@ const { data: receipt } = await useAsyncData('checkout-receipt', async () => {
   }
 })
 
-const formattedAmount = computed(() => (receipt.value ? new Intl.NumberFormat('sr-RS').format(receipt.value.amount) : ''))
-const formattedDate = computed(() =>
-  receipt.value ? new Date(receipt.value.purchasedAt).toLocaleString('sr-RS', { dateStyle: 'medium', timeStyle: 'short' }) : '',
-)
+const slaHours = computed(() => outcome.value?.slaHours ?? 24)
 
-useSeoMeta({ title: t('billing.submittedTitle') })
+const rows = computed(() => {
+  const r = receipt.value
+  if (!r) {
+    const packageValue = formatPackage(t, outcome.value?.subscription)
+    return packageValue ? [{ label: t('billing.receiptPackage'), value: packageValue }] : []
+  }
+  const rows = [
+    { label: t('billing.receiptPackage'), value: formatPackage(t, { package: r.package, billingCycle: r.billingCycle }) },
+    { label: t('billing.receiptAmount'), value: `${new Intl.NumberFormat('sr-RS').format(r.amount)} ${r.currency}` },
+    { label: t('billing.receiptDate'), value: formatDateTime(r.purchasedAt) },
+  ]
+  if (r.documentNumber) rows.push({ label: t('billing.receiptDocument'), value: r.documentNumber })
+  if (r.bankReference) rows.push({ label: t('billing.receiptReference'), value: r.bankReference })
+  return rows
+})
+
+const steps = computed(() => [
+  { title: t('submission.submittedStep1Title'), text: t('submission.submittedStep1Text', { hours: formatHours(t, slaHours.value) }) },
+  { title: t('submission.submittedStep2Title'), text: t('submission.submittedStep2Text') },
+  { title: t('submission.submittedStep3Title'), text: t('submission.submittedStep3Text') },
+])
+
+useSeoMeta({ title: t('submission.submittedTitle') })
 </script>
-
-<style lang="scss" scoped>
-.receipt-card {
-  max-width: 420px;
-  margin-left: auto;
-  margin-right: auto;
-  text-align: left;
-}
-
-.receipt-list {
-  margin: 0;
-}
-
-.receipt-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 8px 0;
-  border-bottom: 1px solid $color-border;
-}
-
-.receipt-row:last-child {
-  border-bottom: none;
-}
-
-.receipt-row dt {
-  font-size: $font-size-muted;
-}
-
-.receipt-row dd {
-  margin: 0;
-  text-align: right;
-}
-
-.receipt-amount {
-  font-weight: 600;
-}
-</style>

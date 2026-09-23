@@ -20,7 +20,11 @@ export default defineNuxtConfig({
       titleTemplate: '%s · Rentaj',
       htmlAttrs: { lang: 'sr-Latn-RS' },
       link: [
-        { rel: 'icon', type: 'image/png', href: '/favicon.png' },
+        // The "R" mark of the Figma logo (378:409), 48x48 on a clear background;
+        // public/ also holds favicon.ico (16/32/48) for clients that ask for it
+        // by name, and the 180x180 home screen icon on white for iOS.
+        { rel: 'icon', type: 'image/png', sizes: '48x48', href: '/favicon.png' },
+        { rel: 'apple-touch-icon', sizes: '180x180', href: '/apple-touch-icon.png' },
         { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
         { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' },
         {

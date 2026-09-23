@@ -61,7 +61,7 @@ __decorate([
 __decorate([
     (0, common_1.Get)(':id'),
     __param(0, (0, current_user_decorator_1.CurrentUser)('id')),
-    __param(1, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, String]),
     __metadata("design:returntype", void 0)
@@ -69,7 +69,7 @@ __decorate([
 __decorate([
     (0, common_1.Post)(':id/messages'),
     __param(0, (0, current_user_decorator_1.CurrentUser)('id')),
-    __param(1, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __param(2, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, String, messaging_dto_1.SendMessageDto]),
@@ -79,7 +79,7 @@ __decorate([
     (0, common_1.Post)('messages/:messageId/attachments'),
     (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('file')),
     __param(0, (0, current_user_decorator_1.CurrentUser)('id')),
-    __param(1, (0, common_1.Param)('messageId')),
+    __param(1, (0, common_1.Param)('messageId', common_1.ParseUUIDPipe)),
     __param(2, (0, common_1.UploadedFile)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, String, Object]),
@@ -88,7 +88,7 @@ __decorate([
 __decorate([
     (0, common_1.Post)(':id/read'),
     __param(0, (0, current_user_decorator_1.CurrentUser)('id')),
-    __param(1, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, String]),
     __metadata("design:returntype", void 0)

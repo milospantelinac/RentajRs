@@ -12,20 +12,48 @@ var AvailabilityService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AvailabilityService = void 0;
 const common_1 = require("@nestjs/common");
+const config_1 = require("@nestjs/config");
 const schedule_1 = require("@nestjs/schedule");
 const event_emitter_1 = require("@nestjs/event-emitter");
 const common_2 = require("@nestjs/common");
 const nestjs_i18n_1 = require("nestjs-i18n");
 const prisma_service_1 = require("../../prisma/prisma.service");
 const ics_1 = require("../../common/utils/ics");
+const ical_availability_1 = require("../../common/utils/ical-availability");
+const outbound_fetch_1 = require("../../common/utils/outbound-fetch");
 const money_1 = require("../../common/utils/money");
 const timezone_1 = require("../../common/utils/timezone");
+const ICAL_FETCH_TIMEOUT_MS = 15_000;
+const ICAL_NOT_CALENDAR = 'NOT_CALENDAR';
+async function fetchIcalFeed(url, allowPrivateAddresses) {
+    const response = await (0, outbound_fetch_1.fetchUserUrl)(url, { allowPrivateAddresses, signal: AbortSignal.timeout(ICAL_FETCH_TIMEOUT_MS) });
+    if (!response.ok)
+        throw new Error(`HTTP ${response.status}`);
+    const text = await response.text();
+    if (!(0, ics_1.isIcsCalendar)(text))
+        throw new Error(ICAL_NOT_CALENDAR);
+    return text;
+}
+function serializeIcalSource(source) {
+    return {
+        id: source.id,
+        name: source.name,
+        url: source.url,
+        lastSyncedAt: source.lastSyncedAt,
+        status: source.lastError ? 'ERROR' : source.lastSyncedAt ? 'ACTIVE' : 'PENDING',
+        error: source.lastError ? (source.lastError === ICAL_NOT_CALENDAR ? 'NOT_CALENDAR' : 'UNREACHABLE') : null,
+    };
+}
 let AvailabilityService = AvailabilityService_1 = class AvailabilityService {
-    constructor(prisma, events, i18n) {
+    constructor(prisma, events, i18n, config) {
         this.prisma = prisma;
         this.events = events;
         this.i18n = i18n;
+        this.config = config;
         this.logger = new common_2.Logger(AvailabilityService_1.name);
+    }
+    get allowPrivateFeedAddresses() {
+        return this.config.get('ical.allowPrivateAddresses') === true;
     }
     async lockTerm(listingId, startsAt, endsAt, source, opts = {}) {
         try {
@@ -175,7 +203,10 @@ let AvailabilityService = AvailabilityService_1 = class AvailabilityService {
             where: { listingId, date: { in: monthStarts } },
         });
         const overrideByMonth = new Map(overrides.map((o) => [o.date.toISOString().slice(0, 10), o.price]));
-        return monthStarts.map((m) => overrideByMonth.get(m.toISOString().slice(0, 10)) ?? basePrice);
+        return monthStarts.map((m) => {
+            const override = overrideByMonth.get(m.toISOString().slice(0, 10));
+            return override !== undefined ? { price: override, kind: 'SPECIAL' } : { price: basePrice, kind: 'BASE' };
+        });
     }
     async setHourlyPriceRanges(userId, listingId, dto) {
         await this.assertOwnership(userId, listingId);
@@ -217,17 +248,17 @@ let AvailabilityService = AvailabilityService_1 = class AvailabilityService {
             where: { listingId, date: dateOnly, startTime: { lte: startTime }, endTime: { gt: startTime } },
         });
         if (override)
-            return override.price;
+            return { price: override.price, kind: 'SPECIAL' };
         const dayOfWeek = (0, timezone_1.toBelgradeISODayOfWeek)(date);
         const ranges = await this.prisma.hourlyPriceRange.findMany({ where: { listingId } });
         const daySpecific = ranges.find((r) => r.dayOfWeek === dayOfWeek && r.startTime <= startTime && r.endTime > startTime);
         if (daySpecific)
-            return daySpecific.price;
+            return { price: daySpecific.price, kind: 'RANGE' };
         const shared = ranges.find((r) => r.dayOfWeek === null && r.startTime <= startTime && r.endTime > startTime);
         if (shared)
-            return shared.price;
+            return { price: shared.price, kind: 'RANGE' };
         const isWeekend = dayOfWeek === 5 || dayOfWeek === 6;
-        return isWeekend && weekendPrice ? weekendPrice : basePrice;
+        return isWeekend && weekendPrice ? { price: weekendPrice, kind: 'WEEKEND' } : { price: basePrice, kind: 'BASE' };
     }
     async getNightlyPrices(listingId, startsAt, endsAt, basePrice, weekendPrice) {
         const overrides = await this.prisma.datePriceOverride.findMany({
@@ -236,9 +267,8 @@ let AvailabilityService = AvailabilityService_1 = class AvailabilityService {
         const overrideByDate = new Map(overrides.map((o) => [o.date.toISOString().slice(0, 10), o.price]));
         const prices = [];
         for (let d = new Date(startsAt); d < endsAt; d.setUTCDate(d.getUTCDate() + 1)) {
-            const key = d.toISOString().slice(0, 10);
             const isWeekend = d.getUTCDay() === 5 || d.getUTCDay() === 6;
-            prices.push(overrideByDate.get(key) ?? (isWeekend && weekendPrice ? weekendPrice : basePrice));
+            prices.push(datePricedUnit(overrideByDate.get(d.toISOString().slice(0, 10)), isWeekend, basePrice, weekendPrice));
         }
         return prices;
     }
@@ -253,33 +283,98 @@ let AvailabilityService = AvailabilityService_1 = class AvailabilityService {
         for (let time = startsAt.getTime(); time < endsAt.getTime(); time += 3600_000) {
             const hour = new Date(time);
             const isWeekend = hour.getUTCDay() === 5 || hour.getUTCDay() === 6;
-            prices.push(overrideByDate.get(hour.toISOString().slice(0, 10)) ?? (isWeekend && weekendPrice ? weekendPrice : basePrice));
+            prices.push(datePricedUnit(overrideByDate.get(hour.toISOString().slice(0, 10)), isWeekend, basePrice, weekendPrice));
         }
         return prices;
     }
     async addIcalSource(userId, listingId, dto) {
         const listing = await this.assertOwnership(userId, listingId);
-        if (listing.bookingModel !== 'PER_STAY' || listing.priceUnit === 'MONTH') {
-            throw new common_1.BadRequestException(this.i18n.t('errors.LISTING_NOT_BOOKABLE'));
-        }
         const subscription = listing.subscriptionId
             ? await this.prisma.subscription.findUnique({ where: { id: listing.subscriptionId }, include: { package: true } })
             : null;
-        if (!subscription?.package.hasIcal) {
-            throw new common_1.ForbiddenException(this.i18n.t('errors.PACKAGE_FEATURE_NOT_INCLUDED'));
+        switch ((0, ical_availability_1.getIcalAvailability)(listing, !!subscription?.package.hasIcal)) {
+            case 'NOT_STAY':
+                throw new common_1.BadRequestException(this.i18n.t('errors.LISTING_NOT_BOOKABLE'));
+            case 'NOT_PUBLISHED':
+                throw new common_1.BadRequestException(this.i18n.t('errors.ICAL_LISTING_NOT_ACTIVE'));
+            case 'NO_ICAL_PACKAGE':
+                throw new common_1.ForbiddenException(this.i18n.t('errors.PACKAGE_FEATURE_NOT_INCLUDED'));
         }
-        return this.prisma.icalSource.create({ data: { listingId, name: dto.name, url: dto.url } });
+        const url = (0, ics_1.normalizeIcalUrl)(dto.url);
+        if (listing.icalExportToken && url.includes(listing.icalExportToken)) {
+            throw new common_1.BadRequestException(this.i18n.t('errors.ICAL_SOURCE_OWN_FEED'));
+        }
+        if (await this.prisma.icalSource.findFirst({ where: { listingId, url }, select: { id: true } })) {
+            throw new common_1.ConflictException(this.i18n.t('errors.ICAL_SOURCE_DUPLICATE'));
+        }
+        let text;
+        try {
+            text = await fetchIcalFeed(url, this.allowPrivateFeedAddresses);
+        }
+        catch (err) {
+            if (err instanceof outbound_fetch_1.NonPublicAddressError) {
+                this.logger.warn(`Refused an iCal address on a non-public host (${err.host}) for listing ${listingId}`);
+            }
+            const notCalendar = err.message === ICAL_NOT_CALENDAR;
+            throw new common_1.BadRequestException(this.i18n.t(notCalendar ? 'errors.ICAL_URL_NOT_CALENDAR' : 'errors.ICAL_URL_UNREACHABLE'));
+        }
+        const source = await this.prisma.icalSource.create({
+            data: { listingId, name: dto.name?.trim() || (0, ics_1.icalSourceName)(url), url },
+        });
+        await this.syncIcalSource(source.id, text);
+        return serializeIcalSource(await this.prisma.icalSource.findUniqueOrThrow({ where: { id: source.id } }));
     }
     async removeIcalSource(userId, listingId, sourceId) {
         await this.assertOwnership(userId, listingId);
-        await this.prisma.icalOccupancy.deleteMany({ where: { sourceId } });
-        await this.prisma.blockedTerm.deleteMany({ where: { icalSourceId: sourceId } });
-        await this.prisma.icalSource.deleteMany({ where: { id: sourceId, listingId } });
+        const source = await this.prisma.icalSource.findFirst({ where: { id: sourceId, listingId }, select: { id: true } });
+        if (!source)
+            throw new common_1.NotFoundException(this.i18n.t('errors.ICAL_SOURCE_NOT_FOUND'));
+        await this.prisma.$transaction([
+            this.prisma.icalOccupancy.deleteMany({ where: { sourceId } }),
+            this.prisma.blockedTerm.deleteMany({ where: { icalSourceId: sourceId } }),
+            this.prisma.icalSource.delete({ where: { id: sourceId } }),
+        ]);
         return { message: 'ok' };
     }
     async listIcalSources(userId, listingId) {
         await this.assertOwnership(userId, listingId);
-        return this.prisma.icalSource.findMany({ where: { listingId } });
+        const sources = await this.prisma.icalSource.findMany({ where: { listingId }, orderBy: [{ name: 'asc' }, { url: 'asc' }] });
+        return sources.map(serializeIcalSource);
+    }
+    async getIcalOverview(userId, listingId) {
+        const listing = await this.prisma.listing.findUnique({
+            where: { id: listingId },
+            include: {
+                city: { select: { name: true } },
+                cityArea: { select: { name: true } },
+                subscription: { select: { package: { select: { hasIcal: true } } } },
+            },
+        });
+        if (!listing || listing.status === 'DELETED')
+            throw new common_1.NotFoundException(this.i18n.t('errors.LISTING_NOT_FOUND'));
+        if (listing.userId !== userId)
+            throw new common_1.ForbiddenException();
+        const availability = (0, ical_availability_1.getIcalAvailability)(listing, !!listing.subscription?.package.hasIcal);
+        let exportToken = null;
+        let sources = [];
+        if (availability === 'AVAILABLE') {
+            exportToken =
+                listing.icalExportToken ??
+                    (await this.prisma.listing.update({ where: { id: listingId }, data: { icalExportToken: crypto.randomUUID() } })).icalExportToken;
+            sources = await this.prisma.icalSource.findMany({ where: { listingId }, orderBy: [{ name: 'asc' }, { url: 'asc' }] });
+        }
+        return {
+            listing: {
+                id: listing.id,
+                title: listing.title,
+                status: listing.status,
+                cityName: listing.city?.name ?? null,
+                cityAreaName: listing.cityArea?.name ?? null,
+            },
+            availability,
+            exportToken,
+            sources: sources.map(serializeIcalSource),
+        };
     }
     async exportIcs(token) {
         const listing = await this.prisma.listing.findUnique({ where: { icalExportToken: token } });
@@ -297,22 +392,22 @@ let AvailabilityService = AvailabilityService_1 = class AvailabilityService {
             await this.syncIcalSource(source.id).catch((err) => this.logger.warn(`iCal sync failed for ${source.id}: ${err.message}`));
         }
     }
-    async syncIcalSource(sourceId) {
+    async syncIcalSource(sourceId, feedText) {
         const source = await this.prisma.icalSource.findUniqueOrThrow({ where: { id: sourceId } });
         let text;
         try {
-            const response = await fetch(source.url);
-            if (!response.ok)
-                throw new Error(`HTTP ${response.status}`);
-            text = await response.text();
+            text = feedText ?? (await fetchIcalFeed(source.url, this.allowPrivateFeedAddresses));
         }
         catch (err) {
+            if (err instanceof outbound_fetch_1.NonPublicAddressError) {
+                this.logger.warn(`iCal source ${sourceId} points at a non-public host (${err.host}); not fetched`);
+            }
             const failureCount = source.failureCount + 1;
             await this.prisma.icalSource.update({
                 where: { id: sourceId },
                 data: { failureCount, lastError: err.message },
             });
-            if (failureCount >= 3) {
+            if (failureCount >= ical_availability_1.ICAL_FAILURE_ALERT_THRESHOLD) {
                 this.events.emit('availability.ical_sync_failed', { listingId: source.listingId, sourceId });
             }
             return;
@@ -375,8 +470,14 @@ exports.AvailabilityService = AvailabilityService = AvailabilityService_1 = __de
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
         event_emitter_1.EventEmitter2,
-        nestjs_i18n_1.I18nService])
+        nestjs_i18n_1.I18nService,
+        config_1.ConfigService])
 ], AvailabilityService);
+function datePricedUnit(override, isWeekend, basePrice, weekendPrice) {
+    if (override !== undefined)
+        return { price: override, kind: 'SPECIAL' };
+    return isWeekend && weekendPrice ? { price: weekendPrice, kind: 'WEEKEND' } : { price: basePrice, kind: 'BASE' };
+}
 function isExclusionViolation(err) {
     const message = err?.message ?? '';
     const meta = err?.meta?.message ?? '';

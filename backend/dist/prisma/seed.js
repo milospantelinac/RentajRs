@@ -152,8 +152,14 @@ async function seedSettings() {
         },
         { key: 'daily_new_conversation_limit', value: 10, description: 'R77' },
         { key: 'listing_index_threshold', value: 3, description: 'R135' },
-        { key: 'review_window_days', value: 14, description: 'R96' },
+        { key: 'review_window_days', value: 14, description: 'Dizajn 43: days after a booking completes in which its guest can leave a review' },
+        { key: 'review_edit_days', value: 7, description: 'Dizajn 43: days after a review goes public in which its author can change it' },
         { key: 'default_payment_deadline_hours', value: 48, description: 'R59' },
+        {
+            key: 'booking_request_response_hours',
+            value: 48,
+            description: 'Dizajn 41: hours an owner has to answer a booking request before it expires (sooner if the term starts first)',
+        },
         { key: 'moderation_sla_hours', value: 24, description: 'R30' },
         {
             key: 'admin_new_booking_notifications',
@@ -450,6 +456,23 @@ const CATEGORY_TREE = [
         ],
     },
     {
+        name: 'Magacini i skladišta',
+        icon: 'warehouse',
+        shortDescription: 'Magacini, skladišta i hladnjače',
+        defaultBookingModel: client_1.BookingModel.PER_STAY,
+        allowedPriceUnits: [client_1.PriceUnit.MONTH],
+        defaultPriceUnit: client_1.PriceUnit.MONTH,
+        attributes: [
+            { key: 'povrsina', name: 'Površina', type: client_1.AttributeType.LIST, required: true, showOnCard: true, options: opts(['20 m²', '50 m²', '100 m²', '200 m²', '300 m²', '500 m²', '1000 m²', 'Preko 1000 m²']) },
+            { key: 'visina_prostora', name: 'Visina prostora', type: client_1.AttributeType.LIST, required: true, showOnCard: true, options: opts(['2 m', '2.5 m', '3 m', '4 m', '5 m', '6 m', 'Preko 6 m']) },
+            { key: 'tip_prostora', name: 'Tip prostora', type: client_1.AttributeType.LIST, required: true, isFilter: true, filterType: client_1.FilterType.SELECT, showOnCard: true, options: opts(['Privatni magacin', 'Poslovni magacin', 'Industrijski magacin', 'Skladišni prostor', 'Hladnjača']) },
+            {
+                key: 'sadrzaji', name: 'Sadržaji', type: client_1.AttributeType.CHECKBOX_GROUP, isFilter: true, filterType: client_1.FilterType.SELECT,
+                options: opts(['Alarm / sigurnosni sistem', 'Video nadzor / kamere', 'Protivpožarni sistem', 'Grejanje', 'Klima', 'Paletni regali / police', 'Parking', 'Pristup kamionima', 'Rampa za utovar']),
+            },
+        ],
+    },
+    {
         name: 'Građevinske mašine',
         icon: 'excavator',
         shortDescription: 'Bageri, viljuškari, platforme',
@@ -498,23 +521,6 @@ const CATEGORY_TREE = [
         ],
     },
     {
-        name: 'Magacini i skladišta',
-        icon: 'warehouse',
-        shortDescription: 'Magacini, skladišta i hladnjače',
-        defaultBookingModel: client_1.BookingModel.PER_STAY,
-        allowedPriceUnits: [client_1.PriceUnit.MONTH],
-        defaultPriceUnit: client_1.PriceUnit.MONTH,
-        attributes: [
-            { key: 'povrsina', name: 'Površina', type: client_1.AttributeType.LIST, required: true, showOnCard: true, options: opts(['20 m²', '50 m²', '100 m²', '200 m²', '300 m²', '500 m²', '1000 m²', 'Preko 1000 m²']) },
-            { key: 'visina_prostora', name: 'Visina prostora', type: client_1.AttributeType.LIST, required: true, showOnCard: true, options: opts(['2 m', '2.5 m', '3 m', '4 m', '5 m', '6 m', 'Preko 6 m']) },
-            { key: 'tip_prostora', name: 'Tip prostora', type: client_1.AttributeType.LIST, required: true, isFilter: true, filterType: client_1.FilterType.SELECT, showOnCard: true, options: opts(['Privatni magacin', 'Poslovni magacin', 'Industrijski magacin', 'Skladišni prostor', 'Hladnjača']) },
-            {
-                key: 'sadrzaji', name: 'Sadržaji', type: client_1.AttributeType.CHECKBOX_GROUP, isFilter: true, filterType: client_1.FilterType.SELECT,
-                options: opts(['Alarm / sigurnosni sistem', 'Video nadzor / kamere', 'Protivpožarni sistem', 'Grejanje', 'Klima', 'Paletni regali / police', 'Parking', 'Pristup kamionima', 'Rampa za utovar']),
-            },
-        ],
-    },
-    {
         name: 'Ostalo',
         icon: 'other',
         defaultBookingModel: client_1.BookingModel.PER_STAY,
@@ -533,6 +539,7 @@ async function seedCategoryNode(node, parentId, order) {
             defaultBookingModel: node.defaultBookingModel,
             allowedPriceUnits: node.allowedPriceUnits,
             defaultPriceUnit: node.defaultPriceUnit,
+            displayOrder: order,
         },
         create: {
             parentId,

@@ -1,8 +1,8 @@
 // Dizajn 4 — which 3 attribute values show on a listing card's "traka
 // ključnih činjenica", and in what order, per category. Reads real
-// attribute values (SearchService.serializeResult / UsersService.listFavorites
-// already resolve LIST/CHECKBOX_GROUP option ids to names) — this module only
-// picks and formats, it never invents a value.
+// attribute values (the backend's serializeListingCard in
+// common/utils/listing-card.ts already resolves LIST/CHECKBOX_GROUP option ids
+// to names); this module only picks and formats, it never invents a value.
 //
 // Keyed by the listing's actual (leaf) category slug — Prostori za proslave's
 // two bookable leaves share their parent's attribute set (T64), so both list
@@ -112,7 +112,7 @@ export function getCardKeyFacts(listing) {
 // category attribute with its raw ListingAttribute row attached, while search
 // results arrive pre-flattened; normalising here lets both feed the same
 // formatters instead of duplicating them per payload shape.
-function flattenDetailAttribute(attr) {
+export function flattenListingAttribute(attr) {
   const v = attr.value || {}
   return {
     key: attr.key,
@@ -146,7 +146,7 @@ export function getListingKeyFacts(listing) {
     if (facts.length >= 6) break
     const attr = byKey.get(key)
     if (!attr) continue
-    const flat = flattenDetailAttribute(attr)
+    const flat = flattenListingAttribute(attr)
     const noun = COUNT_NOUNS[key]
     if (noun && flat.valueNumber !== null) {
       facts.push({ key, value: String(flat.valueNumber), label: noun[srPluralCategory(flat.valueNumber)] })

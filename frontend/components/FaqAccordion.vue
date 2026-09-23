@@ -121,25 +121,49 @@ function toggle(index) {
   line-height: 1.5;
 }
 
+// Dizajn 42 (94:27, 26:3271 - 26:3296): on a phone the panels are 50 tall,
+// radius 10 and 10 apart; the question is 16 Medium 17 from the left and the
+// toggle is the same white tile at 37, 7 in from the right. The frame drops
+// every question about 50px below its own panel; the answer here follows the
+// question row, 14/1.5 in the frame's 282 column.
 @include respond-below(md) {
+  .faq-accordion {
+    gap: 10px;
+  }
+
+  .faq-item {
+    border-radius: 10px;
+  }
+
   .faq-question {
-    min-height: 60px;
-    padding: 10px 10px 10px 20px;
+    min-height: 50px;
+    padding: 6.5px 7px 6.5px 17px;
     font-size: 16px;
   }
 
-  .faq-icon,
+  .faq-icon {
+    width: 37px;
+    height: 37px;
+    border-radius: 6.17px;
+  }
+
   .faq-icon-plus {
-    width: 40px;
-    height: 40px;
+    width: 37px;
+    height: 37px;
+  }
+
+  .faq-icon-minus {
+    width: 13.1px;
+    height: 2.22px;
   }
 
   .faq-answer {
-    padding: 8px 20px 20px;
+    padding: 0 17px 17px;
   }
 
   .faq-answer p {
-    font-size: $font-size-body;
+    max-width: 282px;
+    font-size: 14px;
   }
 }
 </style>

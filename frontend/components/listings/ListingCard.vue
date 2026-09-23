@@ -21,11 +21,13 @@
         :aria-label="t(isFavorited ? 'listing.unsaveListing' : 'listing.saveListing')"
         @click.stop.prevent="toggleFavorite"
       >
+        <!-- 626:522 outlines the heart; a saved listing's heart is filled
+             without the outline (380:1415, asset 44f8a). -->
         <svg viewBox="0 0 18 18" fill="none" class="listing-card-favorite-icon">
           <path
             d="M9 15.375C9 15.375 3.375 11.925 3.375 8.175C3.44498 7.55639 3.68851 6.97019 4.07748 6.48411C4.46645 5.99802 4.98498 5.63188 5.57319 5.42797C6.16141 5.22405 6.7953 5.19069 7.40167 5.33172C8.00804 5.47275 8.56215 5.78244 9 6.225C9.43785 5.78244 9.99196 5.47275 10.5983 5.33172C11.2047 5.19069 11.8386 5.22405 12.4268 5.42797C13.015 5.63188 13.5336 5.99802 13.9225 6.48411C14.3115 6.97019 14.555 7.55639 14.625 8.175C14.625 11.925 9 15.375 9 15.375Z"
             :fill="isFavorited ? 'currentColor' : 'none'"
-            stroke="currentColor"
+            :stroke="isFavorited ? 'none' : 'currentColor'"
             stroke-width="1.2"
             stroke-linejoin="round"
           />
@@ -43,13 +45,13 @@
         <p class="listing-card-title">{{ listing.title }}</p>
         <span v-if="listing.avgRating" class="listing-card-rating">
           <img src="/images/icons/star.svg" alt="" class="listing-card-star" />
-          {{ Number(listing.avgRating).toFixed(2) }}
+          {{ Number(listing.avgRating).toFixed(1) }}
         </span>
       </div>
 
       <div v-if="keyFacts.length" class="listing-card-facts">
         <span v-for="fact in keyFacts" :key="fact.key" class="listing-card-fact">
-          <AttributeIcon :name="fact.key" :size="15" />
+          <AttributeIcon :name="fact.key" :size="15" class="listing-card-fact-icon" />
           <span class="listing-card-fact-text">{{ fact.text }}</span>
         </span>
       </div>
@@ -58,7 +60,7 @@
 
       <div class="listing-card-footer">
         <p class="listing-card-price">
-          {{ new Intl.NumberFormat('sr-RS').format(listing.price || 0) }} RSD
+          <span>{{ new Intl.NumberFormat('sr-RS').format(listing.price || 0) }} RSD</span>
           <span class="listing-card-price-unit">{{ priceUnitSuffix }}</span>
         </p>
         <span class="btn btn-circle-sm listing-card-details-btn" aria-hidden="true">
@@ -118,6 +120,8 @@ const priceUnitSuffix = computed(() => getCardPriceUnitSuffix(props.listing.pric
 // measurement is 20px — kept as a local override rather than changing the
 // shared token (which also backs unrelated cards/tables/panels).
 $listing-card-radius: 20px;
+// 380:1415: a saved listing's heart. Not a Dizajn 1 colour, so it stays here.
+$listing-card-saved: #f43f5e;
 
 .listing-card {
   display: flex;
@@ -158,15 +162,20 @@ $listing-card-radius: 20px;
   pointer-events: none;
 }
 
+// 626:516: a fixed 22 tall pill with the name centred in it.
 .listing-card-category-pill {
   position: absolute;
   top: 14px;
   left: 14px;
-  padding: 6px 11px;
+  display: flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 11px;
   border-radius: $radius-pill;
   background: rgba($color-background, 0.7);
   color: $color-text;
   font-size: 10px;
+  line-height: normal;
   white-space: nowrap;
 }
 
@@ -183,7 +192,7 @@ $listing-card-radius: 20px;
   border: none;
   border-radius: $radius-pill;
   background: $color-surface;
-  color: $color-text-muted;
+  color: $color-text;
   cursor: pointer;
   transition: color 0.15s;
 }
@@ -192,8 +201,9 @@ $listing-card-radius: 20px;
   color: $color-primary;
 }
 
-.listing-card-favorite-btn-active {
-  color: $color-primary;
+.listing-card-favorite-btn-active,
+.listing-card-favorite-btn-active:hover {
+  color: $listing-card-saved;
 }
 
 .listing-card-favorite-icon {
@@ -230,14 +240,20 @@ $listing-card-radius: 20px;
   padding: 16px 18px;
 }
 
+// 642:2823: the title keeps the component's fixed 171 by 36 box, two lines
+// even when it needs one, so cards stay the same height; it only narrows when
+// a card is too slim to fit it beside the rating.
 .listing-card-title-row {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 8px;
+  gap: 12px;
 }
 
 .listing-card-title {
+  flex: 0 1 171px;
+  min-width: 0;
+  height: 36px;
   margin: 0;
   font-size: 16px;
   font-weight: $font-weight-card-title;
@@ -279,6 +295,11 @@ $listing-card-radius: 20px;
   flex-shrink: 1;
 }
 
+// 626:536: grey icons beside dark text on every frame.
+.listing-card-fact .listing-card-fact-icon {
+  color: $color-text-muted;
+}
+
 .listing-card-fact-text {
   font-size: 13px;
   font-weight: $font-weight-card-title;
@@ -293,20 +314,27 @@ $listing-card-radius: 20px;
   margin-top: auto;
 }
 
+// 638:495: the price sits at the top of the row, beside the 30 tall button,
+// with its unit 5 after it on the same baseline (638:497).
 .listing-card-footer {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
 }
 
 .listing-card-price {
+  display: flex;
+  flex: 1;
+  align-items: baseline;
+  gap: 5px;
+  min-width: 0;
   margin: 0;
   font-size: 16px;
+  line-height: normal;
   color: $color-text;
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .listing-card-price-unit {

@@ -2,11 +2,35 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { I18nService } from 'nestjs-i18n';
-import { ReviewDirection } from '@prisma/client';
+import { Prisma, Review } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
-import { CreateReviewDto, ReplyToReviewDto } from './dto/reviews.dto';
+import { CreateReviewDto, ReplyToReviewDto, UpdateReviewDto } from './dto/reviews.dto';
+import {
+  getReviewDeadline,
+  getReviewEditableUntil,
+  readReviewDeadline,
+  readReviewEditDays,
+  readReviewWindowDays,
+} from '../../common/utils/review-window';
 
-const DEFAULT_REVIEW_WINDOW_DAYS = 14;
+/**
+ * What the booking page shows of the guest's own review: no author,
+ * recipient or moderation fields. Dizajn 43 (585:515): it can change until
+ * `editableUntil`, which the page names.
+ */
+function reviewView(review: Review, editDays: number, now = new Date()) {
+  const editableUntil = getReviewEditableUntil(review.publishedAt, editDays);
+  const editable = now <= editableUntil;
+  return {
+    id: review.id,
+    rating: review.rating,
+    comment: review.comment,
+    writtenAt: review.writtenAt,
+    publishedAt: review.publishedAt,
+    editable,
+    editableUntil: editable ? editableUntil : null,
+  };
+}
 
 @Injectable()
 export class ReviewsService {
@@ -16,96 +40,92 @@ export class ReviewsService {
     private events: EventEmitter2,
   ) {}
 
-  /** R92: only the side of a COMPLETED booking may review, and only once per direction. */
+  /**
+   * R92, Dizajn 43: only the guest of a COMPLETED booking reviews it, once and
+   * within review_window_days of completion, and the review is public at
+   * once. Owners no longer rate guests.
+   */
   async createReview(authorId: string, dto: CreateReviewDto) {
-    const booking = await this.prisma.booking.findUniqueOrThrow({ where: { id: dto.bookingId } });
+    const booking = await this.prisma.booking.findUnique({ where: { id: dto.bookingId } });
+    if (!booking) throw new NotFoundException();
+    if (booking.guestId !== authorId) throw new ForbiddenException();
     if (booking.status !== 'COMPLETED') {
       throw new BadRequestException('Reviews can only be left for a completed booking');
     }
 
-    let direction: ReviewDirection;
-    let recipientId: string;
-    if (booking.guestId === authorId) {
-      direction = 'GUEST_TO_OWNER';
-      recipientId = booking.ownerId;
-    } else if (booking.ownerId === authorId) {
-      direction = 'OWNER_TO_GUEST';
-      recipientId = booking.guestId;
-    } else {
-      throw new ForbiddenException();
-    }
+    const [existing, reviewBy, editDays] = await Promise.all([
+      this.prisma.review.findUnique({ where: { bookingId: booking.id } }),
+      readReviewDeadline(this.prisma, booking),
+      readReviewEditDays(this.prisma),
+    ]);
+    if (existing) throw new BadRequestException(this.i18n.t('errors.REVIEW_ALREADY_EXISTS'));
+    if (new Date() > reviewBy) throw new BadRequestException(this.i18n.t('errors.REVIEW_WINDOW_CLOSED'));
 
-    const existing = await this.prisma.review.findUnique({
-      where: { bookingId_direction: { bookingId: booking.id, direction } },
-    });
-    if (existing) throw new BadRequestException('You have already reviewed this booking');
-
-    if (direction === 'OWNER_TO_GUEST' && dto.tags?.length) {
-      // R100 — quick tags are guest-facing only; silently ignored for GUEST_TO_OWNER.
-    }
-
-    const review = await this.prisma.review.create({
-      data: {
-        bookingId: booking.id,
-        authorId,
-        recipientId,
-        listingId: booking.listingId,
-        direction,
-        rating: dto.rating,
-        comment: dto.comment,
-      },
-    });
-
-    if (direction === 'OWNER_TO_GUEST' && dto.tags?.length) {
-      await this.prisma.reviewTagRow.createMany({
-        data: dto.tags.map((tag) => ({ reviewId: review.id, tag })),
+    let review: Review;
+    try {
+      review = await this.prisma.review.create({
+        data: {
+          bookingId: booking.id,
+          authorId,
+          recipientId: booking.ownerId,
+          listingId: booking.listingId,
+          rating: dto.rating,
+          comment: dto.comment?.trim() || null,
+        },
       });
+    } catch (err) {
+      // A second send racing the first meets the one review per booking.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw new BadRequestException(this.i18n.t('errors.REVIEW_ALREADY_EXISTS'));
+      }
+      throw err;
     }
 
-    await this.tryPublishPair(booking.id);
-    this.events.emit('review.written', { reviewId: review.id, bookingId: booking.id, direction });
-    return review;
+    await this.refreshListingRating(booking.listingId);
+    this.events.emit('review.published', { reviewId: review.id });
+    return reviewView(review, editDays);
   }
 
-  /** R96: both publish together once the second side writes theirs, or after 14 days — whichever first. */
-  private async tryPublishPair(bookingId: string) {
-    const reviews = await this.prisma.review.findMany({ where: { bookingId } });
-    if (reviews.length < 2) return;
-    await this.publishReviews(reviews.map((r) => r.id));
-  }
+  /**
+   * Dizajn 43 (585:515): the author may change a review for review_edit_days
+   * after it went public. The change is public at once and the listing's
+   * rating follows it.
+   */
+  async updateReview(authorId: string, reviewId: string, dto: UpdateReviewDto) {
+    const review = await this.prisma.review.findUnique({ where: { id: reviewId } });
+    if (!review) throw new NotFoundException();
+    if (review.authorId !== authorId) throw new ForbiddenException();
 
-  private async publishReviews(reviewIds: string[]) {
+    const editDays = await readReviewEditDays(this.prisma);
     const now = new Date();
-    await this.prisma.review.updateMany({
-      where: { id: { in: reviewIds }, published: false },
-      data: { published: true, publishedAt: now },
-    });
-
-    for (const reviewId of reviewIds) {
-      const review = await this.prisma.review.findUnique({ where: { id: reviewId } });
-      if (!review) continue;
-      await this.refreshListingRating(review.listingId);
+    if (now > getReviewEditableUntil(review.publishedAt, editDays)) {
+      throw new BadRequestException(this.i18n.t('errors.REVIEW_EDIT_CLOSED'));
     }
-    this.events.emit('review.published', { reviewIds });
+
+    const updated = await this.prisma.review.update({
+      where: { id: reviewId },
+      data: { rating: dto.rating, comment: dto.comment?.trim() || null },
+    });
+    await this.refreshListingRating(review.listingId);
+    return reviewView(updated, editDays, now);
   }
 
   private async refreshListingRating(listingId: string) {
-    const published = await this.prisma.review.findMany({
-      where: { listingId, published: true, hiddenByAdmin: false, direction: 'GUEST_TO_OWNER' },
+    const visible = await this.prisma.review.findMany({
+      where: { listingId, hiddenByAdmin: false },
       select: { rating: true },
     });
     // R102 — average shown only from 3 reviews onward; below that just the count is exposed (handled client-side).
-    const avg = published.length ? published.reduce((sum, r) => sum + r.rating, 0) / published.length : null;
+    const avg = visible.length ? visible.reduce((sum, r) => sum + r.rating, 0) / visible.length : null;
     await this.prisma.listing.update({
       where: { id: listingId },
-      data: { avgRating: avg, reviewCount: published.length },
+      data: { avgRating: avg, reviewCount: visible.length },
     });
   }
 
   async replyToReview(ownerId: string, reviewId: string, dto: ReplyToReviewDto) {
     const review = await this.prisma.review.findUniqueOrThrow({ where: { id: reviewId } });
-    if (review.direction !== 'GUEST_TO_OWNER' || review.recipientId !== ownerId) throw new ForbiddenException();
-    if (!review.published) throw new BadRequestException('Review is not published yet');
+    if (review.recipientId !== ownerId) throw new ForbiddenException();
 
     const existing = await this.prisma.reviewReply.findUnique({ where: { reviewId } });
     if (existing) throw new BadRequestException('This review already has a reply'); // R101 — one reply, never edited
@@ -116,53 +136,71 @@ export class ReviewsService {
   }
 
   async getListingReviews(listingId: string) {
-    return this.prisma.review.findMany({
-      where: { listingId, published: true, hiddenByAdmin: false, direction: 'GUEST_TO_OWNER' },
+    const reviews = await this.prisma.review.findMany({
+      where: { listingId, hiddenByAdmin: false },
       orderBy: { publishedAt: 'desc' },
       include: {
         // Dizajn 11 — a review card is signed "Miloš J.", so the surname's
         // initial has to come along; the full surname is never rendered.
         author: { select: { id: true, firstName: true, lastName: true, avatarUrl: true } },
-        tags: true,
         reply: true,
       },
     });
+    // Found in Dizajn 39: this public list used to send the whole row, with
+    // the guest's full surname and the booking behind the review. It keeps
+    // what the listing's page shows.
+    return reviews.map(({ author, reply, ...review }) => ({
+      id: review.id,
+      rating: review.rating,
+      comment: review.comment,
+      writtenAt: review.writtenAt,
+      publishedAt: review.publishedAt,
+      author: {
+        id: author.id,
+        firstName: author.firstName,
+        lastInitial: author.lastName?.trim().charAt(0) || null,
+        avatarUrl: author.avatarUrl,
+      },
+      reply: reply ? { content: reply.content, createdAt: reply.createdAt } : null,
+    }));
   }
 
-  /** Drives the "leave a review" panel on the booking detail page — never exposes an unpublished counterpart review (R96). */
+  /** Drives the review panel on the guest's booking page (Dizajn 39, 43); the owner has none. */
   async getBookingReviewStatus(userId: string, bookingId: string) {
     const booking = await this.prisma.booking.findUnique({ where: { id: bookingId } });
     if (!booking) throw new NotFoundException();
-    if (booking.guestId !== userId && booking.ownerId !== userId) throw new ForbiddenException();
+    if (booking.guestId !== userId) throw new ForbiddenException();
 
-    const myDirection: ReviewDirection = booking.guestId === userId ? 'GUEST_TO_OWNER' : 'OWNER_TO_GUEST';
-    const counterpartDirection: ReviewDirection = myDirection === 'GUEST_TO_OWNER' ? 'OWNER_TO_GUEST' : 'GUEST_TO_OWNER';
-
-    const reviews = await this.prisma.review.findMany({ where: { bookingId }, include: { tags: true } });
-    const mine = reviews.find((r) => r.direction === myDirection) ?? null;
-    const counterpart = reviews.find((r) => r.direction === counterpartDirection) ?? null;
+    const completed = booking.status === 'COMPLETED';
+    const [mine, reviewBy, editDays] = await Promise.all([
+      this.prisma.review.findUnique({ where: { bookingId } }),
+      completed ? readReviewDeadline(this.prisma, booking) : null,
+      readReviewEditDays(this.prisma),
+    ]);
+    const now = new Date();
 
     return {
-      canReview: booking.status === 'COMPLETED' && !mine,
-      direction: myDirection,
-      myReview: mine,
-      counterpartHasReviewed: !!counterpart,
-      counterpartReview: counterpart?.published ? counterpart : null,
+      canReview: !!reviewBy && !mine && now <= reviewBy,
+      myReview: mine ? reviewView(mine, editDays, now) : null,
     };
   }
 
+  /** Dizajn 31, 43: the guest's completed bookings still open for a review (the dashboard's reminder). */
   async getMyPendingReviews(userId: string) {
-    // Bookings this user could review but hasn't yet (drives the dashboard "leave a review" nudge).
-    const completed = await this.prisma.booking.findMany({
-      where: { OR: [{ guestId: userId }, { ownerId: userId }], status: 'COMPLETED' },
-      include: { listing: { select: { title: true, slug: true } }, reviews: true },
-    });
+    const [completed, windowDays] = await Promise.all([
+      this.prisma.booking.findMany({
+        where: { guestId: userId, status: 'COMPLETED', review: { is: null } },
+        include: {
+          listing: { select: { title: true, slug: true } },
+          history: { where: { newStatus: 'COMPLETED' }, orderBy: { changedAt: 'desc' }, take: 1, select: { changedAt: true } },
+        },
+      }),
+      readReviewWindowDays(this.prisma),
+    ]);
+    const now = new Date();
     return completed
-      .filter((b) => {
-        const direction: ReviewDirection = b.guestId === userId ? 'GUEST_TO_OWNER' : 'OWNER_TO_GUEST';
-        return !b.reviews.some((r) => r.direction === direction);
-      })
-      .map((b) => ({ bookingId: b.id, listing: b.listing }));
+      .filter((booking) => now <= getReviewDeadline(booking.history[0]?.changedAt ?? booking.endsAt, windowDays))
+      .map((booking) => ({ bookingId: booking.id, listing: booking.listing }));
   }
 
   // -- Admin ---------------------------------------------------------
@@ -177,27 +215,9 @@ export class ReviewsService {
 
   // -- Scheduled jobs --------------------------------------------------
 
-  /** R96 fallback — publish solo once 14 days pass without the counterpart writing theirs. */
-  @Cron(CronExpression.EVERY_DAY_AT_2AM)
-  async publishOverdueReviews() {
-    const windowDays = await this.getReviewWindowDays();
-    const cutoff = new Date(Date.now() - windowDays * 86_400_000);
-    const overdue = await this.prisma.review.findMany({
-      where: { published: false, writtenAt: { lt: cutoff } },
-    });
-    for (const review of overdue) {
-      await this.publishReviews([review.id]);
-    }
-  }
-
-  /** R171 — admin-editable in /admin/podesavanja (Setting.review_window_days). */
-  private async getReviewWindowDays(): Promise<number> {
-    const setting = await this.prisma.setting.findUnique({ where: { key: 'review_window_days' } });
-    return typeof setting?.value === 'number' ? setting.value : DEFAULT_REVIEW_WINDOW_DAYS;
-  }
-
   /**
-   * Ch.8.4 — 7-day nudge for bookings that finished without a review yet.
+   * Ch.8.4: a 7-day nudge to the guest of a booking that finished without a
+   * review yet, while the review window is still open (Dizajn 43).
    * Booking has no updatedAt column, so "completed 7 days ago" is read off
    * the automatic COMPLETED transition recorded in BookingHistory instead.
    */
@@ -214,13 +234,11 @@ export class ReviewsService {
     });
 
     for (const { bookingId } of candidates) {
-      const booking = await this.prisma.booking.findUnique({ where: { id: bookingId } });
-      if (!booking) continue;
-      const reviews = await this.prisma.review.findMany({ where: { bookingId } });
-      const guestReviewed = reviews.some((r) => r.direction === 'GUEST_TO_OWNER');
-      const ownerReviewed = reviews.some((r) => r.direction === 'OWNER_TO_GUEST');
-      if (!guestReviewed) this.events.emit('review.reminder', { bookingId, userId: booking.guestId });
-      if (!ownerReviewed) this.events.emit('review.reminder', { bookingId, userId: booking.ownerId });
+      const booking = await this.prisma.booking.findUnique({ where: { id: bookingId }, include: { review: { select: { id: true } } } });
+      if (!booking || booking.review) continue;
+      const reviewBy = await readReviewDeadline(this.prisma, booking);
+      if (new Date() > reviewBy) continue;
+      this.events.emit('review.reminder', { bookingId, userId: booking.guestId, reviewBy });
     }
   }
 }
