@@ -1,0 +1,470 @@
+@use 'breakpoints' as *;
+@use 'tokens' as *;
+
+// Dizajn 45: the shapes the admin panel repeats on every screen. The panel
+// has no frames of its own, so every value here is the one the dashboard
+// already draws (Dizajn 30/31/34/38) or the one the ticket spells out.
+//
+// They live in their own partial because nothing outside /admin uses them:
+// the dashboard and the public pages keep their page-scoped styles, and the
+// old .table / .badge rules these replace had no other callers either.
+
+// The white raised card every block of content sits in. The shadow is the
+// pair the dashboard's own content cards use (Dizajn 38, 380:1714), a touch
+// softer in its 8px layer than $shadow-card.
+.admin-card {
+  border-radius: $radius-card;
+  background: $color-surface;
+  box-shadow:
+    0 1px 3px rgba(97, 115, 133, 0.05),
+    0 6px 20px rgba(97, 115, 133, 0.08);
+}
+
+.admin-card + .admin-card {
+  margin-top: 20px;
+}
+
+// A table fills its card edge to edge, so the card clips it into the corners.
+.admin-card-table {
+  overflow: hidden;
+}
+
+.admin-card-body {
+  padding: 22px 24px;
+}
+
+// Dizajn 38's section title, the heading a card opens with.
+.admin-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 20px 24px 0;
+}
+
+.admin-card-table .admin-card-head {
+  padding-bottom: 18px;
+}
+
+.admin-card-title {
+  font-size: 17px;
+  font-weight: 500;
+  line-height: normal;
+  color: $color-text;
+}
+
+.admin-card-note {
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 300;
+  line-height: 20px;
+  color: $color-text-muted;
+}
+
+// Tables ------------------------------------------------------------------
+// The ticket: a white card with a shadow, a SemiBold 13 header in grey, rows
+// parted by an #E4EBF2 line and no zebra. The row's own paddings are the
+// dashboard table's (Dizajn 34, 378:506 and 378:511).
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: $color-surface;
+}
+
+.admin-table th {
+  padding: 14px 22px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: normal;
+  color: $color-text-muted;
+  text-align: left;
+  white-space: nowrap;
+}
+
+// The line under the header is the first row's own, so the last row ends on
+// the card's edge with no trailing rule.
+.admin-table td {
+  padding: 15px 22px 16px;
+  border-top: 1px solid $color-border;
+  font-size: 15px;
+  font-weight: 400;
+  line-height: normal;
+  color: $color-text;
+  vertical-align: middle;
+}
+
+.admin-table-tight td,
+.admin-table-tight th {
+  padding-left: 18px;
+  padding-right: 18px;
+}
+
+.admin-cell-sub {
+  display: block;
+  font-size: 13px;
+  font-weight: 300;
+  line-height: normal;
+  color: $color-text-muted;
+}
+
+// A name over its quieter second line. One element, so a stacked phone row
+// keeps the two together instead of spreading them across the cell.
+.admin-cell-pair {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.admin-cell-name {
+  font-size: 15px;
+  font-weight: 500;
+  line-height: normal;
+  color: $color-text;
+}
+
+.admin-cell-actions {
+  width: 1%;
+  white-space: nowrap;
+}
+
+// A loading cell's second line stands where .admin-cell-pair would put it.
+.admin-skeleton-sub {
+  margin-top: 3px;
+}
+
+// A row that is a link to somewhere: the frame draws no hover fill, only the
+// title turning blue (Dizajn 34).
+.admin-row-link {
+  cursor: pointer;
+}
+
+.admin-row-link:hover .admin-cell-name {
+  color: $color-primary;
+}
+
+// Actions ------------------------------------------------------------------
+// The last column's actions are text buttons (Dizajn 6 "tekstualno"): no
+// fill, no border, blue ink, red where the action destroys something.
+
+.admin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+}
+
+.admin-action {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: $font-family-base;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: normal;
+  color: $color-primary;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.admin-action:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.admin-action:disabled {
+  color: $color-text-muted;
+  cursor: not-allowed;
+}
+
+.admin-action-danger {
+  color: $color-error;
+}
+
+// Status pills (Dizajn 31) -------------------------------------------------
+// The dashboard's own pill, values from 380:540 / 357:543.
+
+.admin-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 10px;
+  border-radius: $radius-pill;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: normal;
+  white-space: nowrap;
+}
+
+.admin-pill-success {
+  background: #cdfad1;
+  color: #178c24;
+}
+
+.admin-pill-warning {
+  background: $color-warning-bg;
+  color: $color-warning;
+}
+
+.admin-pill-info {
+  background: $color-accent-tint;
+  color: $color-primary;
+}
+
+.admin-pill-neutral {
+  background: $color-background;
+  color: $color-text-muted;
+}
+
+.admin-pill-critical {
+  background: #fdeff1;
+  color: $color-error;
+}
+
+.admin-pills {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+// Checkbox (Dizajn 38, 380:1785) -------------------------------------------
+// The same 18px box with the white tick the dashboard's settings draw, rather
+// than a native accent-color box.
+
+.admin-check {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  border: 1.5px solid $color-border;
+  border-radius: 8px;
+  background: $color-surface;
+  appearance: none;
+  cursor: pointer;
+}
+
+.admin-check:checked {
+  border-color: $color-primary;
+  background: $color-primary url('/images/icons/check-white-18.svg') center / 18px 18px no-repeat;
+}
+
+.admin-check-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: normal;
+  color: $color-text;
+  cursor: pointer;
+}
+
+// Switchers ----------------------------------------------------------------
+// The platform's own two-or-three-way switch (Dizajn 34, 378:497 and 378:499):
+// a white 12-radius button per option, the current one filled blue. Figma
+// draws the stroke inside, so the padding gives up its pixel and the selected
+// option keeps a transparent border to stay the same size.
+
+.admin-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-switch-btn {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  padding: 11px 17px;
+  border: 1px solid $color-border;
+  border-radius: $radius-button;
+  background: $color-surface;
+  font-family: $font-family-base;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: normal;
+  color: $color-text;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.admin-switch-btn:hover {
+  border-color: $color-primary;
+  color: $color-primary;
+  text-decoration: none;
+}
+
+.admin-switch-btn.is-active,
+.admin-switch-btn.is-active:hover {
+  border-color: transparent;
+  background: $color-primary;
+  color: $color-surface;
+}
+
+// The language pair that sits in a card's own header, a step smaller.
+.admin-switch-sm .admin-switch-btn {
+  padding: 7px 14px;
+  font-size: 13px;
+}
+
+// Filters above a table ----------------------------------------------------
+// A page-grey .form-control would disappear against the page, so the panel's
+// filters are the dashboard's white controls instead (Dizajn 34, 378:501).
+
+.admin-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.admin-field {
+  height: 42px;
+  padding: 0 17px;
+  border: 1px solid $color-border;
+  border-radius: $radius-input;
+  background: $color-surface;
+  font-family: $font-family-base;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: normal;
+  color: $color-text;
+}
+
+.admin-field::placeholder {
+  color: $color-text-muted;
+}
+
+.admin-field:hover {
+  border-color: $color-primary;
+}
+
+.admin-field:focus-visible {
+  outline: none;
+  border-color: $color-primary;
+  box-shadow: 0 0 0 3px $color-accent-tint;
+}
+
+.admin-field-search {
+  width: 320px;
+  max-width: 100%;
+}
+
+// A button standing in a filter row matches the fields next to it.
+.admin-filters .btn {
+  min-height: 42px;
+}
+
+select.admin-field {
+  padding-right: 49px;
+  background: $color-surface url('/images/icons/chevron-down-18.svg') no-repeat right 15px center / 18px 18px;
+  cursor: pointer;
+  appearance: none;
+}
+
+// Dialogs ------------------------------------------------------------------
+// The platform's own modal (AvatarCropModal): the page dimmed to 55%, the
+// panel a card with the same 24 of padding as a content card.
+
+.admin-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(6, 27, 49, 0.55);
+  z-index: $z-modal;
+}
+
+.admin-modal {
+  width: 100%;
+  max-width: 460px;
+}
+
+// Phones (R157) ------------------------------------------------------------
+// A table becomes one card per row instead of scrolling sideways; the cells
+// name themselves from the `data-label` the page sets.
+
+@include mobile-only {
+  .admin-card-body {
+    padding: 18px 16px;
+  }
+
+  .admin-card-head {
+    padding: 18px 16px 0;
+  }
+
+  .admin-card-table .admin-card-head {
+    padding-bottom: 14px;
+  }
+
+  .admin-table thead {
+    display: none;
+  }
+
+  .admin-table,
+  .admin-table tbody,
+  .admin-table tr,
+  .admin-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .admin-table tr + tr {
+    border-top: 1px solid $color-border;
+  }
+
+  .admin-table td {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 9px 16px;
+    border-top: 0;
+  }
+
+  .admin-table tr td:first-child {
+    padding-top: 16px;
+  }
+
+  .admin-table tr td:last-child {
+    padding-bottom: 16px;
+  }
+
+  .admin-table td[data-label]::before {
+    content: attr(data-label);
+    flex-shrink: 0;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: normal;
+    color: $color-text-muted;
+  }
+
+  .admin-table td[data-label] {
+    text-align: right;
+  }
+
+  .admin-table td[data-label] .admin-cell-sub {
+    text-align: right;
+  }
+
+  // The actions carry no label, so they line up with the values above them
+  // instead of sitting alone on the left.
+  .admin-table td.admin-cell-actions {
+    width: auto;
+    justify-content: flex-end;
+    white-space: normal;
+  }
+
+  .admin-actions {
+    justify-content: flex-end;
+  }
+
+  .admin-field-search {
+    width: 100%;
+  }
+}

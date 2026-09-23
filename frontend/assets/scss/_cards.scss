@@ -57,43 +57,8 @@
   transform: translateY(-2px);
 }
 
-// Status badge: 6px radius, subtle background, darker text (Ch.18.4). Color
-// variants map to the same urgency palette used on the dashboard.
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 10px;
-  border-radius: $radius-badge;
-  font-size: $font-size-label;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.badge-neutral {
-  background: $color-background;
-  color: $color-text-muted;
-}
-
-.badge-info {
-  background: $color-accent-tint;
-  color: $color-primary;
-}
-
-.badge-warning {
-  background: $color-warning-bg;
-  color: $color-warning;
-}
-
-.badge-critical {
-  background: rgba(209, 41, 61, 0.1);
-  color: $color-error;
-}
-
-.badge-success {
-  background: rgba(18, 183, 106, 0.1);
-  color: #0a8a51;
-}
+// The status badge that used to live here was the admin panel's alone; Dizajn
+// 45 replaced it with the dashboard's own pill (.admin-pill in _admin.scss).
 
 // "Needs your attention" card variants (Ch.10.3/10.4) — left-border accent by
 // urgency, used on the dashboard attention list.

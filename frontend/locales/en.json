@@ -1550,7 +1550,7 @@
     "attrOptions": "Options (key:name, comma-separated)",
     "attrRequired": "required",
     "attrIsFilter": "used as filter",
-    "listingCount": "listings",
+    "listingCount": "Listings",
     "emailTemplates": "Email templates",
     "searchTemplates": "Search by template key",
     "subject": "Email subject",
@@ -1623,6 +1623,109 @@
       "SUSPECTED_FRAUD": "Suspected fraud",
       "DUPLICATE_LISTING": "Duplicate listing",
       "OTHER": "Other"
+    },
+    "sectionModeration": "Moderation",
+    "sectionOperations": "Operations",
+    "sectionContent": "Content and system",
+    "loadErrorTitle": "Loading failed",
+    "loadErrorText": "This page could not load its data. Please try again.",
+    "refresh": "Refresh",
+    "clearSearch": "Clear search",
+    "userLabel": "User",
+    "userActive": "Active",
+    "noDisputeHistory": "No disputes",
+    "viewDetails": "Details",
+    "bookingNotFoundTitle": "No such booking",
+    "subtitle": {
+      "queue": "Listings owners sent for approval, oldest first.",
+      "categories": "The category tree, owner proposals and attributes.",
+      "users": "Search accounts, block them and see dispute history.",
+      "bookings": "Search every booking on the platform.",
+      "subscriptions": "Subscriptions, package prices and the featured waitlist.",
+      "disputes": "Disputes and listing reports waiting for a decision.",
+      "emailTemplates": "The text of the messages the platform sends, in Serbian and English.",
+      "content": "Static pages, the FAQ and the homepage video.",
+      "settings": "System values that change how the platform behaves."
+    },
+    "empty": {
+      "queue": {
+        "title": "Nothing waiting",
+        "text": "Every listing sent in has been handled. A new one shows up here as soon as an owner sends it for approval."
+      },
+      "users": {
+        "title": "No users",
+        "text": "No account has been registered on the platform yet."
+      },
+      "usersSearch": {
+        "title": "No results",
+        "text": "No account matches this search. Try another name or email address."
+      },
+      "bookings": {
+        "title": "No bookings",
+        "text": "There is not a single booking on the platform yet."
+      },
+      "bookingsSearch": {
+        "title": "No results",
+        "text": "No booking matches the search. Try removing a filter."
+      },
+      "subscriptions": {
+        "title": "No subscriptions",
+        "text": "No owner has bought a package yet."
+      },
+      "subscriptionsFilter": {
+        "title": "No results",
+        "text": "No subscription is in this status. Try removing the filter."
+      },
+      "disputes": {
+        "title": "No open disputes",
+        "text": "When a guest or an owner raises a dispute, it shows up here."
+      },
+      "reports": {
+        "title": "No reports",
+        "text": "When someone reports a listing, it shows up here."
+      },
+      "waitlist": {
+        "title": "The waitlist is empty",
+        "text": "No owner is waiting for a free featured slot."
+      },
+      "categories": {
+        "title": "No categories",
+        "text": "The category tree is empty. Add the first category."
+      },
+      "pendingCategory": {
+        "title": "No listings without a category",
+        "text": "When an owner proposes a listing for a category that does not exist, it shows up here."
+      },
+      "proposed": {
+        "title": "No proposed categories",
+        "text": "When an owner proposes a new category, it shows up here."
+      },
+      "attributes": {
+        "title": "No attributes",
+        "text": "This category has no attribute yet, neither its own nor an inherited one."
+      },
+      "templates": {
+        "title": "No templates",
+        "text": "No email template was loaded from the database."
+      },
+      "templatesSearch": {
+        "title": "No results",
+        "text": "No template matches this search."
+      },
+      "settings": {
+        "title": "No settings",
+        "text": "No system value was loaded from the database."
+      },
+      "faq": {
+        "title": "No questions",
+        "text": "There is no question in this language yet. Add the first one."
+      }
+    },
+    "categoryStatus": {
+      "ACTIVE": "Active",
+      "PROPOSED": "Proposed",
+      "MERGED": "Merged",
+      "ARCHIVED": "Archived"
     }
   },
   "home": {

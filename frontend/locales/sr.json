@@ -1550,7 +1550,7 @@
     "attrOptions": "Opcije (ključ:naziv, odvojeno zarezom)",
     "attrRequired": "obavezno",
     "attrIsFilter": "koristi se kao filter",
-    "listingCount": "oglasa",
+    "listingCount": "Broj oglasa",
     "emailTemplates": "E-mail šabloni",
     "searchTemplates": "Pretraga po ključu šablona",
     "subject": "Naslov e-maila",
@@ -1623,6 +1623,109 @@
       "SUSPECTED_FRAUD": "Sumnja na prevaru",
       "DUPLICATE_LISTING": "Duplirani oglas",
       "OTHER": "Drugo"
+    },
+    "sectionModeration": "Moderacija",
+    "sectionOperations": "Poslovanje",
+    "sectionContent": "Sadržaj i sistem",
+    "loadErrorTitle": "Učitavanje nije uspelo",
+    "loadErrorText": "Podaci za ovu stranicu nisu stigli. Pokušajte ponovo.",
+    "refresh": "Osveži",
+    "clearSearch": "Očisti pretragu",
+    "userLabel": "Korisnik",
+    "userActive": "Aktivan",
+    "noDisputeHistory": "Nema sporova",
+    "viewDetails": "Detalji",
+    "bookingNotFoundTitle": "Rezervacija ne postoji",
+    "subtitle": {
+      "queue": "Oglasi koje su vlasnici poslali na odobrenje, najstariji prvi.",
+      "categories": "Stablo kategorija, predlozi vlasnika i atributi.",
+      "users": "Pretraga naloga, blokiranje i istorija sporova.",
+      "bookings": "Pretraga svih rezervacija na platformi.",
+      "subscriptions": "Pretplate, cene paketa i lista čekanja za isticanje.",
+      "disputes": "Sporovi i prijave oglasa koji čekaju odluku.",
+      "emailTemplates": "Tekst poruka koje platforma šalje, na srpskom i engleskom.",
+      "content": "Statične stranice, pitanja i odgovori i video na početnoj.",
+      "settings": "Sistemske vrednosti koje menjaju ponašanje platforme."
+    },
+    "empty": {
+      "queue": {
+        "title": "Nema oglasa na čekanju",
+        "text": "Svi poslati oglasi su obrađeni. Novi se pojavljuje ovde čim ga vlasnik pošalje na odobrenje."
+      },
+      "users": {
+        "title": "Nema korisnika",
+        "text": "Nijedan nalog još nije registrovan na platformi."
+      },
+      "usersSearch": {
+        "title": "Nema rezultata",
+        "text": "Nijedan nalog ne odgovara ovoj pretrazi. Pokušajte sa drugim imenom ili e-mail adresom."
+      },
+      "bookings": {
+        "title": "Nema rezervacija",
+        "text": "Na platformi još nema nijedne rezervacije."
+      },
+      "bookingsSearch": {
+        "title": "Nema rezultata",
+        "text": "Nijedna rezervacija ne odgovara pretrazi. Pokušajte da uklonite neki filter."
+      },
+      "subscriptions": {
+        "title": "Nema pretplata",
+        "text": "Nijedan vlasnik još nije kupio paket."
+      },
+      "subscriptionsFilter": {
+        "title": "Nema rezultata",
+        "text": "Nijedna pretplata nije u ovom statusu. Pokušajte da uklonite filter."
+      },
+      "disputes": {
+        "title": "Nema otvorenih sporova",
+        "text": "Kada gost ili vlasnik prijavi spor, pojaviće se ovde."
+      },
+      "reports": {
+        "title": "Nema prijava",
+        "text": "Kada neko prijavi oglas, pojaviće se ovde."
+      },
+      "waitlist": {
+        "title": "Lista čekanja je prazna",
+        "text": "Nijedan vlasnik ne čeka slobodno mesto za isticanje."
+      },
+      "categories": {
+        "title": "Nema kategorija",
+        "text": "Stablo kategorija je prazno. Dodajte prvu kategoriju."
+      },
+      "pendingCategory": {
+        "title": "Nema oglasa bez kategorije",
+        "text": "Kada vlasnik predloži oglas za kategoriju koja ne postoji, pojaviće se ovde."
+      },
+      "proposed": {
+        "title": "Nema predloženih kategorija",
+        "text": "Kada vlasnik predloži novu kategoriju, pojaviće se ovde."
+      },
+      "attributes": {
+        "title": "Nema atributa",
+        "text": "Ova kategorija još nema nijedan atribut, ni svoj ni nasleđen."
+      },
+      "templates": {
+        "title": "Nema šablona",
+        "text": "Nijedan e-mail šablon nije učitan iz baze."
+      },
+      "templatesSearch": {
+        "title": "Nema rezultata",
+        "text": "Nijedan šablon ne odgovara ovoj pretrazi."
+      },
+      "settings": {
+        "title": "Nema podešavanja",
+        "text": "Nijedna sistemska vrednost nije učitana iz baze."
+      },
+      "faq": {
+        "title": "Nema pitanja",
+        "text": "Na ovom jeziku još nema nijednog pitanja. Dodajte prvo."
+      }
+    },
+    "categoryStatus": {
+      "ACTIVE": "Aktivna",
+      "PROPOSED": "Predložena",
+      "MERGED": "Spojena",
+      "ARCHIVED": "Arhivirana"
     }
   },
   "home": {

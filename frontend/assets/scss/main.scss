@@ -12,7 +12,7 @@
 @use 'buttons';
 @use 'forms';
 @use 'cards';
-@use 'tables';
+@use 'admin';
 
 // Funnel Sans itself is loaded via the Google Fonts <link> in nuxt.config.ts
 // app.head — self-hosting is a reasonable future optimization but adds a

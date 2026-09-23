@@ -18,3 +18,26 @@ const REGISTRY = Object.fromEntries(
 export function getDashboardNavIconMarkup(name) {
   return REGISTRY[name] || null
 }
+
+// Dizajn 45: the Font Awesome glyph an entry with no Figma icon falls back
+// to, shared by the menus (DashboardNavIcon) and the empty and error blocks
+// (StateBlock), so a name means the same picture everywhere. The admin
+// panel's entries are the whole list of such names, plus the bottom bar's
+// "Više" and the panel's own shield.
+const NAV_ICON_FALLBACKS = {
+  admin: 'shield-halved',
+  more: 'ellipsis',
+  queue: 'clipboard-check',
+  disputes: 'triangle-exclamation',
+  categories: 'sitemap',
+  users: 'users',
+  payments: 'credit-card',
+  content: 'file-lines',
+  emails: 'envelope',
+  settings: 'gear',
+}
+
+/** Null for a name that neither registry knows, which leaves the caller without an icon rather than breaking it. */
+export function getNavIconFallback(name) {
+  return NAV_ICON_FALLBACKS[name] || null
+}

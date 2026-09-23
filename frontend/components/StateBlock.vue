@@ -1,6 +1,7 @@
 <template>
   <div class="state-block" :class="{ 'is-error': error, 'is-card': card }">
     <span v-if="iconMarkup" class="state-block-icon" aria-hidden="true" v-html="iconMarkup" />
+    <FontAwesomeIcon v-else-if="fallbackIcon" :icon="fallbackIcon" class="state-block-icon" aria-hidden="true" />
     <p class="state-block-title">{{ title }}</p>
     <p v-if="text" class="state-block-text">{{ text }}</p>
     <slot />
@@ -18,7 +19,8 @@
 // turns the icon and the title red.
 const props = defineProps({
   // A dashboard menu icon name, or one of the state-only icons, see
-  // utils/stateIcons.js.
+  // utils/stateIcons.js. Dizajn 45: a name Figma draws no icon for (the admin
+  // panel's screens) falls back to that name's glyph, as the menus do.
   icon: { type: String, default: '' },
   title: { type: String, required: true },
   text: { type: String, default: '' },
@@ -27,6 +29,7 @@ const props = defineProps({
 })
 
 const iconMarkup = computed(() => (props.icon ? getStateIconMarkup(props.icon) : null))
+const fallbackIcon = computed(() => (props.icon ? getNavIconFallback(props.icon) : null))
 </script>
 
 <style lang="scss" scoped>
