@@ -301,9 +301,10 @@
 
         <aside class="search-map-col" :class="{ 'mobile-hidden': !mapOpenMobile }">
           <div class="search-map-frame" :class="{ 'search-map-frame-expanded': mapExpanded }">
-            <ListingMap :listings="results" @bounds-change="onBoundsChange" />
+            <ListingMap :listings="results" @bounds-change="onBoundsChange" @ready="mapReady = true" />
 
-            <label class="map-live-toggle">
+            <!-- These three sit on top of the map, so they wait for it too. -->
+            <label v-if="mapReady" class="map-live-toggle">
               <input v-model="searchAsIMove" type="checkbox" class="map-live-checkbox" />
               <span>{{ t('search.searchAsIMove') }}</span>
             </label>
@@ -312,7 +313,7 @@
               {{ t('search.searchThisArea') }}
             </button>
 
-            <button type="button" class="map-expand-btn" @click="mapExpanded = !mapExpanded">
+            <button v-if="mapReady" type="button" class="map-expand-btn" @click="mapExpanded = !mapExpanded">
               {{ mapExpanded ? t('common.close') : t('search.expandMap') }}
             </button>
           </div>
@@ -363,6 +364,7 @@ const showResultsSkeleton = computed(() => !searched.value || (loading.value && 
 const panelOpen = ref(false)
 const mapOpenMobile = ref(false)
 const mapExpanded = ref(false)
+const mapReady = ref(false)
 const searchAsIMove = ref(false)
 const notifyEmail = ref('')
 const notifySent = ref(false)
