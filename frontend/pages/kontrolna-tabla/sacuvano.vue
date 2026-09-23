@@ -4,19 +4,26 @@
 
     <!-- Dizajn 44: a failed load and an empty list both say so where the
          cards would be. -->
-    <section v-if="error" class="saved-state is-error">
-      <DashboardNavIcon name="saved" class="saved-state-icon" />
-      <p class="saved-state-title">{{ t('savedListings.loadErrorTitle') }}</p>
-      <p class="saved-state-text">{{ t('savedListings.loadErrorText') }}</p>
-      <button type="button" class="saved-button" @click="refresh()">{{ t('errorPage.tryAgain') }}</button>
-    </section>
+    <StateBlock
+      v-if="error"
+      card
+      error
+      icon="saved"
+      :title="t('savedListings.loadErrorTitle')"
+      :text="t('savedListings.loadErrorText')"
+    >
+      <button type="button" class="state-block-action" @click="refresh()">{{ t('errorPage.tryAgain') }}</button>
+    </StateBlock>
 
-    <section v-else-if="!visibleFavorites.length" class="saved-state">
-      <DashboardNavIcon name="saved" class="saved-state-icon" />
-      <p class="saved-state-title">{{ t('savedListings.emptyTitle') }}</p>
-      <p class="saved-state-text">{{ t('savedListings.emptyText') }}</p>
-      <NuxtLink to="/pretraga" class="saved-button">{{ t('dashboard.browseListings') }}</NuxtLink>
-    </section>
+    <StateBlock
+      v-else-if="!visibleFavorites.length"
+      card
+      icon="saved"
+      :title="t('savedListings.emptyTitle')"
+      :text="t('savedListings.emptyText')"
+    >
+      <NuxtLink to="/pretraga" class="state-block-action">{{ t('dashboard.browseListings') }}</NuxtLink>
+    </StateBlock>
 
     <div v-else class="saved-grid">
       <ListingCard v-for="favorite in visibleFavorites" :key="favorite.listingId" :listing="favorite.listing" />
@@ -79,70 +86,6 @@ useSeoMeta({ title: t('nav.favorites') })
   gap: 32px;
 }
 
-// Dizajn 44, in the white raised card the other dashboard pages use.
-.saved-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 48px 24px;
-  border-radius: $radius-card;
-  background: $color-surface;
-  box-shadow:
-    0 6px 20px rgba(97, 115, 133, 0.08),
-    0 1px 3px rgba(97, 115, 133, 0.05);
-  text-align: center;
-}
-
-.saved-state-icon {
-  width: 48px;
-  height: 48px;
-  margin-bottom: 12px;
-  color: $color-text-muted;
-}
-
-.saved-state-title {
-  font-size: 17px;
-  font-weight: 500;
-  line-height: normal;
-  color: $color-text;
-}
-
-.saved-state-text {
-  max-width: 420px;
-  margin-top: 4px;
-  font-size: 13px;
-  font-weight: 300;
-  line-height: normal;
-  color: $color-text-muted;
-}
-
-.saved-state.is-error .saved-state-icon,
-.saved-state.is-error .saved-state-title {
-  color: $color-error;
-}
-
-// 357:503, the dashboard's grey button.
-.saved-button {
-  display: inline-flex;
-  align-items: center;
-  margin-top: 16px;
-  padding: 11px 20px;
-  border: 0;
-  border-radius: $radius-button;
-  background: $color-background;
-  font-size: 13px;
-  font-weight: 500;
-  line-height: normal;
-  color: $color-text;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.saved-button:hover {
-  color: $color-primary;
-  text-decoration: none;
-}
-
 @include mobile-only {
   .saved {
     margin: 0;
@@ -150,10 +93,6 @@ useSeoMeta({ title: t('nav.favorites') })
 
   .saved-grid {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .saved-state {
-    padding: 32px 16px;
   }
 }
 </style>

@@ -4,19 +4,28 @@
 
     <!-- Dizajn 44: a failed load and an empty inbox both say so where the
          list would be. -->
-    <section v-if="!openId && error" class="inbox-state is-error">
-      <DashboardNavIcon name="messages" class="inbox-state-icon" />
-      <p class="inbox-state-title">{{ t('conversations.loadErrorTitle') }}</p>
-      <p class="inbox-state-text">{{ t('conversations.loadErrorText') }}</p>
-      <button type="button" class="inbox-button" @click="refresh()">{{ t('errorPage.tryAgain') }}</button>
-    </section>
+    <StateBlock
+      v-if="!openId && error"
+      card
+      error
+      icon="messages"
+      class="inbox-state"
+      :title="t('conversations.loadErrorTitle')"
+      :text="t('conversations.loadErrorText')"
+    >
+      <button type="button" class="state-block-action" @click="refresh()">{{ t('errorPage.tryAgain') }}</button>
+    </StateBlock>
 
-    <section v-else-if="!openId && !rows.length" class="inbox-state">
-      <DashboardNavIcon name="messages" class="inbox-state-icon" />
-      <p class="inbox-state-title">{{ t('conversations.emptyTitle') }}</p>
-      <p class="inbox-state-text">{{ t('conversations.emptyText') }}</p>
-      <NuxtLink to="/pretraga" class="inbox-button">{{ t('dashboard.browseListings') }}</NuxtLink>
-    </section>
+    <StateBlock
+      v-else-if="!openId && !rows.length"
+      card
+      icon="messages"
+      class="inbox-state"
+      :title="t('conversations.emptyTitle')"
+      :text="t('conversations.emptyText')"
+    >
+      <NuxtLink to="/pretraga" class="state-block-action">{{ t('dashboard.browseListings') }}</NuxtLink>
+    </StateBlock>
 
     <div v-else class="inbox-split">
       <nav v-if="rows.length || error" class="inbox-list" :aria-label="t('dashboard.conversations')">
@@ -319,68 +328,10 @@ $inbox-unread-dot: #f43f5e;
   cursor: pointer;
 }
 
-// Dizajn 44, in the white raised card the other dashboard pages use.
-.inbox-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+// Dizajn 44's block stands where the list would, inside the page's own
+// step-out of the layout padding.
+.state-block.inbox-state {
   margin: 4px 8px 8px;
-  padding: 48px 24px;
-  border-radius: $radius-card;
-  background: $color-surface;
-  box-shadow: $shadow-card;
-  text-align: center;
-}
-
-.inbox-state-icon {
-  width: 48px;
-  height: 48px;
-  margin-bottom: 12px;
-  color: $color-text-muted;
-}
-
-.inbox-state-title {
-  font-size: 17px;
-  font-weight: 500;
-  line-height: normal;
-  color: $color-text;
-}
-
-.inbox-state-text {
-  max-width: 420px;
-  margin-top: 4px;
-  font-size: 13px;
-  font-weight: 300;
-  line-height: normal;
-  color: $color-text-muted;
-}
-
-.inbox-state.is-error .inbox-state-icon,
-.inbox-state.is-error .inbox-state-title {
-  color: $color-error;
-}
-
-// 357:503, the dashboard's grey button.
-.inbox-button {
-  display: inline-flex;
-  align-items: center;
-  margin-top: 16px;
-  padding: 11px 20px;
-  border: 0;
-  border-radius: $radius-button;
-  background: $color-background;
-  font-family: $font-family-base;
-  font-size: 13px;
-  font-weight: 500;
-  line-height: normal;
-  color: $color-text;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.inbox-button:hover {
-  color: $color-primary;
-  text-decoration: none;
 }
 
 // Below xl the list and an open conversation don't fit side by side, so the
@@ -401,9 +352,8 @@ $inbox-unread-dot: #f43f5e;
     padding: 0;
   }
 
-  .inbox-state {
+  .state-block.inbox-state {
     margin: 0;
-    padding: 32px 16px;
   }
 
   .inbox-row {

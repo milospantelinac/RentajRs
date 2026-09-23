@@ -12,19 +12,26 @@
 
     <!-- Dizajn 44: a failed load and a listing that can't connect calendars
          both say so in one card, in place of the two the frame draws. -->
-    <section v-if="error" class="ical-card ical-state is-error">
-      <DashboardNavIcon name="bookings" class="ical-state-icon" />
-      <p class="ical-state-title">{{ t('ical.loadErrorTitle') }}</p>
-      <p class="ical-state-text">{{ t('ical.loadErrorText') }}</p>
-      <button type="button" class="ical-state-button" @click="reload()">{{ t('errorPage.tryAgain') }}</button>
-    </section>
+    <StateBlock
+      v-if="error"
+      error
+      icon="bookings"
+      class="ical-card ical-state"
+      :title="t('ical.loadErrorTitle')"
+      :text="t('ical.loadErrorText')"
+    >
+      <button type="button" class="state-block-action" @click="reload()">{{ t('errorPage.tryAgain') }}</button>
+    </StateBlock>
 
-    <section v-else-if="locked" class="ical-card ical-state">
-      <DashboardNavIcon name="bookings" class="ical-state-icon" />
-      <p class="ical-state-title">{{ t(`ical.locked.${locked.key}.title`) }}</p>
-      <p class="ical-state-text">{{ t(`ical.locked.${locked.key}.text`) }}</p>
-      <NuxtLink :to="locked.action.to" class="ical-state-button">{{ locked.action.label }}</NuxtLink>
-    </section>
+    <StateBlock
+      v-else-if="locked"
+      icon="bookings"
+      class="ical-card ical-state"
+      :title="t(`ical.locked.${locked.key}.title`)"
+      :text="t(`ical.locked.${locked.key}.text`)"
+    >
+      <NuxtLink :to="locked.action.to" class="state-block-action">{{ locked.action.label }}</NuxtLink>
+    </StateBlock>
 
     <template v-else>
       <section class="ical-card" aria-labelledby="ical-export-title">
@@ -74,11 +81,13 @@
         </ul>
 
         <!-- Dizajn 44 inside the list's own box; the form right under it is the action. -->
-        <div v-else class="ical-list ical-empty">
-          <DashboardNavIcon name="bookings" class="ical-state-icon" />
-          <p class="ical-state-title">{{ t('ical.emptyTitle') }}</p>
-          <p class="ical-state-text">{{ t('ical.emptyText') }}</p>
-        </div>
+        <StateBlock
+          v-else
+          icon="bookings"
+          class="ical-list ical-empty"
+          :title="t('ical.emptyTitle')"
+          :text="t('ical.emptyText')"
+        />
 
         <form class="ical-add" novalidate @submit.prevent="addSource">
           <div class="ical-row ical-add-row">
@@ -572,70 +581,17 @@ $ical-danger-border: #f43f5e;
   flex-shrink: 0;
 }
 
-// Dizajn 44: an icon, a title, one sentence and one button, centred.
-.ical-state {
-  align-items: center;
+// Dizajn 44 in this page's own boxes: the card draws its stroke inside, so
+// the block gives up a pixel of padding on every side, and it replaces the
+// cards' 18 gap with its own spacing.
+.state-block.ical-state {
   gap: 0;
   padding: 47px 23px;
-  text-align: center;
 }
 
-.ical-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+// 572:942, the smaller box inside the card, with the add form right under it.
+.state-block.ical-empty {
   padding: 31px 23px 33px;
-  text-align: center;
-}
-
-.ical-state-icon {
-  width: 48px;
-  height: 48px;
-  margin-bottom: 12px;
-  color: $color-text-muted;
-}
-
-.ical-state-title {
-  font-size: 17px;
-  font-weight: 500;
-  line-height: normal;
-  color: $color-text;
-}
-
-.ical-state-text {
-  max-width: 420px;
-  margin-top: 4px;
-  font-size: 13px;
-  font-weight: 300;
-  line-height: normal;
-  color: $color-text-muted;
-}
-
-.ical-state.is-error .ical-state-icon,
-.ical-state.is-error .ical-state-title {
-  color: $color-error;
-}
-
-// 357:503, the dashboard's grey button.
-.ical-state-button {
-  display: inline-flex;
-  align-items: center;
-  margin-top: 16px;
-  padding: 11px 20px;
-  border: 0;
-  border-radius: $radius-button;
-  background: $color-background;
-  font-family: $font-family-base;
-  font-size: 13px;
-  font-weight: 500;
-  line-height: normal;
-  color: $color-text;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.ical-state-button:hover {
-  color: $color-primary;
 }
 
 @include mobile-only {
@@ -647,7 +603,7 @@ $ical-danger-border: #f43f5e;
     padding: 19px 15px;
   }
 
-  .ical-state {
+  .state-block.ical-state {
     padding: 39px 15px;
   }
 

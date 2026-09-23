@@ -19,12 +19,15 @@
 
     <!-- Dizajn 44: a failed load says so where the cards would be. -->
     <section v-if="error" class="subs-section">
-      <div class="subs-state is-error">
-        <DashboardNavIcon name="packages" class="subs-state-icon" />
-        <p class="subs-state-title">{{ t('mySubscriptions.loadErrorTitle') }}</p>
-        <p class="subs-state-text">{{ t('mySubscriptions.loadErrorText') }}</p>
-        <button type="button" class="subs-state-button" @click="reload()">{{ t('errorPage.tryAgain') }}</button>
-      </div>
+      <StateBlock
+        card
+        error
+        icon="packages"
+        :title="t('mySubscriptions.loadErrorTitle')"
+        :text="t('mySubscriptions.loadErrorText')"
+      >
+        <button type="button" class="state-block-action" @click="reload()">{{ t('errorPage.tryAgain') }}</button>
+      </StateBlock>
     </section>
 
     <template v-else>
@@ -93,12 +96,15 @@
           </article>
         </div>
 
-        <div v-else class="subs-state">
-          <DashboardNavIcon name="packages" class="subs-state-icon" />
-          <p class="subs-state-title">{{ t('mySubscriptions.emptyTitle') }}</p>
-          <p class="subs-state-text">{{ t('mySubscriptions.emptyText') }}</p>
-          <NuxtLink :to="buyPackageLink" class="subs-state-button">{{ t('billing.buyPackage') }}</NuxtLink>
-        </div>
+        <StateBlock
+          v-else
+          card
+          icon="packages"
+          :title="t('mySubscriptions.emptyTitle')"
+          :text="t('mySubscriptions.emptyText')"
+        >
+          <NuxtLink :to="buyPackageLink" class="state-block-action">{{ t('billing.buyPackage') }}</NuxtLink>
+        </StateBlock>
       </section>
 
       <!-- ADR-005's banked-days transfer only ever fires from here or from an
@@ -682,68 +688,6 @@ $subs-alert-bg: #fdeff1;
   cursor: default;
 }
 
-// Dizajn 44: an icon, a title, one sentence and one button, in a card where the cards would be.
-.subs-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 48px 24px;
-  border-radius: $radius-card;
-  background: $color-surface;
-  box-shadow: $shadow-card;
-  text-align: center;
-}
-
-.subs-state-icon {
-  width: 48px;
-  height: 48px;
-  margin-bottom: 12px;
-  color: $color-text-muted;
-}
-
-.subs-state-title {
-  font-size: 17px;
-  font-weight: 500;
-  line-height: normal;
-  color: $color-text;
-}
-
-.subs-state-text {
-  max-width: 420px;
-  margin-top: 4px;
-  font-size: 13px;
-  font-weight: 300;
-  line-height: normal;
-  color: $color-text-muted;
-}
-
-.subs-state.is-error .subs-state-icon,
-.subs-state.is-error .subs-state-title {
-  color: $color-error;
-}
-
-// 357:503, the dashboard's grey button.
-.subs-state-button {
-  display: inline-flex;
-  align-items: center;
-  margin-top: 16px;
-  padding: 11px 20px;
-  border: 0;
-  border-radius: $radius-button;
-  background: $color-background;
-  font-family: $font-family-base;
-  font-size: 13px;
-  font-weight: 500;
-  line-height: normal;
-  color: $color-text;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.subs-state-button:hover {
-  color: $color-primary;
-}
-
 // Below xl a card needs the whole column for its label and listing name.
 @include respond-below(xl) {
   .subs-grid {
@@ -785,10 +729,6 @@ $subs-alert-bg: #fdeff1;
 
   .subs-row-text {
     flex-basis: 100%;
-  }
-
-  .subs-state {
-    padding: 32px 16px;
   }
 }
 </style>

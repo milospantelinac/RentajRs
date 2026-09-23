@@ -960,8 +960,8 @@
     "filters": "Filters",
     "showMap": "Show map",
     "showList": "Show list",
-    "noResults": "No results for this search",
-    "noResultsWithFilters": "No listings match your filters. Try broadening or removing some of them.",
+    "noResults": "No listings match this search.",
+    "noResultsWithFilters": "No listing matches the selected filters.",
     "relaxSearch": "Broaden search",
     "notifyMe": "Notify me",
     "notifySent": "We'll notify you when a matching listing appears",
@@ -971,7 +971,7 @@
     "dateTo": "Date to",
     "resultsCount": "Found {count} listing(s)",
     "activeFilters": "Active filters",
-    "clearAllFilters": "Clear all",
+    "clearAllFilters": "Clear all filters",
     "applyFilters": "Apply filters",
     "queryPlaceholder": "Flat, van, playroom, party venue…",
     "allCategories": "All",
@@ -1016,7 +1016,11 @@
     "listingsCountMany": "{count} listings",
     "filtersAppliedOne": "{count} filter applied",
     "filtersAppliedFew": "{count} filters applied",
-    "filtersAppliedMany": "{count} filters applied"
+    "filtersAppliedMany": "{count} filters applied",
+    "noResultsTitle": "No results",
+    "removeFilterHint": "Try removing a filter.",
+    "loadErrorTitle": "Search could not be loaded",
+    "loadErrorText": "Check your internet connection and try again."
   },
   "legalPages": {
     "lastUpdated": "Last updated: {date}",
@@ -1427,7 +1431,6 @@
     "replyPlaceholder": "Write a reply (optional, can only be sent once)",
     "sendReply": "Send reply",
     "replySent": "Reply sent",
-    "noReviewsYet": "This listing has no reviews yet",
     "formNote": "The rating and comment are published on the listing right away. The button stays inactive until you choose a rating.",
     "publishedNote": "The review is published on the listing.",
     "publishedEditableNote": "The review is published on the listing. You can change it until {date}",
@@ -1435,7 +1438,10 @@
     "edit": "Edit review",
     "saveEdit": "Save changes",
     "cancelEdit": "Cancel",
-    "starLabel": "Rating {count} of 5"
+    "starLabel": "Rating {count} of 5",
+    "emptyTitle": "No reviews yet",
+    "emptyText": "The first review arrives once a guest completes a booking.",
+    "ownerEmptyText": "Guest reviews for this owner's listings will appear here."
   },
   "admin": {
     "panel": "Admin panel",

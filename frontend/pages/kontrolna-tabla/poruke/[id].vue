@@ -79,13 +79,16 @@
     </template>
 
     <!-- Dizajn 44 inside the conversation's own card; the list stays beside it. -->
-    <div v-else class="thread-state" :class="{ 'is-error': loadError }">
-      <DashboardNavIcon name="messages" class="thread-state-icon" />
-      <p class="thread-state-title">{{ t(loadError ? 'conversations.threadErrorTitle' : 'conversations.notFoundTitle') }}</p>
-      <p class="thread-state-text">{{ t(loadError ? 'conversations.loadErrorText' : 'conversations.notFoundText') }}</p>
-      <button v-if="loadError" type="button" class="thread-state-button" @click="refresh()">{{ t('errorPage.tryAgain') }}</button>
-      <NuxtLink v-else to="/kontrolna-tabla/poruke" class="thread-state-button">{{ t('conversations.back') }}</NuxtLink>
-    </div>
+    <StateBlock
+      v-else
+      icon="messages"
+      :error="loadError"
+      :title="t(loadError ? 'conversations.threadErrorTitle' : 'conversations.notFoundTitle')"
+      :text="t(loadError ? 'conversations.loadErrorText' : 'conversations.notFoundText')"
+    >
+      <button v-if="loadError" type="button" class="state-block-action" @click="refresh()">{{ t('errorPage.tryAgain') }}</button>
+      <NuxtLink v-else to="/kontrolna-tabla/poruke" class="state-block-action">{{ t('conversations.back') }}</NuxtLink>
+    </StateBlock>
   </section>
 </template>
 
@@ -592,66 +595,6 @@ useSeoMeta({
   color: $color-text-muted;
 }
 
-// Dizajn 44
-.thread-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 48px 24px;
-  text-align: center;
-}
-
-.thread-state-icon {
-  width: 48px;
-  height: 48px;
-  margin-bottom: 12px;
-  color: $color-text-muted;
-}
-
-.thread-state-title {
-  font-size: 17px;
-  font-weight: 500;
-  line-height: normal;
-  color: $color-text;
-}
-
-.thread-state-text {
-  max-width: 420px;
-  margin-top: 4px;
-  font-size: 13px;
-  font-weight: 300;
-  line-height: normal;
-  color: $color-text-muted;
-}
-
-.thread-state.is-error .thread-state-icon,
-.thread-state.is-error .thread-state-title {
-  color: $color-error;
-}
-
-// 357:503, the dashboard's grey button.
-.thread-state-button {
-  display: inline-flex;
-  align-items: center;
-  margin-top: 16px;
-  padding: 11px 20px;
-  border: 0;
-  border-radius: $radius-button;
-  background: $color-background;
-  font-family: $font-family-base;
-  font-size: 13px;
-  font-weight: 500;
-  line-height: normal;
-  color: $color-text;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.thread-state-button:hover {
-  color: $color-primary;
-  text-decoration: none;
-}
-
 @include respond-below(xl) {
   .thread-back {
     display: inline-flex;
@@ -685,10 +628,6 @@ useSeoMeta({
 
   .thread-send {
     padding: 0 16px;
-  }
-
-  .thread-state {
-    padding: 32px 16px;
   }
 }
 </style>

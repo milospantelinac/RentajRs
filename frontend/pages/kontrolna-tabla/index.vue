@@ -58,12 +58,15 @@
         </ul>
 
         <!-- The frame draws no empty list; this follows Dizajn 44's rule. -->
-        <div v-else class="home-empty">
-          <DashboardNavIcon name="bookings" class="home-empty-icon" />
-          <p class="home-empty-title">{{ t('dashboard.noUpcoming') }}</p>
-          <p class="home-empty-text">{{ t('dashboard.noUpcomingText') }}</p>
+        <StateBlock
+          v-else
+          icon="bookings"
+          class="home-empty"
+          :title="t('dashboard.noUpcoming')"
+          :text="t('dashboard.noUpcomingText')"
+        >
           <NuxtLink :to="emptyAction.to" class="home-button home-empty-button">{{ emptyAction.label }}</NuxtLink>
-        </div>
+        </StateBlock>
       </section>
 
       <section v-if="dashboard.onboarding" class="home-panel home-onboarding">
@@ -459,34 +462,10 @@ useSeoMeta({ title: t('dashboard.overview') })
   color: $color-primary;
 }
 
-.home-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+// Dizajn 44: the block sits inside the panel, tighter than a page of its
+// own, and the panel is narrower than the sentence ever needs.
+.state-block.home-empty {
   padding: 20px 16px 8px;
-  text-align: center;
-}
-
-.home-empty-icon {
-  width: 48px;
-  height: 48px;
-  margin-bottom: 12px;
-  color: $color-text-muted;
-}
-
-.home-empty-title {
-  font-size: 17px;
-  font-weight: 500;
-  line-height: normal;
-  color: $color-text;
-}
-
-.home-empty-text {
-  margin-top: 4px;
-  font-size: 13px;
-  font-weight: 300;
-  line-height: normal;
-  color: $color-text-muted;
 }
 
 .home-empty-button {

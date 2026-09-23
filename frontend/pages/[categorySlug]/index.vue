@@ -22,13 +22,17 @@
         <ListingCard :listing="listing" />
       </div>
     </div>
-    <div v-else class="card">
-      <div class="card-body text-center">
-        <p class="text-body mb-2">{{ t('category.emptyTitle', { name: category.name }) }}</p>
-        <p class="text-muted mb-3">{{ t('category.emptySubtitle') }}</p>
-        <NuxtLink to="/oglasi/novi" class="btn btn-primary-flat">{{ t('nav.addListing') }}</NuxtLink>
-      </div>
-    </div>
+    <!-- Dizajn 44: the same empty state as everywhere else, in the card the
+         cards would fill. -->
+    <StateBlock
+      v-else
+      card
+      icon="listings"
+      :title="t('category.emptyTitle', { name: category.name })"
+      :text="t('category.emptySubtitle')"
+    >
+      <NuxtLink to="/oglasi/novi" class="state-block-action">{{ t('nav.addListing') }}</NuxtLink>
+    </StateBlock>
 
     <div v-if="cities.length" class="city-links mt-4">
       <h2 class="text-section-title mb-2">{{ t('category.browseByCity') }}</h2>

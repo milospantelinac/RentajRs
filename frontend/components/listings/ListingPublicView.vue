@@ -224,7 +224,14 @@
               <span class="listing-review-score-count">{{ reviewCountLabel }}</span>
             </div>
 
-            <p v-if="!reviews?.length" class="listing-empty">{{ t('reviews.noReviewsYet') }}</p>
+            <!-- Dizajn 44, in the section the reviews would fill. -->
+            <StateBlock
+              v-if="!reviews?.length"
+              icon="reviews"
+              class="listing-empty"
+              :title="t('reviews.emptyTitle')"
+              :text="t('reviews.emptyText')"
+            />
 
             <div v-else class="listing-review-list">
               <article v-for="review in visibleReviews" :key="review.id" class="listing-review">
@@ -795,9 +802,12 @@ onBeforeUnmount(() => window.removeEventListener('resize', measureDescription))
   color: $color-text;
 }
 
-.listing-empty {
-  font-size: $font-size-body;
-  color: $color-text-muted;
+// Dizajn 44: the block spans the section so it centres in the space the
+// reviews would fill; the section already sets 18 above it, so it carries
+// less of its own padding than a block that replaces a whole page.
+.state-block.listing-empty {
+  align-self: stretch;
+  padding: 24px;
 }
 
 .listing-fine-print {

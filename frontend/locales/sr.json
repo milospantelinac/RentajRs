@@ -960,8 +960,8 @@
     "filters": "Filteri",
     "showMap": "Prikaži mapu",
     "showList": "Prikaži listu",
-    "noResults": "Nema rezultata za zadatu pretragu",
-    "noResultsWithFilters": "Nema oglasa za izabrane filtere. Probajte da ih proširite ili uklonite neke od njih.",
+    "noResults": "Nema oglasa koji odgovaraju ovoj pretrazi.",
+    "noResultsWithFilters": "Nijedan oglas ne odgovara izabranim filterima.",
     "relaxSearch": "Proširi pretragu",
     "notifyMe": "Obavesti me",
     "notifySent": "Obavestićemo vas kada se pojavi odgovarajući oglas",
@@ -971,7 +971,7 @@
     "dateTo": "Datum do",
     "resultsCount": "Pronašli smo {count} oglas(a)",
     "activeFilters": "Aktivni filteri",
-    "clearAllFilters": "Obriši sve",
+    "clearAllFilters": "Očisti sve filtere",
     "applyFilters": "Filtriraj",
     "queryPlaceholder": "Stan, kombi, igraonice, sala za proslave…",
     "allCategories": "Sve",
@@ -1016,7 +1016,11 @@
     "listingsCountMany": "{count} oglasa",
     "filtersAppliedOne": "{count} filter primenjen",
     "filtersAppliedFew": "{count} filtera primenjena",
-    "filtersAppliedMany": "{count} filtera primenjeno"
+    "filtersAppliedMany": "{count} filtera primenjeno",
+    "noResultsTitle": "Nema rezultata",
+    "removeFilterHint": "Pokušajte da uklonite neki filter.",
+    "loadErrorTitle": "Pretraga nije učitana",
+    "loadErrorText": "Proverite internet vezu i pokušajte ponovo."
   },
   "legalPages": {
     "lastUpdated": "Poslednja izmena: {date}",
@@ -1427,7 +1431,6 @@
     "replyPlaceholder": "Napišite odgovor (opciono, može se poslati samo jednom)",
     "sendReply": "Pošalji odgovor",
     "replySent": "Odgovor je poslat",
-    "noReviewsYet": "Ovaj oglas još uvek nema recenzija",
     "formNote": "Ocena i komentar se objavljuju odmah na oglasu. Dugme je neaktivno dok se ne izabere ocena.",
     "publishedNote": "Recenzija je objavljena na oglasu.",
     "publishedEditableNote": "Recenzija je objavljena na oglasu. Možete je izmeniti do {date}",
@@ -1435,7 +1438,10 @@
     "edit": "Izmeni recenziju",
     "saveEdit": "Sačuvaj izmene",
     "cancelEdit": "Odustani",
-    "starLabel": "Ocena {count} od 5"
+    "starLabel": "Ocena {count} od 5",
+    "emptyTitle": "Još nema recenzija",
+    "emptyText": "Prva recenzija stiže kada gost završi rezervaciju.",
+    "ownerEmptyText": "Ovde će stajati recenzije gostiju za oglase ovog vlasnika."
   },
   "admin": {
     "panel": "Administracija",

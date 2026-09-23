@@ -10,19 +10,26 @@
 
     <!-- Dizajn 44: a failed load and an owner without listings both say so
          inside the card the table would fill. -->
-    <section v-if="error" class="mylist-card mylist-state is-error">
-      <DashboardNavIcon name="listings" class="mylist-state-icon" />
-      <p class="mylist-state-title">{{ t('myListings.loadErrorTitle') }}</p>
-      <p class="mylist-state-text">{{ t('myListings.loadErrorText') }}</p>
-      <button type="button" class="mylist-button" @click="refresh()">{{ t('errorPage.tryAgain') }}</button>
-    </section>
+    <StateBlock
+      v-if="error"
+      card
+      error
+      icon="listings"
+      :title="t('myListings.loadErrorTitle')"
+      :text="t('myListings.loadErrorText')"
+    >
+      <button type="button" class="state-block-action" @click="refresh()">{{ t('errorPage.tryAgain') }}</button>
+    </StateBlock>
 
-    <section v-else-if="!allListings.length" class="mylist-card mylist-state">
-      <DashboardNavIcon name="listings" class="mylist-state-icon" />
-      <p class="mylist-state-title">{{ t('myListings.emptyTitle') }}</p>
-      <p class="mylist-state-text">{{ t('myListings.emptyText') }}</p>
+    <StateBlock
+      v-else-if="!allListings.length"
+      card
+      icon="listings"
+      :title="t('myListings.emptyTitle')"
+      :text="t('myListings.emptyText')"
+    >
       <NuxtLink to="/oglasi/novi" class="mylist-add mylist-state-action"><span aria-hidden="true">{{ PLUS }}</span>{{ t('nav.addListing') }}</NuxtLink>
-    </section>
+    </StateBlock>
 
     <template v-else>
       <nav class="mylist-tabs" :aria-label="t('myListings.tabsLabel')">
@@ -118,12 +125,15 @@
           </div>
         </div>
 
-        <div v-if="!rows.length" class="mylist-state mylist-state-tab" role="row">
+        <div v-if="!rows.length" class="mylist-state-tab" role="row">
           <div role="cell">
-            <DashboardNavIcon name="listings" class="mylist-state-icon" />
-            <p class="mylist-state-title">{{ t(`myListings.emptyTab.${activeTab}.title`) }}</p>
-            <p class="mylist-state-text">{{ t(`myListings.emptyTab.${activeTab}.text`) }}</p>
-            <NuxtLink :to="LIST_PATH" class="mylist-button">{{ t('myListings.showAll') }}</NuxtLink>
+            <StateBlock
+              icon="listings"
+              :title="t(`myListings.emptyTab.${activeTab}.title`)"
+              :text="t(`myListings.emptyTab.${activeTab}.text`)"
+            >
+              <NuxtLink :to="LIST_PATH" class="state-block-action">{{ t('myListings.showAll') }}</NuxtLink>
+            </StateBlock>
           </div>
         </div>
       </div>
@@ -669,76 +679,14 @@ a.mylist-pill:hover {
   color: $color-error;
 }
 
-// Dizajn 44: an icon, a title, one sentence and one button.
-.mylist-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 48px 24px;
-  text-align: center;
-}
-
+// Dizajn 44: the empty tab keeps the table row it stands in; the block
+// itself brings the padding and the centring.
 .mylist-state-tab {
   border-top: 1px solid $color-border;
 }
 
-.mylist-state-tab > div {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.mylist-state-icon {
-  width: 48px;
-  height: 48px;
-  margin-bottom: 12px;
-  color: $color-text-muted;
-}
-
-.mylist-state-title {
-  font-size: 17px;
-  font-weight: 500;
-  line-height: normal;
-  color: $color-text;
-}
-
-.mylist-state-text {
-  max-width: 420px;
-  margin-top: 4px;
-  font-size: 13px;
-  font-weight: 300;
-  line-height: normal;
-  color: $color-text-muted;
-}
-
-.mylist-state.is-error .mylist-state-icon,
-.mylist-state.is-error .mylist-state-title {
-  color: $color-error;
-}
-
 .mylist-state-action {
   margin-top: 16px;
-}
-
-// 357:503, the home page's grey button.
-.mylist-button {
-  display: inline-flex;
-  align-items: center;
-  margin-top: 16px;
-  padding: 11px 20px;
-  border: 0;
-  border-radius: $radius-button;
-  background: $color-background;
-  font-size: 13px;
-  font-weight: 500;
-  line-height: normal;
-  color: $color-text;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.mylist-button:hover {
-  color: $color-primary;
 }
 
 // Below xl the columns no longer fit: each row becomes a small card with the
@@ -845,10 +793,6 @@ a.mylist-pill:hover {
   // A touch target of 44.
   .mylist-more-button::before {
     inset: -12px;
-  }
-
-  .mylist-state {
-    padding: 32px 16px;
   }
 }
 </style>

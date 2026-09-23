@@ -20,20 +20,30 @@
     </div>
 
     <!-- Dizajn 44: a failed load and a role without bookings say so in the
-         card the table would fill. -->
-    <section v-if="error" class="bookreq-card bookreq-state is-error" :class="cardClass">
-      <DashboardNavIcon :name="stateIcon" class="bookreq-state-icon" />
-      <p class="bookreq-state-title">{{ t('bookingRequests.loadErrorTitle') }}</p>
-      <p class="bookreq-state-text">{{ t('bookingRequests.loadErrorText') }}</p>
-      <button type="button" class="bookreq-button" @click="refresh()">{{ t('errorPage.tryAgain') }}</button>
-    </section>
+         card the table would fill; another role or status is loading in the
+         shape of the rows that are coming. -->
+    <StateBlock
+      v-if="!pending && error"
+      error
+      :icon="stateIcon"
+      class="bookreq-card"
+      :class="cardClass"
+      :title="t('bookingRequests.loadErrorTitle')"
+      :text="t('bookingRequests.loadErrorText')"
+    >
+      <button type="button" class="state-block-action" @click="refresh()">{{ t('errorPage.tryAgain') }}</button>
+    </StateBlock>
 
-    <section v-else-if="!rows.length && !status" class="bookreq-card bookreq-state" :class="cardClass">
-      <DashboardNavIcon :name="stateIcon" class="bookreq-state-icon" />
-      <p class="bookreq-state-title">{{ t(`bookingRequests.empty.${role}.title`) }}</p>
-      <p class="bookreq-state-text">{{ t(`bookingRequests.empty.${role}.text`) }}</p>
-      <NuxtLink :to="emptyAction.to" class="bookreq-button">{{ emptyAction.label }}</NuxtLink>
-    </section>
+    <StateBlock
+      v-else-if="!pending && !rows.length && !status"
+      :icon="stateIcon"
+      class="bookreq-card"
+      :class="cardClass"
+      :title="t(`bookingRequests.empty.${role}.title`)"
+      :text="t(`bookingRequests.empty.${role}.text`)"
+    >
+      <NuxtLink :to="emptyAction.to" class="state-block-action">{{ emptyAction.label }}</NuxtLink>
+    </StateBlock>
 
     <div v-else class="bookreq-card" :class="cardClass" role="table" :aria-label="title">
       <div class="bookreq-head" role="row">
@@ -44,31 +54,56 @@
         <span class="bookreq-cell-arrow" aria-hidden="true" />
       </div>
 
-      <div v-for="row in rows" :key="row.id" class="bookreq-row" role="row">
-        <div class="bookreq-cell-listing bookreq-pair" role="cell">
-          <NuxtLink :to="row.to" class="bookreq-link">{{ row.listing }}</NuxtLink>
-          <p v-if="row.meta" class="bookreq-sub">{{ row.meta }}</p>
+      <template v-if="pending">
+        <div v-for="index in SKELETON_ROWS" :key="`loading-${index}`" class="bookreq-row" aria-hidden="true">
+          <div class="bookreq-cell-listing bookreq-pair">
+            <SkeletonBox width="58%" height="15px" />
+            <SkeletonBox width="38%" height="13px" />
+          </div>
+          <div class="bookreq-cell-term bookreq-pair">
+            <SkeletonBox width="82%" height="14px" />
+            <SkeletonBox width="54%" height="13px" />
+          </div>
+          <div class="bookreq-cell-amount">
+            <SkeletonBox width="76%" height="15px" />
+          </div>
+          <div class="bookreq-cell-status">
+            <SkeletonBox width="104px" height="27px" radius="999px" />
+          </div>
+          <span class="bookreq-cell-arrow" />
         </div>
-        <div class="bookreq-cell-term bookreq-pair" role="cell">
-          <p class="bookreq-date">{{ row.date }}</p>
-          <p class="bookreq-sub">{{ row.time }}</p>
-        </div>
-        <p class="bookreq-cell-amount bookreq-amount" role="cell">{{ row.amount }}</p>
-        <div class="bookreq-cell-status" role="cell">
-          <span class="bookreq-pill" :class="`bookreq-pill-${row.status}`">{{ row.statusText }}</span>
-        </div>
-        <img src="/images/icons/chevron-right-faint.svg" alt="" width="16" height="16" class="bookreq-cell-arrow" />
-      </div>
+      </template>
 
-      <div v-if="!rows.length" class="bookreq-state bookreq-state-filtered" role="row">
-        <div role="cell">
-          <DashboardNavIcon :name="stateIcon" class="bookreq-state-icon" />
-          <p class="bookreq-state-title">{{ t('bookingRequests.empty.filtered.title') }}</p>
-          <p class="bookreq-state-text">{{ t('bookingRequests.empty.filtered.text') }}</p>
-          <!-- The router calls any link to this path current, whatever its query. -->
-          <NuxtLink :to="{ query: { role } }" class="bookreq-button" :aria-current="null">{{ t('bookingRequests.showAll') }}</NuxtLink>
+      <template v-else>
+        <div v-for="row in rows" :key="row.id" class="bookreq-row" role="row">
+          <div class="bookreq-cell-listing bookreq-pair" role="cell">
+            <NuxtLink :to="row.to" class="bookreq-link">{{ row.listing }}</NuxtLink>
+            <p v-if="row.meta" class="bookreq-sub">{{ row.meta }}</p>
+          </div>
+          <div class="bookreq-cell-term bookreq-pair" role="cell">
+            <p class="bookreq-date">{{ row.date }}</p>
+            <p class="bookreq-sub">{{ row.time }}</p>
+          </div>
+          <p class="bookreq-cell-amount bookreq-amount" role="cell">{{ row.amount }}</p>
+          <div class="bookreq-cell-status" role="cell">
+            <span class="bookreq-pill" :class="`bookreq-pill-${row.status}`">{{ row.statusText }}</span>
+          </div>
+          <img src="/images/icons/chevron-right-faint.svg" alt="" width="16" height="16" class="bookreq-cell-arrow" />
         </div>
-      </div>
+
+        <div v-if="!rows.length" class="bookreq-state-filtered" role="row">
+          <div role="cell">
+            <StateBlock
+              :icon="stateIcon"
+              :title="t('bookingRequests.empty.filtered.title')"
+              :text="t('bookingRequests.empty.filtered.text')"
+            >
+              <!-- The router calls any link to this path current, whatever its query. -->
+              <NuxtLink :to="{ query: { role } }" class="state-block-action" :aria-current="null">{{ t('bookingRequests.showAll') }}</NuxtLink>
+            </StateBlock>
+          </div>
+        </div>
+      </template>
     </div>
   </div>
 </template>
@@ -90,11 +125,16 @@ const router = useRouter()
 const role = computed(() => (route.query.role === 'owner' ? 'owner' : 'guest'))
 const status = computed(() => getBookingStatus(route.query.status))
 
-const { data: bookings, error, refresh } = await useAsyncData(
+const { data: bookings, error, pending, refresh } = await useAsyncData(
   'my-bookings',
   () => api.get('/bookings/mine', { query: { role: role.value, ...(status.value ? { status: status.value } : {}) } }),
   { watch: [role, status] },
 )
+
+// Dizajn 44: the page itself arrives with its rows, so `pending` is only ever
+// true for the re-fetch another role or status triggers - the one moment the
+// table has nothing to show yet, and the one the skeleton rows fill.
+const SKELETON_ROWS = 5
 
 const title = computed(() => (role.value === 'owner' ? t('dashboard.requests') : t('dashboard.myBookings')))
 
@@ -397,72 +437,10 @@ $bookreq-closed-bg: #f0f2f5;
   color: $color-text-muted;
 }
 
-// Dizajn 44: an icon, a title, one sentence and one button.
-.bookreq-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 48px 24px;
-  text-align: center;
-}
-
+// Dizajn 44: the filtered empty state keeps the table row it stands in; the
+// block itself brings the padding and the centring.
 .bookreq-state-filtered {
   border-top: 1px solid $color-border;
-}
-
-.bookreq-state-filtered > div {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.bookreq-state-icon {
-  width: 48px;
-  height: 48px;
-  margin-bottom: 12px;
-  color: $color-text-muted;
-}
-
-.bookreq-state-title {
-  font-size: 17px;
-  font-weight: 500;
-  line-height: normal;
-  color: $color-text;
-}
-
-.bookreq-state-text {
-  max-width: 420px;
-  margin-top: 4px;
-  font-size: 13px;
-  font-weight: 300;
-  line-height: normal;
-  color: $color-text-muted;
-}
-
-.bookreq-state.is-error .bookreq-state-icon,
-.bookreq-state.is-error .bookreq-state-title {
-  color: $color-error;
-}
-
-// 357:503, the home page's grey button.
-.bookreq-button {
-  display: inline-flex;
-  align-items: center;
-  margin-top: 16px;
-  padding: 11px 20px;
-  border: 0;
-  border-radius: $radius-button;
-  background: $color-background;
-  font-size: 13px;
-  font-weight: 500;
-  line-height: normal;
-  color: $color-text;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.bookreq-button:hover {
-  color: $color-primary;
 }
 
 // Below xl the four columns no longer fit: each row becomes a small card with
@@ -550,10 +528,6 @@ $bookreq-closed-bg: #f0f2f5;
 
   .bookreq-cell-status {
     justify-content: flex-start;
-  }
-
-  .bookreq-state {
-    padding: 32px 16px;
   }
 }
 </style>
