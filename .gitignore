@@ -44,3 +44,6 @@ backend/prisma/dev.db
 
 # Docker: .dockerignore files stay on the machines that build the images
 .dockerignore
+
+# Local backup files
+*.backup-*
