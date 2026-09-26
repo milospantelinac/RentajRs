@@ -3,8 +3,9 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { I18nService } from 'nestjs-i18n';
 import * as crypto from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
+import { CacheService } from '../../common/cache/cache.service';
 import { UploadsService } from '../../common/uploads/uploads.service';
-import { TaxonomyService } from '../taxonomy/taxonomy.service';
+import { LISTING_COUNTS_CACHE_KEY, TaxonomyService } from '../taxonomy/taxonomy.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { paraToRsd } from '../../common/utils/money';
 import { LISTING_CARD_INCLUDE, loadListingCardNames, serializeListingCard } from '../../common/utils/listing-card';
@@ -40,6 +41,7 @@ export class UsersService {
     private i18n: I18nService,
     private events: EventEmitter2,
     private taxonomy: TaxonomyService,
+    private cache: CacheService,
   ) {}
 
   /** R13: "owner" is never stored — it's whether the user has >=1 ACTIVE listing. Single source of truth — see AuthService/DashboardService. */
@@ -312,6 +314,8 @@ export class UsersService {
         },
       });
     });
+    // After the commit: deleted inside the transaction, a read in between could cache the old count again.
+    await this.cache.del(LISTING_COUNTS_CACHE_KEY);
 
     for (const booking of activeBookings) {
       this.events.emit('booking.cancelled_account_deleted', { bookingId: booking.id });

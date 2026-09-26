@@ -7,6 +7,7 @@ import { Prisma, Subscription, SubscriptionStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CacheService } from '../../common/cache/cache.service';
 import { ListingsService } from '../listings/listings.service';
+import { LISTING_COUNTS_CACHE_KEY } from '../taxonomy/taxonomy.service';
 import { PaymentProvider } from '../../common/payment/payment-provider.interface';
 import { NestPayCheckoutService } from '../../common/payment/nestpay/nestpay-checkout.service';
 import { FiscalizationProvider } from '../../common/fiscalization/fiscalization-provider.interface';
@@ -493,7 +494,7 @@ export class SubscriptionsService {
       }
     }
     if (reactivate && listings.some((listing) => listing.status === 'EXPIRED')) {
-      await this.cache.delByPrefix('taxonomy:category:');
+      await this.cache.del(LISTING_COUNTS_CACHE_KEY);
     }
   }
 
@@ -1006,7 +1007,10 @@ export class SubscriptionsService {
         }
       }
       // The email says the listing is no longer visible, so it only goes out when one really left search.
-      if (leftSearch.length) this.events.emit('subscription.expired', { subscriptionId: sub.id, listingIds: leftSearch });
+      if (leftSearch.length) {
+        this.events.emit('subscription.expired', { subscriptionId: sub.id, listingIds: leftSearch });
+        await this.cache.del(LISTING_COUNTS_CACHE_KEY);
+      }
     }
   }
 
@@ -1023,7 +1027,11 @@ export class SubscriptionsService {
       });
       if (stillCovered === 0) {
         // Only a live listing goes offline; a deleted one stays deleted.
-        await this.prisma.listing.updateMany({ where: { id: banked.listingId, status: 'ACTIVE' }, data: { status: 'EXPIRED' } });
+        const { count } = await this.prisma.listing.updateMany({
+          where: { id: banked.listingId, status: 'ACTIVE' },
+          data: { status: 'EXPIRED' },
+        });
+        if (count) await this.cache.del(LISTING_COUNTS_CACHE_KEY);
       }
     }
   }

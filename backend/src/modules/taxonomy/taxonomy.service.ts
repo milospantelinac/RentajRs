@@ -14,12 +14,39 @@ import {
 } from './dto/admin-category.dto';
 
 const CACHE_TTL = 60 * 30; // 30 min — categories/attributes change rarely and are admin-invalidated below
-// Bump the suffix whenever a tree node gains or loses a field: Redis outlives a
-// deploy, so the old key would keep serving the previous shape for up to
-// CACHE_TTL. v2 — Dizajn 17's shortDescription.
-const TREE_CACHE_KEY = 'taxonomy:tree:v2';
+// The backend drops every taxonomy key whenever it connects to Redis
+// (DERIVED_KEY_PREFIXES), so a deploy never serves a shape cached before it.
+// Bump the suffix anyway when a tree node gains or loses a field, for an old
+// instance still writing during a rolling deploy. v3: the listing counts
+// moved to their own key.
+const TREE_CACHE_KEY = 'taxonomy:tree:v3';
+/**
+ * Live listings per category (getListingCounts). Kept apart from the tree,
+ * which changes only when an admin edits a category: the counts change
+ * whenever a listing goes live or leaves search, and every write that can do
+ * that deletes this key (a listing's status, availability or category, a
+ * package running out or renewed, account deletion, a category merge or
+ * rejection).
+ */
+export const LISTING_COUNTS_CACHE_KEY = 'taxonomy:listing-counts';
+// Short, so a count is never off for long: not after a missed delete, and not
+// when a read that started before a write stores the old number after it.
+const LISTING_COUNTS_TTL = 60;
 const FUZZY_THRESHOLD = 0.35;
 export const FALLBACK_CATEGORY_SLUG = 'ostalo';
+
+type CategoryNode = {
+  id: string;
+  slug: string;
+  icon: string | null;
+  name: string;
+  shortDescription: string | null;
+  children: CategoryNode[];
+};
+type CountedCategoryNode = Omit<CategoryNode, 'children'> & {
+  listingCount: number;
+  children: CountedCategoryNode[];
+};
 
 @Injectable()
 export class TaxonomyService {
@@ -32,8 +59,43 @@ export class TaxonomyService {
 
   // -- Reads (public) ------------------------------------------------------
 
-  /** Two-level navigation (R49): main categories, each with its direct children. */
-  async getCategoryTree() {
+  /** Two-level navigation (R49): main categories, their direct children and live listing counts. */
+  async getCategoryTree(): Promise<CountedCategoryNode[]> {
+    const [tree, counts] = await Promise.all([this.getCategoryStructure(), this.getListingCounts()]);
+
+    // A parent's count is its whole subtree (R49): "Sve nekretnine" has to
+    // equal Stanovi + Kuće + Sobe plus anything filed on the parent itself,
+    // which is also how a search on the parent slug matches (categorySubtreeIds).
+    const withCounts = (node: CategoryNode): CountedCategoryNode => {
+      const children = node.children.map(withCounts);
+      const listingCount =
+        (counts[node.id] ?? 0) + children.reduce((sum, child) => sum + child.listingCount, 0);
+      return { ...node, listingCount, children };
+    };
+    return tree.map(withCounts);
+  }
+
+  /**
+   * Category.listingCount is a denormalised column the schema describes as
+   * "refreshed by a scheduled job"; that job was never written, so the column
+   * always reads 0. Counted live instead, one grouped query per
+   * LISTING_COUNTS_TTL, with the filter search.service.ts's buildWhere starts
+   * from (ACTIVE and not switched to "trenutno nedostupno"), so the number on a
+   * /pretraga chip is what picking it finds.
+   */
+  private async getListingCounts(): Promise<Record<string, number>> {
+    return this.cache.getOrSet(LISTING_COUNTS_CACHE_KEY, LISTING_COUNTS_TTL, async () => {
+      const rows = await this.prisma.listing.groupBy({
+        by: ['categoryId'],
+        where: { status: 'ACTIVE', available: true },
+        _count: { _all: true },
+      });
+      return Object.fromEntries(rows.map((row) => [row.categoryId, row._count._all]));
+    });
+  }
+
+  /** The tree as admins shape it, without counts; the admin methods below drop it on every change. */
+  private async getCategoryStructure(): Promise<CategoryNode[]> {
     return this.cache.getOrSet(TREE_CACHE_KEY, CACHE_TTL, async () => {
       const categories = await this.prisma.category.findMany({
         // T60 — "Ostalo" is an internal fallback for uncategorized listings
@@ -51,18 +113,6 @@ export class TaxonomyService {
         this.getTranslationMap('CATEGORY', categoryIds, 'shortDescription'),
       ]);
 
-      // Category.listingCount is a denormalised column the schema describes as
-      // "refreshed by a scheduled job" — that job was never written, so the
-      // column has always read 0 everywhere it surfaced. Counted live here
-      // instead: one grouped query, and the whole tree is Redis-cached for
-      // CACHE_TTL anyway, so this costs one aggregate per cache miss.
-      const counts = await this.prisma.listing.groupBy({
-        by: ['categoryId'],
-        where: { status: 'ACTIVE' },
-        _count: { _all: true },
-      });
-      const directCount = new Map(counts.map((row) => [row.categoryId, row._count._all]));
-
       const byParent = new Map<string, typeof categories>();
       for (const cat of categories) {
         const key = cat.parentId ?? 'root';
@@ -70,23 +120,14 @@ export class TaxonomyService {
         byParent.get(key)!.push(cat);
       }
 
-      // A parent's count is its whole subtree (R49): "Sve nekretnine" has to
-      // equal Stanovi + Kuće + Sobe plus anything filed on the parent itself,
-      // which is also how a search on the parent slug matches (categorySubtreeIds).
-      const toNode = (cat: (typeof categories)[number]): any => {
-        const children = (byParent.get(cat.id) ?? []).map(toNode);
-        const listingCount =
-          (directCount.get(cat.id) ?? 0) + children.reduce((sum: number, child: any) => sum + child.listingCount, 0);
-        return {
-          id: cat.id,
-          slug: cat.slug,
-          icon: cat.icon,
-          name: names.get(cat.id) ?? cat.slug,
-          shortDescription: shortDescriptions.get(cat.id) ?? null,
-          listingCount,
-          children,
-        };
-      };
+      const toNode = (cat: (typeof categories)[number]): CategoryNode => ({
+        id: cat.id,
+        slug: cat.slug,
+        icon: cat.icon,
+        name: names.get(cat.id) ?? cat.slug,
+        shortDescription: shortDescriptions.get(cat.id) ?? null,
+        children: (byParent.get(cat.id) ?? []).map(toNode),
+      });
 
       return (byParent.get('root') ?? []).map(toNode);
     });
@@ -95,9 +136,10 @@ export class TaxonomyService {
   async getCategoryBySlug(slug: string) {
     // v2 (Dizajn 25): attribute options come in their displayOrder now, and the new key
     // keeps Redis from serving the old order after a deploy.
-    const cached = await this.cache.get(`taxonomy:category:v2:${slug}`);
-    if (cached) return cached;
+    return this.cache.getOrSet(`taxonomy:category:v2:${slug}`, CACHE_TTL, () => this.loadCategoryBySlug(slug));
+  }
 
+  private async loadCategoryBySlug(slug: string) {
     const category = await this.prisma.category.findUnique({ where: { slug } });
     if (!category || category.status === 'ARCHIVED') {
       throw new NotFoundException();
@@ -119,9 +161,7 @@ export class TaxonomyService {
     const childNames = await this.getTranslationMap('CATEGORY', childCategories.map((c) => c.id));
     const children = childCategories.map((c) => ({ id: c.id, slug: c.slug, name: childNames.get(c.id) ?? c.slug }));
 
-    const result = { ...category, name: name ?? category.slug, description, attributes, children };
-    await this.cache.set(`taxonomy:category:v2:${slug}`, result, CACHE_TTL);
-    return result;
+    return { ...category, name: name ?? category.slug, description, attributes, children };
   }
 
   /**
@@ -567,7 +607,8 @@ export class TaxonomyService {
   }
 
   private async invalidateTreeCache(categoryId?: string) {
-    await this.cache.del(TREE_CACHE_KEY);
+    // The counts go too: a merge or a rejection moves listings to another category.
+    await this.cache.del(TREE_CACHE_KEY, LISTING_COUNTS_CACHE_KEY);
     await this.cache.delByPrefix('taxonomy:category:');
     await this.cache.delByPrefix('taxonomy:attributes:');
   }

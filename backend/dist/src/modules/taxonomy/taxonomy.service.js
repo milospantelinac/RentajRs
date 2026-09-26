@@ -9,7 +9,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.TaxonomyService = exports.FALLBACK_CATEGORY_SLUG = void 0;
+exports.TaxonomyService = exports.FALLBACK_CATEGORY_SLUG = exports.LISTING_COUNTS_CACHE_KEY = void 0;
 const common_1 = require("@nestjs/common");
 const event_emitter_1 = require("@nestjs/event-emitter");
 const nestjs_i18n_1 = require("nestjs-i18n");
@@ -17,7 +17,9 @@ const client_1 = require("@prisma/client");
 const prisma_service_1 = require("../../prisma/prisma.service");
 const cache_service_1 = require("../../common/cache/cache.service");
 const CACHE_TTL = 60 * 30;
-const TREE_CACHE_KEY = 'taxonomy:tree:v2';
+const TREE_CACHE_KEY = 'taxonomy:tree:v3';
+exports.LISTING_COUNTS_CACHE_KEY = 'taxonomy:listing-counts';
+const LISTING_COUNTS_TTL = 60;
 const FUZZY_THRESHOLD = 0.35;
 exports.FALLBACK_CATEGORY_SLUG = 'ostalo';
 let TaxonomyService = class TaxonomyService {
@@ -28,6 +30,25 @@ let TaxonomyService = class TaxonomyService {
         this.events = events;
     }
     async getCategoryTree() {
+        const [tree, counts] = await Promise.all([this.getCategoryStructure(), this.getListingCounts()]);
+        const withCounts = (node) => {
+            const children = node.children.map(withCounts);
+            const listingCount = (counts[node.id] ?? 0) + children.reduce((sum, child) => sum + child.listingCount, 0);
+            return { ...node, listingCount, children };
+        };
+        return tree.map(withCounts);
+    }
+    async getListingCounts() {
+        return this.cache.getOrSet(exports.LISTING_COUNTS_CACHE_KEY, LISTING_COUNTS_TTL, async () => {
+            const rows = await this.prisma.listing.groupBy({
+                by: ['categoryId'],
+                where: { status: 'ACTIVE', available: true },
+                _count: { _all: true },
+            });
+            return Object.fromEntries(rows.map((row) => [row.categoryId, row._count._all]));
+        });
+    }
+    async getCategoryStructure() {
         return this.cache.getOrSet(TREE_CACHE_KEY, CACHE_TTL, async () => {
             const categories = await this.prisma.category.findMany({
                 where: { status: 'ACTIVE', slug: { not: exports.FALLBACK_CATEGORY_SLUG } },
@@ -38,12 +59,6 @@ let TaxonomyService = class TaxonomyService {
                 this.getTranslationMap('CATEGORY', categoryIds),
                 this.getTranslationMap('CATEGORY', categoryIds, 'shortDescription'),
             ]);
-            const counts = await this.prisma.listing.groupBy({
-                by: ['categoryId'],
-                where: { status: 'ACTIVE' },
-                _count: { _all: true },
-            });
-            const directCount = new Map(counts.map((row) => [row.categoryId, row._count._all]));
             const byParent = new Map();
             for (const cat of categories) {
                 const key = cat.parentId ?? 'root';
@@ -51,26 +66,21 @@ let TaxonomyService = class TaxonomyService {
                     byParent.set(key, []);
                 byParent.get(key).push(cat);
             }
-            const toNode = (cat) => {
-                const children = (byParent.get(cat.id) ?? []).map(toNode);
-                const listingCount = (directCount.get(cat.id) ?? 0) + children.reduce((sum, child) => sum + child.listingCount, 0);
-                return {
-                    id: cat.id,
-                    slug: cat.slug,
-                    icon: cat.icon,
-                    name: names.get(cat.id) ?? cat.slug,
-                    shortDescription: shortDescriptions.get(cat.id) ?? null,
-                    listingCount,
-                    children,
-                };
-            };
+            const toNode = (cat) => ({
+                id: cat.id,
+                slug: cat.slug,
+                icon: cat.icon,
+                name: names.get(cat.id) ?? cat.slug,
+                shortDescription: shortDescriptions.get(cat.id) ?? null,
+                children: (byParent.get(cat.id) ?? []).map(toNode),
+            });
             return (byParent.get('root') ?? []).map(toNode);
         });
     }
     async getCategoryBySlug(slug) {
-        const cached = await this.cache.get(`taxonomy:category:v2:${slug}`);
-        if (cached)
-            return cached;
+        return this.cache.getOrSet(`taxonomy:category:v2:${slug}`, CACHE_TTL, () => this.loadCategoryBySlug(slug));
+    }
+    async loadCategoryBySlug(slug) {
         const category = await this.prisma.category.findUnique({ where: { slug } });
         if (!category || category.status === 'ARCHIVED') {
             throw new common_1.NotFoundException();
@@ -86,9 +96,7 @@ let TaxonomyService = class TaxonomyService {
         });
         const childNames = await this.getTranslationMap('CATEGORY', childCategories.map((c) => c.id));
         const children = childCategories.map((c) => ({ id: c.id, slug: c.slug, name: childNames.get(c.id) ?? c.slug }));
-        const result = { ...category, name: name ?? category.slug, description, attributes, children };
-        await this.cache.set(`taxonomy:category:v2:${slug}`, result, CACHE_TTL);
-        return result;
+        return { ...category, name: name ?? category.slug, description, attributes, children };
     }
     async resolveAttributesForCategory(categoryId) {
         return this.cache.getOrSet(`taxonomy:attributes:v2:${categoryId}`, CACHE_TTL, async () => {
@@ -438,7 +446,7 @@ let TaxonomyService = class TaxonomyService {
         return candidate;
     }
     async invalidateTreeCache(categoryId) {
-        await this.cache.del(TREE_CACHE_KEY);
+        await this.cache.del(TREE_CACHE_KEY, exports.LISTING_COUNTS_CACHE_KEY);
         await this.cache.delByPrefix('taxonomy:category:');
         await this.cache.delByPrefix('taxonomy:attributes:');
     }

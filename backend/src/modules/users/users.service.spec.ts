@@ -1,5 +1,6 @@
 import { NotFoundException } from '@nestjs/common';
 import { UsersService } from './users.service';
+import { LISTING_COUNTS_CACHE_KEY } from '../taxonomy/taxonomy.service';
 
 const i18n = { t: jest.fn((key: string) => key) };
 const taxonomy = {
@@ -7,8 +8,8 @@ const taxonomy = {
   getOptionNames: jest.fn().mockResolvedValue(new Map([['o1', 'Bazen']])),
 };
 
-function makeService(prisma: any) {
-  return new UsersService(prisma, {} as any, i18n as any, {} as any, taxonomy as any);
+function makeService(prisma: any, cache: any = {}) {
+  return new UsersService(prisma, {} as any, i18n as any, {} as any, taxonomy as any, cache);
 }
 
 // A whole Listing row, private fields included, the way Prisma hands it over.
@@ -135,5 +136,30 @@ describe('UsersService#addFavorite (Dizajn 36)', () => {
       create: { userId: 'u1', listingId: 'l1', priceAtAdd: 350_000n },
     });
     expect(favorite.priceAtAdd).toBe(3500);
+  });
+});
+
+describe('UsersService#executeDeletion', () => {
+  it('drops the cached category counts once the deleted listings are committed', async () => {
+    const steps: string[] = [];
+    const tx = {
+      booking: { update: jest.fn() },
+      listing: { updateMany: jest.fn(async () => steps.push('listings deleted')) },
+      subscription: { updateMany: jest.fn() },
+      session: { updateMany: jest.fn() },
+      user: { update: jest.fn() },
+    };
+    const prisma = {
+      booking: { findMany: jest.fn().mockResolvedValue([]) },
+      $transaction: jest.fn(async (run: (client: typeof tx) => Promise<void>) => {
+        await run(tx);
+        steps.push('committed');
+      }),
+    };
+    const cache = { del: jest.fn(async () => steps.push('counts dropped')) };
+
+    await makeService(prisma, cache).executeDeletion('u1');
+    expect(cache.del).toHaveBeenCalledWith(LISTING_COUNTS_CACHE_KEY);
+    expect(steps).toEqual(['listings deleted', 'committed', 'counts dropped']);
   });
 });

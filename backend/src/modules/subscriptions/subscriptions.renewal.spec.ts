@@ -1,6 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { SubscriptionsService } from './subscriptions.service';
 import { PACKAGE_ENDING_WITHOUT_RENEWAL } from '../../common/utils/subscription-renewal';
+import { LISTING_COUNTS_CACHE_KEY } from '../taxonomy/taxonomy.service';
 
 // A small in-memory stand-in for the Prisma calls the renewal paths make.
 type Row = Record<string, any>;
@@ -103,7 +104,7 @@ function setup(rows: Partial<Tables>) {
   };
   const prisma = makePrisma(tables);
   const listings = { markPendingApproval: jest.fn(async () => ({})) };
-  const cache = { delByPrefix: jest.fn(async () => undefined) };
+  const cache = { del: jest.fn(async () => undefined) };
   const nestpay = {
     buildCheckoutForm: jest.fn(async () => ({ actionUrl: 'https://bank', fields: {} })),
     verifyCallback: jest.fn(async (body: Row) => ({ valid: true, approved: true, oid: body.oid, transId: 'T1' })),
@@ -315,7 +316,8 @@ describe('SubscriptionsService renewal payment', () => {
     expect(tables.bankedDay[0]).toMatchObject({ id: 'b1', usedAt: expect.any(Date) });
     expect(tables.bankedDay[1]).toMatchObject({ listingId: 'l2', days: 10, originPackageId: 'pkg-standard' });
     expect(tables.bankedDay[1].validUntil ?? null).toBeNull();
-    expect(cache.delByPrefix).toHaveBeenCalledWith('taxonomy:category:');
+    // Two listings are back in search, so the category counts are stale.
+    expect(cache.del).toHaveBeenCalledWith(LISTING_COUNTS_CACHE_KEY);
   });
 
   it('closes a package that ended but was not swept yet', async () => {
@@ -343,7 +345,7 @@ describe('SubscriptionsService renewal payment', () => {
 
 describe('SubscriptionsService expiry with renewals', () => {
   it('hands the listings to the paid renewal without a gap or an email', async () => {
-    const { service, tables, events } = setup({
+    const { service, tables, events, cache } = setup({
       subscription: [
         subscription({ id: 's1', status: 'ACTIVE', expiresAt: new Date(Date.now() - 60_000) }),
         subscription({ id: 'r1', status: 'SCHEDULED', renewsSubscriptionId: 's1', startsAt: new Date(Date.now() - 60_000) }),
@@ -365,10 +367,11 @@ describe('SubscriptionsService expiry with renewals', () => {
     // The carried-over days still wait for the renewal to end.
     expect(tables.bankedDay[0]).toMatchObject({ validFrom: null, validUntil: null, usedAt: null });
     expect(events.emit).not.toHaveBeenCalled();
+    expect(cache.del).not.toHaveBeenCalled();
   });
 
   it('takes live listings offline, leaves deleted ones alone and says which went', async () => {
-    const { service, tables, events } = setup({
+    const { service, tables, events, cache } = setup({
       subscription: [subscription({ id: 's1', status: 'ACTIVE', packageId: 'pkg-pro', expiresAt: new Date(Date.now() - 60_000) })],
       listing: [
         listing({ id: 'l1', subscriptionId: 's1' }),
@@ -385,16 +388,34 @@ describe('SubscriptionsService expiry with renewals', () => {
     expect(status).toEqual({ l1: 'EXPIRED', l2: 'ACTIVE', l3: 'DELETED', l4: 'EXPIRED' });
     expect(tables.bankedDay[0].validUntil).toBeInstanceOf(Date);
     expect(events.emit).toHaveBeenCalledWith('subscription.expired', { subscriptionId: 's1', listingIds: ['l1'] });
+    expect(cache.del).toHaveBeenCalledWith(LISTING_COUNTS_CACHE_KEY);
   });
 
   it('stays quiet when no live listing left search', async () => {
-    const { service, events } = setup({
+    const { service, events, cache } = setup({
       subscription: [subscription({ id: 's1', status: 'ACTIVE', expiresAt: new Date(Date.now() - 60_000) })],
       listing: [],
     });
     jest.spyOn(service as any, 'sendExpiringSoonReminders').mockResolvedValue(undefined);
     await service.processSubscriptionExpiry();
     expect(events.emit).not.toHaveBeenCalled();
+    expect(cache.del).not.toHaveBeenCalled();
+  });
+
+  it('takes a live listing offline once its carried-over days run out', async () => {
+    const ran = { usedAt: null, days: 5, validFrom: new Date(Date.now() - 6 * DAY), validUntil: new Date(Date.now() - DAY) };
+    const { service, tables, cache } = setup({
+      listing: [listing({ id: 'l1' }), listing({ id: 'l2', status: 'DELETED' })],
+      bankedDay: [
+        { id: 'b1', listingId: 'l1', ...ran },
+        { id: 'b2', listingId: 'l2', ...ran },
+      ],
+    });
+    await service.expireBankedDayCoverage();
+
+    expect(Object.fromEntries(tables.listing.map((l) => [l.id, l.status]))).toEqual({ l1: 'EXPIRED', l2: 'DELETED' });
+    // Once, for the listing that really left search.
+    expect(cache.del.mock.calls).toEqual([[LISTING_COUNTS_CACHE_KEY]]);
   });
 
   it('reminds only about packages whose end takes a listing out of search', async () => {

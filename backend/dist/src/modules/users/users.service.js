@@ -48,6 +48,7 @@ const event_emitter_1 = require("@nestjs/event-emitter");
 const nestjs_i18n_1 = require("nestjs-i18n");
 const crypto = __importStar(require("crypto"));
 const prisma_service_1 = require("../../prisma/prisma.service");
+const cache_service_1 = require("../../common/cache/cache.service");
 const uploads_service_1 = require("../../common/uploads/uploads.service");
 const taxonomy_service_1 = require("../taxonomy/taxonomy.service");
 const money_1 = require("../../common/utils/money");
@@ -74,12 +75,13 @@ const ME_SELECT = {
     createdAt: true,
 };
 let UsersService = class UsersService {
-    constructor(prisma, uploads, i18n, events, taxonomy) {
+    constructor(prisma, uploads, i18n, events, taxonomy, cache) {
         this.prisma = prisma;
         this.uploads = uploads;
         this.i18n = i18n;
         this.events = events;
         this.taxonomy = taxonomy;
+        this.cache = cache;
     }
     async isOwner(userId) {
         const count = await this.prisma.listing.count({ where: { userId, status: 'ACTIVE' } });
@@ -296,6 +298,7 @@ let UsersService = class UsersService {
                 },
             });
         });
+        await this.cache.del(taxonomy_service_1.LISTING_COUNTS_CACHE_KEY);
         for (const booking of activeBookings) {
             this.events.emit('booking.cancelled_account_deleted', { bookingId: booking.id });
         }
@@ -309,7 +312,8 @@ exports.UsersService = UsersService = __decorate([
         uploads_service_1.UploadsService,
         nestjs_i18n_1.I18nService,
         event_emitter_1.EventEmitter2,
-        taxonomy_service_1.TaxonomyService])
+        taxonomy_service_1.TaxonomyService,
+        cache_service_1.CacheService])
 ], UsersService);
 function slugify(input) {
     const map = {
