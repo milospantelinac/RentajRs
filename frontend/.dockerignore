@@ -1,0 +1,5 @@
+# Misc
+*.tsbuildinfo
+
+# Docker: .dockerignore files stay on the machines that build the images
+.dockerignore
