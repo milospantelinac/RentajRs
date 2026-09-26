@@ -152,8 +152,14 @@ async function seedSettings() {
         },
         { key: 'daily_new_conversation_limit', value: 10, description: 'R77' },
         { key: 'listing_index_threshold', value: 3, description: 'R135' },
-        { key: 'review_window_days', value: 14, description: 'R96' },
+        { key: 'review_window_days', value: 14, description: 'Dizajn 43: days after a booking completes in which its guest can leave a review' },
+        { key: 'review_edit_days', value: 7, description: 'Dizajn 43: days after a review goes public in which its author can change it' },
         { key: 'default_payment_deadline_hours', value: 48, description: 'R59' },
+        {
+            key: 'booking_request_response_hours',
+            value: 48,
+            description: 'Dizajn 41: hours an owner has to answer a booking request before it expires (sooner if the term starts first)',
+        },
         { key: 'moderation_sla_hours', value: 24, description: 'R30' },
         {
             key: 'admin_new_booking_notifications',
@@ -164,6 +170,11 @@ async function seedSettings() {
             key: 'homepage_video_url',
             value: null,
             description: 'Ch.18.3 — YouTube/Vimeo/direct video URL for the homepage "how it works" section; section is hidden entirely while this is empty',
+        },
+        {
+            key: 'homepage_video_thumbnail',
+            value: null,
+            description: 'Poster image shown over the homepage "how it works" video before playback; uploaded from /admin/sadrzaj. Falls back to YouTube\'s own thumbnail when empty',
         },
     ];
     let created = 0;
@@ -185,6 +196,35 @@ async function seedLocations() {
         'Istočna Srbija': ['Zaječar', 'Bor', 'Negotin', 'Kladovo'],
         'Južna Srbija': ['Niš', 'Leskovac', 'Vranje', 'Pirot', 'Prokuplje'],
         Kosovo: ['Kosovska Mitrovica'],
+    };
+    const locative = {
+        Beograd: 'Beogradu',
+        'Novi Sad': 'Novom Sadu',
+        Subotica: 'Subotici',
+        Zrenjanin: 'Zrenjaninu',
+        Pančevo: 'Pančevu',
+        Sombor: 'Somboru',
+        Kikinda: 'Kikindi',
+        'Sremska Mitrovica': 'Sremskoj Mitrovici',
+        Kragujevac: 'Kragujevcu',
+        Kruševac: 'Kruševcu',
+        Jagodina: 'Jagodini',
+        Čačak: 'Čačku',
+        'Gornji Milanovac': 'Gornjem Milanovcu',
+        Užice: 'Užicu',
+        Valjevo: 'Valjevu',
+        Šabac: 'Šapcu',
+        Loznica: 'Loznici',
+        Zaječar: 'Zaječaru',
+        Bor: 'Boru',
+        Negotin: 'Negotinu',
+        Kladovo: 'Kladovu',
+        Niš: 'Nišu',
+        Leskovac: 'Leskovcu',
+        Vranje: 'Vranju',
+        Pirot: 'Pirotu',
+        Prokuplje: 'Prokuplju',
+        'Kosovska Mitrovica': 'Kosovskoj Mitrovici',
     };
     const beogradAreas = [
         'Vračar',
@@ -208,8 +248,13 @@ async function seedLocations() {
         for (const cityName of cities) {
             const city = await prisma.city.upsert({
                 where: { slug: slugify(cityName) },
-                update: {},
-                create: { regionId: region.id, name: cityName, slug: slugify(cityName) },
+                update: { nameLocative: locative[cityName] ?? null },
+                create: {
+                    regionId: region.id,
+                    name: cityName,
+                    slug: slugify(cityName),
+                    nameLocative: locative[cityName] ?? null,
+                },
             });
             const areas = cityName === 'Beograd' ? beogradAreas : cityName === 'Novi Sad' ? novisadAreas : [];
             for (const areaName of areas) {
@@ -272,6 +317,7 @@ const CATEGORY_TREE = [
     {
         name: 'Nekretnine',
         icon: 'home',
+        shortDescription: 'Stanovi, kuće i vikendice',
         defaultBookingModel: client_1.BookingModel.PER_STAY,
         allowedPriceUnits: [client_1.PriceUnit.NIGHT, client_1.PriceUnit.MONTH],
         defaultPriceUnit: client_1.PriceUnit.NIGHT,
@@ -326,6 +372,7 @@ const CATEGORY_TREE = [
     {
         name: 'Prostori za proslave',
         icon: 'party',
+        shortDescription: 'Sale, bašte i restorani',
         defaultBookingModel: client_1.BookingModel.PER_SLOT,
         allowedPriceUnits: [client_1.PriceUnit.HOUR, client_1.PriceUnit.SLOT],
         defaultPriceUnit: client_1.PriceUnit.SLOT,
@@ -346,6 +393,7 @@ const CATEGORY_TREE = [
     {
         name: 'Igraonice',
         icon: 'toy',
+        shortDescription: 'Igraonice i rođendaonice',
         defaultBookingModel: client_1.BookingModel.PER_SLOT,
         allowedPriceUnits: [client_1.PriceUnit.HOUR, client_1.PriceUnit.SLOT],
         defaultPriceUnit: client_1.PriceUnit.SLOT,
@@ -361,6 +409,7 @@ const CATEGORY_TREE = [
     {
         name: 'Vozila',
         icon: 'car',
+        shortDescription: 'Putnička i dostavna vozila',
         defaultBookingModel: client_1.BookingModel.PER_STAY,
         allowedPriceUnits: [client_1.PriceUnit.DAY, client_1.PriceUnit.HOUR],
         defaultPriceUnit: client_1.PriceUnit.DAY,
@@ -407,8 +456,26 @@ const CATEGORY_TREE = [
         ],
     },
     {
+        name: 'Magacini i skladišta',
+        icon: 'warehouse',
+        shortDescription: 'Magacini, skladišta i hladnjače',
+        defaultBookingModel: client_1.BookingModel.PER_STAY,
+        allowedPriceUnits: [client_1.PriceUnit.MONTH],
+        defaultPriceUnit: client_1.PriceUnit.MONTH,
+        attributes: [
+            { key: 'povrsina', name: 'Površina', type: client_1.AttributeType.LIST, required: true, showOnCard: true, options: opts(['20 m²', '50 m²', '100 m²', '200 m²', '300 m²', '500 m²', '1000 m²', 'Preko 1000 m²']) },
+            { key: 'visina_prostora', name: 'Visina prostora', type: client_1.AttributeType.LIST, required: true, showOnCard: true, options: opts(['2 m', '2.5 m', '3 m', '4 m', '5 m', '6 m', 'Preko 6 m']) },
+            { key: 'tip_prostora', name: 'Tip prostora', type: client_1.AttributeType.LIST, required: true, isFilter: true, filterType: client_1.FilterType.SELECT, showOnCard: true, options: opts(['Privatni magacin', 'Poslovni magacin', 'Industrijski magacin', 'Skladišni prostor', 'Hladnjača']) },
+            {
+                key: 'sadrzaji', name: 'Sadržaji', type: client_1.AttributeType.CHECKBOX_GROUP, isFilter: true, filterType: client_1.FilterType.SELECT,
+                options: opts(['Alarm / sigurnosni sistem', 'Video nadzor / kamere', 'Protivpožarni sistem', 'Grejanje', 'Klima', 'Paletni regali / police', 'Parking', 'Pristup kamionima', 'Rampa za utovar']),
+            },
+        ],
+    },
+    {
         name: 'Građevinske mašine',
         icon: 'excavator',
+        shortDescription: 'Bageri, viljuškari, platforme',
         defaultBookingModel: client_1.BookingModel.PER_STAY,
         allowedPriceUnits: [client_1.PriceUnit.DAY],
         defaultPriceUnit: client_1.PriceUnit.DAY,
@@ -454,22 +521,6 @@ const CATEGORY_TREE = [
         ],
     },
     {
-        name: 'Magacini i skladišta',
-        icon: 'warehouse',
-        defaultBookingModel: client_1.BookingModel.PER_STAY,
-        allowedPriceUnits: [client_1.PriceUnit.MONTH],
-        defaultPriceUnit: client_1.PriceUnit.MONTH,
-        attributes: [
-            { key: 'povrsina', name: 'Površina', type: client_1.AttributeType.LIST, required: true, showOnCard: true, options: opts(['20 m²', '50 m²', '100 m²', '200 m²', '300 m²', '500 m²', '1000 m²', 'Preko 1000 m²']) },
-            { key: 'visina_prostora', name: 'Visina prostora', type: client_1.AttributeType.LIST, required: true, showOnCard: true, options: opts(['2 m', '2.5 m', '3 m', '4 m', '5 m', '6 m', 'Preko 6 m']) },
-            { key: 'tip_prostora', name: 'Tip prostora', type: client_1.AttributeType.LIST, required: true, isFilter: true, filterType: client_1.FilterType.SELECT, showOnCard: true, options: opts(['Privatni magacin', 'Poslovni magacin', 'Industrijski magacin', 'Skladišni prostor', 'Hladnjača']) },
-            {
-                key: 'sadrzaji', name: 'Sadržaji', type: client_1.AttributeType.CHECKBOX_GROUP, isFilter: true, filterType: client_1.FilterType.SELECT,
-                options: opts(['Alarm / sigurnosni sistem', 'Video nadzor / kamere', 'Protivpožarni sistem', 'Grejanje', 'Klima', 'Paletni regali / police', 'Parking', 'Pristup kamionima', 'Rampa za utovar']),
-            },
-        ],
-    },
-    {
         name: 'Ostalo',
         icon: 'other',
         defaultBookingModel: client_1.BookingModel.PER_STAY,
@@ -488,6 +539,7 @@ async function seedCategoryNode(node, parentId, order) {
             defaultBookingModel: node.defaultBookingModel,
             allowedPriceUnits: node.allowedPriceUnits,
             defaultPriceUnit: node.defaultPriceUnit,
+            displayOrder: order,
         },
         create: {
             parentId,
@@ -501,6 +553,9 @@ async function seedCategoryNode(node, parentId, order) {
         },
     });
     await setTranslation('CATEGORY', category.id, 'name', node.name);
+    if (node.shortDescription) {
+        await setTranslation('CATEGORY', category.id, 'shortDescription', node.shortDescription);
+    }
     for (const [i, attr] of node.attributes.entries()) {
         const attrFields = {
             type: attr.type,

@@ -57,8 +57,9 @@ __decorate([
     __metadata("design:type", String)
 ], CreateDefinedSlotDto.prototype, "endsAt", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ required: false, description: 'RSD, overrides the listing base price for this slot' }),
-    (0, class_validator_1.IsOptional)(),
+    (0, swagger_1.ApiProperty)({ description: 'RSD for this slot' }),
+    (0, class_validator_1.IsInt)(),
+    (0, class_validator_1.IsPositive)(),
     __metadata("design:type", Number)
 ], CreateDefinedSlotDto.prototype, "price", void 0);
 __decorate([
@@ -171,14 +172,16 @@ class AddIcalSourceDto {
 }
 exports.AddIcalSourceDto = AddIcalSourceDto;
 __decorate([
-    (0, swagger_1.ApiProperty)(),
+    (0, swagger_1.ApiProperty)({ required: false, description: 'Defaults to the platform named by the address' }),
+    (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
-    (0, class_validator_1.IsNotEmpty)(),
+    (0, class_validator_1.MaxLength)(80),
     __metadata("design:type", String)
 ], AddIcalSourceDto.prototype, "name", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)(),
-    (0, class_validator_1.IsUrl)(),
+    (0, swagger_1.ApiProperty)({ example: 'https://www.airbnb.com/calendar/ical/123.ics?s=abc' }),
+    (0, class_validator_1.IsUrl)({ protocols: ['http', 'https', 'webcal'], require_protocol: true }, { message: 'validation.ICAL_URL_INVALID' }),
+    (0, class_validator_1.MaxLength)(2000, { message: 'validation.ICAL_URL_INVALID' }),
     __metadata("design:type", String)
 ], AddIcalSourceDto.prototype, "url", void 0);
 //# sourceMappingURL=availability.dto.js.map

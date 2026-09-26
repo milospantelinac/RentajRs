@@ -31,6 +31,12 @@ export class CreateCategoryDto {
   @IsString()
   description?: string;
 
+  @ApiPropertyOptional({ description: 'One line under the category card on /oglasi/novi (Dizajn 17)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  shortDescription?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -65,6 +71,12 @@ export class UpdateCategoryDto {
   @IsOptional()
   @IsString()
   description?: string;
+
+  @ApiPropertyOptional({ description: 'One line under the category card on /oglasi/novi (Dizajn 17)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  shortDescription?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

@@ -2,12 +2,17 @@
 
 // Bootstrap-shaped container: fluid with responsive side padding below the
 // smallest breakpoint's max-width, then steps to fixed max-widths.
+// xxl matches the Figma desktop canvas: 1440 wide, 112 side margins, 1216
+// content (Dizajn 1). The max-width is the border box, so it carries the
+// container's own 24px side padding on top of the 1216 of content — at a
+// 1440 viewport that puts the content edge at exactly 112px. Narrower tiers
+// are unspecified by Figma and keep their original Bootstrap-shaped steps.
 $container-max-widths: (
   sm: 540px,
   md: 720px,
   lg: 960px,
   xl: 1140px,
-  xxl: 1320px,
+  xxl: 1264px,
 );
 
 $container-padding-x: 16px;

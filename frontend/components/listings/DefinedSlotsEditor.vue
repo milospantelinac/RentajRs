@@ -1,149 +1,202 @@
 <template>
-  <div class="ds-editor">
-    <p class="text-label mb-2">{{ t('listing.dsExistingSlots') }}</p>
-    <ul v-if="slots.length" class="ds-list mb-3">
-      <li v-for="s in slots" :key="s.id">
-        <div class="ds-row">
-          <span>{{ formatDateTime(s.startsAt) }} — {{ formatTime(s.endsAt) }}</span>
-          <span>{{ s.price ? `${formatPrice(s.price)} RSD` : '—' }}</span>
-          <span class="ds-row-actions">
-            <button type="button" class="btn-link" @click="toggleCopyPanel(s)">{{ t('listing.dsCopySlot') }}</button>
-            <button type="button" class="btn-link-danger" @click="removeSlot(s.id)">✕</button>
-          </span>
-        </div>
-
-        <!-- T105 — copy this exact term (same time + price) onto more
-             dates: manual multi-select, or a weekly "Ponavljaj" shortcut
-             that just precomputes which dates a manual pick would need.
-             Each result is its own independent DefinedSlot row, same as
-             adding one by hand — nothing here tracks "the series" once
-             created. -->
-        <div v-if="copyingSlotId === s.id" class="ds-copy-panel">
-          <div class="ds-copy-mode-toggle">
-            <button
-              type="button"
-              class="btn btn-tertiary btn-sm"
-              :class="{ 'ds-copy-mode-active': copyMode === 'manual' }"
-              @click="copyMode = 'manual'"
-            >{{ t('listing.dsCopyManual') }}</button>
-            <button
-              type="button"
-              class="btn btn-tertiary btn-sm"
-              :class="{ 'ds-copy-mode-active': copyMode === 'repeat' }"
-              @click="copyMode = 'repeat'"
-            >{{ t('listing.dsCopyRepeat') }}</button>
+  <!-- Dizajn 22: the Forma column of 532:514 (Definisani termini). -->
+  <div class="avail avail-ds">
+    <!-- 532:789 -->
+    <section class="avail-section">
+      <p class="avail-eyebrow">{{ t('listing.dsExistingSlots') }}</p>
+      <div class="avail-slots">
+        <template v-for="s in slots" :key="s.id">
+          <div class="avail-slot">
+            <span class="avail-slot-date">{{ formatNumericDate(s.startsAt) }}</span>
+            <span class="avail-slot-time">{{ formatTime(s.startsAt) }} - {{ formatTime(s.endsAt) }}</span>
+            <span class="avail-slot-price">{{ s.price ? `${formatPrice(s.price)} RSD` : '-' }}</span>
+            <!-- T105's copy, kept as a link beside the frame's delete icon. -->
+            <button type="button" class="avail-link" :aria-expanded="copyingSlotId === s.id" @click="toggleCopyPanel(s)">
+              {{ t('listing.dsCopySlot') }}
+            </button>
+            <button type="button" class="avail-icon-btn" :aria-label="t('listing.dsRemoveSlot')" @click="removeSlot(s.id)">
+              <img src="/images/icons/remove-x-danger.svg" alt="" />
+            </button>
           </div>
 
-          <template v-if="copyMode === 'manual'">
-            <div v-for="(d, i) in copyDates" :key="i" class="ds-copy-date-row">
-              <input v-model="copyDates[i]" type="date" class="form-control" />
-              <button type="button" class="btn-link-danger" :disabled="copyDates.length === 1" @click="copyDates.splice(i, 1)">✕</button>
+          <!-- T105: copy this exact term (same time + price) onto more
+               dates: manual multi-select, or a weekly "Ponavljaj" shortcut
+               that just precomputes which dates a manual pick would need.
+               Each result is its own independent DefinedSlot row, same as
+               adding one by hand; nothing here tracks "the series" once
+               created. -->
+          <div v-if="copyingSlotId === s.id" class="avail-copy">
+            <div class="avail-copy-row">
+              <button type="button" class="avail-btn" :class="{ 'is-active': copyMode === 'manual' }" @click="copyMode = 'manual'">
+                {{ t('listing.dsCopyManual') }}
+              </button>
+              <button type="button" class="avail-btn" :class="{ 'is-active': copyMode === 'repeat' }" @click="copyMode = 'repeat'">
+                {{ t('listing.dsCopyRepeat') }}
+              </button>
             </div>
-            <button type="button" class="btn btn-tertiary btn-sm mt-1" @click="copyDates.push('')">+ {{ t('listing.dsCopyAddDate') }}</button>
-          </template>
 
-          <template v-else>
-            <div class="form-group mb-2">
-              <label class="form-label">{{ t('listing.dsCopyRepeatDay') }}</label>
-              <select v-model.number="repeatDayOfWeek" class="form-control form-select">
-                <option v-for="d in WEEKDAYS" :key="d.value" :value="d.value">{{ t(d.labelKey) }}</option>
-              </select>
-            </div>
-            <div class="ds-copy-repeat-end">
-              <label class="form-row-inline">
-                <input v-model="repeatEndMode" type="radio" value="count" />
-                {{ t('listing.dsCopyRepeatCountLabel') }}
+            <template v-if="copyMode === 'manual'">
+              <div v-for="(d, i) in copyDates" :key="i" class="avail-copy-row">
+                <AvailabilityDateField
+                  v-model="copyDates[i]"
+                  class="avail-copy-date"
+                  variant="boxed"
+                  :listing-id="listingId"
+                  :placeholder="t('listing.datePlaceholder')"
+                  :aria-label="t('listing.dsDate')"
+                />
+                <button
+                  type="button"
+                  class="avail-icon-btn"
+                  :disabled="copyDates.length === 1"
+                  :aria-label="t('listing.whRemove')"
+                  @click="copyDates.splice(i, 1)"
+                >
+                  <img src="/images/icons/remove-x-muted.svg" alt="" />
+                </button>
+              </div>
+              <div class="avail-copy-row">
+                <button type="button" class="avail-link" @click="copyDates.push('')">+ {{ t('listing.dsCopyAddDate') }}</button>
+              </div>
+            </template>
+
+            <template v-else>
+              <div class="avail-copy-row">
+                <label :for="`ds-repeat-day-${s.id}`">{{ t('listing.dsCopyRepeatDay') }}</label>
+                <span class="avail-select avail-copy-select">
+                  <select :id="`ds-repeat-day-${s.id}`" v-model.number="repeatDayOfWeek" class="avail-select-control">
+                    <option v-for="d in WEEKDAYS" :key="d.value" :value="d.value">{{ t(d.labelKey) }}</option>
+                  </select>
+                  <img src="/images/icons/chevron-down.svg" alt="" />
+                </span>
+              </div>
+              <div class="avail-copy-row">
+                <input :id="`ds-repeat-count-${s.id}`" v-model="repeatEndMode" type="radio" value="count" />
+                <label :for="`ds-repeat-count-${s.id}`">{{ t('listing.dsCopyRepeatCountLabel') }}</label>
                 <input
                   v-model.number="repeatCount"
                   type="number"
                   min="1"
                   :max="MAX_REPEAT_DATES"
-                  class="form-control ds-copy-repeat-count"
+                  class="avail-add-input avail-copy-count"
+                  :aria-label="t('listing.dsCopyRepeatCountLabel')"
                   :disabled="repeatEndMode !== 'count'"
                 />
-              </label>
-              <label class="form-row-inline mt-2">
-                <input v-model="repeatEndMode" type="radio" value="until" />
-                {{ t('listing.dsCopyRepeatUntilLabel') }}
-                <input
+              </div>
+              <div class="avail-copy-row">
+                <input :id="`ds-repeat-until-${s.id}`" v-model="repeatEndMode" type="radio" value="until" />
+                <label :for="`ds-repeat-until-${s.id}`">{{ t('listing.dsCopyRepeatUntilLabel') }}</label>
+                <AvailabilityDateField
                   v-model="repeatUntilDate"
-                  type="date"
-                  class="form-control ds-copy-repeat-until"
-                  :disabled="repeatEndMode !== 'until'"
+                  class="avail-copy-date"
+                  variant="boxed"
+                  :listing-id="listingId"
+                  :placeholder="t('listing.datePlaceholder')"
+                  :aria-label="t('listing.dsCopyRepeatUntilLabel')"
                 />
-              </label>
+              </div>
+            </template>
+
+            <div class="avail-copy-row">
+              <button type="button" class="avail-btn avail-btn-soft" :disabled="copying" @click="confirmCopy(s)">
+                {{ copying ? t('common.loading') : t('listing.dsCopyConfirm') }}
+              </button>
+              <button type="button" class="avail-btn" @click="copyingSlotId = null">{{ t('common.cancel') }}</button>
             </div>
-          </template>
 
-          <div class="ds-copy-actions mt-2">
-            <button type="button" class="btn btn-primary-flat btn-sm" :disabled="copying" @click="confirmCopy(s)">
-              {{ copying ? t('common.loading') : t('listing.dsCopyConfirm') }}
-            </button>
-            <button type="button" class="btn btn-tertiary btn-sm" @click="copyingSlotId = null">{{ t('common.cancel') }}</button>
-          </div>
-
-          <p v-if="copyError" class="form-error mt-2">{{ copyError }}</p>
-          <div v-if="copyResult" class="ds-copy-result mt-2">
-            <p v-if="copyResult.created" class="text-success mb-1">
-              {{ t('listing.dsCopyResultCreated', { count: copyResult.created }) }}
-            </p>
-            <template v-if="copyResult.skipped.length">
-              <p class="form-error mb-1">{{ t('listing.dsCopyResultSkippedIntro') }}</p>
-              <ul class="ds-copy-skipped-list">
-                <li v-for="(msg, i) in copyResult.skipped" :key="i">{{ msg }}</li>
-              </ul>
+            <p v-if="copyError" class="avail-error"><img src="/images/icons/field-error.svg" alt="" />{{ copyError }}</p>
+            <template v-if="copyResult">
+              <p v-if="copyResult.created" class="avail-success">{{ t('listing.dsCopyResultCreated', { count: copyResult.created }) }}</p>
+              <template v-if="copyResult.skipped.length">
+                <p class="avail-error">{{ t('listing.dsCopyResultSkippedIntro') }}</p>
+                <ul class="avail-copy-list">
+                  <li v-for="(msg, i) in copyResult.skipped" :key="i">{{ msg }}</li>
+                </ul>
+              </template>
             </template>
           </div>
-        </div>
-      </li>
-    </ul>
-    <p v-else class="text-muted mb-3">{{ t('listing.dsNoSlots') }}</p>
+        </template>
+        <p v-if="!slots.length" class="avail-slots-empty">{{ t('listing.dsNoSlots') }}</p>
+      </div>
+    </section>
 
-    <div class="ds-form">
-      <div class="form-group mb-2">
-        <label class="form-label">{{ t('listing.dsDate') }}</label>
-        <input v-model="form.date" type="date" class="form-control" />
-      </div>
-      <div class="row">
-        <div class="col-6">
-          <div class="form-group mb-2">
-            <label class="form-label">{{ t('listing.dsFrom') }}</label>
-            <input v-model="form.from" type="time" class="form-control" />
-          </div>
+    <!-- 532:822 -->
+    <section class="avail-section">
+      <p class="avail-eyebrow">{{ t('listing.dsAddTitle') }}</p>
+      <div class="avail-add">
+        <div class="avail-add-field avail-add-date">
+          <label for="ds-date" class="avail-add-label">{{ t('listing.dsDate') }}<span class="avail-add-required">*</span></label>
+          <AvailabilityDateField
+            id="ds-date"
+            v-model="form.date"
+            variant="boxed"
+            :listing-id="listingId"
+            :placeholder="t('listing.datePlaceholder')"
+            @update:model-value="addError = ''"
+          />
         </div>
-        <div class="col-6">
-          <div class="form-group mb-2">
-            <label class="form-label">{{ t('listing.dsTo') }}</label>
-            <input v-model="form.to" type="time" class="form-control" />
-          </div>
+        <div class="avail-add-field avail-add-time">
+          <label for="ds-from" class="avail-add-label">{{ t('listing.dsFrom') }}<span class="avail-add-required">*</span></label>
+          <AvailabilityTimeSelect id="ds-from" v-model="form.from" variant="boxed" />
+        </div>
+        <div class="avail-add-field avail-add-time">
+          <label for="ds-to" class="avail-add-label">{{ t('listing.dsTo') }}<span class="avail-add-required">*</span></label>
+          <AvailabilityTimeSelect id="ds-to" v-model="form.to" variant="boxed" />
+        </div>
+        <div class="avail-add-field avail-add-price">
+          <label for="ds-price" class="avail-add-label">{{ t('listing.price') }} (RSD)<span class="avail-add-required">*</span></label>
+          <input
+            id="ds-price"
+            type="text"
+            inputmode="numeric"
+            autocomplete="off"
+            class="avail-add-input"
+            :class="{ 'is-invalid': addError && !form.price }"
+            :value="formatRsdInput(form.price)"
+            @input="onPriceInput"
+          />
         </div>
       </div>
-      <div class="form-group mb-3">
-        <label class="form-label">{{ t('listing.price') }} (RSD) *</label>
-        <input v-model.number="form.price" type="number" min="1" class="form-control" />
-      </div>
-      <button type="button" class="btn btn-primary-flat btn-sm" :disabled="busy || !canAdd" @click="addSlot">
-        + {{ t('listing.dsAddSlot') }}
-      </button>
-      <p v-if="editorError" class="form-error mt-2">{{ editorError }}</p>
-    </div>
+      <p v-if="addError" class="avail-error"><img src="/images/icons/field-error.svg" alt="" />{{ addError }}</p>
+      <button type="button" class="avail-btn avail-btn-outline" :disabled="busy" @click="addSlot">+ {{ t('listing.dsAddSlot') }}</button>
+      <p class="avail-note">{{ t('listing.dsNote') }}</p>
+    </section>
 
-    <!-- Izuzeci — blokirati ceo datum (Dodavanje Oglasa spec §3). -->
-    <div class="mt-4">
-      <p class="text-label mb-2">{{ t('listing.whExceptions') }}</p>
-      <div class="wh-exception-row">
-        <input v-model="blockDate" type="date" class="form-control" />
-        <button type="button" class="btn btn-tertiary btn-sm" :disabled="!blockDate || blockingDate" @click="blockWholeDate">
+    <!-- 532:684: Dodavanje Oglasa spec §3, block a whole date. -->
+    <section class="avail-section">
+      <p class="avail-label">
+        {{ t('listing.whExceptions') }}
+        <span class="avail-label-note">{{ t('listing.dsExceptionsCaption') }}</span>
+      </p>
+      <div class="avail-exception-row">
+        <span class="avail-exception-label">{{ t('listing.whBlockDate') }}</span>
+        <AvailabilityDateField
+          v-model="blockDate"
+          class="avail-exception-date"
+          :listing-id="listingId"
+          :placeholder="t('listing.datePlaceholder')"
+          :aria-label="t('listing.whBlockDate')"
+        />
+        <button type="button" class="avail-btn" :disabled="blockingDate" @click="blockWholeDate">
           {{ blockDateSaved ? t('common.savedButton') : t('listing.whBlockDate') }}
         </button>
       </div>
-      <ul v-if="blockedDates.length" class="ds-list mt-2">
-        <li v-for="b in blockedDates" :key="b.id" class="ds-row">
-          <span>{{ formatDate(b.startsAt) }}</span>
-          <button type="button" class="btn-link-danger" @click="removeBlockedDate(b.id)">✕</button>
-        </li>
-      </ul>
-    </div>
+      <p v-if="blockError" class="avail-error"><img src="/images/icons/field-error.svg" alt="" />{{ blockError }}</p>
+      <!-- 239:287's exception list (252:424), which 532:514 leaves out. -->
+      <div v-if="blockedDates.length" class="avail-list">
+        <p class="avail-list-head">
+          {{ t('listing.whExceptionsListTitle') }}
+          <img src="/images/icons/info-circle.svg" alt="" />
+        </p>
+        <div v-for="b in blockedDates" :key="b.id" class="avail-list-row">
+          <span class="avail-list-text">
+            <span class="avail-list-title">{{ formatLongDate(b.startsAt) }}</span>
+            <span class="avail-list-sub">{{ t('listing.whExceptionBlocked') }}</span>
+          </span>
+          <button type="button" class="avail-link" @click="removeBlockedDate(b.id)">{{ t('listing.whRemove') }}</button>
+        </div>
+      </div>
+    </section>
   </div>
 </template>
 
@@ -156,16 +209,17 @@ const { t } = useI18n()
 const api = useApi()
 
 const slots = ref([])
+// Every blocked term, bookings included, so the preview offers what a guest would see.
+const allBlocked = ref([])
 const busy = ref(false)
-const editorError = ref('')
+const addError = ref('')
 const blockDate = ref('')
 const blockedDates = ref([])
 const blockingDate = ref(false)
 const blockDateSaved = ref(false)
+const blockError = ref('')
 
 const form = reactive({ date: '', from: '10:00', to: '12:00', price: null })
-
-const canAdd = computed(() => form.date && form.from && form.to)
 
 // T105 — "Kopiraj termin"
 const WEEKDAYS = [
@@ -283,17 +337,28 @@ async function confirmCopy(slot) {
   }
 }
 
-function formatDateTime(v) {
-  return new Date(v).toLocaleString('sr-RS', { day: 'numeric', month: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+// 532:793 "12. 9. 2026.", 532:794 "09:00", 532:795 "4.500 RSD".
+const numericDateFormatter = new Intl.DateTimeFormat('sr-Latn-RS', { day: 'numeric', month: 'numeric', year: 'numeric' })
+const longDateFormatter = new Intl.DateTimeFormat('sr-Latn-RS', { day: 'numeric', month: 'long', year: 'numeric' })
+const weekdayFormatter = new Intl.DateTimeFormat('sr-Latn-RS', { weekday: 'long', day: 'numeric', month: 'long' })
+const rsdFormatter = new Intl.NumberFormat('sr-RS')
+
+function formatNumericDate(v) {
+  return numericDateFormatter.format(new Date(v))
+}
+function formatLongDate(v) {
+  return longDateFormatter.format(new Date(v))
 }
 function formatTime(v) {
-  return new Date(v).toLocaleTimeString('sr-RS', { hour: '2-digit', minute: '2-digit' })
+  return timeOf(new Date(v))
 }
 function formatPrice(v) {
-  return new Intl.NumberFormat('sr-RS').format(v)
+  return rsdFormatter.format(v)
 }
-function formatDate(v) {
-  return new Date(v).toLocaleDateString('sr-RS')
+
+function onPriceInput(event) {
+  form.price = applyRsdInput(event)
+  addError.value = ''
 }
 
 async function load() {
@@ -303,22 +368,29 @@ async function load() {
     query: { from: from.toISOString(), to: to.toISOString() },
   })
   slots.value = data.definedSlots || []
+  allBlocked.value = data.blocked || []
   // T34 — only MANUAL blocks are listed/removable here; BOOKING/GAP/ICAL
   // blocks come from elsewhere and aren't this editor's to touch (the
   // backend's own delete endpoint already refuses to remove them).
-  blockedDates.value = (data.blocked || []).filter((b) => b.source === 'MANUAL')
+  blockedDates.value = allBlocked.value.filter((b) => b.source === 'MANUAL')
 }
 
+// Dizajn 22: 532:852 marks the price as required too; a slot without one used
+// to be booked at the listing's price, which is 0 for defined slots.
 async function addSlot() {
+  addError.value = ''
+  if (!form.date || !form.price) {
+    addError.value = t('listing.dsAddIncomplete')
+    return
+  }
   busy.value = true
-  editorError.value = ''
   try {
     const startsAt = new Date(`${form.date}T${form.from}:00`)
     const endsAt = new Date(`${form.date}T${form.to}:00`)
     const created = await api.post(`/listings/${props.listingId}/availability/slots`, {
       startsAt: startsAt.toISOString(),
       endsAt: endsAt.toISOString(),
-      price: form.price || undefined,
+      price: form.price,
     })
     // T75 — build the just-added row from what the owner actually typed
     // rather than the raw response, so it renders correctly before the
@@ -327,12 +399,12 @@ async function addSlot() {
       id: created.id,
       startsAt: startsAt.toISOString(),
       endsAt: endsAt.toISOString(),
-      price: form.price || null,
+      price: form.price,
     })
     slots.value.sort((a, b) => new Date(a.startsAt) - new Date(b.startsAt))
     form.price = null
   } catch (e) {
-    editorError.value = extractErrorMessage(e, t('auth.genericError'))
+    addError.value = extractErrorMessage(e, t('auth.genericError'))
   } finally {
     busy.value = false
   }
@@ -341,11 +413,17 @@ async function addSlot() {
 async function removeSlot(id) {
   await api.delete(`/listings/${props.listingId}/availability/slots/${id}`)
   slots.value = slots.value.filter((s) => s.id !== id)
+  if (copyingSlotId.value === id) copyingSlotId.value = null
 }
 
+// 532:694 looks ready before a date is picked, so a click says what is missing.
 async function blockWholeDate() {
-  if (!blockDate.value) return
+  if (!blockDate.value) {
+    blockError.value = t('listing.whExceptionDateRequired')
+    return
+  }
   blockingDate.value = true
+  blockError.value = ''
   try {
     const start = new Date(`${blockDate.value}T00:00:00`)
     const end = new Date(start.getTime() + 86400000)
@@ -355,124 +433,62 @@ async function blockWholeDate() {
     })
     blockedDates.value.push(created)
     blockedDates.value.sort((a, b) => new Date(a.startsAt) - new Date(b.startsAt))
+    allBlocked.value.push(created)
     blockDate.value = ''
     blockDateSaved.value = true
-    setTimeout(() => { blockDateSaved.value = false }, 2000)
+    setTimeout(() => {
+      blockDateSaved.value = false
+    }, 2000)
+  } catch (e) {
+    blockError.value = extractErrorMessage(e, t('auth.genericError'))
   } finally {
     blockingDate.value = false
   }
 }
 
 async function removeBlockedDate(id) {
-  await api.delete(`/listings/${props.listingId}/availability/blocks/${id}`)
-  blockedDates.value = blockedDates.value.filter((b) => b.id !== id)
+  blockError.value = ''
+  try {
+    await api.delete(`/listings/${props.listingId}/availability/blocks/${id}`)
+    blockedDates.value = blockedDates.value.filter((b) => b.id !== id)
+    allBlocked.value = allBlocked.value.filter((b) => b.id !== id)
+  } catch (e) {
+    blockError.value = extractErrorMessage(e, t('auth.genericError'))
+  }
 }
+
+// 534:515: the first day a guest could book, up to three of its slots, the
+// frame's second one shown as picked.
+const preview = computed(() => {
+  const now = Date.now()
+  const open = slots.value.filter((s) => {
+    const start = new Date(s.startsAt).getTime()
+    const end = new Date(s.endsAt).getTime()
+    return start > now && !allBlocked.value.some((b) => new Date(b.startsAt).getTime() < end && new Date(b.endsAt).getTime() > start)
+  })
+  if (!open.length) return null
+  const firstDay = dateInputValue(new Date(open[0].startsAt))
+  const daySlots = open.filter((s) => dateInputValue(new Date(s.startsAt)) === firstDay).slice(0, 3)
+  const label = weekdayFormatter.format(new Date(open[0].startsAt))
+  return {
+    date: label.charAt(0).toUpperCase() + label.slice(1),
+    selectedIndex: daySlots.length > 1 ? 1 : 0,
+    slots: daySlots.map((s) => ({
+      id: s.id,
+      time: `${formatTime(s.startsAt)} - ${formatTime(s.endsAt)}`,
+      price: s.price ? `${formatPrice(s.price)} RSD` : '-',
+    })),
+  }
+})
 
 onMounted(load)
 
 // T26 — the wizard's step validation needs to know whether at least one
 // slot exists before letting the owner move past this step; `slots` is
 // otherwise local to this component.
-defineExpose({ slots })
+defineExpose({ slots, preview })
 </script>
 
 <style lang="scss" scoped>
-.ds-list {
-  list-style: none;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.ds-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-  font-size: $font-size-muted;
-  padding: 8px 10px;
-  border: 1px solid $color-border;
-  border-radius: 8px;
-}
-
-.wh-exception-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-}
-
-.btn-link-danger {
-  background: none;
-  border: none;
-  color: $color-error;
-  cursor: pointer;
-  font-size: 12px;
-}
-
-.ds-row-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-shrink: 0;
-}
-
-.btn-link {
-  background: none;
-  border: none;
-  color: $color-primary;
-  cursor: pointer;
-  font-size: 12px;
-  padding: 0;
-}
-
-.ds-copy-panel {
-  margin-top: 6px;
-  padding: 12px;
-  border: 1px dashed $color-border;
-  border-radius: 8px;
-  font-size: $font-size-muted;
-}
-
-.ds-copy-mode-toggle {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
-.ds-copy-mode-active {
-  border-color: $color-primary;
-  color: $color-primary;
-}
-
-.ds-copy-date-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
-}
-
-.ds-copy-repeat-end {
-  display: flex;
-  flex-direction: column;
-}
-
-.ds-copy-repeat-count,
-.ds-copy-repeat-until {
-  width: auto;
-  display: inline-block;
-  margin-left: 6px;
-}
-
-.ds-copy-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.ds-copy-skipped-list {
-  margin: 0;
-  padding-left: 18px;
-  color: $color-error;
-}
+@use '@/assets/scss/availability-editor';
 </style>

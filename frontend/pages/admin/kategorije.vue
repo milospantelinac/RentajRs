@@ -1,218 +1,263 @@
 <template>
   <div>
-    <div class="d-flex justify-content-between align-items-center mb-3">
-      <h2 class="text-section-title">{{ t('admin.categories') }}</h2>
-      <button class="btn btn-primary-flat btn-sm" @click="showCreate = !showCreate">{{ t('admin.newCategory') }}</button>
-    </div>
+    <DashboardPageHeader :title="t('admin.categories')" :subtitle="t('admin.subtitle.categories')">
+      <template #actions>
+        <button class="btn btn-primary-flat btn-sm" @click="showCreate = !showCreate">{{ t('admin.newCategory') }}</button>
+      </template>
+    </DashboardPageHeader>
 
-    <div v-if="showCreate" class="card mb-4">
-      <div class="card-body">
-        <div class="row">
-          <div class="col-12 col-md-6">
-            <div class="form-group mb-3">
-              <label class="form-label">{{ t('admin.categoryName') }}</label>
-              <input v-model="createForm.name" type="text" class="form-control" />
-            </div>
-          </div>
-          <div class="col-12 col-md-6">
-            <div class="form-group mb-3">
-              <label class="form-label">{{ t('admin.parentCategory') }}</label>
-              <select v-model="createForm.parentId" class="form-control form-select">
-                <option :value="undefined">—</option>
-                <option v-for="c in tree" :key="c.id" :value="c.id">{{ '—'.repeat(c.level - 1) }} {{ c.name }}</option>
-              </select>
-            </div>
-          </div>
-          <div class="col-12 col-md-6">
-            <div class="form-group mb-3">
-              <label class="form-label">{{ t('admin.bookingModel') }}</label>
-              <select v-model="createForm.defaultBookingModel" class="form-control form-select">
-                <option value="PER_STAY">PER_STAY</option>
-                <option value="PER_SLOT">PER_SLOT</option>
-                <option value="NO_BOOKING">NO_BOOKING</option>
-              </select>
-            </div>
-          </div>
-          <div class="col-12 col-md-6">
-            <div class="form-group mb-3">
-              <label class="form-label">{{ t('listing.priceUnit') }}</label>
-              <select v-model="createForm.defaultPriceUnit" class="form-control form-select">
-                <option v-for="u in priceUnits" :key="u" :value="u">{{ u }}</option>
-              </select>
-            </div>
-          </div>
-          <div class="col-12">
-            <div class="form-group mb-3">
-              <label class="form-label">{{ t('admin.allowedPriceUnits') }}</label>
-              <div class="tag-options">
-                <button
-                  v-for="u in priceUnits"
-                  :key="u"
-                  type="button"
-                  class="btn btn-sm"
-                  :class="createForm.allowedPriceUnits.includes(u) ? 'btn-primary-flat' : 'btn-tertiary'"
-                  @click="toggleUnit(u)"
-                >{{ u }}</button>
-              </div>
-            </div>
-          </div>
+    <div v-if="showCreate" class="admin-card cat-card">
+      <p class="admin-card-title">{{ t('admin.newCategory') }}</p>
+      <div class="cat-grid">
+        <div class="form-group">
+          <label class="form-label">{{ t('admin.categoryName') }}</label>
+          <input v-model="createForm.name" type="text" class="form-control" />
         </div>
-        <button class="btn btn-primary-flat btn-sm" @click="createCategory">{{ t('admin.create') }}</button>
+        <div class="form-group">
+          <label class="form-label">{{ t('admin.parentCategory') }}</label>
+          <select v-model="createForm.parentId" class="form-control form-select">
+            <option :value="undefined">-</option>
+            <option v-for="c in tree" :key="c.id" :value="c.id">{{ indentLabel(c) }}</option>
+          </select>
+        </div>
       </div>
+      <div class="form-group cat-wide">
+        <label class="form-label">{{ t('admin.categoryShortDescription') }}</label>
+        <input v-model="createForm.shortDescription" type="text" class="form-control" maxlength="120" />
+      </div>
+      <div class="cat-grid">
+        <div class="form-group">
+          <label class="form-label">{{ t('admin.bookingModel') }}</label>
+          <select v-model="createForm.defaultBookingModel" class="form-control form-select">
+            <option value="PER_STAY">PER_STAY</option>
+            <option value="PER_SLOT">PER_SLOT</option>
+            <option value="NO_BOOKING">NO_BOOKING</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">{{ t('listing.priceUnit') }}</label>
+          <select v-model="createForm.defaultPriceUnit" class="form-control form-select">
+            <option v-for="u in priceUnits" :key="u" :value="u">{{ u }}</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group cat-wide">
+        <label class="form-label">{{ t('admin.allowedPriceUnits') }}</label>
+        <div class="admin-switch">
+          <button
+            v-for="u in priceUnits"
+            :key="u"
+            type="button"
+            class="admin-switch-btn"
+            :class="{ 'is-active': createForm.allowedPriceUnits.includes(u) }"
+            @click="toggleUnit(u)"
+          >{{ u }}</button>
+        </div>
+      </div>
+      <button class="btn btn-primary-flat btn-sm" @click="createCategory">{{ t('admin.create') }}</button>
     </div>
 
-    <table class="table table-responsive-cards mb-4">
-      <thead>
-        <tr>
-          <th>{{ t('admin.categoryName') }}</th>
-          <th>{{ t('admin.statusLabel') }}</th>
-          <th>{{ t('admin.listingCount') }}</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="c in tree" :key="c.id">
-          <td :data-label="t('admin.categoryName')">{{ '—'.repeat(c.level - 1) }} {{ c.name }}</td>
-          <td :data-label="t('admin.statusLabel')">
-            <span class="badge" :class="c.status === 'ACTIVE' ? 'badge-success' : 'badge-neutral'">{{ c.status }}</span>
-          </td>
-          <td :data-label="t('admin.listingCount')">{{ c.listingCount }}</td>
-          <td :data-label="''">
-            <button class="btn btn-tertiary btn-sm" @click="selectedAttrCategory = c; loadAttributes()">{{ t('admin.attributes') }}</button>
-            <button v-if="c.level > 1" class="btn btn-tertiary btn-sm" @click="promote(c.id)">{{ t('admin.promote') }}</button>
-            <button v-if="c.status === 'ACTIVE'" class="btn btn-tertiary btn-sm" @click="openMerge(c)">{{ t('admin.merge') }}</button>
-            <button v-if="c.status === 'ACTIVE'" class="btn btn-tertiary btn-sm" @click="archiveCategory(c)">{{ t('admin.archive') }}</button>
-            <button v-else class="btn btn-tertiary btn-sm" @click="approveCategory(c.id)">{{ t('admin.restore') }}</button>
-            <button class="btn btn-danger btn-sm" @click="deleteCategory(c)">{{ t('common.delete') }}</button>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+    <div class="admin-card admin-card-table">
+      <StateBlock
+        v-if="!tree?.length"
+        icon="categories"
+        :title="t('admin.empty.categories.title')"
+        :text="t('admin.empty.categories.text')"
+      />
+      <table v-else class="admin-table">
+        <thead>
+          <tr>
+            <th>{{ t('admin.categoryName') }}</th>
+            <th>{{ t('admin.statusLabel') }}</th>
+            <th>{{ t('admin.listingCount') }}</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="c in tree" :key="c.id">
+            <td :data-label="t('admin.categoryName')">
+              <span class="admin-cell-name cat-name" :style="{ marginLeft: `${(c.level - 1) * 18}px` }">{{ c.name }}</span>
+            </td>
+            <td :data-label="t('admin.statusLabel')">
+              <span class="admin-pill" :class="c.status === 'ACTIVE' ? 'admin-pill-success' : 'admin-pill-neutral'">
+                {{ t(`admin.categoryStatus.${c.status}`) }}
+              </span>
+            </td>
+            <td :data-label="t('admin.listingCount')">{{ c.listingCount }}</td>
+            <td class="admin-cell-actions">
+              <div class="admin-actions">
+                <button class="admin-action" @click="selectedAttrCategory = c; loadAttributes()">{{ t('admin.attributes') }}</button>
+                <button v-if="c.level > 1" class="admin-action" @click="promote(c.id)">{{ t('admin.promote') }}</button>
+                <button v-if="c.status === 'ACTIVE'" class="admin-action" @click="openMerge(c)">{{ t('admin.merge') }}</button>
+                <button v-if="c.status === 'ACTIVE'" class="admin-action" @click="archiveCategory(c)">{{ t('admin.archive') }}</button>
+                <button v-else class="admin-action" @click="approveCategory(c.id)">{{ t('admin.restore') }}</button>
+                <button class="admin-action admin-action-danger" @click="deleteCategory(c)">{{ t('common.delete') }}</button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
 
     <!-- T60 — "Otključaj svoju kategoriju" (Kategorije spec §8) parks these
          as DRAFT listings with pendingCategoryAssignment, but nothing ever
          surfaced them to an admin to actually resolve until now. -->
-    <h2 class="text-section-title mb-3">{{ t('admin.pendingCategoryListings') }}</h2>
-    <p v-if="!pendingCategoryListings?.length" class="text-muted mb-4">{{ t('admin.noItems') }}</p>
-    <div v-for="l in pendingCategoryListings" :key="l.id" class="card mb-3">
-      <div class="card-body">
-        <p class="text-body mb-1"><strong>{{ l.title }}</strong></p>
-        <p class="text-muted mb-1">{{ t('admin.proposedBy') }}: {{ l.user?.firstName }} {{ l.user?.lastName }} ({{ l.user?.email }})</p>
-        <p class="text-muted mb-1">{{ t('admin.bookingModel') }}: {{ l.bookingModel }} · {{ t('listing.priceUnit') }}: {{ l.priceUnit }}</p>
-        <p v-if="l.description" class="text-muted mb-2">{{ l.description }}</p>
-        <div class="d-flex reply-actions">
-          <select v-model="assignCategoryTarget[l.id]" class="form-control form-select">
-            <option value="">{{ t('admin.parentCategory') }}</option>
-            <option v-for="c in tree" :key="c.id" :value="c.id">{{ '—'.repeat(c.level - 1) }} {{ c.name }}</option>
-          </select>
-          <button
-            class="btn btn-primary-flat btn-sm"
-            :disabled="!assignCategoryTarget[l.id]"
-            @click="assignCategory(l.id)"
-          >{{ t('admin.assignCategory') }}</button>
+    <div class="admin-card">
+      <div class="admin-card-head">
+        <p class="admin-card-title">{{ t('admin.pendingCategoryListings') }}</p>
+      </div>
+
+      <StateBlock
+        v-if="!pendingCategoryListings?.length"
+        icon="categories"
+        :title="t('admin.empty.pendingCategory.title')"
+        :text="t('admin.empty.pendingCategory.text')"
+      />
+
+      <div v-else class="admin-card-body cat-list">
+        <div v-for="l in pendingCategoryListings" :key="l.id" class="cat-row">
+          <p class="admin-cell-name">{{ l.title }}</p>
+          <p class="admin-card-note">{{ t('admin.proposedBy') }}: {{ l.user?.firstName }} {{ l.user?.lastName }} ({{ l.user?.email }})</p>
+          <p class="admin-card-note">{{ t('admin.bookingModel') }}: {{ l.bookingModel }} · {{ t('listing.priceUnit') }}: {{ l.priceUnit }}</p>
+          <p v-if="l.description" class="cat-description">{{ l.description }}</p>
+          <div class="cat-row-actions">
+            <select v-model="assignCategoryTarget[l.id]" class="admin-field cat-assign" :aria-label="t('admin.parentCategory')">
+              <option value="">{{ t('admin.parentCategory') }}</option>
+              <option v-for="c in tree" :key="c.id" :value="c.id">{{ indentLabel(c) }}</option>
+            </select>
+            <button
+              class="btn btn-primary-flat btn-sm"
+              :disabled="!assignCategoryTarget[l.id]"
+              @click="assignCategory(l.id)"
+            >{{ t('admin.assignCategory') }}</button>
+          </div>
         </div>
       </div>
     </div>
 
-    <h2 class="text-section-title mb-3">{{ t('admin.proposedCategories') }}</h2>
-    <p v-if="!proposed?.length" class="text-muted mb-4">{{ t('admin.noItems') }}</p>
-    <div v-for="p in proposed" :key="p.id" class="card mb-3">
-      <div class="card-body">
-        <p class="text-body"><strong>{{ p.name }}</strong> <span class="text-muted">({{ p.parentName || '—' }})</span></p>
-        <p class="text-muted mb-2">{{ t('admin.proposedBy') }}: {{ p.proposedByUser?.firstName }} {{ p.proposedByUser?.lastName }} · {{ p.proposalCount }}×</p>
-        <div class="d-flex reply-actions">
-          <button class="btn btn-primary-flat btn-sm" @click="approveCategory(p.id)">{{ t('admin.approve') }}</button>
-          <button class="btn btn-danger btn-sm" @click="rejectCategory(p.id)">{{ t('admin.reject') }}</button>
+    <div class="admin-card">
+      <div class="admin-card-head">
+        <p class="admin-card-title">{{ t('admin.proposedCategories') }}</p>
+      </div>
+
+      <StateBlock
+        v-if="!proposed?.length"
+        icon="categories"
+        :title="t('admin.empty.proposed.title')"
+        :text="t('admin.empty.proposed.text')"
+      />
+
+      <div v-else class="admin-card-body cat-list">
+        <div v-for="p in proposed" :key="p.id" class="cat-row">
+          <p class="admin-cell-name">{{ p.name }} <span class="cat-parent">({{ p.parentName || '-' }})</span></p>
+          <p class="admin-card-note">
+            {{ t('admin.proposedBy') }}: {{ p.proposedByUser?.firstName }} {{ p.proposedByUser?.lastName }} · {{ p.proposalCount }}x
+          </p>
+          <div class="cat-row-actions">
+            <button class="btn btn-primary-flat btn-sm" @click="approveCategory(p.id)">{{ t('admin.approve') }}</button>
+            <button class="btn btn-danger btn-sm" @click="rejectCategory(p.id)">{{ t('admin.reject') }}</button>
+          </div>
         </div>
       </div>
     </div>
 
-    <div v-if="selectedAttrCategory" class="card mb-4">
-      <div class="card-body">
-        <h2 class="text-section-title mb-3">{{ selectedAttrCategory.name }} — {{ t('admin.attributes') }}</h2>
-        <table v-if="attributes.length" class="table table-responsive-cards mb-3">
-          <thead>
-            <tr>
-              <th>{{ t('listing.title') }}</th>
-              <th>{{ t('admin.ownAttribute') }}</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="a in attributes" :key="a.id">
-              <td :data-label="t('listing.title')">{{ a.name }} <span class="text-muted">({{ a.key }}, {{ a.type }})</span></td>
-              <td :data-label="t('admin.ownAttribute')">
-                <span class="badge" :class="a.categoryId === selectedAttrCategory.id ? 'badge-success' : 'badge-neutral'">
-                  {{ a.categoryId === selectedAttrCategory.id ? t('common.yes') : t('admin.inherited') }}
-                </span>
-              </td>
-              <td :data-label="''">
-                <button v-if="a.categoryId === selectedAttrCategory.id" class="btn btn-danger btn-sm" @click="deleteAttribute(a.id)">
-                  {{ t('common.delete') }}
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-
-        <h3 class="text-label mb-2">{{ t('admin.addAttribute') }}</h3>
-        <div class="row">
-          <div class="col-6 col-md-3">
-            <div class="form-group mb-2">
-              <label class="form-label">{{ t('admin.attrKey') }}</label>
-              <input v-model="attrForm.key" type="text" class="form-control" />
-            </div>
-          </div>
-          <div class="col-6 col-md-3">
-            <div class="form-group mb-2">
-              <label class="form-label">{{ t('admin.categoryName') }}</label>
-              <input v-model="attrForm.name" type="text" class="form-control" />
-            </div>
-          </div>
-          <div class="col-6 col-md-3">
-            <div class="form-group mb-2">
-              <label class="form-label">{{ t('admin.attrType') }}</label>
-              <select v-model="attrForm.type" class="form-control form-select">
-                <option v-for="ty in ['NUMBER', 'TEXT', 'LIST', 'MULTISELECT', 'BOOLEAN']" :key="ty" :value="ty">{{ ty }}</option>
-              </select>
-            </div>
-          </div>
-          <div class="col-6 col-md-3">
-            <div class="form-group mb-2">
-              <label class="form-label">{{ t('admin.attrUnit') }}</label>
-              <input v-model="attrForm.unit" type="text" class="form-control" />
-            </div>
-          </div>
-          <div class="col-12" v-if="['LIST', 'MULTISELECT'].includes(attrForm.type)">
-            <div class="form-group mb-2">
-              <label class="form-label">{{ t('admin.attrOptions') }}</label>
-              <input v-model="attrForm.optionsRaw" type="text" class="form-control" placeholder="wifi:Wi-Fi, parking:Parking" />
-            </div>
-          </div>
-          <div class="col-12">
-            <label class="form-label mr-2">
-              <input v-model="attrForm.required" type="checkbox" /> {{ t('admin.attrRequired') }}
-            </label>
-            <label class="form-label ml-3">
-              <input v-model="attrForm.isFilter" type="checkbox" /> {{ t('admin.attrIsFilter') }}
-            </label>
-          </div>
-        </div>
-        <button class="btn btn-primary-flat btn-sm mt-2" @click="upsertAttribute">{{ t('common.save') }}</button>
+    <div v-if="selectedAttrCategory" class="admin-card admin-card-table">
+      <div class="admin-card-head">
+        <p class="admin-card-title">{{ selectedAttrCategory.name }}: {{ t('admin.attributes') }}</p>
+        <button class="admin-action" @click="selectedAttrCategory = null">{{ t('common.close') }}</button>
       </div>
-    </div>
 
-    <div v-if="mergeTarget" class="modal-backdrop" @click.self="mergeTarget = null">
-      <div class="modal-panel card">
-        <div class="card-body">
-          <h3 class="text-section-title mb-3">{{ t('admin.merge') }}: {{ mergeTarget.name }}</h3>
-          <div class="form-group mb-3">
-            <label class="form-label">{{ t('admin.mergeInto') }}</label>
-            <select v-model="mergeInto" class="form-control form-select">
-              <option v-for="c in tree.filter((c) => c.id !== mergeTarget.id)" :key="c.id" :value="c.id">{{ c.name }}</option>
+      <StateBlock
+        v-if="!attributes.length"
+        icon="categories"
+        :title="t('admin.empty.attributes.title')"
+        :text="t('admin.empty.attributes.text')"
+      />
+
+      <table v-else class="admin-table">
+        <thead>
+          <tr>
+            <th>{{ t('listing.title') }}</th>
+            <th>{{ t('admin.ownAttribute') }}</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="a in attributes" :key="a.id">
+            <td :data-label="t('listing.title')">
+              <div class="admin-cell-pair">
+                <span class="admin-cell-name">{{ a.name }}</span>
+                <span class="admin-cell-sub">{{ a.key }}, {{ a.type }}</span>
+              </div>
+            </td>
+            <td :data-label="t('admin.ownAttribute')">
+              <span class="admin-pill" :class="a.categoryId === selectedAttrCategory.id ? 'admin-pill-success' : 'admin-pill-neutral'">
+                {{ a.categoryId === selectedAttrCategory.id ? t('common.yes') : t('admin.inherited') }}
+              </span>
+            </td>
+            <td class="admin-cell-actions">
+              <div class="admin-actions">
+                <button
+                  v-if="a.categoryId === selectedAttrCategory.id"
+                  class="admin-action admin-action-danger"
+                  @click="deleteAttribute(a.id)"
+                >{{ t('common.delete') }}</button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="admin-card-body cat-attr-form">
+        <p class="admin-card-title">{{ t('admin.addAttribute') }}</p>
+        <div class="cat-grid cat-grid-4">
+          <div class="form-group">
+            <label class="form-label">{{ t('admin.attrKey') }}</label>
+            <input v-model="attrForm.key" type="text" class="form-control" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">{{ t('admin.categoryName') }}</label>
+            <input v-model="attrForm.name" type="text" class="form-control" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">{{ t('admin.attrType') }}</label>
+            <select v-model="attrForm.type" class="form-control form-select">
+              <option v-for="ty in ['NUMBER', 'TEXT', 'LIST', 'MULTISELECT', 'BOOLEAN']" :key="ty" :value="ty">{{ ty }}</option>
             </select>
           </div>
-          <div class="d-flex reply-actions">
+          <div class="form-group">
+            <label class="form-label">{{ t('admin.attrUnit') }}</label>
+            <input v-model="attrForm.unit" type="text" class="form-control" />
+          </div>
+        </div>
+        <div v-if="['LIST', 'MULTISELECT'].includes(attrForm.type)" class="form-group cat-wide">
+          <label class="form-label">{{ t('admin.attrOptions') }}</label>
+          <input v-model="attrForm.optionsRaw" type="text" class="form-control" placeholder="wifi:Wi-Fi, parking:Parking" />
+        </div>
+        <div class="cat-checks">
+          <label class="admin-check-row">
+            <input v-model="attrForm.required" type="checkbox" class="admin-check" /> {{ t('admin.attrRequired') }}
+          </label>
+          <label class="admin-check-row">
+            <input v-model="attrForm.isFilter" type="checkbox" class="admin-check" /> {{ t('admin.attrIsFilter') }}
+          </label>
+        </div>
+        <button class="btn btn-primary-flat btn-sm" @click="upsertAttribute">{{ t('common.save') }}</button>
+      </div>
+    </div>
+
+    <div v-if="mergeTarget" class="admin-modal-backdrop" @click.self="mergeTarget = null">
+      <div class="admin-modal admin-card">
+        <div class="admin-card-body">
+          <p class="admin-card-title">{{ t('admin.merge') }}</p>
+          <p class="admin-card-note mb-3">{{ mergeTarget.name }}</p>
+          <div class="form-group mb-4">
+            <label class="form-label">{{ t('admin.mergeInto') }}</label>
+            <select v-model="mergeInto" class="form-control form-select">
+              <option v-for="c in mergeOptions" :key="c.id" :value="c.id">{{ c.name }}</option>
+            </select>
+          </div>
+          <div class="cat-row-actions">
             <button class="btn btn-danger btn-sm" @click="confirmMerge">{{ t('admin.merge') }}</button>
             <button class="btn btn-tertiary btn-sm" @click="mergeTarget = null">{{ t('common.cancel') }}</button>
           </div>
@@ -236,6 +281,14 @@ const { data: pendingCategoryListings, refresh: refreshPendingCategoryListings }
   () => api.get('/admin/listings/pending-category'),
 )
 
+// A child sits under its parent in a <select> too, where only spacing can
+// show the level.
+function indentLabel(c) {
+  return `${' '.repeat((c.level - 1) * 3)}${c.name}`
+}
+
+const mergeOptions = computed(() => (tree.value || []).filter((c) => c.id !== mergeTarget.value?.id))
+
 const assignCategoryTarget = reactive({})
 async function assignCategory(listingId) {
   const categoryId = assignCategoryTarget[listingId]
@@ -247,7 +300,7 @@ async function assignCategory(listingId) {
 
 const showCreate = ref(false)
 const createForm = reactive({
-  name: '', parentId: undefined, defaultBookingModel: 'PER_STAY', defaultPriceUnit: 'NIGHT', allowedPriceUnits: ['NIGHT'],
+  name: '', shortDescription: '', parentId: undefined, defaultBookingModel: 'PER_STAY', defaultPriceUnit: 'NIGHT', allowedPriceUnits: ['NIGHT'],
 })
 
 function toggleUnit(u) {
@@ -260,6 +313,7 @@ async function createCategory() {
   await api.post('/admin/categories', createForm)
   showCreate.value = false
   createForm.name = ''
+  createForm.shortDescription = ''
   await refreshTree()
 }
 
@@ -360,29 +414,109 @@ useSeoMeta({ title: t('admin.categories') })
 </script>
 
 <style lang="scss" scoped>
-.tag-options {
+.cat-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 18px;
+  padding: 22px 24px;
+  margin-bottom: 20px;
+}
+
+// Two fields to a line above 768, four on the attribute form above 992.
+.cat-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 18px;
+  width: 100%;
+}
+
+.cat-wide {
+  width: 100%;
+}
+
+@include respond-above(md) {
+  .cat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@include respond-above(lg) {
+  .cat-grid-4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+// The tree's depth, 18 a level, instead of a run of dashes in the cell.
+.cat-name {
+  display: inline-block;
+}
+
+.cat-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding-top: 0;
+}
+
+.cat-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 18px 0;
+  border-bottom: 1px solid $color-border;
+}
+
+.cat-row:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.cat-parent {
+  font-size: 13px;
+  font-weight: 300;
+  color: $color-text-muted;
+}
+
+.cat-description {
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 21px;
+  color: $color-text;
+  overflow-wrap: anywhere;
+}
+
+.cat-row-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-}
-
-.reply-actions {
-  gap: 8px;
-}
-
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
   align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  padding: 16px;
+  gap: 8px;
+  margin-top: 6px;
 }
 
-.modal-panel {
-  width: 100%;
-  max-width: 420px;
+.cat-assign {
+  width: 260px;
+  max-width: 100%;
+}
+
+.cat-attr-form {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 18px;
+  border-top: 1px solid $color-border;
+}
+
+.cat-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+@include mobile-only {
+  .cat-card {
+    padding: 18px 16px;
+  }
 }
 </style>

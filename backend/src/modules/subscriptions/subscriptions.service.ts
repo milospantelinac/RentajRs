@@ -11,7 +11,17 @@ import { PaymentProvider } from '../../common/payment/payment-provider.interface
 import { NestPayCheckoutService } from '../../common/payment/nestpay/nestpay-checkout.service';
 import { FiscalizationProvider } from '../../common/fiscalization/fiscalization-provider.interface';
 import { paraToRsd, rsdToPara } from '../../common/utils/money';
+import {
+  DAY_MS,
+  PACKAGE_ENDING_WITHOUT_RENEWAL,
+  RENEWABLE_SUBSCRIPTION_STATUSES,
+  addDays,
+  cycleLength,
+  isRunningPeriod,
+} from '../../common/utils/subscription-renewal';
 import { PurchaseSubscriptionDto, PurchaseFeaturedDto, AdjustPriceDto, InitCheckoutDto } from './dto/subscriptions.dto';
+
+type RenewalBlock = 'NOT_RENEWABLE' | 'NO_LISTINGS' | 'ALREADY_RENEWED';
 
 @Injectable()
 export class SubscriptionsService {
@@ -222,11 +232,16 @@ export class SubscriptionsService {
   async initCheckout(userId: string, dto: InitCheckoutDto) {
     const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: dto.listingId } });
     if (listing.userId !== userId) throw new ForbiddenException();
-    // ACTIVE is allowed too — this is also the paid path for upgrading an
-    // already-live listing to a bigger package (ADR-005); handleNestPaySuccess
-    // branches on the listing's status to tell a fresh publish from an upgrade.
+    // A renewal pays for the next period of a package the listing is already on;
+    // everything else is a first package or a move to Pro.
+    const renewed = dto.renewSubscriptionId ? await this.assertRenewable(userId, dto) : null;
+    if (renewed) return this.startCheckout(userId, dto, renewed.id);
+
+    // ACTIVE is allowed too: this is also the paid path for upgrading an
+    // already-live listing to Pro (ADR-005); handleNestPaySuccess branches on
+    // the listing's status to tell a fresh publish from an upgrade.
     if (!['DRAFT', 'REJECTED', 'ACTIVE'].includes(listing.status)) {
-      throw new BadRequestException('Listing is not eligible for a package purchase');
+      throw new BadRequestException(this.i18n.t('errors.LISTING_PACKAGE_PURCHASE_NOT_ALLOWED'));
     }
     // R126's email-verified gate ultimately lives in ListingsService.markPendingApproval
     // (the actual DRAFT/REJECTED -> PENDING_APPROVAL transition, also reached from admin
@@ -240,8 +255,14 @@ export class SubscriptionsService {
         throw new ForbiddenException(this.i18n.t('errors.EMAIL_NOT_VERIFIED'));
       }
     }
-    const pkg = await this.prisma.package.findUniqueOrThrow({ where: { id: dto.packageId } });
     await this.assertPackageCompatibleWithListing(listing.id, dto.packageId);
+    if (listing.status === 'ACTIVE') await this.assertUpgradeToPro(listing.subscriptionId, dto.packageId);
+    return this.startCheckout(userId, dto, null);
+  }
+
+  /** Saves the buyer's details, opens the AWAITING_PAYMENT subscription and builds NestPay's form. */
+  private async startCheckout(userId: string, dto: InitCheckoutDto, renewsSubscriptionId: string | null) {
+    const pkg = await this.prisma.package.findUniqueOrThrow({ where: { id: dto.packageId } });
     const price = dto.billingCycle === 'YEARLY' ? pkg.priceYearly : pkg.priceMonthly;
 
     // Save billing details to the profile too — the whole point of asking is
@@ -270,6 +291,7 @@ export class SubscriptionsService {
         status: 'AWAITING_PAYMENT',
         priceAtPurchase: price,
         pendingListingId: dto.listingId,
+        renewsSubscriptionId,
         termsAcceptedAt: new Date(), // dto.termsAccepted is already validated true (@IsIn([true]))
       },
     });
@@ -290,6 +312,208 @@ export class SubscriptionsService {
     });
 
     return { actionUrl, fields };
+  }
+
+  /**
+   * A live listing buys a package here only to move up to Pro (ADR-005). Buying
+   * its own package again started a second period at once and threw away the
+   * days left on the first, so the next period is bought as a renewal instead.
+   */
+  private async assertUpgradeToPro(currentSubscriptionId: string | null, packageId: string) {
+    const [pkg, current] = await Promise.all([
+      this.prisma.package.findUniqueOrThrow({ where: { id: packageId } }),
+      currentSubscriptionId
+        ? this.prisma.subscription.findUnique({ where: { id: currentSubscriptionId }, include: { package: true } })
+        : null,
+    ]);
+    if (pkg.key !== 'PRO' || current?.package.key === 'PRO') {
+      throw new BadRequestException(this.i18n.t('errors.SUBSCRIPTION_UPGRADE_PRO_ONLY'));
+    }
+  }
+
+  // -- Renewal ------------------------------------------------------------
+  // Packages never renew by themselves (see processSubscriptionExpiry); the owner
+  // pays for the next period of the same package. Bought while the package still
+  // runs, the new period waits as SCHEDULED and takes the listings over when the
+  // old one ends; bought after it ended, it starts at payment and the listings are
+  // back in search at once, without a new review (they were approved before, and
+  // edits to live listings aren't reviewed either). A Pro renewal carries every
+  // listing on the package.
+
+  /** What the renewal page shows: the package, the listings it carries and when the new period starts. */
+  async getRenewal(userId: string, subscriptionId: string) {
+    const subscription = await this.prisma.subscription.findUnique({
+      where: { id: subscriptionId },
+      include: {
+        package: true,
+        listings: {
+          where: { status: { not: 'DELETED' } },
+          orderBy: { createdAt: 'asc' },
+          select: { id: true, title: true, status: true, city: { select: { name: true } }, cityArea: { select: { name: true } } },
+        },
+      },
+    });
+    if (!subscription || subscription.userId !== userId) {
+      throw new NotFoundException(this.i18n.t('errors.SUBSCRIPTION_NOT_FOUND'));
+    }
+    const block = await this.getRenewalBlock(subscription);
+    const { package: pkg } = subscription;
+    return {
+      id: subscription.id,
+      status: subscription.status,
+      billingCycle: subscription.billingCycle,
+      expiresAt: subscription.expiresAt,
+      package: {
+        id: pkg.id,
+        key: pkg.key,
+        listingLimit: pkg.listingLimit,
+        priceMonthly: paraToRsd(pkg.priceMonthly),
+        priceYearly: paraToRsd(pkg.priceYearly),
+      },
+      listings: subscription.listings.map((listing) => ({
+        id: listing.id,
+        title: listing.title,
+        status: listing.status,
+        place: listing.cityArea?.name ?? listing.city?.name ?? null,
+      })),
+      renewable: !block,
+      reason: block,
+      // null: the new period starts when the payment goes through.
+      startsAt: isRunningPeriod(subscription) ? subscription.expiresAt : null,
+    };
+  }
+
+  private async getRenewalBlock(subscription: Subscription & { listings: { id: string }[] }): Promise<RenewalBlock | null> {
+    if (!RENEWABLE_SUBSCRIPTION_STATUSES.includes(subscription.status)) return 'NOT_RENEWABLE';
+    if (!subscription.listings.length) return 'NO_LISTINGS';
+    const scheduled = await this.prisma.subscription.count({
+      where: { renewsSubscriptionId: subscription.id, status: 'SCHEDULED' },
+    });
+    return scheduled ? 'ALREADY_RENEWED' : null;
+  }
+
+  private async assertRenewable(userId: string, dto: InitCheckoutDto) {
+    const subscription = await this.prisma.subscription.findUnique({
+      where: { id: dto.renewSubscriptionId },
+      include: { listings: { where: { status: { not: 'DELETED' } }, select: { id: true } } },
+    });
+    if (!subscription || subscription.userId !== userId) {
+      throw new NotFoundException(this.i18n.t('errors.SUBSCRIPTION_NOT_FOUND'));
+    }
+    const block = await this.getRenewalBlock(subscription);
+    if (block === 'ALREADY_RENEWED') throw new BadRequestException(this.i18n.t('errors.SUBSCRIPTION_ALREADY_RENEWED'));
+    if (block || !subscription.listings.some((listing) => listing.id === dto.listingId)) {
+      throw new BadRequestException(this.i18n.t('errors.SUBSCRIPTION_RENEWAL_NOT_ALLOWED'));
+    }
+    if (subscription.packageId !== dto.packageId) {
+      throw new BadRequestException(this.i18n.t('errors.SUBSCRIPTION_RENEWAL_SAME_PACKAGE'));
+    }
+    for (const listing of subscription.listings) {
+      await this.assertPackageCompatibleWithListing(listing.id, dto.packageId);
+    }
+    return subscription;
+  }
+
+  /** The last paid period in a chain of renewals, the one a new renewal continues. */
+  private async findRenewalTail(subscription: Subscription): Promise<Subscription> {
+    let tail = subscription;
+    for (let depth = 0; depth < 100; depth++) {
+      const next = await this.prisma.subscription.findFirst({
+        where: { renewsSubscriptionId: tail.id, status: 'SCHEDULED' },
+        orderBy: { startsAt: 'desc' },
+      });
+      if (!next) break;
+      tail = next;
+    }
+    return tail;
+  }
+
+  /** Right after a renewal is paid: queue it behind the running period, or start it and bring the listings back. */
+  private async completeRenewal(renewal: Subscription): Promise<'scheduled' | 'active'> {
+    const renewed = await this.prisma.subscription.findUniqueOrThrow({ where: { id: renewal.renewsSubscriptionId! } });
+    const days = cycleLength(renewal.billingCycle);
+    // Two checkouts paid for the same package line up one after the other.
+    const tail = await this.findRenewalTail(renewed);
+
+    if (isRunningPeriod(tail)) {
+      await this.prisma.subscription.update({
+        where: { id: renewal.id },
+        data: {
+          status: 'SCHEDULED',
+          startsAt: tail.expiresAt,
+          expiresAt: addDays(tail.expiresAt!, days),
+          renewsSubscriptionId: tail.id,
+          pendingListingId: null,
+        },
+      });
+      return 'scheduled';
+    }
+
+    const now = new Date();
+    await this.prisma.subscription.update({
+      where: { id: renewal.id },
+      data: { status: 'ACTIVE', startsAt: now, expiresAt: addDays(now, days), pendingListingId: null },
+    });
+    if (renewed.status === 'ACTIVE') {
+      // Past its end; the nightly sweep just hasn't reached it yet.
+      await this.prisma.subscription.update({ where: { id: renewed.id }, data: { status: 'EXPIRED' } });
+    }
+    await this.handOverListings(renewed.id, renewal.id, { reactivate: true });
+    return 'active';
+  }
+
+  /**
+   * Moves a package's listings onto the subscription that continues it. After a
+   * gap (reactivate) the expired ones are back in search, and days carried over
+   * from an earlier package that were already running are kept for later.
+   */
+  private async handOverListings(fromId: string, toId: string, { reactivate }: { reactivate: boolean }) {
+    const listings = await this.prisma.listing.findMany({
+      where: { subscriptionId: fromId, status: { not: 'DELETED' } },
+      select: { id: true, status: true, publishedAt: true },
+    });
+    for (const listing of listings) {
+      if (reactivate) await this.rebankRunningDays(listing.id);
+      const approvedBefore = !!listing.publishedAt;
+      await this.prisma.listing.update({
+        where: { id: listing.id },
+        data: {
+          subscriptionId: toId,
+          ...(reactivate && listing.status === 'EXPIRED' && approvedBefore ? { status: 'ACTIVE' } : {}),
+        },
+      });
+      if (reactivate && listing.status === 'EXPIRED' && !approvedBefore) {
+        // The sweep also expires listings still waiting for their first review;
+        // those go back to review rather than straight into search.
+        try {
+          await this.listings.markPendingApproval(listing.id, toId);
+        } catch (err) {
+          this.logger.warn(`Renewed listing ${listing.id} could not go back to review: ${(err as Error).message}`);
+        }
+      }
+    }
+    if (reactivate && listings.some((listing) => listing.status === 'EXPIRED')) {
+      await this.cache.delByPrefix('taxonomy:category:');
+    }
+  }
+
+  /**
+   * ADR-005: carried-over days are never lost. expireOverdueSubscriptions starts
+   * all of a listing's rows as one window; when a new period starts inside that
+   * window, what is left of it goes back to waiting for the new period to end.
+   */
+  private async rebankRunningDays(listingId: string) {
+    const now = new Date();
+    const running = await this.prisma.bankedDay.findMany({
+      where: { listingId, usedAt: null, validUntil: { not: null } },
+    });
+    if (!running.length) return;
+    await this.prisma.bankedDay.updateMany({ where: { id: { in: running.map((row) => row.id) } }, data: { usedAt: now } });
+    const until = Math.max(...running.map((row) => row.validUntil!.getTime()));
+    const left = Math.ceil((until - now.getTime()) / DAY_MS);
+    if (left > 0) {
+      await this.prisma.bankedDay.create({ data: { listingId, days: left, originPackageId: running[0].originPackageId } });
+    }
   }
 
   /** okUrl target — NestPay POSTs the payment result here after 3D authentication. */
@@ -320,7 +544,7 @@ export class SubscriptionsService {
           errorMessage: verification.errMsg || `ProcReturnCode ${verification.procReturnCode}`,
         },
       });
-      return `${frontendUrl}/oglasi/${listingId}/placanje-neuspesno`;
+      return `${frontendUrl}${paymentFailedPath(listingId, subscription.renewsSubscriptionId)}`;
     }
 
     await this.prisma.transaction.create({
@@ -335,8 +559,12 @@ export class SubscriptionsService {
     });
 
     const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: listingId } });
+    const isRenewal = !!subscription.renewsSubscriptionId;
     let redirectPath: string;
-    if (listing.status === 'ACTIVE') {
+    if (isRenewal) {
+      const outcome = await this.completeRenewal(subscription);
+      redirectPath = `/kontrolna-tabla/pretplate?renewed=${outcome}`;
+    } else if (listing.status === 'ACTIVE') {
       // ADR-005 upgrade path: the listing is already live, so there's no
       // moderation step to gate this on — bank whatever's left on the old
       // subscription, attach the new one, and start its clock immediately.
@@ -403,7 +631,10 @@ export class SubscriptionsService {
       },
     });
 
-    this.events.emit('subscription.purchased', { userId: subscription.userId, subscriptionId: subscription.id });
+    this.events.emit(isRenewal ? 'subscription.renewed' : 'subscription.purchased', {
+      userId: subscription.userId,
+      subscriptionId: subscription.id,
+    });
     return `${frontendUrl}${redirectPath}`;
   }
 
@@ -430,7 +661,9 @@ export class SubscriptionsService {
     });
     await this.prisma.subscription.delete({ where: { id: subscription.id } });
 
-    return listingId ? `${frontendUrl}/oglasi/${listingId}/placanje-neuspesno` : `${frontendUrl}/kontrolna-tabla/pretplate?payment=failed`;
+    return listingId
+      ? `${frontendUrl}${paymentFailedPath(listingId, subscription.renewsSubscriptionId)}`
+      : `${frontendUrl}/kontrolna-tabla/pretplate?payment=failed`;
   }
 
   private async bankRemainingDays(listingId: string, oldSubscription: Subscription & { package: { id: string } }) {
@@ -637,7 +870,13 @@ export class SubscriptionsService {
     const subscriptions = await this.prisma.subscription.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
-      include: { package: true, listings: { select: { id: true, title: true, slug: true } } },
+      include: {
+        package: true,
+        // A deleted listing keeps its subscriptionId but no longer takes a place on
+        // the package (attachToExistingSubscription doesn't count it), so the free
+        // Pro slot offers and Moje pretplate count the same listings the server does.
+        listings: { where: { status: { not: 'DELETED' } }, select: { id: true, title: true, slug: true } },
+      },
     });
     const listingIds = subscriptions.flatMap((s) => s.listings.map((l) => l.id));
     const bankedDays = listingIds.length
@@ -708,12 +947,16 @@ export class SubscriptionsService {
     await this.sendExpiringSoonReminders();
   }
 
-  /** Ch.22.4 "Pretplata ističe (-7, -3, -1)". */
+  /**
+   * Ch.22.4 "Pretplata ističe (-7, -3, -1)", for packages whose end would take a
+   * listing out of search: not once the next period is paid for, nor for a
+   * package no listing depends on any more.
+   */
   private async sendExpiringSoonReminders() {
     for (const daysLeft of [7, 3, 1]) {
       const target = addDays(new Date(), daysLeft);
       const subs = await this.prisma.subscription.findMany({
-        where: { status: 'ACTIVE', expiresAt: { gte: startOfDay(target), lt: endOfDay(target) } },
+        where: { ...PACKAGE_ENDING_WITHOUT_RENEWAL, expiresAt: { gte: startOfDay(target), lt: endOfDay(target) } },
       });
       for (const sub of subs) {
         this.events.emit('subscription.expiring_soon', { subscriptionId: sub.id, daysLeft });
@@ -731,9 +974,23 @@ export class SubscriptionsService {
   private async expireOverdueSubscriptions() {
     const overdue = await this.prisma.subscription.findMany({ where: { status: 'ACTIVE', expiresAt: { lt: new Date() } } });
     for (const sub of overdue) {
-      const listings = await this.prisma.listing.findMany({ where: { subscriptionId: sub.id } });
       await this.prisma.subscription.update({ where: { id: sub.id }, data: { status: 'EXPIRED' } });
 
+      // A renewal paid in advance takes the listings over without a gap; any
+      // carried-over days keep waiting for that period to end.
+      const renewal = await this.prisma.subscription.findFirst({
+        where: { renewsSubscriptionId: sub.id, status: 'SCHEDULED' },
+        orderBy: { startsAt: 'asc' },
+      });
+      if (renewal) {
+        await this.prisma.subscription.update({ where: { id: renewal.id }, data: { status: 'ACTIVE' } });
+        await this.handOverListings(sub.id, renewal.id, { reactivate: false });
+        continue;
+      }
+
+      // A deleted listing keeps its subscriptionId, and stays deleted.
+      const listings = await this.prisma.listing.findMany({ where: { subscriptionId: sub.id, status: { not: 'DELETED' } } });
+      const leftSearch: string[] = [];
       for (const listing of listings) {
         const unused = await this.prisma.bankedDay.findMany({ where: { listingId: listing.id, usedAt: null } });
         const totalDays = unused.reduce((sum, b) => sum + b.days, 0);
@@ -745,9 +1002,11 @@ export class SubscriptionsService {
           });
         } else {
           await this.prisma.listing.update({ where: { id: listing.id }, data: { status: 'EXPIRED' } });
+          if (listing.status === 'ACTIVE') leftSearch.push(listing.id);
         }
       }
-      this.events.emit('subscription.expired', { subscriptionId: sub.id });
+      // The email says the listing is no longer visible, so it only goes out when one really left search.
+      if (leftSearch.length) this.events.emit('subscription.expired', { subscriptionId: sub.id, listingIds: leftSearch });
     }
   }
 
@@ -763,7 +1022,8 @@ export class SubscriptionsService {
         where: { listingId: banked.listingId, usedAt: null, validUntil: { gt: new Date() } },
       });
       if (stillCovered === 0) {
-        await this.prisma.listing.update({ where: { id: banked.listingId }, data: { status: 'EXPIRED' } });
+        // Only a live listing goes offline; a deleted one stays deleted.
+        await this.prisma.listing.updateMany({ where: { id: banked.listingId, status: 'ACTIVE' }, data: { status: 'EXPIRED' } });
       }
     }
   }
@@ -802,8 +1062,10 @@ export class SubscriptionsService {
   }
 }
 
-function addDays(date: Date, days: number): Date {
-  return new Date(date.getTime() + days * 86_400_000);
+/** Where a declined payment lands; a renewal keeps its package in the "try again" link. */
+function paymentFailedPath(listingId: string, renewsSubscriptionId: string | null): string {
+  const path = `/oglasi/${listingId}/placanje-neuspesno`;
+  return renewsSubscriptionId ? `${path}?obnova=${renewsSubscriptionId}` : path;
 }
 function startOfDay(date: Date): Date {
   const d = new Date(date);

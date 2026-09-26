@@ -20,7 +20,11 @@ export default defineNuxtConfig({
       titleTemplate: '%s · Rentaj',
       htmlAttrs: { lang: 'sr-Latn-RS' },
       link: [
-        { rel: 'icon', type: 'image/png', href: '/favicon.png' },
+        // The "R" mark of the Figma logo (378:409), 48x48 on a clear background;
+        // public/ also holds favicon.ico (16/32/48) for clients that ask for it
+        // by name, and the 180x180 home screen icon on white for iOS.
+        { rel: 'icon', type: 'image/png', sizes: '48x48', href: '/favicon.png' },
+        { rel: 'apple-touch-icon', sizes: '180x180', href: '/apple-touch-icon.png' },
         { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
         { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' },
         {
@@ -117,6 +121,19 @@ export default defineNuxtConfig({
   },
 
   vite: {
+    server: {
+      // docker-compose sets CHOKIDAR_USEPOLLING for this container because
+      // Vite's native watcher never sees edits made on the Windows host
+      // through the bind mount. Vite doesn't read that variable on its own
+      // (it's a webpack/CRA convention), so without this the container keeps
+      // serving stale files — changed locale messages show up as raw keys
+      // — until someone restarts it by hand. Left off outside Docker so
+      // local dev keeps the cheaper native watcher.
+      watch:
+        process.env.CHOKIDAR_USEPOLLING === 'true'
+          ? { usePolling: true, interval: Number(process.env.CHOKIDAR_INTERVAL) || 300 }
+          : undefined,
+    },
     css: {
       preprocessorOptions: {
         scss: {

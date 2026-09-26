@@ -13,6 +13,7 @@ exports.CRITICAL_EMAIL_EVENTS = new Set([
     'booking_payment_reminder_half',
     'booking_payment_reminder_final',
     'booking_payment_confirmed',
+    'booking_payment_reported_owner',
     'subscription_invoice',
     'subscription_pro_forma',
     'booking_confirmed_cash',

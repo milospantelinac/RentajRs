@@ -153,6 +153,21 @@ exports.emailTemplates = [
         },
     },
     {
+        key: 'listing_category_assigned',
+        sr: {
+            subject: 'Kategorija za vaš oglas je otvorena',
+            heading: 'Oglas "{oglas}" sada ima svoju kategoriju',
+            bodyText: 'Otvorili smo kategoriju za vaš oglas. Nastavite sa unosom podataka i pošaljite oglas na odobrenje kada bude spreman.',
+            buttonLabel: 'Nastavi oglas',
+        },
+        en: {
+            subject: 'Your listing’s category is open',
+            heading: '"{oglas}" now has its category',
+            bodyText: 'We’ve opened a category for your listing. Carry on filling it in and send it for approval when it’s ready.',
+            buttonLabel: 'Continue listing',
+        },
+    },
+    {
         key: 'listing_edit_approved',
         sr: {
             subject: 'Izmene su objavljene',
@@ -217,13 +232,13 @@ exports.emailTemplates = [
         sr: {
             subject: 'Gost čeka odgovor — {oglas}',
             heading: 'Gost i dalje čeka odgovor',
-            bodyText: 'Prošlo je 6 časova otkako je stigao zahtev za "{oglas}", a još uvek niste odgovorili. Brz odgovor povećava šansu da rezervacija bude potvrđena.',
+            bodyText: 'Prošlo je 6 časova otkako je stigao zahtev za "{oglas}", a još uvek niste odgovorili. Brz odgovor povećava šansu da rezervacija bude potvrđena. Ako ne odgovorite do {rok}, zahtev ističe i termin se oslobađa.',
             buttonLabel: 'Odgovori',
         },
         en: {
             subject: 'Guest is waiting — {oglas}',
             heading: 'A guest is still waiting for a reply',
-            bodyText: 'It’s been 6 hours since a request came in for "{oglas}" and you haven’t responded yet. A quick reply improves your odds of confirming the booking.',
+            bodyText: 'It’s been 6 hours since a request came in for "{oglas}" and you haven’t responded yet. A quick reply improves your odds of confirming the booking. If you don’t respond by {rok}, the request expires and the term is released.',
             buttonLabel: 'Reply',
         },
     },
@@ -303,6 +318,36 @@ exports.emailTemplates = [
         },
     },
     {
+        key: 'booking_request_expired_guest',
+        sr: {
+            subject: 'Zahtev je istekao',
+            heading: 'Zahtev za "{oglas}" je istekao',
+            bodyText: 'Vlasnik nije odgovorio na vaš zahtev na vreme, pa je zahtev istekao i termin je ponovo slobodan. Možete poslati novi zahtev.',
+            buttonLabel: 'Pogledaj oglas',
+        },
+        en: {
+            subject: 'Your request has expired',
+            heading: 'Your request for "{oglas}" has expired',
+            bodyText: 'The owner did not answer your request in time, so it has expired and the term is free again. You can send a new request.',
+            buttonLabel: 'View listing',
+        },
+    },
+    {
+        key: 'booking_request_expired_owner',
+        sr: {
+            subject: 'Zahtev je istekao bez odgovora',
+            heading: 'Zahtev za "{oglas}" je istekao',
+            bodyText: 'Niste odgovorili na zahtev na vreme, pa je istekao i termin je ponovo slobodan. Gost je obavešten.',
+            buttonLabel: 'Pogledaj zahtev',
+        },
+        en: {
+            subject: 'A request expired unanswered',
+            heading: 'The request for "{oglas}" has expired',
+            bodyText: 'You did not answer the request in time, so it has expired and the term is free again. The guest has been told.',
+            buttonLabel: 'View request',
+        },
+    },
+    {
         key: 'booking_confirmed_cash',
         sr: {
             subject: 'Rezervacija je potvrđena',
@@ -329,6 +374,21 @@ exports.emailTemplates = [
             subject: 'Booking confirmed',
             heading: 'Payment confirmed',
             bodyText: 'The owner confirmed that payment for "{oglas}" was received. The booking is now confirmed.',
+            buttonLabel: 'View booking',
+        },
+    },
+    {
+        key: 'booking_payment_reported_owner',
+        sr: {
+            subject: 'Gost je prijavio uplatu',
+            heading: 'Gost kaže da je uplatio za "{oglas}"',
+            bodyText: 'Gost je prijavio da je poslao uplatu od {iznos}, a prijem još niste potvrdili. Proverite račun i potvrdite prijem na stranici rezervacije. Dok administrator proverava prijavu, rezervacija ne ističe.',
+            buttonLabel: 'Pogledaj rezervaciju',
+        },
+        en: {
+            subject: 'The guest reported a payment',
+            heading: 'The guest says they paid for "{oglas}"',
+            bodyText: 'The guest reported sending a payment of {iznos}, but you have not confirmed it yet. Check your account and confirm the payment on the booking page. The booking does not expire while an administrator reviews the report.',
             buttonLabel: 'View booking',
         },
     },
@@ -397,29 +457,29 @@ exports.emailTemplates = [
         sr: {
             subject: 'Kako je prošlo? Ocenite {oglas}',
             heading: 'Kako je prošlo?',
-            bodyText: 'Vaša rezervacija za "{oglas}" je realizovana. Ostavite recenziju — pomaže drugima da odaberu, a vidljiva je tek kada obe strane ocene.',
+            bodyText: 'Vaša rezervacija za "{oglas}" je realizovana. Ostavite recenziju: pomaže drugim gostima da izaberu i odmah se objavljuje na oglasu. Možete je ostaviti do {rok}',
             buttonLabel: 'Ostavi recenziju',
         },
         en: {
             subject: 'How did it go? Rate {oglas}',
             heading: 'How did it go?',
-            bodyText: 'Your booking for "{oglas}" is complete. Leave a review — it helps others choose, and only becomes visible once both sides have reviewed.',
+            bodyText: 'Your booking for "{oglas}" is complete. Leave a review: it helps other guests choose and is published on the listing right away. You can leave it until {rok}.',
             buttonLabel: 'Leave a review',
         },
     },
     {
         key: 'reviews_published',
         sr: {
-            subject: 'Ocene su objavljene',
-            heading: 'Recenzije za "{oglas}" su objavljene',
-            bodyText: 'Obe strane su ostavile recenziju, pa su sada obe javno vidljive.',
-            buttonLabel: 'Pogledaj recenzije',
+            subject: 'Nova recenzija za {oglas}',
+            heading: 'Gost je ostavio recenziju',
+            bodyText: 'Gost je ocenio vaš oglas "{oglas}". Recenzija je objavljena na oglasu.',
+            buttonLabel: 'Pogledaj recenziju',
         },
         en: {
-            subject: 'Reviews are published',
-            heading: 'Reviews for "{oglas}" are published',
-            bodyText: 'Both sides have left a review, so both are now publicly visible.',
-            buttonLabel: 'View reviews',
+            subject: 'New review for {oglas}',
+            heading: 'A guest left a review',
+            bodyText: 'A guest reviewed your listing "{oglas}". The review is published on the listing.',
+            buttonLabel: 'View review',
         },
     },
     {
@@ -427,13 +487,13 @@ exports.emailTemplates = [
         sr: {
             subject: 'Podsećamo: ocenite {oglas}',
             heading: 'Podsetnik za ocenu',
-            bodyText: 'Prošlo je 7 dana od realizacije rezervacije za "{oglas}", a još niste ostavili recenziju. Ostavite je pre nego što prođe 14 dana.',
+            bodyText: 'Prošlo je 7 dana od realizacije rezervacije za "{oglas}", a još niste ostavili recenziju. Možete je ostaviti do {rok}',
             buttonLabel: 'Ostavi recenziju',
         },
         en: {
             subject: 'Reminder: rate {oglas}',
             heading: 'Review reminder',
-            bodyText: 'It’s been 7 days since your booking for "{oglas}" was completed and you haven’t left a review yet. Leave one before the 14-day window closes.',
+            bodyText: 'It’s been 7 days since your booking for "{oglas}" was completed and you haven’t left a review yet. You can leave one until {rok}.',
             buttonLabel: 'Leave a review',
         },
     },
@@ -465,6 +525,21 @@ exports.emailTemplates = [
             heading: '{paket} is now active',
             bodyText: 'Your subscription is active. Charged: {iznos} on {datum}. Manage your listings and packages from the dashboard.',
             buttonLabel: 'Open dashboard',
+        },
+    },
+    {
+        key: 'subscription_renewed',
+        sr: {
+            subject: 'Paket je obnovljen',
+            heading: 'Paket {paket} je obnovljen',
+            bodyText: 'Naplaćeno: {iznos}, dana {datum}. Novi period paketa traje od {od} do {do}',
+            buttonLabel: 'Pogledaj pretplate',
+        },
+        en: {
+            subject: 'Your package is renewed',
+            heading: '{paket} is renewed',
+            bodyText: "Charged: {iznos} on {datum}. The package's new period runs from {od} to {do}.",
+            buttonLabel: 'View subscriptions',
         },
     },
     {

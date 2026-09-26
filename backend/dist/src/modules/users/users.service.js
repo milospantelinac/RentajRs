@@ -49,7 +49,9 @@ const nestjs_i18n_1 = require("nestjs-i18n");
 const crypto = __importStar(require("crypto"));
 const prisma_service_1 = require("../../prisma/prisma.service");
 const uploads_service_1 = require("../../common/uploads/uploads.service");
+const taxonomy_service_1 = require("../taxonomy/taxonomy.service");
 const money_1 = require("../../common/utils/money");
+const listing_card_1 = require("../../common/utils/listing-card");
 const DELETION_TOKEN_TTL_MS = 60 * 60_000;
 const ME_SELECT = {
     id: true,
@@ -72,11 +74,12 @@ const ME_SELECT = {
     createdAt: true,
 };
 let UsersService = class UsersService {
-    constructor(prisma, uploads, i18n, events) {
+    constructor(prisma, uploads, i18n, events, taxonomy) {
         this.prisma = prisma;
         this.uploads = uploads;
         this.i18n = i18n;
         this.events = events;
+        this.taxonomy = taxonomy;
     }
     async isOwner(userId) {
         const count = await this.prisma.listing.count({ where: { userId, status: 'ACTIVE' } });
@@ -144,7 +147,7 @@ let UsersService = class UsersService {
                     },
                 },
                 reviewsReceived: {
-                    where: { published: true, direction: 'GUEST_TO_OWNER', hiddenByAdmin: false },
+                    where: { hiddenByAdmin: false },
                     orderBy: { publishedAt: 'desc' },
                     take: 20,
                     select: {
@@ -171,28 +174,24 @@ let UsersService = class UsersService {
     }
     async listFavorites(userId) {
         const favorites = await this.prisma.favorite.findMany({
-            where: { userId },
+            where: { userId, listing: { status: 'ACTIVE' } },
             orderBy: { addedAt: 'desc' },
-            include: {
-                listing: {
-                    include: { photos: { where: { isCover: true }, take: 1 }, city: true, category: { select: { slug: true } } },
-                },
-            },
+            select: { listingId: true, addedAt: true, listing: { include: listing_card_1.LISTING_CARD_INCLUDE } },
         });
+        const { categoryNames, optionNames } = await (0, listing_card_1.loadListingCardNames)(this.taxonomy, favorites.map((f) => f.listing));
         return favorites.map((f) => ({
-            ...f,
-            priceAtAdd: (0, money_1.paraToRsd)(f.priceAtAdd),
-            priceDropped: f.listing.price < f.priceAtAdd,
-            listing: {
-                ...f.listing,
-                price: (0, money_1.paraToRsd)(f.listing.price),
-                weekendPrice: (0, money_1.paraToRsd)(f.listing.weekendPrice),
-                pricePerGuest: (0, money_1.paraToRsd)(f.listing.pricePerGuest),
-            },
+            listingId: f.listingId,
+            addedAt: f.addedAt,
+            listing: (0, listing_card_1.serializeListingCard)(f.listing, categoryNames, optionNames),
         }));
     }
     async addFavorite(userId, listingId) {
-        const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: listingId } });
+        const listing = await this.prisma.listing.findFirst({
+            where: { id: listingId, status: 'ACTIVE' },
+            select: { price: true },
+        });
+        if (!listing)
+            throw new common_1.NotFoundException(this.i18n.t('errors.LISTING_NOT_FOUND'));
         const favorite = await this.prisma.favorite.upsert({
             where: { userId_listingId: { userId, listingId } },
             update: {},
@@ -272,7 +271,7 @@ let UsersService = class UsersService {
             }
             await tx.listing.updateMany({ where: { userId }, data: { status: 'DELETED', deletedAt: new Date() } });
             await tx.subscription.updateMany({
-                where: { userId, status: { in: ['ACTIVE', 'PENDING_ACTIVATION'] } },
+                where: { userId, status: { in: ['ACTIVE', 'PENDING_ACTIVATION', 'SCHEDULED'] } },
                 data: { status: 'CANCELLED', cancelledAt: new Date() },
             });
             await tx.session.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } });
@@ -309,7 +308,8 @@ exports.UsersService = UsersService = __decorate([
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
         uploads_service_1.UploadsService,
         nestjs_i18n_1.I18nService,
-        event_emitter_1.EventEmitter2])
+        event_emitter_1.EventEmitter2,
+        taxonomy_service_1.TaxonomyService])
 ], UsersService);
 function slugify(input) {
     const map = {

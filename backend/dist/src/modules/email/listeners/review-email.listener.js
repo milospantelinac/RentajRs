@@ -15,6 +15,8 @@ const config_1 = require("@nestjs/config");
 const event_emitter_1 = require("@nestjs/event-emitter");
 const prisma_service_1 = require("../../../prisma/prisma.service");
 const email_service_1 = require("../../../common/email/email.service");
+const review_window_1 = require("../../../common/utils/review-window");
+const format_1 = require("../format");
 let ReviewEmailListener = class ReviewEmailListener {
     constructor(prisma, email, config) {
         this.prisma = prisma;
@@ -24,36 +26,37 @@ let ReviewEmailListener = class ReviewEmailListener {
     async onBookingCompleted({ bookingId }) {
         const booking = await this.prisma.booking.findUnique({
             where: { id: bookingId },
-            include: { listing: { select: { title: true } }, guest: true, owner: true },
+            include: { listing: { select: { title: true } }, guest: true },
         });
         if (!booking)
             return;
-        await Promise.all([booking.guest, booking.owner].map((recipient) => this.email.send({
+        const reviewBy = await (0, review_window_1.readReviewDeadline)(this.prisma, booking);
+        await this.email.send({
             key: 'review_invitation',
-            to: recipient.email,
-            language: recipient.language,
-            userId: recipient.id,
-            context: { oglas: booking.listing.title },
+            to: booking.guest.email,
+            language: booking.guest.language,
+            userId: booking.guest.id,
+            context: { oglas: booking.listing.title, rok: (0, format_1.formatDate)(reviewBy, (0, format_1.localeFor)(booking.guest.language)) },
             buttonUrl: `${this.frontendUrl}/rezervacije/${booking.id}`,
-        })));
-    }
-    async onPublished({ reviewIds }) {
-        const reviews = await this.prisma.review.findMany({
-            where: { id: { in: reviewIds } },
-            include: { listing: { select: { title: true, slug: true } }, author: true, recipient: true },
         });
-        for (const review of reviews) {
-            await this.email.send({
-                key: 'reviews_published',
-                to: review.recipient.email,
-                language: review.recipient.language,
-                userId: review.recipient.id,
-                context: { oglas: review.listing.title },
-                buttonUrl: `${this.frontendUrl}/oglasi/${review.listing.slug}`,
-            });
-        }
     }
-    async onReminder({ bookingId, userId }) {
+    async onPublished({ reviewId }) {
+        const review = await this.prisma.review.findUnique({
+            where: { id: reviewId },
+            include: { listing: { select: { title: true, slug: true } }, recipient: true },
+        });
+        if (!review)
+            return;
+        await this.email.send({
+            key: 'reviews_published',
+            to: review.recipient.email,
+            language: review.recipient.language,
+            userId: review.recipient.id,
+            context: { oglas: review.listing.title },
+            buttonUrl: `${this.frontendUrl}/oglasi/${review.listing.slug}`,
+        });
+    }
+    async onReminder({ bookingId, userId, reviewBy }) {
         const [booking, user] = await Promise.all([
             this.prisma.booking.findUnique({ where: { id: bookingId }, include: { listing: { select: { title: true } } } }),
             this.prisma.user.findUnique({ where: { id: userId } }),
@@ -65,7 +68,7 @@ let ReviewEmailListener = class ReviewEmailListener {
             to: user.email,
             language: user.language,
             userId,
-            context: { oglas: booking.listing.title },
+            context: { oglas: booking.listing.title, rok: (0, format_1.formatDate)(reviewBy, (0, format_1.localeFor)(user.language)) },
             buttonUrl: `${this.frontendUrl}/rezervacije/${bookingId}`,
         });
     }

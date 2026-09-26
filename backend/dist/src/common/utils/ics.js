@@ -1,7 +1,30 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.isIcsCalendar = isIcsCalendar;
+exports.normalizeIcalUrl = normalizeIcalUrl;
+exports.icalSourceName = icalSourceName;
 exports.parseIcs = parseIcs;
 exports.buildIcsCalendar = buildIcsCalendar;
+function isIcsCalendar(text) {
+    return text.replace(/^﻿/, '').trimStart().toUpperCase().startsWith('BEGIN:VCALENDAR');
+}
+function normalizeIcalUrl(url) {
+    return url.trim().replace(/^webcal:\/\//i, 'https://');
+}
+const ICAL_PLATFORM_NAMES = [
+    [/(^|\.)airbnb(\.com?)?\.[a-z]{2,3}$/, 'Airbnb'],
+    [/(^|\.)booking\.com$/, 'Booking.com'],
+    [/(^|\.)google\.com$/, 'Google Calendar'],
+    [/(^|\.)(vrbo|homeaway)(\.com?)?\.[a-z]{2,3}$/, 'Vrbo'],
+    [/(^|\.)expedia(\.com?)?\.[a-z]{2,3}$/, 'Expedia'],
+    [/(^|\.)tripadvisor(\.com?)?\.[a-z]{2,3}$/, 'Tripadvisor'],
+    [/(^|\.)(outlook|live|office365)\.com$/, 'Outlook'],
+    [/(^|\.)icloud\.com$/, 'iCloud'],
+];
+function icalSourceName(url) {
+    const host = new URL(url).hostname.toLowerCase().replace(/^www\./, '');
+    return ICAL_PLATFORM_NAMES.find(([pattern]) => pattern.test(host))?.[1] ?? host;
+}
 function parseIcs(icsText) {
     const events = [];
     const lines = unfoldLines(icsText);

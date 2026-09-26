@@ -20,6 +20,7 @@ const bookings_service_1 = require("./bookings.service");
 const create_booking_request_dto_1 = require("./dto/create-booking-request.dto");
 const booking_actions_dto_1 = require("./dto/booking-actions.dto");
 const current_user_decorator_1 = require("../../common/decorators/current-user.decorator");
+const public_decorator_1 = require("../../common/decorators/public.decorator");
 let BookingsController = class BookingsController {
     constructor(bookingsService) {
         this.bookingsService = bookingsService;
@@ -75,6 +76,7 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], BookingsController.prototype, "create", null);
 __decorate([
+    (0, public_decorator_1.Public)(),
     (0, common_1.Post)('listings/:id/bookings/quote'),
     __param(0, (0, common_1.Param)('id')),
     __param(1, (0, common_1.Body)()),
@@ -86,7 +88,7 @@ __decorate([
     (0, common_1.Get)('bookings/mine'),
     __param(0, (0, current_user_decorator_1.CurrentUser)('id')),
     __param(1, (0, common_1.Query)('role')),
-    __param(2, (0, common_1.Query)('status')),
+    __param(2, (0, common_1.Query)('status', new common_1.ParseEnumPipe(client_1.BookingStatus, { optional: true }))),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, String, String]),
     __metadata("design:returntype", void 0)

@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Param,
+  ParseUUIDPipe,
   Post,
   UploadedFile,
   UseInterceptors,
@@ -29,12 +30,12 @@ export class MessagingController {
   }
 
   @Get(':id')
-  get(@CurrentUser('id') userId: string, @Param('id') id: string) {
+  get(@CurrentUser('id') userId: string, @Param('id', ParseUUIDPipe) id: string) {
     return this.messagingService.getConversation(userId, id);
   }
 
   @Post(':id/messages')
-  reply(@CurrentUser('id') userId: string, @Param('id') id: string, @Body() dto: SendMessageDto) {
+  reply(@CurrentUser('id') userId: string, @Param('id', ParseUUIDPipe) id: string, @Body() dto: SendMessageDto) {
     return this.messagingService.sendMessage(userId, id, dto.content);
   }
 
@@ -42,14 +43,14 @@ export class MessagingController {
   @UseInterceptors(FileInterceptor('file'))
   addAttachment(
     @CurrentUser('id') userId: string,
-    @Param('messageId') messageId: string,
-    @UploadedFile() file: Express.Multer.File,
+    @Param('messageId', ParseUUIDPipe) messageId: string,
+    @UploadedFile() file: Express.Multer.File | undefined,
   ) {
     return this.messagingService.addAttachment(userId, messageId, file);
   }
 
   @Post(':id/read')
-  markRead(@CurrentUser('id') userId: string, @Param('id') id: string) {
+  markRead(@CurrentUser('id') userId: string, @Param('id', ParseUUIDPipe) id: string) {
     return this.messagingService.markRead(userId, id);
   }
 }

@@ -15,6 +15,7 @@ const class_transformer_1 = require("class-transformer");
 const undefined_if_blank_transform_1 = require("../../../common/validators/undefined-if-blank.transform");
 const class_validator_1 = require("class-validator");
 const client_1 = require("@prisma/client");
+const YOUTUBE_URL = /^(?:https?:\/\/)?(?:(?:www|m)\.)?(?:youtube\.com\/(?:watch\?(?:[^#\s]*&)?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{11})(?:[?&#/]\S*)?$/i;
 class MandatoryFeeDto {
 }
 __decorate([
@@ -42,17 +43,17 @@ __decorate([
     __metadata("design:type", String)
 ], UpdateListingDto.prototype, "slotSubmode", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)(),
+    (0, swagger_1.ApiPropertyOptional)({ maxLength: 70 }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
-    (0, class_validator_1.MaxLength)(200),
+    (0, class_validator_1.MaxLength)(70),
     __metadata("design:type", String)
 ], UpdateListingDto.prototype, "title", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)(),
+    (0, swagger_1.ApiPropertyOptional)({ maxLength: 1200 }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
-    (0, class_validator_1.MaxLength)(5000),
+    (0, class_validator_1.MaxLength)(1200),
     __metadata("design:type", String)
 ], UpdateListingDto.prototype, "description", void 0);
 __decorate([
@@ -63,10 +64,11 @@ __decorate([
     __metadata("design:type", Array)
 ], UpdateListingDto.prototype, "keywords", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)(),
+    (0, swagger_1.ApiPropertyOptional)({ nullable: true }),
     (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsUrl)(),
-    __metadata("design:type", String)
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.Matches)(YOUTUBE_URL, { message: 'validation.VIDEO_URL_YOUTUBE' }),
+    __metadata("design:type", Object)
 ], UpdateListingDto.prototype, "videoUrl", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ enum: client_1.PriceUnit }),

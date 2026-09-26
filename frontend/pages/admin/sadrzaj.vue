@@ -1,121 +1,139 @@
 <template>
   <div>
-    <h2 class="text-section-title mb-3">{{ t('admin.content') }}</h2>
+    <DashboardPageHeader :title="t('admin.content')" :subtitle="t('admin.subtitle.content')" />
 
-    <div class="content-tabs mb-4">
-      <button
-        class="btn btn-sm"
-        :class="tab === 'pages' ? 'btn-primary-flat' : 'btn-tertiary'"
-        @click="tab = 'pages'"
-      >{{ t('admin.staticPages') }}</button>
-      <button
-        class="btn btn-sm"
-        :class="tab === 'faq' ? 'btn-primary-flat' : 'btn-tertiary'"
-        @click="tab = 'faq'"
-      >{{ t('admin.faqManagement') }}</button>
-      <button
-        class="btn btn-sm"
-        :class="tab === 'video' ? 'btn-primary-flat' : 'btn-tertiary'"
-        @click="tab = 'video'"
-      >{{ t('admin.homepageVideo') }}</button>
+    <div class="admin-switch mb-4">
+      <button class="admin-switch-btn" :class="{ 'is-active': tab === 'pages' }" @click="tab = 'pages'">
+        {{ t('admin.staticPages') }}
+      </button>
+      <button class="admin-switch-btn" :class="{ 'is-active': tab === 'faq' }" @click="tab = 'faq'">
+        {{ t('admin.faqManagement') }}
+      </button>
+      <button class="admin-switch-btn" :class="{ 'is-active': tab === 'video' }" @click="tab = 'video'">
+        {{ t('admin.homepageVideo') }}
+      </button>
     </div>
 
     <!-- Static pages (Rich Text Editor) -->
     <section v-if="tab === 'pages'">
-      <div v-for="slug in PAGE_SLUGS" :key="slug" class="card mb-4">
-        <div class="card-body">
-          <div class="d-flex justify-content-between align-items-center mb-3">
-            <p class="text-body mb-0"><strong>{{ t(`legalPages.${SLUG_TITLE_KEY[slug]}`) }}</strong></p>
-            <div class="form-row-inline">
-              <button
-                class="btn btn-sm"
-                :class="activeLang[slug] !== 'EN' ? 'btn-primary-flat' : 'btn-tertiary'"
-                @click="activeLang[slug] = 'SR'"
-              >SR</button>
-              <button
-                class="btn btn-sm"
-                :class="activeLang[slug] === 'EN' ? 'btn-primary-flat' : 'btn-tertiary'"
-                @click="activeLang[slug] = 'EN'"
-              >EN</button>
-            </div>
+      <div v-for="slug in PAGE_SLUGS" :key="slug" class="admin-card content-card">
+        <div class="content-head">
+          <p class="admin-card-title">{{ t(`legalPages.${SLUG_TITLE_KEY[slug]}`) }}</p>
+          <div class="admin-switch admin-switch-sm">
+            <button
+              class="admin-switch-btn"
+              :class="{ 'is-active': activeLang[slug] !== 'EN' }"
+              @click="activeLang[slug] = 'SR'"
+            >SR</button>
+            <button
+              class="admin-switch-btn"
+              :class="{ 'is-active': activeLang[slug] === 'EN' }"
+              @click="activeLang[slug] = 'EN'"
+            >EN</button>
           </div>
-
-          <template v-if="pageForms[slug] && pageForms[slug][activeLang[slug] || 'SR']">
-            <div class="form-group mb-2">
-              <label class="form-label">{{ t('admin.pageTitle') }}</label>
-              <input v-model="pageForms[slug][activeLang[slug] || 'SR'].title" type="text" class="form-control" />
-            </div>
-            <div class="form-group mb-2">
-              <label class="form-label">{{ t('admin.pageBody') }}</label>
-              <RichTextEditor v-model="pageForms[slug][activeLang[slug] || 'SR'].bodyHtml" />
-            </div>
-            <label class="form-row-inline mb-2">
-              <input v-model="pageForms[slug][activeLang[slug] || 'SR'].published" type="checkbox" class="form-checkbox" />
-              {{ t('admin.pagePublished') }}
-            </label>
-            <p v-if="savedPage[slug + (activeLang[slug] || 'SR')]" class="text-success mb-2">{{ t('dashboard.changesSaved') }}</p>
-            <button class="btn btn-primary-flat btn-sm" @click="savePage(slug, activeLang[slug] || 'SR')">{{ t('common.save') }}</button>
-          </template>
         </div>
+
+        <template v-if="pageForms[slug] && pageForms[slug][activeLang[slug] || 'SR']">
+          <div class="form-group">
+            <label class="form-label">{{ t('admin.pageTitle') }}</label>
+            <input v-model="pageForms[slug][activeLang[slug] || 'SR'].title" type="text" class="form-control" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">{{ t('admin.pageBody') }}</label>
+            <RichTextEditor v-model="pageForms[slug][activeLang[slug] || 'SR'].bodyHtml" />
+          </div>
+          <label class="admin-check-row">
+            <input v-model="pageForms[slug][activeLang[slug] || 'SR'].published" type="checkbox" class="admin-check" />
+            {{ t('admin.pagePublished') }}
+          </label>
+          <div class="content-actions">
+            <button class="btn btn-primary-flat btn-sm" @click="savePage(slug, activeLang[slug] || 'SR')">{{ t('common.save') }}</button>
+            <p v-if="savedPage[slug + (activeLang[slug] || 'SR')]" class="form-success">{{ t('dashboard.changesSaved') }}</p>
+          </div>
+        </template>
       </div>
     </section>
 
     <!-- FAQ (plain text) -->
     <section v-else-if="tab === 'faq'">
-      <div class="form-row-inline mb-3">
-        <button
-          class="btn btn-sm"
-          :class="faqLang !== 'EN' ? 'btn-primary-flat' : 'btn-tertiary'"
-          @click="faqLang = 'SR'"
-        >SR</button>
-        <button
-          class="btn btn-sm"
-          :class="faqLang === 'EN' ? 'btn-primary-flat' : 'btn-tertiary'"
-          @click="faqLang = 'EN'"
-        >EN</button>
+      <div class="admin-switch admin-switch-sm mb-4">
+        <button class="admin-switch-btn" :class="{ 'is-active': faqLang !== 'EN' }" @click="faqLang = 'SR'">SR</button>
+        <button class="admin-switch-btn" :class="{ 'is-active': faqLang === 'EN' }" @click="faqLang = 'EN'">EN</button>
       </div>
 
-      <div v-for="(item, idx) in faqsByLang" :key="item.id" class="card mb-3">
-        <div class="card-body">
-          <div class="form-group mb-2">
+      <StateBlock
+        v-if="!faqsByLang.length"
+        card
+        icon="content"
+        :title="t('admin.empty.faq.title')"
+        :text="t('admin.empty.faq.text')"
+      >
+        <button type="button" class="state-block-action" @click="addFaq">{{ t('admin.addFaqItem') }}</button>
+      </StateBlock>
+
+      <template v-else>
+        <div v-for="(item, idx) in faqsByLang" :key="item.id" class="admin-card content-card">
+          <div class="form-group">
             <label class="form-label">{{ t('admin.faqQuestion') }}</label>
             <input v-model="item.question" type="text" class="form-control" />
           </div>
-          <div class="form-group mb-2">
+          <div class="form-group">
             <label class="form-label">{{ t('admin.faqAnswer') }}</label>
             <textarea v-model="item.answer" class="form-control" rows="3"></textarea>
           </div>
-          <label class="form-row-inline mb-2">
-            <input v-model="item.published" type="checkbox" class="form-checkbox" />
+          <label class="admin-check-row">
+            <input v-model="item.published" type="checkbox" class="admin-check" />
             {{ t('admin.pagePublished') }}
           </label>
-          <div class="form-row-inline">
+          <div class="content-actions">
             <button class="btn btn-primary-flat btn-sm" @click="saveFaq(item)">{{ t('common.save') }}</button>
-            <button class="btn btn-tertiary btn-sm" :disabled="idx === 0" @click="reorderFaq(item, -1)">↑ {{ t('admin.moveUp') }}</button>
-            <button class="btn btn-tertiary btn-sm" :disabled="idx === faqsByLang.length - 1" @click="reorderFaq(item, 1)">↓ {{ t('admin.moveDown') }}</button>
-            <button class="btn btn-danger btn-sm" @click="removeFaq(item)">{{ t('admin.deleteFaqItem') }}</button>
+            <div class="admin-actions content-row-actions">
+              <button class="admin-action" :disabled="idx === 0" @click="reorderFaq(item, -1)">↑ {{ t('admin.moveUp') }}</button>
+              <button class="admin-action" :disabled="idx === faqsByLang.length - 1" @click="reorderFaq(item, 1)">↓ {{ t('admin.moveDown') }}</button>
+              <button class="admin-action admin-action-danger" @click="removeFaq(item)">{{ t('admin.deleteFaqItem') }}</button>
+            </div>
+            <p v-if="savedFaq[item.id]" class="form-success">{{ t('dashboard.changesSaved') }}</p>
           </div>
-          <p v-if="savedFaq[item.id]" class="text-success mt-2 mb-0">{{ t('dashboard.changesSaved') }}</p>
         </div>
-      </div>
+      </template>
 
-      <button class="btn btn-tertiary btn-sm" @click="addFaq">+ {{ t('admin.addFaqItem') }}</button>
+      <button v-if="faqsByLang.length" class="btn btn-tertiary btn-sm mt-4" @click="addFaq">+ {{ t('admin.addFaqItem') }}</button>
     </section>
 
     <!-- Homepage video -->
     <section v-else>
-      <div class="card">
-        <div class="card-body">
-          <p class="text-muted mb-3">{{ t('admin.homepageVideoHint') }}</p>
-          <div class="form-group mb-3">
-            <label class="form-label">{{ t('admin.videoUrl') }}</label>
-            <input v-model="videoUrlForm" type="url" class="form-control" placeholder="https://www.youtube.com/watch?v=..." />
-          </div>
-          <p v-if="savedVideo" class="text-success mb-2">{{ t('dashboard.changesSaved') }}</p>
-          <div class="form-row-inline">
-            <button class="btn btn-primary-flat btn-sm" @click="saveVideoUrl">{{ t('common.save') }}</button>
-            <button class="btn btn-tertiary btn-sm" :disabled="!videoUrlForm" @click="clearVideoUrl">{{ t('admin.clearVideoUrl') }}</button>
-          </div>
+      <div class="admin-card content-card">
+        <p class="admin-card-note">{{ t('admin.homepageVideoHint') }}</p>
+
+        <div class="form-group">
+          <label class="form-label">{{ t('admin.videoUrl') }}</label>
+          <input v-model="videoUrlForm" type="url" class="form-control" placeholder="https://www.youtube.com/watch?v=..." />
+        </div>
+        <div class="content-actions">
+          <button class="btn btn-primary-flat btn-sm" @click="saveVideoUrl">{{ t('common.save') }}</button>
+          <button class="btn btn-tertiary btn-sm" :disabled="!videoUrlForm" @click="clearVideoUrl">{{ t('admin.clearVideoUrl') }}</button>
+          <p v-if="savedVideo" class="form-success">{{ t('dashboard.changesSaved') }}</p>
+        </div>
+      </div>
+
+      <div class="admin-card content-card">
+        <div>
+          <p class="admin-card-title">{{ t('admin.videoThumbnail') }}</p>
+          <p class="admin-card-note">{{ t('admin.videoThumbnailHint') }}</p>
+        </div>
+
+        <img v-if="thumbnailUrl" :src="thumbnailUrl" alt="" class="video-thumb-preview" />
+
+        <p v-if="thumbnailError" class="form-error">{{ thumbnailError }}</p>
+
+        <div class="content-actions">
+          <label class="btn btn-tertiary btn-sm">
+            {{ uploadingThumbnail ? t('common.loading') : t('admin.videoThumbnailUpload') }}
+            <input type="file" accept="image/*" class="visually-hidden" :disabled="uploadingThumbnail" @change="uploadThumbnail" />
+          </label>
+          <button v-if="thumbnailUrl" class="admin-action admin-action-danger" :disabled="uploadingThumbnail" @click="removeThumbnail">
+            {{ t('common.delete') }}
+          </button>
         </div>
       </div>
     </section>
@@ -224,19 +242,100 @@ function clearVideoUrl() {
   saveVideoUrl()
 }
 
+// -- Homepage video poster --------------------------------------------------
+// Stored as the homepage_video_thumbnail setting; the upload endpoint writes
+// the setting itself, so this screen only needs to hold the resulting URL.
+const thumbSetting = (settings.value || []).find((s) => s.key === 'homepage_video_thumbnail')
+const thumbnailUrl = ref(typeof thumbSetting?.value === 'string' ? thumbSetting.value : '')
+const uploadingThumbnail = ref(false)
+const thumbnailError = ref('')
+
+async function uploadThumbnail(event) {
+  const file = event.target.files?.[0]
+  event.target.value = ''
+  if (!file) return
+
+  thumbnailError.value = ''
+  uploadingThumbnail.value = true
+  try {
+    const body = new FormData()
+    body.append('file', file)
+    const res = await api.post('/admin/homepage-video-thumbnail', body)
+    thumbnailUrl.value = res.thumbnailUrl || ''
+  } catch (e) {
+    thumbnailError.value = extractErrorMessage(e, t('auth.genericError'))
+  } finally {
+    uploadingThumbnail.value = false
+  }
+}
+
+async function removeThumbnail() {
+  thumbnailError.value = ''
+  uploadingThumbnail.value = true
+  try {
+    await api.delete('/admin/homepage-video-thumbnail')
+    thumbnailUrl.value = ''
+  } catch (e) {
+    thumbnailError.value = extractErrorMessage(e, t('auth.genericError'))
+  } finally {
+    uploadingThumbnail.value = false
+  }
+}
+
 useSeoMeta({ title: t('admin.content') })
 </script>
 
 <style lang="scss" scoped>
-.content-tabs {
+// The dashboard's content card (Dizajn 38): 22/24 of padding, 18 between the
+// fields inside.
+.content-card {
   display: flex;
-  gap: 8px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 18px;
+  padding: 22px 24px;
 }
 
-.form-row-inline {
+.content-card > .form-group,
+.content-card > .admin-card-note,
+.content-card > .video-thumb-preview {
+  width: 100%;
+}
+
+.content-head {
   display: flex;
-  align-items: center;
-  gap: 8px;
   flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+
+.content-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+}
+
+.content-row-actions {
+  gap: 16px;
+}
+
+// Same 1293:653 crop the homepage frame uses, so the admin sees exactly how
+// the poster will sit behind the play button.
+.video-thumb-preview {
+  display: block;
+  width: 100%;
+  max-width: 420px;
+  aspect-ratio: 1293 / 653;
+  object-fit: cover;
+  border-radius: $radius-card;
+}
+
+@include mobile-only {
+  .content-card {
+    padding: 18px 16px;
+  }
 }
 </style>

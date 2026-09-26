@@ -4,8 +4,10 @@ import { I18nService } from 'nestjs-i18n';
 import * as crypto from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { UploadsService } from '../../common/uploads/uploads.service';
+import { TaxonomyService } from '../taxonomy/taxonomy.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { paraToRsd } from '../../common/utils/money';
+import { LISTING_CARD_INCLUDE, loadListingCardNames, serializeListingCard } from '../../common/utils/listing-card';
 
 const DELETION_TOKEN_TTL_MS = 60 * 60_000; // 1h — matches the password-reset token lifetime
 
@@ -37,6 +39,7 @@ export class UsersService {
     private uploads: UploadsService,
     private i18n: I18nService,
     private events: EventEmitter2,
+    private taxonomy: TaxonomyService,
   ) {}
 
   /** R13: "owner" is never stored — it's whether the user has >=1 ACTIVE listing. Single source of truth — see AuthService/DashboardService. */
@@ -95,7 +98,7 @@ export class UsersService {
     return candidate;
   }
 
-  /** Public owner profile — §13.3: never exposes contact info or reviews the owner wrote about guests. */
+  /** Public owner profile (§13.3): never exposes contact info. Its reviews are the guests' reviews of the owner's listings. */
   async getPublicProfile(slug: string) {
     const user = await this.prisma.user.findUnique({
       where: { profileSlug: slug },
@@ -122,7 +125,7 @@ export class UsersService {
           },
         },
         reviewsReceived: {
-          where: { published: true, direction: 'GUEST_TO_OWNER', hiddenByAdmin: false },
+          where: { hiddenByAdmin: false },
           orderBy: { publishedAt: 'desc' },
           take: 20,
           select: {
@@ -151,35 +154,40 @@ export class UsersService {
 
   // -- Favorites ---------------------------------------------------------
 
+  /**
+   * Dizajn 36: the saved page shows each listing as the very card search
+   * shows (common/utils/listing-card.ts), so a guest never receives the
+   * address, the iCal export token or anything else the public page keeps
+   * back. Only live listings are listed, since only they have a page to open;
+   * an expired, rejected or deleted one keeps its row and shows again if the
+   * listing comes back. The price-drop email and bell entry still read
+   * priceAtAdd (sendPriceDropNotifications).
+   */
   async listFavorites(userId: string) {
     const favorites = await this.prisma.favorite.findMany({
-      where: { userId },
+      where: { userId, listing: { status: 'ACTIVE' } },
       orderBy: { addedAt: 'desc' },
-      include: {
-        listing: {
-          include: { photos: { where: { isCover: true }, take: 1 }, city: true, category: { select: { slug: true } } },
-        },
-      },
+      select: { listingId: true, addedAt: true, listing: { include: LISTING_CARD_INCLUDE } },
     });
-    // Price-drop signal (Ch.10 "Ako stigne" item) — compare today's price to the price when saved.
-    // Prisma's BigInt (para) fields must be converted before this crosses into JSON — see money.ts.
-    // weekendPrice/pricePerGuest are BigInt too (like price) — left unconverted in the ...f.listing
-    // spread below, they crashed JSON.stringify on any listing that had either set.
+    const { categoryNames, optionNames } = await loadListingCardNames(
+      this.taxonomy,
+      favorites.map((f) => f.listing),
+    );
     return favorites.map((f) => ({
-      ...f,
-      priceAtAdd: paraToRsd(f.priceAtAdd),
-      priceDropped: f.listing.price < f.priceAtAdd,
-      listing: {
-        ...f.listing,
-        price: paraToRsd(f.listing.price),
-        weekendPrice: paraToRsd(f.listing.weekendPrice),
-        pricePerGuest: paraToRsd(f.listing.pricePerGuest),
-      },
+      listingId: f.listingId,
+      addedAt: f.addedAt,
+      listing: serializeListingCard(f.listing, categoryNames, optionNames),
     }));
   }
 
   async addFavorite(userId: string, listingId: string) {
-    const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: listingId } });
+    // Only a live listing has a page with a heart on it, so anything else is
+    // reported as missing instead of being saved out of sight (Dizajn 36).
+    const listing = await this.prisma.listing.findFirst({
+      where: { id: listingId, status: 'ACTIVE' },
+      select: { price: true },
+    });
+    if (!listing) throw new NotFoundException(this.i18n.t('errors.LISTING_NOT_FOUND'));
     const favorite = await this.prisma.favorite.upsert({
       where: { userId_listingId: { userId, listingId } },
       update: {},
@@ -279,7 +287,7 @@ export class UsersService {
       }
       await tx.listing.updateMany({ where: { userId }, data: { status: 'DELETED', deletedAt: new Date() } });
       await tx.subscription.updateMany({
-        where: { userId, status: { in: ['ACTIVE', 'PENDING_ACTIVATION'] } },
+        where: { userId, status: { in: ['ACTIVE', 'PENDING_ACTIVATION', 'SCHEDULED'] } },
         data: { status: 'CANCELLED', cancelledAt: new Date() },
       });
       await tx.session.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } });

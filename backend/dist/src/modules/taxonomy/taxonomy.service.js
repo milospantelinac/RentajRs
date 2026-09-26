@@ -17,6 +17,7 @@ const client_1 = require("@prisma/client");
 const prisma_service_1 = require("../../prisma/prisma.service");
 const cache_service_1 = require("../../common/cache/cache.service");
 const CACHE_TTL = 60 * 30;
+const TREE_CACHE_KEY = 'taxonomy:tree:v2';
 const FUZZY_THRESHOLD = 0.35;
 exports.FALLBACK_CATEGORY_SLUG = 'ostalo';
 let TaxonomyService = class TaxonomyService {
@@ -27,12 +28,22 @@ let TaxonomyService = class TaxonomyService {
         this.events = events;
     }
     async getCategoryTree() {
-        return this.cache.getOrSet('taxonomy:tree', CACHE_TTL, async () => {
+        return this.cache.getOrSet(TREE_CACHE_KEY, CACHE_TTL, async () => {
             const categories = await this.prisma.category.findMany({
                 where: { status: 'ACTIVE', slug: { not: exports.FALLBACK_CATEGORY_SLUG } },
                 orderBy: { displayOrder: 'asc' },
             });
-            const names = await this.getTranslationMap('CATEGORY', categories.map((c) => c.id));
+            const categoryIds = categories.map((c) => c.id);
+            const [names, shortDescriptions] = await Promise.all([
+                this.getTranslationMap('CATEGORY', categoryIds),
+                this.getTranslationMap('CATEGORY', categoryIds, 'shortDescription'),
+            ]);
+            const counts = await this.prisma.listing.groupBy({
+                by: ['categoryId'],
+                where: { status: 'ACTIVE' },
+                _count: { _all: true },
+            });
+            const directCount = new Map(counts.map((row) => [row.categoryId, row._count._all]));
             const byParent = new Map();
             for (const cat of categories) {
                 const key = cat.parentId ?? 'root';
@@ -40,19 +51,24 @@ let TaxonomyService = class TaxonomyService {
                     byParent.set(key, []);
                 byParent.get(key).push(cat);
             }
-            const toNode = (cat) => ({
-                id: cat.id,
-                slug: cat.slug,
-                icon: cat.icon,
-                name: names.get(cat.id) ?? cat.slug,
-                listingCount: cat.listingCount,
-                children: (byParent.get(cat.id) ?? []).map(toNode),
-            });
+            const toNode = (cat) => {
+                const children = (byParent.get(cat.id) ?? []).map(toNode);
+                const listingCount = (directCount.get(cat.id) ?? 0) + children.reduce((sum, child) => sum + child.listingCount, 0);
+                return {
+                    id: cat.id,
+                    slug: cat.slug,
+                    icon: cat.icon,
+                    name: names.get(cat.id) ?? cat.slug,
+                    shortDescription: shortDescriptions.get(cat.id) ?? null,
+                    listingCount,
+                    children,
+                };
+            };
             return (byParent.get('root') ?? []).map(toNode);
         });
     }
     async getCategoryBySlug(slug) {
-        const cached = await this.cache.get(`taxonomy:category:${slug}`);
+        const cached = await this.cache.get(`taxonomy:category:v2:${slug}`);
         if (cached)
             return cached;
         const category = await this.prisma.category.findUnique({ where: { slug } });
@@ -71,11 +87,11 @@ let TaxonomyService = class TaxonomyService {
         const childNames = await this.getTranslationMap('CATEGORY', childCategories.map((c) => c.id));
         const children = childCategories.map((c) => ({ id: c.id, slug: c.slug, name: childNames.get(c.id) ?? c.slug }));
         const result = { ...category, name: name ?? category.slug, description, attributes, children };
-        await this.cache.set(`taxonomy:category:${slug}`, result, CACHE_TTL);
+        await this.cache.set(`taxonomy:category:v2:${slug}`, result, CACHE_TTL);
         return result;
     }
     async resolveAttributesForCategory(categoryId) {
-        return this.cache.getOrSet(`taxonomy:attributes:${categoryId}`, CACHE_TTL, async () => {
+        return this.cache.getOrSet(`taxonomy:attributes:v2:${categoryId}`, CACHE_TTL, async () => {
             const chain = [];
             let current = await this.prisma.category.findUnique({ where: { id: categoryId }, select: { id: true, parentId: true } });
             while (current) {
@@ -89,7 +105,7 @@ let TaxonomyService = class TaxonomyService {
             }
             const attributes = await this.prisma.categoryAttribute.findMany({
                 where: { categoryId: { in: chain } },
-                include: { options: true },
+                include: { options: { orderBy: { displayOrder: 'asc' } } },
                 orderBy: [{ categoryId: 'asc' }, { displayOrder: 'asc' }],
             });
             attributes.sort((a, b) => chain.indexOf(a.categoryId) - chain.indexOf(b.categoryId));
@@ -189,6 +205,9 @@ let TaxonomyService = class TaxonomyService {
     async getCategoryNames(categoryIds, language = client_1.Language.SR) {
         return this.getTranslationMap('CATEGORY', categoryIds, 'name', language);
     }
+    async getOptionNames(optionIds, language = client_1.Language.SR) {
+        return this.getTranslationMap('OPTION', optionIds, 'name', language);
+    }
     async adminGetCategoryTree() {
         const categories = await this.prisma.category.findMany({ orderBy: [{ level: 'asc' }, { displayOrder: 'asc' }] });
         const names = await this.getTranslationMap('CATEGORY', categories.map((c) => c.id));
@@ -234,6 +253,8 @@ let TaxonomyService = class TaxonomyService {
         await this.setTranslation('CATEGORY', category.id, 'name', dto.name);
         if (dto.description)
             await this.setTranslation('CATEGORY', category.id, 'description', dto.description);
+        if (dto.shortDescription)
+            await this.setTranslation('CATEGORY', category.id, 'shortDescription', dto.shortDescription);
         await this.invalidateTreeCache();
         return category;
     }
@@ -255,6 +276,8 @@ let TaxonomyService = class TaxonomyService {
             await this.setTranslation('CATEGORY', id, 'name', dto.name);
         if (dto.description)
             await this.setTranslation('CATEGORY', id, 'description', dto.description);
+        if (dto.shortDescription)
+            await this.setTranslation('CATEGORY', id, 'shortDescription', dto.shortDescription);
         await this.invalidateTreeCache(id);
         return this.prisma.category.findUnique({ where: { id } });
     }
@@ -415,7 +438,7 @@ let TaxonomyService = class TaxonomyService {
         return candidate;
     }
     async invalidateTreeCache(categoryId) {
-        await this.cache.del('taxonomy:tree');
+        await this.cache.del(TREE_CACHE_KEY);
         await this.cache.delByPrefix('taxonomy:category:');
         await this.cache.delByPrefix('taxonomy:attributes:');
     }

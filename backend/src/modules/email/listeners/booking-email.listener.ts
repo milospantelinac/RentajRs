@@ -5,6 +5,7 @@ import * as QRCode from 'qrcode';
 import { Booking, Listing, User } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { EmailService } from '../../../common/email/email.service';
+import { getRequestExpiresAt, readRequestResponseHours } from '../../../common/utils/request-expiry';
 import { formatRsd, formatDateTime, localeFor } from '../format';
 
 type FullBooking = Booking & { listing: Listing; guest: User; owner: User };
@@ -60,14 +61,41 @@ export class BookingEmailListener {
   async onUnopenedReminder({ bookingId }: { bookingId: string }) {
     const b = await this.load(bookingId);
     if (!b) return;
+    // Dizajn 41: the owner learns when the request would expire unanswered.
+    const expiresAt = getRequestExpiresAt(b, await readRequestResponseHours(this.prisma));
     await this.email.send({
       key: 'booking_request_unopened_reminder',
       to: b.owner.email,
       language: b.owner.language,
       userId: b.owner.id,
-      context: { oglas: b.listing.title },
+      context: { oglas: b.listing.title, rok: formatDateTime(expiresAt, localeFor(b.owner.language)) },
       buttonUrl: this.bookingUrl(b.id),
     });
+  }
+
+  // Dizajn 41: the guest can ask for another term, the owner sees the request closed.
+  @OnEvent('booking.request_expired')
+  async onRequestExpired({ bookingId }: { bookingId: string }) {
+    const b = await this.load(bookingId);
+    if (!b) return;
+    await Promise.all([
+      this.email.send({
+        key: 'booking_request_expired_guest',
+        to: b.guest.email,
+        language: b.guest.language,
+        userId: b.guest.id,
+        context: { oglas: b.listing.title },
+        buttonUrl: `${this.frontendUrl}/oglasi/${b.listing.slug}`,
+      }),
+      this.email.send({
+        key: 'booking_request_expired_owner',
+        to: b.owner.email,
+        language: b.owner.language,
+        userId: b.owner.id,
+        context: { oglas: b.listing.title },
+        buttonUrl: this.bookingUrl(b.id),
+      }),
+    ]);
   }
 
   @OnEvent('booking.rejected')
@@ -151,6 +179,22 @@ export class BookingEmailListener {
       language: b.guest.language,
       userId: b.guest.id,
       context: { oglas: b.listing.title, iznos: formatRsd(b.amountDue), rok: formatDateTime(b.paymentDeadline, localeFor(b.guest.language)) },
+      buttonUrl: this.bookingUrl(b.id),
+    });
+  }
+
+  // T94: the admins get their own mail (AdminEmailListener); the owner is the
+  // one who can settle it by confirming the payment.
+  @OnEvent('booking.payment_disputed')
+  async onPaymentReported({ bookingId }: { bookingId: string }) {
+    const b = await this.load(bookingId);
+    if (!b) return;
+    await this.email.send({
+      key: 'booking_payment_reported_owner',
+      to: b.owner.email,
+      language: b.owner.language,
+      userId: b.owner.id,
+      context: { oglas: b.listing.title, iznos: formatRsd(b.amountDue) },
       buttonUrl: this.bookingUrl(b.id),
     });
   }

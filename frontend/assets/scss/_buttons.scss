@@ -1,10 +1,16 @@
 @use 'tokens' as *;
 
-// Button component rules straight from Ch.18.4:
-// primary = full pill + gradient + white text
-// secondary = 8px radius, dark background
-// tertiary = 8px radius, border only
-// danger = red border + text, NEVER a full red background
+// Button system — Dizajn 6:
+// primary   = flat #0957DF fill, white text, 12px radius
+// secondary = white fill, #E4EBF2 border, dark text, 12px radius
+// text      = no fill, no border, blue text
+// circle-sm = 30x30, white fill, #E4EBF2 border (card "detaljnije" arrow)
+// danger    = red border + text, NEVER a full red background
+// None of these carry a shadow — Dizajn 1 reserves shadows for cards/tables/panels.
+//
+// R149's marketing-gradient-vs-flat split is superseded by this ticket: the
+// brand gradient survives only as a small accent (e.g. the header's CTA
+// icon), never as a button fill, on marketing surfaces or anywhere else.
 
 .btn {
   display: inline-flex;
@@ -13,7 +19,7 @@
   gap: 8px;
   font-family: $font-family-base;
   font-size: $font-size-body;
-  font-weight: 600;
+  font-weight: $font-weight-card-title; // Medium
   border: 1px solid transparent;
   cursor: pointer;
   transition:
@@ -37,24 +43,14 @@
   font-size: $font-size-muted;
 }
 
-.btn-primary {
-  border-radius: $radius-pill;
-  background: $gradient-marketing;
-  color: $color-surface;
-}
-
-.btn-primary:hover:not(:disabled) {
-  filter: brightness(1.05);
-}
-
-// Marketing surfaces get the gradient; everywhere else (dashboard, admin)
-// the primary action is a flat, calmer fill — R149.
+.btn-primary,
 .btn-primary-flat {
-  border-radius: $radius-pill;
+  border-radius: $radius-button;
   background: $color-primary;
   color: $color-surface;
 }
 
+.btn-primary:hover:not(:disabled),
 .btn-primary-flat:hover:not(:disabled) {
   background: $color-dark;
 }
@@ -69,9 +65,11 @@
   opacity: 0.9;
 }
 
+// Dizajn 6 "sekundarno" — explicit white fill (not transparent), so it reads
+// as a filled button on any background, not just the page's own white.
 .btn-tertiary {
   border-radius: $radius-button;
-  background: transparent;
+  background: $color-surface;
   border-color: $color-border;
   color: $color-text;
 }
@@ -79,6 +77,19 @@
 .btn-tertiary:hover:not(:disabled) {
   border-color: $color-primary;
   color: $color-primary;
+}
+
+// Dizajn 6 "tekstualno" — no fill, no border, blue text only.
+.btn-text {
+  border-radius: $radius-button;
+  background: transparent;
+  color: $color-primary;
+  padding: 0 4px;
+  min-height: auto;
+}
+
+.btn-text:hover:not(:disabled) {
+  text-decoration: underline;
 }
 
 .btn-danger {
@@ -89,7 +100,7 @@
 }
 
 .btn-danger:hover:not(:disabled) {
-  background: rgba(229, 72, 77, 0.06);
+  background: rgba(209, 41, 61, 0.06);
 }
 
 .btn-icon {
@@ -98,6 +109,18 @@
   min-height: $touch-target-min;
   border-radius: $radius-pill;
   background: transparent;
+  border-color: $color-border;
+  color: $color-text;
+}
+
+// Dizajn 6 "malo kružno" — the card's "detaljnije" arrow button.
+.btn-circle-sm {
+  padding: 0;
+  width: 30px;
+  height: 30px;
+  min-height: 0;
+  border-radius: $radius-pill;
+  background: $color-surface;
   border-color: $color-border;
   color: $color-text;
 }

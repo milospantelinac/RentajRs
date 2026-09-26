@@ -27,6 +27,9 @@ let ReviewsController = class ReviewsController {
     create(userId, dto) {
         return this.reviewsService.createReview(userId, dto);
     }
+    update(userId, id, dto) {
+        return this.reviewsService.updateReview(userId, id, dto);
+    }
     reply(userId, id, dto) {
         return this.reviewsService.replyToReview(userId, id, dto);
     }
@@ -52,6 +55,15 @@ __decorate([
     __metadata("design:paramtypes", [String, reviews_dto_1.CreateReviewDto]),
     __metadata("design:returntype", void 0)
 ], ReviewsController.prototype, "create", null);
+__decorate([
+    (0, common_1.Patch)('reviews/:id'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)('id')),
+    __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, reviews_dto_1.UpdateReviewDto]),
+    __metadata("design:returntype", void 0)
+], ReviewsController.prototype, "update", null);
 __decorate([
     (0, common_1.Post)('reviews/:id/reply'),
     __param(0, (0, current_user_decorator_1.CurrentUser)('id')),
@@ -79,7 +91,7 @@ __decorate([
 __decorate([
     (0, common_1.Get)('bookings/:id/reviews'),
     __param(0, (0, current_user_decorator_1.CurrentUser)('id')),
-    __param(1, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, String]),
     __metadata("design:returntype", void 0)

@@ -6,7 +6,7 @@
         <h1 class="text-page-title mb-1">{{ t('listing.contactOwner') }}</h1>
         <p class="text-muted mb-4">
           {{ t('listing.messageAboutListing') }} <strong>{{ listing.title }}</strong> —
-          {{ listing.user?.firstName }} {{ listing.user?.lastName }}
+          {{ ownerName }}
         </p>
         <div class="card">
           <div class="card-body">
@@ -38,15 +38,26 @@ if (listing.value && !listing.value.canMessage) {
   await navigateTo(`/oglasi/${listing.value.slug}`)
 }
 
+// "Marko P.", as the listing's page names the owner; the full name comes with
+// a confirmed booking (T80).
+const ownerName = computed(() => {
+  const owner = listing.value?.owner
+  if (!owner) return ''
+  return [owner.firstName, owner.lastInitial ? `${owner.lastInitial}.` : ''].filter(Boolean).join(' ')
+})
+
 const content = ref('')
 const error = ref('')
 const sending = ref(false)
+// Dizajn 39: "Pošalji poruku vlasniku" on the guest's booking ties the new
+// conversation to that booking, which its header then shows (Dizajn 37).
+const bookingId = typeof route.query.rezervacija === 'string' ? route.query.rezervacija : undefined
 
 async function send() {
   error.value = ''
   sending.value = true
   try {
-    const message = await api.post('/conversations', { listingId: listing.value.id, content: content.value })
+    const message = await api.post('/conversations', { listingId: listing.value.id, bookingId, content: content.value })
     await navigateTo(`/kontrolna-tabla/poruke/${message.conversationId}`)
   } catch (e) {
     error.value = extractErrorMessage(e, t('auth.genericError'))

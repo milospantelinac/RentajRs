@@ -5,13 +5,13 @@ import {
   IsArray,
   IsDateString,
   IsInt,
-  IsNotEmpty,
   IsOptional,
   IsPositive,
   IsString,
   IsUrl,
   Matches,
   Max,
+  MaxLength,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -50,9 +50,11 @@ export class CreateDefinedSlotDto {
   @IsDateString()
   endsAt: string;
 
-  @ApiProperty({ required: false, description: 'RSD, overrides the listing base price for this slot' })
-  @IsOptional()
-  price?: number;
+  // Dizajn 22: required, a slot without its own price was booked at the listing's price (0 for defined slots).
+  @ApiProperty({ description: 'RSD for this slot' })
+  @IsInt()
+  @IsPositive()
+  price: number;
 
   @ApiProperty({ required: false, default: 1 })
   @IsOptional()
@@ -147,12 +149,15 @@ export class SetSlotPriceOverrideDto {
 }
 
 export class AddIcalSourceDto {
-  @ApiProperty()
+  // Dizajn 33: the page only asks for the address and names the calendar after it.
+  @ApiProperty({ required: false, description: 'Defaults to the platform named by the address' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  name: string;
+  @MaxLength(80)
+  name?: string;
 
-  @ApiProperty()
-  @IsUrl()
+  @ApiProperty({ example: 'https://www.airbnb.com/calendar/ical/123.ics?s=abc' })
+  @IsUrl({ protocols: ['http', 'https', 'webcal'], require_protocol: true }, { message: 'validation.ICAL_URL_INVALID' })
+  @MaxLength(2000, { message: 'validation.ICAL_URL_INVALID' })
   url: string;
 }

@@ -28,6 +28,9 @@ let SearchController = class SearchController {
     getFilters(categorySlug) {
         return this.searchService.getFilterableAttributes(categorySlug);
     }
+    getSimilar(slug) {
+        return this.searchService.getSimilarListings(slug);
+    }
     getSitemapUrls() {
         return this.searchService.getSitemapUrls();
     }
@@ -58,6 +61,14 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", void 0)
 ], SearchController.prototype, "getFilters", null);
+__decorate([
+    (0, public_decorator_1.Public)(),
+    (0, common_1.Get)('similar'),
+    __param(0, (0, common_1.Query)('slug')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], SearchController.prototype, "getSimilar", null);
 __decorate([
     (0, public_decorator_1.Public)(),
     (0, common_1.Get)('sitemap-urls'),

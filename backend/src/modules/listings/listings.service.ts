@@ -7,7 +7,7 @@ import {
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { I18nService } from 'nestjs-i18n';
-import { ListingStatus, ModerationDecision, Prisma } from '@prisma/client';
+import { BookingStatus, Category, Listing, ListingStatus, ModerationDecision, Prisma, SubscriptionStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CacheService } from '../../common/cache/cache.service';
 import { UploadsService } from '../../common/uploads/uploads.service';
@@ -15,7 +15,10 @@ import { GeocodingService } from '../../common/geocoding/geocoding.service';
 import { TaxonomyService } from '../taxonomy/taxonomy.service';
 import { UsersService } from '../users/users.service';
 import { containsContactInfo } from '../../common/utils/contact-detector';
+import { getIcalAvailability } from '../../common/utils/ical-availability';
+import { getGuestUnits } from '../../common/utils/guest-capacity';
 import { rsdToPara, paraToRsd } from '../../common/utils/money';
+import { DAY_MS } from '../../common/utils/subscription-renewal';
 import { CreateListingDto } from './dto/create-listing.dto';
 import { UpdateListingDto } from './dto/update-listing.dto';
 import { UpdateLocationDto } from './dto/update-location.dto';
@@ -33,6 +36,12 @@ import { FALLBACK_CATEGORY_SLUG } from '../taxonomy/taxonomy.service';
 
 const MAX_PHOTOS = 20;
 const MODERATION_SLA_HOURS = 24;
+const MY_LISTINGS_BOOKING_STATUSES: BookingStatus[] = [
+  BookingStatus.REQUESTED,
+  BookingStatus.AWAITING_PAYMENT,
+  BookingStatus.CONFIRMED,
+  BookingStatus.COMPLETED,
+];
 
 @Injectable()
 export class ListingsService {
@@ -109,19 +118,98 @@ export class ListingsService {
     return this.serialize(listing);
   }
 
+  /**
+   * Dizajn 32: a row of "Moji oglasi" per listing. Next to the listing and its
+   * package it carries the category and place, when the listing went to review
+   * and why it came back, the day its package keeps it online until, and its
+   * bookings: the confirmed and completed ones the home page counts, plus the
+   * requests and payments still open.
+   */
   async getMine(userId: string) {
     const listings = await this.prisma.listing.findMany({
       where: { userId, status: { not: ListingStatus.DELETED } },
       orderBy: { createdAt: 'desc' },
       include: {
-        photos: { where: { isCover: true }, take: 1 },
+        photos: {
+          where: { pendingRemoval: false, versionId: null },
+          orderBy: [{ isCover: 'desc' }, { displayOrder: 'asc' }],
+          take: 1,
+        },
         category: true,
+        city: { select: { name: true } },
+        cityArea: { select: { name: true } },
         // RNT-060 — "Moji oglasi" is where an owner sees what their
         // subscription paid for, per listing, not just the listing itself.
-        subscription: { select: { package: { select: { key: true } }, status: true, expiresAt: true } },
+        subscription: { select: { package: { select: { key: true, hasIcal: true } }, status: true, expiresAt: true } },
+        // Each submission opens a moderation row, and a rejection is written onto it.
+        moderations: { orderBy: { createdAt: 'desc' }, take: 1, select: { createdAt: true, rejectionReason: true, note: true } },
+        bankedDays: { where: { usedAt: null }, select: { validUntil: true, days: true } },
       },
     });
-    return listings.map((l) => this.serialize(l));
+    const listingIds = listings.map((l) => l.id);
+    const categoryNames = await this.taxonomy.getCategoryNames([...new Set(listings.map((l) => l.categoryId))]);
+    // Renewals paid in advance (SCHEDULED, each continuing the one before it)
+    // carry a listing's package past its current end.
+    const scheduled = await this.prisma.subscription.findMany({
+      where: { userId, status: SubscriptionStatus.SCHEDULED },
+      select: { id: true, renewsSubscriptionId: true, expiresAt: true },
+    });
+    const renewalOf = new Map(scheduled.map((s) => [s.renewsSubscriptionId, s]));
+    const lastPaidEnd = (subscriptionId: string | null, expiresAt: Date | null) => {
+      let end = expiresAt;
+      let renewal = subscriptionId ? renewalOf.get(subscriptionId) : undefined;
+      for (let depth = 0; renewal && depth < 100; depth++) {
+        end = renewal.expiresAt;
+        renewal = renewalOf.get(renewal.id);
+      }
+      return end;
+    };
+    const bookingCounts = listingIds.length
+      ? await this.prisma.booking.groupBy({
+          by: ['listingId', 'status'],
+          where: { listingId: { in: listingIds }, status: { in: MY_LISTINGS_BOOKING_STATUSES } },
+          _count: { _all: true },
+        })
+      : [];
+    const countBookings = (listingId: string, statuses: BookingStatus[]) =>
+      bookingCounts
+        .filter((row) => row.listingId === listingId && statuses.includes(row.status))
+        .reduce((sum, row) => sum + row._count._all, 0);
+
+    return listings.map(({ moderations, bankedDays, city, cityArea, ...listing }) => {
+      const moderation = moderations[0];
+      // A listing that outlives its package on banked days (ADR-005) stays online
+      // until the last of them ends: a window already running, or the days still
+      // waiting, which start where the last paid period (renewals included) ends.
+      const paidUntil = lastPaidEnd(listing.subscriptionId, listing.subscription?.expiresAt ?? null);
+      const waitingDays = bankedDays.filter((b) => !b.validUntil).reduce((sum, b) => sum + b.days, 0);
+      const validUntil = [
+        paidUntil && waitingDays ? new Date(paidUntil.getTime() + waitingDays * DAY_MS) : paidUntil,
+        ...bankedDays.map((b) => b.validUntil),
+      ].reduce<Date | null>((latest, date) => (date && (!latest || date > latest) ? date : latest), null);
+      return {
+        ...this.serialize(listing),
+        categoryName: categoryNames.get(listing.categoryId) ?? null,
+        cityName: city?.name ?? null,
+        cityAreaName: cityArea?.name ?? null,
+        coverPhotoUrl: listing.photos[0]?.url ?? null,
+        submittedAt: listing.status === ListingStatus.PENDING_APPROVAL ? (moderation?.createdAt ?? null) : null,
+        rejection:
+          listing.status === ListingStatus.REJECTED && moderation
+            ? { reason: moderation.rejectionReason, note: moderation.note }
+            : null,
+        validUntil,
+        // The next period of this listing's package is already paid for.
+        renewalScheduled: !!listing.subscriptionId && renewalOf.has(listing.subscriptionId),
+        // Dizajn 33: the row menu links to the listing's iCal page only when it can use it.
+        icalAvailable: getIcalAvailability(listing, !!listing.subscription?.package.hasIcal) === 'AVAILABLE',
+        bookings: {
+          confirmed: countBookings(listing.id, [BookingStatus.CONFIRMED, BookingStatus.COMPLETED]),
+          requested: countBookings(listing.id, [BookingStatus.REQUESTED]),
+          awaitingPayment: countBookings(listing.id, [BookingStatus.AWAITING_PAYMENT]),
+        },
+      };
+    });
   }
 
   async getOwned(userId: string, listingId: string) {
@@ -146,6 +234,31 @@ export class ListingsService {
       if (dto.bookingModel !== category.defaultBookingModel) {
         throw new BadRequestException('bookingModel must match the category\'s booking model, or be NO_BOOKING');
       }
+    }
+
+    // Dizajn 23: a minimum above its maximum would turn every request away. Only a
+    // change to the pair is checked, so the wizard steps that send the whole form
+    // still save; a field left out keeps its saved value and null clears it.
+    const rulePairs = [
+      ['minDuration', 'maxDuration', 'errors.DURATION_MIN_ABOVE_MAX'],
+      ['minGuests', 'maxGuests', 'errors.GUESTS_MIN_ABOVE_MAX'],
+    ] as const;
+    for (const [minField, maxField, message] of rulePairs) {
+      const changed = [minField, maxField].some((field) => dto[field] !== undefined && dto[field] !== listing[field]);
+      const min = dto[minField] !== undefined ? dto[minField] : listing[minField];
+      const max = dto[maxField] !== undefined ? dto[maxField] : listing[maxField];
+      if (changed && min != null && max != null && min > max) throw new BadRequestException(this.i18n.t(message));
+    }
+
+    // Dizajn 24: free cancellation without its number of days or hours shows the guest no
+    // terms at all. Checked the same way, only when the policy or the number changes.
+    const cancellationChanged = (['cancellationPolicyType', 'cancellationThreshold'] as const).some(
+      (field) => dto[field] !== undefined && dto[field] !== listing[field],
+    );
+    const policy = dto.cancellationPolicyType !== undefined ? dto.cancellationPolicyType : listing.cancellationPolicyType;
+    const threshold = dto.cancellationThreshold !== undefined ? dto.cancellationThreshold : listing.cancellationThreshold;
+    if (cancellationChanged && (policy === 'FREE_UNTIL_DAYS' || policy === 'FREE_UNTIL_HOURS') && threshold == null) {
+      throw new BadRequestException(this.i18n.t('errors.CANCELLATION_THRESHOLD_REQUIRED'));
     }
 
     const priceFields: Record<string, bigint> = {};
@@ -184,6 +297,14 @@ export class ListingsService {
   async updateLocation(userId: string, listingId: string, dto: UpdateLocationDto) {
     const listing = await this.assertOwnership(userId, listingId);
     const city = await this.prisma.city.findUniqueOrThrow({ where: { id: dto.cityId } });
+    // Dizajn 26: before a booking is confirmed guests only see the city and its area, so a
+    // city with areas needs one of them; a city without areas takes none.
+    const areaIds = (await this.prisma.cityArea.findMany({ where: { cityId: city.id }, select: { id: true } })).map((a) => a.id);
+    if (dto.cityAreaId ? !areaIds.includes(dto.cityAreaId) : areaIds.length > 0) {
+      throw new BadRequestException(
+        this.i18n.t(dto.cityAreaId ? 'errors.CITY_AREA_NOT_IN_CITY' : 'errors.CITY_AREA_REQUIRED'),
+      );
+    }
     // RNT-026 — a dragged pin from the wizard's map wins over auto-geocoding;
     // otherwise fall back to R40's original automatic behavior.
     const coords =
@@ -216,8 +337,9 @@ export class ListingsService {
     // whether the owner actually filled it in, so a naive upsert would
     // create a "value" row for an untouched required field and the review
     // checklist (which only checks "does a row exist") would call it done.
-    // A BOOLEAN has no empty state (false is a real answer), so it always
-    // counts as filled; every other type needs its value present.
+    // A BOOLEAN's false is a real answer, so only a missing value (null) is
+    // empty: that is how the wizard clears a field another field's choice
+    // hides (Dizajn 25). Every other type needs its value present.
     // AttributeType has 7 members (NUMBER/TEXT/TEXTAREA/YEAR/LIST/
     // MULTISELECT/CHECKBOX_GROUP) but this used to only recognize 5 of
     // them — YEAR and TEXTAREA fell through to the LIST/MULTISELECT branch,
@@ -229,7 +351,7 @@ export class ListingsService {
       const type = attributesById.get(v.attributeId)!.type;
       if (type === 'NUMBER' || type === 'YEAR') return v.valueNumber !== null && v.valueNumber !== undefined;
       if (type === 'TEXT' || type === 'TEXTAREA') return !!v.valueText;
-      if (type === 'BOOLEAN') return true;
+      if (type === 'BOOLEAN') return v.valueBoolean !== null && v.valueBoolean !== undefined;
       return (v.valueOptionIds ?? []).length > 0; // LIST / MULTISELECT / CHECKBOX_GROUP
     });
     const toClear = submitted.filter((v) => !toWrite.includes(v)).map((v) => v.attributeId);
@@ -325,6 +447,22 @@ export class ListingsService {
     if (!photo) throw new NotFoundException();
 
     await this.prisma.listingPhoto.delete({ where: { id: photo.id } });
+
+    // Dizajn 27 — every read of a listing's image asks for isCover (search results,
+    // favorites, the dashboard, the subscription mailer), so deleting the cover used to
+    // leave the listing with no picture anywhere. The wizard's grid promises the first
+    // photo is the cover, so renumber what is left the way reorderPhotos does.
+    const remaining = await this.prisma.listingPhoto.findMany({
+      where: { listingId: listing.id, versionId: null, pendingRemoval: false },
+      orderBy: { displayOrder: 'asc' },
+      select: { id: true },
+    });
+    await this.prisma.$transaction(
+      remaining.map((p, index) =>
+        this.prisma.listingPhoto.update({ where: { id: p.id }, data: { displayOrder: index, isCover: index === 0 } }),
+      ),
+    );
+
     return { message: this.i18n.t('common.SUCCESS') };
   }
 
@@ -420,7 +558,10 @@ export class ListingsService {
    */
   async markPendingApproval(listingId: string, subscriptionId: string) {
     const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: listingId } });
-    if (listing.status !== ListingStatus.DRAFT && listing.status !== ListingStatus.REJECTED) {
+    // A listing whose package ended before its first approval comes back here
+    // when that package is renewed (SubscriptionsService.handOverListings).
+    const neverApprovedExpired = listing.status === ListingStatus.EXPIRED && !listing.publishedAt;
+    if (listing.status !== ListingStatus.DRAFT && listing.status !== ListingStatus.REJECTED && !neverApprovedExpired) {
       throw new BadRequestException('Listing is not awaiting submission');
     }
     // R126 — a listing can't go public (leave DRAFT) until the owner has
@@ -460,9 +601,7 @@ export class ListingsService {
       where: { listingId: listing.id, status: { in: ['REQUESTED', 'AWAITING_PAYMENT', 'CONFIRMED'] } },
     });
     if (activeBookings > 0 && listing.paymentMethod) {
-      throw new BadRequestException(
-        'This listing has active bookings — change its payment method to stop accepting new ones first, or wait until they complete',
-      );
+      throw new BadRequestException(this.i18n.t('errors.LISTING_HAS_ACTIVE_BOOKINGS'));
     }
     await this.prisma.listing.update({
       where: { id: listing.id },
@@ -547,6 +686,9 @@ export class ListingsService {
     // search results the same way) — the raw `category: true` include below
     // only carries slug/id, so the breadcrumb rendered blank without this.
     const categoryNames = await this.taxonomy.getCategoryNames([listing.categoryId]);
+    // Dizajn 40: the request form asks for "Broj dece" or "Broj gostiju" by the
+    // same rule the booking rows follow (Dizajn 31/34/39).
+    const guestUnits = await getGuestUnits(this.taxonomy, [listing.categoryId]);
 
     // Ch.11.2/R108 — a listing's package can lack the booking system and/or
     // internal messaging (Osnovni/BASIC has neither). The guest-facing page
@@ -555,10 +697,28 @@ export class ListingsService {
     // contact point, so it's only exposed in that fallback case.
     const canBook = listing.subscription?.package?.hasBookings ?? false;
     const canMessage = listing.subscription?.package?.hasMessaging ?? false;
-    const { phone, ...ownerRest } = listing.user;
+    // The page names the owner "Marko P." (T80: the full name comes with a
+    // confirmed booking), so only the surname's initial leaves the server.
+    const { phone, lastName, ...ownerRest } = listing.user;
+
+    // Dizajn 11 — the owner block reads "Član od 2024. · 3 oglasa na
+    // Rentaj.rs"; the second half is a live count of that owner's other
+    // public listings, not a stored column.
+    const ownerListingCount = await this.prisma.listing.count({
+      where: { userId: listing.userId, status: ListingStatus.ACTIVE },
+    });
+
+    // Dizajn 26: the address reaches a guest with the confirmed booking (BookingsService's
+    // serialize), never through the public page, which shows the city and its area.
+    // Found in Dizajn 39: the payload also carried the owner's row (phone and
+    // full surname, whatever the package), the iCal export token that opens
+    // the listing's calendar feed (Dizajn 33) and the package. It keeps only
+    // what the page reads.
+    const publicListing = this.serialize(listing);
+    for (const field of PRIVATE_LISTING_FIELDS) delete publicListing[field];
 
     return {
-      ...this.serialize(listing),
+      ...publicListing,
       photos: listing.photos,
       faqs: listing.faqs,
       extraServices: listing.extraServices.map((s: any) => ({ ...s, price: paraToRsd(s.price) })),
@@ -566,8 +726,14 @@ export class ListingsService {
       region: listing.region,
       city: listing.city,
       cityArea: listing.cityArea,
-      owner: { ...ownerRest, phone: canMessage ? undefined : phone },
+      owner: {
+        ...ownerRest,
+        lastInitial: lastName?.trim().charAt(0) || null,
+        phone: canMessage ? undefined : phone,
+        listingCount: ownerListingCount,
+      },
       attributes: attributes.map((a: any) => ({ ...a, value: valueMap.get(a.id) ?? null })),
+      guestUnit: guestUnits.get(listing.categoryId) ?? 'guests',
       canBook,
       canMessage,
     };
@@ -658,16 +824,79 @@ export class ListingsService {
         decidedAt: new Date(),
       },
     });
-    this.events.emit('listing.rejected', { listingId, userId: listing.userId, reason: dto.reason });
+    this.events.emit('listing.rejected', { listingId, userId: listing.userId, reason: dto.reason, note: dto.note });
     return this.serialize(updated);
+  }
+
+  /**
+   * Dizajn 29: what the "poslat na odobrenje" and "nije odobren" pages show about a
+   * listing its owner sent for review.
+   */
+  async getSubmissionOutcome(userId: string, listingId: string) {
+    await this.assertOwnership(userId, listingId);
+    const listing = await this.prisma.listing.findUniqueOrThrow({
+      where: { id: listingId },
+      include: {
+        city: true,
+        cityArea: true,
+        photos: { where: { pendingRemoval: false }, orderBy: [{ isCover: 'desc' }, { displayOrder: 'asc' }], take: 1 },
+        subscription: { include: { package: { select: { key: true } } } },
+        moderations: { where: { decision: ModerationDecision.REJECTED }, orderBy: { decidedAt: 'desc' }, take: 1 },
+      },
+    });
+    const categoryNames = await this.taxonomy.getCategoryNames([listing.categoryId]);
+    const { subscription } = listing;
+    const rejection = listing.status === ListingStatus.REJECTED ? listing.moderations[0] : undefined;
+    return {
+      id: listing.id,
+      title: listing.title,
+      status: listing.status,
+      categoryName: categoryNames.get(listing.categoryId) ?? null,
+      cityName: listing.city?.name ?? null,
+      cityAreaName: listing.cityArea?.name ?? null,
+      coverPhotoUrl: listing.photos[0]?.url ?? null,
+      slaHours: await this.getModerationSlaHours(),
+      subscription: subscription
+        ? {
+            package: subscription.package.key,
+            billingCycle: subscription.billingCycle,
+            status: subscription.status,
+            expiresAt: subscription.expiresAt,
+          }
+        : null,
+      canResubmit:
+        listing.status === ListingStatus.REJECTED && RESUBMITTABLE_SUBSCRIPTION_STATUSES.includes(subscription?.status ?? ''),
+      rejection: rejection
+        ? { reason: rejection.rejectionReason, note: rejection.note, decidedAt: rejection.decidedAt }
+        : null,
+    };
+  }
+
+  /**
+   * Dizajn 29: a rejected listing goes back to the queue on the package it already has,
+   * whose clock only starts at the first approval (R28).
+   */
+  async resubmit(userId: string, listingId: string) {
+    const listing = await this.assertOwnership(userId, listingId);
+    const subscription = listing.subscriptionId
+      ? await this.prisma.subscription.findUnique({ where: { id: listing.subscriptionId } })
+      : null;
+    if (listing.status !== ListingStatus.REJECTED || !subscription) {
+      throw new BadRequestException(this.i18n.t('errors.LISTING_RESUBMIT_NOT_ALLOWED'));
+    }
+    if (!RESUBMITTABLE_SUBSCRIPTION_STATUSES.includes(subscription.status)) {
+      throw new BadRequestException(this.i18n.t('errors.LISTING_RESUBMIT_PACKAGE_INACTIVE'));
+    }
+    const { ready } = await this.getReadiness(userId, listingId);
+    if (!ready) throw new BadRequestException(this.i18n.t('errors.LISTING_NOT_READY'));
+    return this.markPendingApproval(listing.id, subscription.id);
   }
 
   /**
    * "Otključaj svoju kategoriju" resolution — admin reviews an owner's
    * self-described listing (parked under Ostalo, pendingCategoryAssignment)
-   * and assigns the real category. bookingModel/priceUnit are left as the
-   * owner already set them; the category only changes which attributes the
-   * wizard now resolves for this listing going forward.
+   * and assigns the real category, which also decides which attributes the
+   * wizard resolves for this listing going forward.
    */
   async adminListPendingCategoryAssignment() {
     const listings = await this.prisma.listing.findMany({
@@ -678,13 +907,87 @@ export class ListingsService {
     return listings.map((l) => this.serialize(l));
   }
 
+  /**
+   * Dizajn 19: "Promeni kategoriju" in the wizard. Only a draft can move, since a
+   * submitted listing was reviewed under its category. Values for detail fields
+   * the new category doesn't have are dropped, and the booking fields follow the
+   * new category the same way an admin assignment does.
+   */
+  async changeCategory(userId: string, listingId: string, categoryId: string) {
+    const listing = await this.assertOwnership(userId, listingId);
+    if (listing.status !== ListingStatus.DRAFT || listing.pendingCategoryAssignment) {
+      throw new BadRequestException(this.i18n.t('errors.LISTING_CATEGORY_CHANGE_NOT_ALLOWED'));
+    }
+    // Only what the category picker offers: an active category without active
+    // subcategories, never the hidden Ostalo fallback.
+    const category = await this.prisma.category.findUnique({
+      where: { id: categoryId },
+      include: { children: { where: { status: 'ACTIVE' }, select: { id: true } } },
+    });
+    if (!category || category.status !== 'ACTIVE' || category.children.length || category.slug === FALLBACK_CATEGORY_SLUG) {
+      throw new BadRequestException(this.i18n.t('errors.CATEGORY_NOT_SELECTABLE'));
+    }
+    if (category.id === listing.categoryId) return this.serialize(listing);
+
+    const attributeIds = (await this.taxonomy.resolveAttributesForCategory(category.id)).map((attr) => attr.id);
+    const [, updated] = await this.prisma.$transaction([
+      this.prisma.listingAttribute.deleteMany({ where: { listingId, attributeId: { notIn: attributeIds } } }),
+      this.prisma.listing.update({
+        where: { id: listingId },
+        data: {
+          categoryId: category.id,
+          ...this.bookingFieldsForCategory(listing, category),
+          // A slot submode only means something under a slot category.
+          slotSubmode: category.defaultBookingModel === 'PER_SLOT' ? listing.slotSubmode : null,
+        },
+      }),
+    ]);
+    return this.serialize(updated);
+  }
+
   async adminAssignCategory(listingId: string, categoryId: string) {
+    const listing = await this.prisma.listing.findUnique({ where: { id: listingId } });
+    if (!listing) throw new NotFoundException(this.i18n.t('errors.LISTING_NOT_FOUND'));
     const category = await this.prisma.category.findUniqueOrThrow({ where: { id: categoryId } });
+    // Dizajn 18: what the owner picked on the proposal form is a first guess
+    // ("biramo zajedno sa vama kad otvorimo kategoriju"), so the booking fields
+    // follow the category. The owner can still pick another allowed unit in
+    // the wizard.
     const updated = await this.prisma.listing.update({
       where: { id: listingId },
-      data: { categoryId: category.id, pendingCategoryAssignment: false },
+      data: {
+        categoryId: category.id,
+        pendingCategoryAssignment: false,
+        ...this.bookingFieldsForCategory(listing, category),
+      },
     });
+    // Dizajn 18 — the "Otključaj svoju kategoriju" form tells the owner we'll
+    // email them once the category is open. Only when the listing was still
+    // waiting for one, so moving it again later doesn't repeat the email.
+    if (listing.pendingCategoryAssignment) {
+      this.events.emit('listing.category_assigned', { listingId, userId: listing.userId });
+    }
     return this.serialize(updated);
+  }
+
+  /**
+   * The booking fields that follow a listing's category (Dizajn 18 and 19).
+   * Online booking takes the category's own stay or slot model, the way the
+   * wizard sets it, while "Bez rezervacije" stays as chosen. A unit the category
+   * doesn't allow becomes its default (R25: a DB trigger rejects the update
+   * otherwise), and a stay listing gets the iCal export link createDraft gives
+   * every new one.
+   */
+  private bookingFieldsForCategory(
+    listing: Pick<Listing, 'bookingModel' | 'priceUnit' | 'icalExportToken'>,
+    category: Pick<Category, 'defaultBookingModel' | 'allowedPriceUnits' | 'defaultPriceUnit'>,
+  ) {
+    const bookingModel = listing.bookingModel === 'NO_BOOKING' ? listing.bookingModel : category.defaultBookingModel;
+    return {
+      bookingModel,
+      priceUnit: category.allowedPriceUnits.includes(listing.priceUnit) ? listing.priceUnit : category.defaultPriceUnit,
+      icalExportToken: listing.icalExportToken ?? (bookingModel === 'PER_STAY' ? crypto.randomUUID() : undefined),
+    };
   }
 
   /** Ch.22.4 "Pad cene sačuvanog oglasa" — notifies once per drop episode, never spams on every re-check. */
@@ -786,6 +1089,26 @@ export class ListingsService {
     };
   }
 }
+
+/**
+ * Listing columns and relations the public page never shows (buildDisplayPayload):
+ * the exact address, the owner's raw row (the page gets `owner`), the package,
+ * the iCal export token, and wizard, moderation and deletion bookkeeping.
+ */
+const PRIVATE_LISTING_FIELDS = [
+  'address',
+  'user',
+  'subscription',
+  'subscriptionId',
+  'icalExportToken',
+  'wizardStep',
+  'pendingCategoryAssignment',
+  'deletedAt',
+  'viewCount',
+];
+
+/** A package that is waiting for its first approval or still running can carry a resubmission. */
+const RESUBMITTABLE_SUBSCRIPTION_STATUSES: string[] = ['PENDING_ACTIVATION', 'ACTIVE'];
 
 function slugify(input: string): string {
   return input

@@ -82,7 +82,7 @@ let AuthService = class AuthService {
         }
         const passwordHash = await argon2.hash(dto.password);
         const user = await this.prisma.user.create({
-            data: { firstName: dto.firstName, lastName: dto.lastName, email, passwordHash },
+            data: { firstName: dto.firstName, lastName: dto.lastName, email, phone: dto.phone, passwordHash },
         });
         await this.prisma.consent.createMany({
             data: [

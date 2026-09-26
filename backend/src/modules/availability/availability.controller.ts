@@ -89,6 +89,11 @@ export class AvailabilityController {
     return this.availabilityService.deleteSlotPriceOverride(userId, id, overrideId);
   }
 
+  @Get('ical')
+  getIcalOverview(@CurrentUser('id') userId: string, @Param('id') id: string) {
+    return this.availabilityService.getIcalOverview(userId, id);
+  }
+
   @Get('ical-sources')
   listIcalSources(@CurrentUser('id') userId: string, @Param('id') id: string) {
     return this.availabilityService.listIcalSources(userId, id);

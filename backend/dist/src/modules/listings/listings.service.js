@@ -22,10 +22,19 @@ const geocoding_service_1 = require("../../common/geocoding/geocoding.service");
 const taxonomy_service_1 = require("../taxonomy/taxonomy.service");
 const users_service_1 = require("../users/users.service");
 const contact_detector_1 = require("../../common/utils/contact-detector");
+const ical_availability_1 = require("../../common/utils/ical-availability");
+const guest_capacity_1 = require("../../common/utils/guest-capacity");
 const money_1 = require("../../common/utils/money");
+const subscription_renewal_1 = require("../../common/utils/subscription-renewal");
 const taxonomy_service_2 = require("../taxonomy/taxonomy.service");
 const MAX_PHOTOS = 20;
 const MODERATION_SLA_HOURS = 24;
+const MY_LISTINGS_BOOKING_STATUSES = [
+    client_1.BookingStatus.REQUESTED,
+    client_1.BookingStatus.AWAITING_PAYMENT,
+    client_1.BookingStatus.CONFIRMED,
+    client_1.BookingStatus.COMPLETED,
+];
 let ListingsService = class ListingsService {
     constructor(prisma, cache, uploads, geocoding, taxonomy, users, i18n, events) {
         this.prisma = prisma;
@@ -90,12 +99,73 @@ let ListingsService = class ListingsService {
             where: { userId, status: { not: client_1.ListingStatus.DELETED } },
             orderBy: { createdAt: 'desc' },
             include: {
-                photos: { where: { isCover: true }, take: 1 },
+                photos: {
+                    where: { pendingRemoval: false, versionId: null },
+                    orderBy: [{ isCover: 'desc' }, { displayOrder: 'asc' }],
+                    take: 1,
+                },
                 category: true,
-                subscription: { select: { package: { select: { key: true } }, status: true, expiresAt: true } },
+                city: { select: { name: true } },
+                cityArea: { select: { name: true } },
+                subscription: { select: { package: { select: { key: true, hasIcal: true } }, status: true, expiresAt: true } },
+                moderations: { orderBy: { createdAt: 'desc' }, take: 1, select: { createdAt: true, rejectionReason: true, note: true } },
+                bankedDays: { where: { usedAt: null }, select: { validUntil: true, days: true } },
             },
         });
-        return listings.map((l) => this.serialize(l));
+        const listingIds = listings.map((l) => l.id);
+        const categoryNames = await this.taxonomy.getCategoryNames([...new Set(listings.map((l) => l.categoryId))]);
+        const scheduled = await this.prisma.subscription.findMany({
+            where: { userId, status: client_1.SubscriptionStatus.SCHEDULED },
+            select: { id: true, renewsSubscriptionId: true, expiresAt: true },
+        });
+        const renewalOf = new Map(scheduled.map((s) => [s.renewsSubscriptionId, s]));
+        const lastPaidEnd = (subscriptionId, expiresAt) => {
+            let end = expiresAt;
+            let renewal = subscriptionId ? renewalOf.get(subscriptionId) : undefined;
+            for (let depth = 0; renewal && depth < 100; depth++) {
+                end = renewal.expiresAt;
+                renewal = renewalOf.get(renewal.id);
+            }
+            return end;
+        };
+        const bookingCounts = listingIds.length
+            ? await this.prisma.booking.groupBy({
+                by: ['listingId', 'status'],
+                where: { listingId: { in: listingIds }, status: { in: MY_LISTINGS_BOOKING_STATUSES } },
+                _count: { _all: true },
+            })
+            : [];
+        const countBookings = (listingId, statuses) => bookingCounts
+            .filter((row) => row.listingId === listingId && statuses.includes(row.status))
+            .reduce((sum, row) => sum + row._count._all, 0);
+        return listings.map(({ moderations, bankedDays, city, cityArea, ...listing }) => {
+            const moderation = moderations[0];
+            const paidUntil = lastPaidEnd(listing.subscriptionId, listing.subscription?.expiresAt ?? null);
+            const waitingDays = bankedDays.filter((b) => !b.validUntil).reduce((sum, b) => sum + b.days, 0);
+            const validUntil = [
+                paidUntil && waitingDays ? new Date(paidUntil.getTime() + waitingDays * subscription_renewal_1.DAY_MS) : paidUntil,
+                ...bankedDays.map((b) => b.validUntil),
+            ].reduce((latest, date) => (date && (!latest || date > latest) ? date : latest), null);
+            return {
+                ...this.serialize(listing),
+                categoryName: categoryNames.get(listing.categoryId) ?? null,
+                cityName: city?.name ?? null,
+                cityAreaName: cityArea?.name ?? null,
+                coverPhotoUrl: listing.photos[0]?.url ?? null,
+                submittedAt: listing.status === client_1.ListingStatus.PENDING_APPROVAL ? (moderation?.createdAt ?? null) : null,
+                rejection: listing.status === client_1.ListingStatus.REJECTED && moderation
+                    ? { reason: moderation.rejectionReason, note: moderation.note }
+                    : null,
+                validUntil,
+                renewalScheduled: !!listing.subscriptionId && renewalOf.has(listing.subscriptionId),
+                icalAvailable: (0, ical_availability_1.getIcalAvailability)(listing, !!listing.subscription?.package.hasIcal) === 'AVAILABLE',
+                bookings: {
+                    confirmed: countBookings(listing.id, [client_1.BookingStatus.CONFIRMED, client_1.BookingStatus.COMPLETED]),
+                    requested: countBookings(listing.id, [client_1.BookingStatus.REQUESTED]),
+                    awaitingPayment: countBookings(listing.id, [client_1.BookingStatus.AWAITING_PAYMENT]),
+                },
+            };
+        });
     }
     async getOwned(userId, listingId) {
         const listing = await this.getFullListing(listingId);
@@ -112,6 +182,23 @@ let ListingsService = class ListingsService {
             if (dto.bookingModel !== category.defaultBookingModel) {
                 throw new common_1.BadRequestException('bookingModel must match the category\'s booking model, or be NO_BOOKING');
             }
+        }
+        const rulePairs = [
+            ['minDuration', 'maxDuration', 'errors.DURATION_MIN_ABOVE_MAX'],
+            ['minGuests', 'maxGuests', 'errors.GUESTS_MIN_ABOVE_MAX'],
+        ];
+        for (const [minField, maxField, message] of rulePairs) {
+            const changed = [minField, maxField].some((field) => dto[field] !== undefined && dto[field] !== listing[field]);
+            const min = dto[minField] !== undefined ? dto[minField] : listing[minField];
+            const max = dto[maxField] !== undefined ? dto[maxField] : listing[maxField];
+            if (changed && min != null && max != null && min > max)
+                throw new common_1.BadRequestException(this.i18n.t(message));
+        }
+        const cancellationChanged = ['cancellationPolicyType', 'cancellationThreshold'].some((field) => dto[field] !== undefined && dto[field] !== listing[field]);
+        const policy = dto.cancellationPolicyType !== undefined ? dto.cancellationPolicyType : listing.cancellationPolicyType;
+        const threshold = dto.cancellationThreshold !== undefined ? dto.cancellationThreshold : listing.cancellationThreshold;
+        if (cancellationChanged && (policy === 'FREE_UNTIL_DAYS' || policy === 'FREE_UNTIL_HOURS') && threshold == null) {
+            throw new common_1.BadRequestException(this.i18n.t('errors.CANCELLATION_THRESHOLD_REQUIRED'));
         }
         const priceFields = {};
         if (dto.price !== undefined)
@@ -140,6 +227,10 @@ let ListingsService = class ListingsService {
     async updateLocation(userId, listingId, dto) {
         const listing = await this.assertOwnership(userId, listingId);
         const city = await this.prisma.city.findUniqueOrThrow({ where: { id: dto.cityId } });
+        const areaIds = (await this.prisma.cityArea.findMany({ where: { cityId: city.id }, select: { id: true } })).map((a) => a.id);
+        if (dto.cityAreaId ? !areaIds.includes(dto.cityAreaId) : areaIds.length > 0) {
+            throw new common_1.BadRequestException(this.i18n.t(dto.cityAreaId ? 'errors.CITY_AREA_NOT_IN_CITY' : 'errors.CITY_AREA_REQUIRED'));
+        }
         const coords = dto.latitude !== undefined && dto.longitude !== undefined
             ? { latitude: dto.latitude, longitude: dto.longitude }
             : await this.geocoding.geocode(dto.address, city.name);
@@ -167,7 +258,7 @@ let ListingsService = class ListingsService {
             if (type === 'TEXT' || type === 'TEXTAREA')
                 return !!v.valueText;
             if (type === 'BOOLEAN')
-                return true;
+                return v.valueBoolean !== null && v.valueBoolean !== undefined;
             return (v.valueOptionIds ?? []).length > 0;
         });
         const toClear = submitted.filter((v) => !toWrite.includes(v)).map((v) => v.attributeId);
@@ -244,6 +335,12 @@ let ListingsService = class ListingsService {
         if (!photo)
             throw new common_1.NotFoundException();
         await this.prisma.listingPhoto.delete({ where: { id: photo.id } });
+        const remaining = await this.prisma.listingPhoto.findMany({
+            where: { listingId: listing.id, versionId: null, pendingRemoval: false },
+            orderBy: { displayOrder: 'asc' },
+            select: { id: true },
+        });
+        await this.prisma.$transaction(remaining.map((p, index) => this.prisma.listingPhoto.update({ where: { id: p.id }, data: { displayOrder: index, isCover: index === 0 } })));
         return { message: this.i18n.t('common.SUCCESS') };
     }
     async reorderPhotos(userId, listingId, photoIds) {
@@ -307,7 +404,8 @@ let ListingsService = class ListingsService {
     }
     async markPendingApproval(listingId, subscriptionId) {
         const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: listingId } });
-        if (listing.status !== client_1.ListingStatus.DRAFT && listing.status !== client_1.ListingStatus.REJECTED) {
+        const neverApprovedExpired = listing.status === client_1.ListingStatus.EXPIRED && !listing.publishedAt;
+        if (listing.status !== client_1.ListingStatus.DRAFT && listing.status !== client_1.ListingStatus.REJECTED && !neverApprovedExpired) {
             throw new common_1.BadRequestException('Listing is not awaiting submission');
         }
         const owner = await this.prisma.user.findUniqueOrThrow({ where: { id: listing.userId } });
@@ -339,7 +437,7 @@ let ListingsService = class ListingsService {
             where: { listingId: listing.id, status: { in: ['REQUESTED', 'AWAITING_PAYMENT', 'CONFIRMED'] } },
         });
         if (activeBookings > 0 && listing.paymentMethod) {
-            throw new common_1.BadRequestException('This listing has active bookings — change its payment method to stop accepting new ones first, or wait until they complete');
+            throw new common_1.BadRequestException(this.i18n.t('errors.LISTING_HAS_ACTIVE_BOOKINGS'));
         }
         await this.prisma.listing.update({
             where: { id: listing.id },
@@ -401,11 +499,18 @@ let ListingsService = class ListingsService {
         const values = await this.prisma.listingAttribute.findMany({ where: { listingId: listing.id } });
         const valueMap = new Map(values.map((v) => [v.attributeId, v]));
         const categoryNames = await this.taxonomy.getCategoryNames([listing.categoryId]);
+        const guestUnits = await (0, guest_capacity_1.getGuestUnits)(this.taxonomy, [listing.categoryId]);
         const canBook = listing.subscription?.package?.hasBookings ?? false;
         const canMessage = listing.subscription?.package?.hasMessaging ?? false;
-        const { phone, ...ownerRest } = listing.user;
+        const { phone, lastName, ...ownerRest } = listing.user;
+        const ownerListingCount = await this.prisma.listing.count({
+            where: { userId: listing.userId, status: client_1.ListingStatus.ACTIVE },
+        });
+        const publicListing = this.serialize(listing);
+        for (const field of PRIVATE_LISTING_FIELDS)
+            delete publicListing[field];
         return {
-            ...this.serialize(listing),
+            ...publicListing,
             photos: listing.photos,
             faqs: listing.faqs,
             extraServices: listing.extraServices.map((s) => ({ ...s, price: (0, money_1.paraToRsd)(s.price) })),
@@ -413,8 +518,14 @@ let ListingsService = class ListingsService {
             region: listing.region,
             city: listing.city,
             cityArea: listing.cityArea,
-            owner: { ...ownerRest, phone: canMessage ? undefined : phone },
+            owner: {
+                ...ownerRest,
+                lastInitial: lastName?.trim().charAt(0) || null,
+                phone: canMessage ? undefined : phone,
+                listingCount: ownerListingCount,
+            },
             attributes: attributes.map((a) => ({ ...a, value: valueMap.get(a.id) ?? null })),
+            guestUnit: guestUnits.get(listing.categoryId) ?? 'guests',
             canBook,
             canMessage,
         };
@@ -494,8 +605,62 @@ let ListingsService = class ListingsService {
                 decidedAt: new Date(),
             },
         });
-        this.events.emit('listing.rejected', { listingId, userId: listing.userId, reason: dto.reason });
+        this.events.emit('listing.rejected', { listingId, userId: listing.userId, reason: dto.reason, note: dto.note });
         return this.serialize(updated);
+    }
+    async getSubmissionOutcome(userId, listingId) {
+        await this.assertOwnership(userId, listingId);
+        const listing = await this.prisma.listing.findUniqueOrThrow({
+            where: { id: listingId },
+            include: {
+                city: true,
+                cityArea: true,
+                photos: { where: { pendingRemoval: false }, orderBy: [{ isCover: 'desc' }, { displayOrder: 'asc' }], take: 1 },
+                subscription: { include: { package: { select: { key: true } } } },
+                moderations: { where: { decision: client_1.ModerationDecision.REJECTED }, orderBy: { decidedAt: 'desc' }, take: 1 },
+            },
+        });
+        const categoryNames = await this.taxonomy.getCategoryNames([listing.categoryId]);
+        const { subscription } = listing;
+        const rejection = listing.status === client_1.ListingStatus.REJECTED ? listing.moderations[0] : undefined;
+        return {
+            id: listing.id,
+            title: listing.title,
+            status: listing.status,
+            categoryName: categoryNames.get(listing.categoryId) ?? null,
+            cityName: listing.city?.name ?? null,
+            cityAreaName: listing.cityArea?.name ?? null,
+            coverPhotoUrl: listing.photos[0]?.url ?? null,
+            slaHours: await this.getModerationSlaHours(),
+            subscription: subscription
+                ? {
+                    package: subscription.package.key,
+                    billingCycle: subscription.billingCycle,
+                    status: subscription.status,
+                    expiresAt: subscription.expiresAt,
+                }
+                : null,
+            canResubmit: listing.status === client_1.ListingStatus.REJECTED && RESUBMITTABLE_SUBSCRIPTION_STATUSES.includes(subscription?.status ?? ''),
+            rejection: rejection
+                ? { reason: rejection.rejectionReason, note: rejection.note, decidedAt: rejection.decidedAt }
+                : null,
+        };
+    }
+    async resubmit(userId, listingId) {
+        const listing = await this.assertOwnership(userId, listingId);
+        const subscription = listing.subscriptionId
+            ? await this.prisma.subscription.findUnique({ where: { id: listing.subscriptionId } })
+            : null;
+        if (listing.status !== client_1.ListingStatus.REJECTED || !subscription) {
+            throw new common_1.BadRequestException(this.i18n.t('errors.LISTING_RESUBMIT_NOT_ALLOWED'));
+        }
+        if (!RESUBMITTABLE_SUBSCRIPTION_STATUSES.includes(subscription.status)) {
+            throw new common_1.BadRequestException(this.i18n.t('errors.LISTING_RESUBMIT_PACKAGE_INACTIVE'));
+        }
+        const { ready } = await this.getReadiness(userId, listingId);
+        if (!ready)
+            throw new common_1.BadRequestException(this.i18n.t('errors.LISTING_NOT_READY'));
+        return this.markPendingApproval(listing.id, subscription.id);
     }
     async adminListPendingCategoryAssignment() {
         const listings = await this.prisma.listing.findMany({
@@ -505,13 +670,59 @@ let ListingsService = class ListingsService {
         });
         return listings.map((l) => this.serialize(l));
     }
+    async changeCategory(userId, listingId, categoryId) {
+        const listing = await this.assertOwnership(userId, listingId);
+        if (listing.status !== client_1.ListingStatus.DRAFT || listing.pendingCategoryAssignment) {
+            throw new common_1.BadRequestException(this.i18n.t('errors.LISTING_CATEGORY_CHANGE_NOT_ALLOWED'));
+        }
+        const category = await this.prisma.category.findUnique({
+            where: { id: categoryId },
+            include: { children: { where: { status: 'ACTIVE' }, select: { id: true } } },
+        });
+        if (!category || category.status !== 'ACTIVE' || category.children.length || category.slug === taxonomy_service_2.FALLBACK_CATEGORY_SLUG) {
+            throw new common_1.BadRequestException(this.i18n.t('errors.CATEGORY_NOT_SELECTABLE'));
+        }
+        if (category.id === listing.categoryId)
+            return this.serialize(listing);
+        const attributeIds = (await this.taxonomy.resolveAttributesForCategory(category.id)).map((attr) => attr.id);
+        const [, updated] = await this.prisma.$transaction([
+            this.prisma.listingAttribute.deleteMany({ where: { listingId, attributeId: { notIn: attributeIds } } }),
+            this.prisma.listing.update({
+                where: { id: listingId },
+                data: {
+                    categoryId: category.id,
+                    ...this.bookingFieldsForCategory(listing, category),
+                    slotSubmode: category.defaultBookingModel === 'PER_SLOT' ? listing.slotSubmode : null,
+                },
+            }),
+        ]);
+        return this.serialize(updated);
+    }
     async adminAssignCategory(listingId, categoryId) {
+        const listing = await this.prisma.listing.findUnique({ where: { id: listingId } });
+        if (!listing)
+            throw new common_1.NotFoundException(this.i18n.t('errors.LISTING_NOT_FOUND'));
         const category = await this.prisma.category.findUniqueOrThrow({ where: { id: categoryId } });
         const updated = await this.prisma.listing.update({
             where: { id: listingId },
-            data: { categoryId: category.id, pendingCategoryAssignment: false },
+            data: {
+                categoryId: category.id,
+                pendingCategoryAssignment: false,
+                ...this.bookingFieldsForCategory(listing, category),
+            },
         });
+        if (listing.pendingCategoryAssignment) {
+            this.events.emit('listing.category_assigned', { listingId, userId: listing.userId });
+        }
         return this.serialize(updated);
+    }
+    bookingFieldsForCategory(listing, category) {
+        const bookingModel = listing.bookingModel === 'NO_BOOKING' ? listing.bookingModel : category.defaultBookingModel;
+        return {
+            bookingModel,
+            priceUnit: category.allowedPriceUnits.includes(listing.priceUnit) ? listing.priceUnit : category.defaultPriceUnit,
+            icalExportToken: listing.icalExportToken ?? (bookingModel === 'PER_STAY' ? crypto.randomUUID() : undefined),
+        };
     }
     async sendPriceDropNotifications() {
         const favorites = await this.prisma.favorite.findMany({
@@ -619,6 +830,18 @@ exports.ListingsService = ListingsService = __decorate([
         nestjs_i18n_1.I18nService,
         event_emitter_1.EventEmitter2])
 ], ListingsService);
+const PRIVATE_LISTING_FIELDS = [
+    'address',
+    'user',
+    'subscription',
+    'subscriptionId',
+    'icalExportToken',
+    'wizardStep',
+    'pendingCategoryAssignment',
+    'deletedAt',
+    'viewCount',
+];
+const RESUBMITTABLE_SUBSCRIPTION_STATUSES = ['PENDING_ACTIVATION', 'ACTIVE'];
 function slugify(input) {
     return input
         .toLowerCase()

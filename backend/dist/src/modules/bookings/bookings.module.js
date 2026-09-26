@@ -11,12 +11,13 @@ const common_1 = require("@nestjs/common");
 const bookings_controller_1 = require("./bookings.controller");
 const bookings_service_1 = require("./bookings.service");
 const availability_module_1 = require("../availability/availability.module");
+const taxonomy_module_1 = require("../taxonomy/taxonomy.module");
 let BookingsModule = class BookingsModule {
 };
 exports.BookingsModule = BookingsModule;
 exports.BookingsModule = BookingsModule = __decorate([
     (0, common_1.Module)({
-        imports: [availability_module_1.AvailabilityModule],
+        imports: [availability_module_1.AvailabilityModule, taxonomy_module_1.TaxonomyModule],
         controllers: [bookings_controller_1.BookingsController],
         providers: [bookings_service_1.BookingsService],
         exports: [bookings_service_1.BookingsService],

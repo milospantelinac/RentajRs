@@ -23,23 +23,41 @@
       </div>
 
       <div class="site-header-actions">
-        <template v-if="!auth.isAuthenticated">
-          <NuxtLink to="/prijava" class="site-header-pill-btn d-none-mobile">{{ t('nav.login') }}</NuxtLink>
-        </template>
-        <template v-else>
+        <template v-if="auth.isAuthenticated">
           <NotificationBell />
         </template>
 
+        <!-- Figma puts "Dodaj Oglas" before "Prijava", with the login pill
+             flush against the right content edge. -->
         <NuxtLink to="/oglasi/novi" class="site-header-cta-btn">
-          <span class="site-header-cta-icon" aria-hidden="true">+</span>
+          <span class="site-header-cta-icon" aria-hidden="true">
+            <svg viewBox="0 0 7 11" fill="none">
+              <path
+                d="M0.654258 1.91787C0.29346 1.56479 0.293461 0.992339 0.654259 0.639262C1.01506 0.286185 1.60002 0.286186 1.96082 0.639263L5.88051 4.47508C6.24131 4.82815 6.24131 5.4006 5.88051 5.75368C5.51972 6.10676 4.93475 6.10676 4.57395 5.75368L0.654258 1.91787Z"
+                fill="white"
+              />
+              <path
+                d="M4.57304 4.47548C4.93383 4.12241 5.5188 4.12241 5.8796 4.47548C6.2404 4.82856 6.2404 5.40101 5.8796 5.75409L1.95991 9.5899C1.59911 9.94298 1.01414 9.94298 0.653344 9.5899C0.292546 9.23682 0.292547 8.66437 0.653344 8.3113L4.57304 4.47548Z"
+                fill="white"
+              />
+            </svg>
+          </span>
           <span class="d-none-mobile">{{ t('nav.addListing') }}</span>
         </NuxtLink>
+
+        <template v-if="!auth.isAuthenticated">
+          <NuxtLink to="/prijava" class="site-header-pill-btn d-none-mobile">{{ t('nav.login') }}</NuxtLink>
+        </template>
 
         <template v-if="auth.isAuthenticated">
           <div ref="userMenuRef" class="user-menu">
             <button class="user-menu-trigger" @click="menuOpen = !menuOpen">
               <img v-if="auth.user?.avatarUrl" :src="auth.user.avatarUrl" alt="" class="user-menu-avatar" />
               <span v-else class="user-menu-avatar user-menu-avatar-placeholder">{{ initials }}</span>
+              <span class="user-menu-name d-none-mobile">{{ auth.user?.firstName }}</span>
+              <svg class="user-menu-chevron d-none-mobile" viewBox="0 0 12 8" fill="none">
+                <path d="M1 1l5 5 5-5" stroke="currentColor" stroke-width="1.5" fill="none" />
+              </svg>
             </button>
             <div v-if="menuOpen" class="user-menu-dropdown card">
               <NuxtLink to="/kontrolna-tabla" class="user-menu-item" @click="menuOpen = false">{{ t('nav.dashboard') }}</NuxtLink>
@@ -58,7 +76,8 @@
           :aria-label="t('nav.menu')"
           @click="mobileNavOpen = !mobileNavOpen"
         >
-          <FontAwesomeIcon :icon="mobileNavOpen ? 'xmark' : 'bars'" />
+          <img src="/images/icons/menu-22.svg" alt="" class="mobile-nav-toggle-lines" />
+          <FontAwesomeIcon :icon="mobileNavOpen ? 'xmark' : 'bars'" class="mobile-nav-toggle-fa" />
         </button>
         <div v-if="mobileNavOpen" class="mobile-nav-dropdown card">
           <NuxtLink
@@ -92,6 +111,25 @@
             @click="mobileNavOpen = false"
           >
             {{ t('nav.contact') }}
+          </NuxtLink>
+          <!-- Dizajn 42: the phone header keeps only the logo and this menu, so
+               the two header buttons move in here. -->
+          <NuxtLink
+            to="/oglasi/novi"
+            class="mobile-nav-dropdown-item mobile-nav-dropdown-item-phone"
+            active-class="mobile-nav-dropdown-item-active"
+            @click="mobileNavOpen = false"
+          >
+            {{ t('nav.addListing') }}
+          </NuxtLink>
+          <NuxtLink
+            v-if="!auth.isAuthenticated"
+            to="/prijava"
+            class="mobile-nav-dropdown-item mobile-nav-dropdown-item-phone"
+            active-class="mobile-nav-dropdown-item-active"
+            @click="mobileNavOpen = false"
+          >
+            {{ t('nav.login') }}
           </NuxtLink>
         </div>
       </div>
@@ -133,15 +171,16 @@ function handleLogout() {
   top: 0;
   z-index: $z-sticky-header;
   background: $color-surface;
-  border-bottom: 1px solid $color-border;
+  // Figma runs the header straight into the hero card with no rule under it.
 }
 
+// Dizajn 5 — 104px (was 68).
 .site-header-inner {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  height: 68px;
+  height: 104px;
   position: relative;
 }
 
@@ -180,17 +219,14 @@ function handleLogout() {
 .site-nav-pill {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 41px;
   background: $color-background;
   border-radius: $radius-input;
-  padding: 5px;
+  padding: 16px 34px;
 }
 
 .site-nav-pill-link {
-  padding: 10px 20px;
-  border-radius: $radius-button;
-  font-weight: 600;
-  font-size: $font-size-muted;
+  font-size: 14px;
   color: $color-text;
   white-space: nowrap;
 }
@@ -200,8 +236,8 @@ function handleLogout() {
 }
 
 .site-nav-pill-link-active {
-  background: $color-surface;
-  box-shadow: $shadow-card;
+  color: $color-primary;
+  font-weight: 600;
 }
 
 .site-header-actions {
@@ -220,12 +256,17 @@ function handleLogout() {
   }
 }
 
-// Below md there's no slack left for a 4th 40-66px-wide action item next to
-// a 130px logo — tighten gaps and swap the CTA's padded rectangle for an
-// icon-sized circle (it's icon-only here anyway, text is d-none-mobile).
+// Dizajn 42 (94:27, first column): the phone header is 77 tall with only the
+// 112px logo and the menu lines. "Dodaj oglas" and "Prijava" move into the
+// menu; a signed-in user keeps the bell and the avatar next to it.
 @include mobile-only {
   .site-header-inner {
     gap: 12px;
+    height: 77px;
+  }
+
+  .site-logo-img {
+    width: 112px;
   }
 
   .site-header-actions {
@@ -234,13 +275,158 @@ function handleLogout() {
   }
 }
 
-// Visible at every width the pill nav isn't (RNT-061/062: pills only fit
-// from xxl up; below that, including real mobile, this is the only way to
-// reach Početna/Cenovnik/FAQ/Kontakt). Pinned to the header's own right
-// edge regardless of how much is in .site-header-actions. `right` matches
-// .container's own padding-left/right — an absolutely positioned child's
-// right:0 lands on the container's padding-box edge, not its content edge,
-// so left at 0 it would sit flush with the viewport, ignoring that padding.
+.site-header-pill-btn {
+  display: flex;
+  align-items: center;
+  height: 44px;
+  padding: 0 20px;
+  // Dizajn 5 — the header's own action buttons use an 8px radius, distinct
+  // from the 12px shared $radius-input used by the nav pill above.
+  border-radius: 8px;
+  background: $color-background;
+  color: $color-text;
+  font-weight: 500;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.site-header-pill-btn:hover {
+  text-decoration: none;
+  background: $color-border;
+}
+
+.site-header-cta-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 44px;
+  padding: 0 16px;
+  border-radius: 8px;
+  background: $color-background;
+  color: $color-text;
+  font-weight: 500;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.site-header-cta-btn:hover {
+  text-decoration: none;
+  background: $color-border;
+}
+
+.site-header-cta-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: $gradient-marketing;
+  flex-shrink: 0;
+}
+
+.site-header-cta-icon svg {
+  width: 7px;
+  height: 11px;
+}
+
+// Dizajn 42: on a phone both buttons live in the menu instead.
+@include mobile-only {
+  .site-header-cta-btn,
+  .site-header-pill-btn {
+    display: none;
+  }
+}
+
+.user-menu {
+  position: relative;
+}
+
+.user-menu-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 12px 0 6px;
+  border: none;
+  border-radius: 8px;
+  background: $color-background;
+  cursor: pointer;
+}
+
+.user-menu-trigger:hover {
+  background: $color-border;
+}
+
+.user-menu-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: $radius-pill;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.user-menu-avatar-placeholder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: $color-dark;
+  color: $color-surface;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.user-menu-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: $color-text;
+  white-space: nowrap;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.user-menu-chevron {
+  width: 10px;
+  height: 7px;
+  color: $color-text-muted;
+  flex-shrink: 0;
+}
+
+.user-menu-dropdown {
+  position: absolute;
+  top: 52px;
+  right: 0;
+  min-width: 200px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: $z-dropdown;
+}
+
+.user-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: $radius-button;
+  border: none;
+  background: none;
+  font-size: $font-size-muted;
+  color: $color-text;
+  cursor: pointer;
+}
+
+.user-menu-item:hover {
+  background: $color-background;
+  text-decoration: none;
+}
+
+.user-menu-item-danger {
+  color: $color-error;
+}
+
 .mobile-nav-toggle-wrap {
   display: none;
   position: absolute;
@@ -279,6 +465,36 @@ function handleLogout() {
   background: $color-border;
 }
 
+.mobile-nav-toggle-lines {
+  display: none;
+}
+
+// 26:3103: the bare 22x16 lines, flush with the 16px gutter; the button keeps
+// a 44px tap area that grows to the left of them.
+@include mobile-only {
+  .mobile-nav-toggle {
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    justify-content: flex-end;
+    background: none;
+  }
+
+  .mobile-nav-toggle:hover {
+    background: none;
+  }
+
+  .mobile-nav-toggle-lines {
+    display: block;
+    width: 22.19px;
+    height: 15.72px;
+  }
+
+  .mobile-nav-toggle-fa {
+    display: none;
+  }
+}
+
 .mobile-nav-dropdown {
   position: absolute;
   top: 48px;
@@ -311,121 +527,13 @@ function handleLogout() {
   font-weight: 600;
 }
 
-.site-header-pill-btn {
-  padding: 14px 32px;
-  border-radius: $radius-input;
-  background: $color-background;
-  color: $color-text;
-  font-weight: 500;
-  font-size: $font-size-muted;
-  white-space: nowrap;
-}
-
-.site-header-pill-btn:hover {
-  text-decoration: none;
-  background: $color-border;
-}
-
-.site-header-cta-btn {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 20px;
-  border-radius: $radius-input;
-  background: $color-background;
-  color: $color-text;
-  font-weight: 500;
-  font-size: $font-size-muted;
-  white-space: nowrap;
-}
-
-.site-header-cta-btn:hover {
-  text-decoration: none;
-  background: $color-border;
+.mobile-nav-dropdown-item-phone {
+  display: none;
 }
 
 @include mobile-only {
-  .site-header-cta-btn {
-    width: 44px;
-    height: 44px;
-    padding: 0;
-    justify-content: center;
+  .mobile-nav-dropdown-item-phone {
+    display: block;
   }
-}
-
-.site-header-cta-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: $radius-badge;
-  background: $gradient-marketing;
-  color: $color-surface;
-  font-size: 16px;
-  line-height: 1;
-  flex-shrink: 0;
-}
-
-.user-menu {
-  position: relative;
-}
-
-.user-menu-trigger {
-  border: none;
-  background: none;
-  padding: 0;
-  cursor: pointer;
-}
-
-.user-menu-avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: $radius-pill;
-  object-fit: cover;
-}
-
-.user-menu-avatar-placeholder {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: $color-dark;
-  color: $color-surface;
-  font-size: $font-size-muted;
-  font-weight: 600;
-}
-
-.user-menu-dropdown {
-  position: absolute;
-  top: 48px;
-  right: 0;
-  min-width: 200px;
-  padding: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  z-index: $z-dropdown;
-}
-
-.user-menu-item {
-  display: block;
-  width: 100%;
-  text-align: left;
-  padding: 10px 12px;
-  border-radius: $radius-button;
-  border: none;
-  background: none;
-  font-size: $font-size-muted;
-  color: $color-text;
-  cursor: pointer;
-}
-
-.user-menu-item:hover {
-  background: $color-background;
-  text-decoration: none;
-}
-
-.user-menu-item-danger {
-  color: $color-error;
 }
 </style>

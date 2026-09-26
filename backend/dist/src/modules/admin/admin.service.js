@@ -17,17 +17,20 @@ const prisma_service_1 = require("../../prisma/prisma.service");
 const users_service_1 = require("../users/users.service");
 const bookings_service_1 = require("../bookings/bookings.service");
 const money_1 = require("../../common/utils/money");
+const payment_report_1 = require("../../common/utils/payment-report");
 const payment_settings_service_1 = require("../../common/payment/nestpay/payment-settings.service");
+const uploads_service_1 = require("../../common/uploads/uploads.service");
 const PRIORITY_REPORT_THRESHOLD = 3;
 const RESTRICTION_DAYS = 30;
 let AdminService = class AdminService {
-    constructor(prisma, users, bookings, i18n, events, paymentSettings) {
+    constructor(prisma, users, bookings, i18n, events, paymentSettings, uploads) {
         this.prisma = prisma;
         this.users = users;
         this.bookings = bookings;
         this.i18n = i18n;
         this.events = events;
         this.paymentSettings = paymentSettings;
+        this.uploads = uploads;
     }
     async listUsers(search, blocked) {
         return this.prisma.user.findMany({
@@ -84,14 +87,28 @@ let AdminService = class AdminService {
         return { message: this.i18n.t('common.SUCCESS') };
     }
     async listDisputes(status) {
-        return this.prisma.dispute.findMany({
+        const disputes = await this.prisma.dispute.findMany({
             where: status ? { status } : undefined,
             orderBy: { createdAt: 'desc' },
             include: {
                 listing: { select: { id: true, title: true, slug: true } },
-                booking: { select: { id: true, status: true, startsAt: true, endsAt: true, guest: { select: { firstName: true, lastName: true } } } },
+                booking: {
+                    select: {
+                        id: true,
+                        status: true,
+                        startsAt: true,
+                        endsAt: true,
+                        paymentDeadline: true,
+                        guest: { select: { firstName: true, lastName: true } },
+                    },
+                },
                 submittedByUser: { select: { id: true, firstName: true, lastName: true } },
             },
+        });
+        return disputes.map((dispute) => {
+            const deadline = dispute.booking?.status === 'AWAITING_PAYMENT' ? dispute.booking.paymentDeadline : null;
+            const open = dispute.type === 'UNCONFIRMED_PAYMENT' && payment_report_1.OPEN_DISPUTE_STATUSES.includes(dispute.status);
+            return { ...dispute, paymentHeldUntil: open && deadline ? new Date(deadline.getTime() + payment_report_1.PAYMENT_REPORT_HOLD_MS) : null };
         });
     }
     async getBookingForAdmin(bookingId) {
@@ -195,6 +212,26 @@ let AdminService = class AdminService {
         await this.prisma.setting.update({ where: { key }, data: { value: dto.value } });
         await this.logAction(adminId, 'update_setting', 'Setting', key, existing.value, dto.value);
         return { message: this.i18n.t('common.SUCCESS') };
+    }
+    async setHomepageVideoThumbnail(adminId, file) {
+        if (!file)
+            throw new common_1.BadRequestException(this.i18n.t('errors.FILE_REQUIRED'));
+        const { url } = await this.uploads.saveImage(file, 'homepage', { maxWidth: 1600 });
+        return this.writeVideoThumbnail(adminId, url);
+    }
+    async removeHomepageVideoThumbnail(adminId) {
+        return this.writeVideoThumbnail(adminId, '');
+    }
+    async writeVideoThumbnail(adminId, url) {
+        const key = 'homepage_video_thumbnail';
+        const existing = await this.prisma.setting.findUnique({ where: { key } });
+        await this.prisma.setting.upsert({
+            where: { key },
+            create: { key, value: url, description: 'Poster image for the homepage "how it works" video' },
+            update: { value: url },
+        });
+        await this.logAction(adminId, 'update_setting', 'Setting', key, existing?.value ?? null, url);
+        return { thumbnailUrl: url || null };
     }
     async getPaymentSettings() {
         return this.paymentSettings.getMasked();
@@ -332,6 +369,7 @@ exports.AdminService = AdminService = __decorate([
         bookings_service_1.BookingsService,
         nestjs_i18n_1.I18nService,
         event_emitter_1.EventEmitter2,
-        payment_settings_service_1.PaymentSettingsService])
+        payment_settings_service_1.PaymentSettingsService,
+        uploads_service_1.UploadsService])
 ], AdminService);
 //# sourceMappingURL=admin.service.js.map

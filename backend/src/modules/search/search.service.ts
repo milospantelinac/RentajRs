@@ -3,7 +3,9 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CacheService } from '../../common/cache/cache.service';
 import { TaxonomyService } from '../taxonomy/taxonomy.service';
-import { paraToRsd, rsdToPara } from '../../common/utils/money';
+import { rsdToPara } from '../../common/utils/money';
+import { GUEST_CAPACITY_ATTRIBUTE_KEYS } from '../../common/utils/guest-capacity';
+import { LISTING_CARD_INCLUDE, loadListingCardNames, serializeListingCard } from '../../common/utils/listing-card';
 import { SearchListingsDto } from './dto/search-listings.dto';
 
 const RELEVANCE_CANDIDATE_POOL = 200;
@@ -144,8 +146,8 @@ export class SearchService {
       }),
     ]);
 
-    const categoryNames = await this.taxonomy.getCategoryNames(rows.map((r) => r.category.id));
-    const results = rows.map((r) => this.serializeResult(r, categoryNames));
+    const { categoryNames, optionNames } = await loadListingCardNames(this.taxonomy, rows);
+    const results = rows.map((r) => serializeListingCard(r, categoryNames, optionNames));
     return { results, total, page, pageSize };
   }
 
@@ -198,8 +200,14 @@ export class SearchService {
     scored.sort((a, b) => b.score - a.score);
     const pageItems = scored.slice((page - 1) * pageSize, (page - 1) * pageSize + pageSize);
 
-    const categoryNames = await this.taxonomy.getCategoryNames(pageItems.map((s) => s.listing.category.id));
-    return { results: pageItems.map((s) => this.serializeResult(s.listing, categoryNames)), total, page, pageSize };
+    const pageListings = pageItems.map((s) => s.listing);
+    const { categoryNames, optionNames } = await loadListingCardNames(this.taxonomy, pageListings);
+    return {
+      results: pageListings.map((listing) => serializeListingCard(listing, categoryNames, optionNames)),
+      total,
+      page,
+      pageSize,
+    };
   }
 
   private async getRankingWeights(): Promise<{
@@ -263,7 +271,7 @@ export class SearchService {
 
   /** Same query with location/date constraints dropped — offered to the user after an empty result set. */
   async relaxedSearch(dto: SearchListingsDto) {
-    const relaxed: SearchListingsDto = { ...dto, cityId: undefined, cityAreaId: undefined, dateFrom: undefined, dateTo: undefined };
+    const relaxed: SearchListingsDto = { ...dto, cityId: undefined, cityAreaId: undefined, cityAreaIds: undefined, dateFrom: undefined, dateTo: undefined };
     return this.search(relaxed);
   }
 
@@ -293,7 +301,12 @@ export class SearchService {
 
     if (dto.regionId) where.regionId = dto.regionId;
     if (dto.cityId) where.cityId = dto.cityId;
-    if (dto.cityAreaId) where.cityAreaId = dto.cityAreaId;
+    // Dizajn 9's filter panel lets a guest tick several parts of a city at
+    // once; cityAreaId stays for the single-value callers (Dizajn 8's pill,
+    // saved links) and the two are OR-ed into one `in` when both arrive.
+    const cityAreaIds = [...new Set([...(dto.cityAreaIds ?? []), ...(dto.cityAreaId ? [dto.cityAreaId] : [])])];
+    if (cityAreaIds.length === 1) where.cityAreaId = cityAreaIds[0];
+    else if (cityAreaIds.length > 1) where.cityAreaId = { in: cityAreaIds };
 
     if (dto.priceMin !== undefined || dto.priceMax !== undefined) {
       where.price = {
@@ -306,6 +319,14 @@ export class SearchService {
       where.AND = [
         ...((where.AND as Prisma.ListingWhereInput[]) ?? []),
         { OR: [{ maxGuests: null }, { maxGuests: { gte: dto.guests } }] },
+        // Dizajn 23: the capacity from wizard step 6 caps the guests too.
+        {
+          NOT: {
+            attributes: {
+              some: { attribute: { key: { in: GUEST_CAPACITY_ATTRIBUTE_KEYS } }, valueNumber: { lt: dto.guests } },
+            },
+          },
+        },
       ];
     }
 
@@ -374,15 +395,57 @@ export class SearchService {
     return where;
   }
 
+  /**
+   * Dizajn 11 — the "Slični oglasi u <gradu>" row at the foot of a listing
+   * page. Same category, the listing's own city first so the row is actually
+   * useful to someone already looking at Senjak, then topped up from the rest
+   * of the country rather than left half-empty in a city with two listings of
+   * that kind. Reuses the search card's serialization so the row renders
+   * through the same ListingCard as everywhere else (Dizajn 3).
+   */
+  async getSimilarListings(slug: string, take = 4) {
+    const listing = await this.prisma.listing.findUnique({
+      where: { slug },
+      select: { id: true, categoryId: true, cityId: true },
+    });
+    if (!listing) return { results: [] };
+
+    const base: Prisma.ListingWhereInput = {
+      status: 'ACTIVE',
+      available: true,
+      categoryId: listing.categoryId,
+    };
+
+    const rows = listing.cityId
+      ? await this.prisma.listing.findMany({
+          where: { ...base, cityId: listing.cityId, id: { not: listing.id } },
+          orderBy: { publishedAt: 'desc' },
+          take,
+          include: this.resultInclude(),
+        })
+      : [];
+
+    if (rows.length < take) {
+      rows.push(
+        ...(await this.prisma.listing.findMany({
+          where: { ...base, id: { notIn: [listing.id, ...rows.map((r) => r.id)] } },
+          orderBy: { publishedAt: 'desc' },
+          take: take - rows.length,
+          include: this.resultInclude(),
+        })),
+      );
+    }
+
+    if (!rows.length) return { results: [] };
+
+    const { categoryNames, optionNames } = await loadListingCardNames(this.taxonomy, rows);
+    return { results: rows.map((r) => serializeListingCard(r, categoryNames, optionNames)) };
+  }
+
+  /** The card's own fields (common/utils/listing-card.ts) plus what relevance ranking reads. */
   private resultInclude() {
     return {
-      // Same last-approved-state guarantee as getPublicBySlug (R32) — a
-      // search card must never show a photo the listing's own page would
-      // hide because it's pending removal or still awaiting approval.
-      photos: { where: { isCover: true, pendingRemoval: false, versionId: null }, take: 1 },
-      category: true,
-      city: true,
-      cityArea: true,
+      ...LISTING_CARD_INCLUDE,
       user: { select: { avgResponseTimeMinutes: true } },
     } satisfies Prisma.ListingInclude;
   }
@@ -451,29 +514,5 @@ export class SearchService {
   private async getIndexThreshold(): Promise<number> {
     const setting = await this.prisma.setting.findUnique({ where: { key: 'listing_index_threshold' } });
     return typeof setting?.value === 'number' ? setting.value : 3;
-  }
-
-  private serializeResult(listing: any, categoryNames: Map<string, string>) {
-    return {
-      id: listing.id,
-      slug: listing.slug,
-      title: listing.title,
-      price: paraToRsd(listing.price),
-      priceUnit: listing.priceUnit,
-      avgRating: listing.avgRating,
-      reviewCount: listing.reviewCount,
-      bookingModel: listing.bookingModel,
-      city: listing.city,
-      cityArea: listing.cityArea,
-      category: {
-        id: listing.category.id,
-        slug: listing.category.slug,
-        icon: listing.category.icon,
-        name: categoryNames.get(listing.category.id) ?? listing.category.slug,
-      },
-      coverPhoto: listing.photos[0] ?? null,
-      latitude: listing.latitude,
-      longitude: listing.longitude,
-    };
   }
 }

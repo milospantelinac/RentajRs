@@ -78,6 +78,12 @@ export class SearchListingsDto {
   @IsUUID('4')
   cityAreaId?: string;
 
+  @ApiPropertyOptional({ type: [String], description: 'Dizajn 9 — several city areas at once; OR-ed with cityAreaId' })
+  @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  cityAreaIds?: string[];
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsNumber()

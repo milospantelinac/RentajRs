@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { OnEvent } from '@nestjs/event-emitter';
+import { I18nService } from 'nestjs-i18n';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { EmailService } from '../../../common/email/email.service';
 
@@ -11,6 +12,7 @@ export class ListingEmailListener {
   constructor(
     private prisma: PrismaService,
     private email: EmailService,
+    private i18n: I18nService,
     config: ConfigService,
   ) {
     this.frontendUrl = config.get<string>('frontendUrl')!;
@@ -53,15 +55,37 @@ export class ListingEmailListener {
   }
 
   @OnEvent('listing.rejected')
-  async onRejected({ listingId, reason }: { listingId: string; reason: string }) {
+  async onRejected({ listingId, reason, note }: { listingId: string; reason: string; note?: string }) {
     const data = await this.loadListingAndOwner(listingId);
     if (!data) return;
+    // Dizajn 29: the reason is a key, so the owner reads its label, followed by the
+    // admin's note when there is one (the template closes the sentence itself).
+    const lang = data.owner.language === 'EN' ? 'en' : 'sr';
+    const label = this.i18n.t(`listings.REJECT_REASON.${reason}`, { lang, defaultValue: reason }) as string;
+    const trimmedNote = note?.trim().replace(/[.!?]+$/, '');
+    const razlog = trimmedNote ? `${label}. ${trimmedNote}` : label;
     await this.email.send({
       key: 'listing_rejected',
       to: data.owner.email,
       language: data.owner.language,
       userId: data.owner.id,
-      context: { oglas: data.listing.title, razlog: reason },
+      context: { oglas: data.listing.title, razlog },
+      buttonUrl: `${this.frontendUrl}/oglasi/${data.listing.id}/odbijeno`,
+    });
+  }
+
+  // Dizajn 18 — an "Otključaj svoju kategoriju" draft got its real category,
+  // so the owner can finish it in the wizard.
+  @OnEvent('listing.category_assigned')
+  async onCategoryAssigned({ listingId }: { listingId: string }) {
+    const data = await this.loadListingAndOwner(listingId);
+    if (!data) return;
+    await this.email.send({
+      key: 'listing_category_assigned',
+      to: data.owner.email,
+      language: data.owner.language,
+      userId: data.owner.id,
+      context: { oglas: data.listing.title },
       buttonUrl: `${this.frontendUrl}/oglasi/${data.listing.id}/uredi`,
     });
   }

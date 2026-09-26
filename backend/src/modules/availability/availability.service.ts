@@ -1,11 +1,14 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Logger } from '@nestjs/common';
 import { I18nContext, I18nService } from 'nestjs-i18n';
-import { OccupancySource } from '@prisma/client';
+import { IcalSource, OccupancySource } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
-import { parseIcs, buildIcsCalendar } from '../../common/utils/ics';
+import { parseIcs, buildIcsCalendar, icalSourceName, isIcsCalendar, normalizeIcalUrl } from '../../common/utils/ics';
+import { ICAL_FAILURE_ALERT_THRESHOLD, getIcalAvailability } from '../../common/utils/ical-availability';
+import { NonPublicAddressError, fetchUserUrl } from '../../common/utils/outbound-fetch';
 import { paraToRsd, rsdToPara } from '../../common/utils/money';
 import { toBelgradeDateOnly, toBelgradeHHMM, toBelgradeISODayOfWeek } from '../../common/utils/timezone';
 import {
@@ -18,6 +21,50 @@ import {
   AddIcalSourceDto,
 } from './dto/availability.dto';
 
+const ICAL_FETCH_TIMEOUT_MS = 15_000;
+// Stored as lastError when a feed answers with something other than a calendar.
+const ICAL_NOT_CALENDAR = 'NOT_CALENDAR';
+
+/**
+ * Dizajn 34: which rule priced a unit (an hour, a night, a month). A booking
+ * keeps this with its total so the owner's request card can say
+ * "2 sata × 4.200 RSD (vikend cena)". RANGE is a price for part of the
+ * working hours, SPECIAL a price set for one date or one time slot.
+ */
+export type PriceKind = 'BASE' | 'WEEKEND' | 'RANGE' | 'SPECIAL';
+
+export interface PricedUnit {
+  price: bigint;
+  kind: PriceKind;
+}
+
+/**
+ * Dizajn 33: one fetch for adding a feed and for the hourly sync. A hanging
+ * host no longer holds up the sync of every other feed, and a response that
+ * isn't a calendar fails the same way an unreachable one does. The address is
+ * the owner's, so fetchUserUrl keeps it (and every redirect) off the server's
+ * own network.
+ */
+async function fetchIcalFeed(url: string, allowPrivateAddresses: boolean): Promise<string> {
+  const response = await fetchUserUrl(url, { allowPrivateAddresses, signal: AbortSignal.timeout(ICAL_FETCH_TIMEOUT_MS) });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const text = await response.text();
+  if (!isIcsCalendar(text)) throw new Error(ICAL_NOT_CALENDAR);
+  return text;
+}
+
+/** What the iCal page shows for a connected calendar; the raw error stays in the database. */
+function serializeIcalSource(source: IcalSource) {
+  return {
+    id: source.id,
+    name: source.name,
+    url: source.url,
+    lastSyncedAt: source.lastSyncedAt,
+    status: source.lastError ? 'ERROR' : source.lastSyncedAt ? 'ACTIVE' : 'PENDING',
+    error: source.lastError ? (source.lastError === ICAL_NOT_CALENDAR ? 'NOT_CALENDAR' : 'UNREACHABLE') : null,
+  };
+}
+
 @Injectable()
 export class AvailabilityService {
   private readonly logger = new Logger(AvailabilityService.name);
@@ -26,7 +73,13 @@ export class AvailabilityService {
     private prisma: PrismaService,
     private events: EventEmitter2,
     private i18n: I18nService,
+    private config: ConfigService,
   ) {}
+
+  /** Only local development may read feeds from private addresses (config `ical.allowPrivateAddresses`). */
+  private get allowPrivateFeedAddresses(): boolean {
+    return this.config.get<boolean>('ical.allowPrivateAddresses') === true;
+  }
 
   // -- Core term-locking (used by BookingsService) ------------------------
 
@@ -163,7 +216,7 @@ export class AvailabilityService {
         listingId,
         startsAt,
         endsAt,
-        price: dto.price ? rsdToPara(dto.price) : undefined,
+        price: rsdToPara(dto.price),
         maxBookings: dto.maxBookings ?? 1,
       },
     });
@@ -220,7 +273,7 @@ export class AvailabilityService {
    * date). getNightlyPrices doesn't apply here since a monthly rate isn't
    * per-night; this is its month-count equivalent for booking creation.
    */
-  async getMonthlyPrices(listingId: string, startMonth: Date, monthCount: number, basePrice: bigint) {
+  async getMonthlyPrices(listingId: string, startMonth: Date, monthCount: number, basePrice: bigint): Promise<PricedUnit[]> {
     const monthStarts: Date[] = [];
     for (let i = 0; i < monthCount; i++) {
       monthStarts.push(new Date(Date.UTC(startMonth.getUTCFullYear(), startMonth.getUTCMonth() + i, 1)));
@@ -229,7 +282,10 @@ export class AvailabilityService {
       where: { listingId, date: { in: monthStarts } },
     });
     const overrideByMonth = new Map(overrides.map((o) => [o.date.toISOString().slice(0, 10), o.price]));
-    return monthStarts.map((m) => overrideByMonth.get(m.toISOString().slice(0, 10)) ?? basePrice);
+    return monthStarts.map((m) => {
+      const override = overrideByMonth.get(m.toISOString().slice(0, 10));
+      return override !== undefined ? { price: override, kind: 'SPECIAL' } : { price: basePrice, kind: 'BASE' };
+    });
   }
 
   // -- PER_SLOT + WORKING_HOURS pricing ------------------------------------
@@ -276,11 +332,18 @@ export class AvailabilityService {
   /**
    * Resolves the actual price for one hourly booking: a date+time-specific
    * SlotPriceOverride wins, then whichever HourlyPriceRange's window
-   * contains the booking's start time, else the listing's flat base price.
+   * contains the booking's start time, then the weekend price when the
+   * booking starts on a Friday or Saturday, else the listing's flat base price.
    * Compares HH:MM strings lexically, which is safe since they're always
    * zero-padded 24h (matches the /^([01]\d|2[0-3]):[0-5]\d$/ DTO pattern).
    */
-  async resolveHourlyPrice(listingId: string, date: Date, startTime: string, basePrice: bigint): Promise<bigint> {
+  async resolveHourlyPrice(
+    listingId: string,
+    date: Date,
+    startTime: string,
+    basePrice: bigint,
+    weekendPrice: bigint | null = null,
+  ): Promise<PricedUnit> {
     // T72 — raw UTC getters read a booking's calendar day back shifted by
     // the Belgrade offset (e.g. a late-evening booking rolling into the next
     // UTC day), missing a same-day SlotPriceOverride; SlotPriceOverride.date
@@ -289,7 +352,7 @@ export class AvailabilityService {
     const override = await this.prisma.slotPriceOverride.findFirst({
       where: { listingId, date: dateOnly, startTime: { lte: startTime }, endTime: { gt: startTime } },
     });
-    if (override) return override.price;
+    if (override) return { price: override.price, kind: 'SPECIAL' };
 
     // T104 — per-day mode stores each range with its own dayOfWeek; a
     // day-specific match wins over a shared (dayOfWeek: null) one covering
@@ -298,56 +361,177 @@ export class AvailabilityService {
     const dayOfWeek = toBelgradeISODayOfWeek(date);
     const ranges = await this.prisma.hourlyPriceRange.findMany({ where: { listingId } });
     const daySpecific = ranges.find((r) => r.dayOfWeek === dayOfWeek && r.startTime <= startTime && r.endTime > startTime);
-    if (daySpecific) return daySpecific.price;
+    if (daySpecific) return { price: daySpecific.price, kind: 'RANGE' };
     const shared = ranges.find((r) => r.dayOfWeek === null && r.startTime <= startTime && r.endTime > startTime);
-    return shared?.price ?? basePrice;
+    if (shared) return { price: shared.price, kind: 'RANGE' };
+
+    // Dizajn 21: the wizard's "Cena za vikend" covers hourly listings too, on
+    // the same Friday and Saturday as a stay's weekend nights (ISO 5 and 6).
+    const isWeekend = dayOfWeek === 5 || dayOfWeek === 6;
+    return isWeekend && weekendPrice ? { price: weekendPrice, kind: 'WEEKEND' } : { price: basePrice, kind: 'BASE' };
   }
 
   /** Per-night price for a PER_STAY booking spanning [startsAt, endsAt) — override where set, weekend/base price otherwise. */
-  async getNightlyPrices(listingId: string, startsAt: Date, endsAt: Date, basePrice: bigint, weekendPrice: bigint | null) {
+  async getNightlyPrices(
+    listingId: string,
+    startsAt: Date,
+    endsAt: Date,
+    basePrice: bigint,
+    weekendPrice: bigint | null,
+  ): Promise<PricedUnit[]> {
     const overrides = await this.prisma.datePriceOverride.findMany({
       where: { listingId, date: { gte: startsAt, lt: endsAt } },
     });
     const overrideByDate = new Map(overrides.map((o) => [o.date.toISOString().slice(0, 10), o.price]));
 
-    const prices: bigint[] = [];
+    const prices: PricedUnit[] = [];
     for (let d = new Date(startsAt); d < endsAt; d.setUTCDate(d.getUTCDate() + 1)) {
-      const key = d.toISOString().slice(0, 10);
       const isWeekend = d.getUTCDay() === 5 || d.getUTCDay() === 6; // Fri/Sat night
-      prices.push(overrideByDate.get(key) ?? (isWeekend && weekendPrice ? weekendPrice : basePrice));
+      prices.push(datePricedUnit(overrideByDate.get(d.toISOString().slice(0, 10)), isWeekend, basePrice, weekendPrice));
     }
     return prices;
   }
 
+  /**
+   * Dizajn 21: per-hour price for a PER_STAY booking billed by the HOUR over
+   * [startsAt, endsAt). Each hour takes its date's override, else the weekend
+   * price on a Friday or Saturday, else the base price: the rule
+   * getNightlyPrices applies to a night, on the same UTC calendar dates.
+   */
+  async getHourlyStayPrices(
+    listingId: string,
+    startsAt: Date,
+    endsAt: Date,
+    basePrice: bigint,
+    weekendPrice: bigint | null,
+  ): Promise<PricedUnit[]> {
+    const firstDate = new Date(startsAt);
+    firstDate.setUTCHours(0, 0, 0, 0);
+    const overrides = await this.prisma.datePriceOverride.findMany({
+      where: { listingId, date: { gte: firstDate, lt: endsAt } },
+    });
+    const overrideByDate = new Map(overrides.map((o) => [o.date.toISOString().slice(0, 10), o.price]));
+
+    const prices: PricedUnit[] = [];
+    for (let time = startsAt.getTime(); time < endsAt.getTime(); time += 3600_000) {
+      const hour = new Date(time);
+      const isWeekend = hour.getUTCDay() === 5 || hour.getUTCDay() === 6;
+      prices.push(datePricedUnit(overrideByDate.get(hour.toISOString().slice(0, 10)), isWeekend, basePrice, weekendPrice));
+    }
+    return prices;
+  }
+
+  /**
+   * Dizajn 33: the address is fetched before it is kept, so a typo or a page
+   * that isn't a calendar is refused on the spot, and a good feed is imported
+   * right away instead of at the next hourly run.
+   */
   async addIcalSource(userId: string, listingId: string, dto: AddIcalSourceDto) {
     const listing = await this.assertOwnership(userId, listingId);
-    // R67 + Dodavanje Oglasa spec §3 — iCal only applies to PER_STAY listings
-    // billed by DAY/NIGHT; "Po mesecu" books in whole calendar months, which
-    // an external calendar sync can't meaningfully express.
-    if (listing.bookingModel !== 'PER_STAY' || listing.priceUnit === 'MONTH') {
-      throw new BadRequestException(this.i18n.t('errors.LISTING_NOT_BOOKABLE'));
-    }
-    // Ch.11.2 — iCal sync isn't included on the Osnovni/BASIC package.
     const subscription = listing.subscriptionId
       ? await this.prisma.subscription.findUnique({ where: { id: listing.subscriptionId }, include: { package: true } })
       : null;
-    if (!subscription?.package.hasIcal) {
-      throw new ForbiddenException(this.i18n.t('errors.PACKAGE_FEATURE_NOT_INCLUDED'));
+    // R67 + Dodavanje Oglasa spec §3: iCal only applies to PER_STAY listings
+    // billed by DAY/NIGHT; "Po mesecu" books in whole calendar months, which
+    // an external calendar sync can't meaningfully express. Ch.11.2: iCal
+    // sync isn't included on the Osnovni/BASIC package.
+    switch (getIcalAvailability(listing, !!subscription?.package.hasIcal)) {
+      case 'NOT_STAY':
+        throw new BadRequestException(this.i18n.t('errors.LISTING_NOT_BOOKABLE'));
+      case 'NOT_PUBLISHED':
+        throw new BadRequestException(this.i18n.t('errors.ICAL_LISTING_NOT_ACTIVE'));
+      case 'NO_ICAL_PACKAGE':
+        throw new ForbiddenException(this.i18n.t('errors.PACKAGE_FEATURE_NOT_INCLUDED'));
     }
-    return this.prisma.icalSource.create({ data: { listingId, name: dto.name, url: dto.url } });
+
+    const url = normalizeIcalUrl(dto.url);
+    // Its own feed would come back as a conflict with every one of its bookings.
+    if (listing.icalExportToken && url.includes(listing.icalExportToken)) {
+      throw new BadRequestException(this.i18n.t('errors.ICAL_SOURCE_OWN_FEED'));
+    }
+    if (await this.prisma.icalSource.findFirst({ where: { listingId, url }, select: { id: true } })) {
+      throw new ConflictException(this.i18n.t('errors.ICAL_SOURCE_DUPLICATE'));
+    }
+
+    let text: string;
+    try {
+      text = await fetchIcalFeed(url, this.allowPrivateFeedAddresses);
+    } catch (err) {
+      // An address inside the server's network reads as unreachable, so the answer can't be used to map it.
+      if (err instanceof NonPublicAddressError) {
+        this.logger.warn(`Refused an iCal address on a non-public host (${err.host}) for listing ${listingId}`);
+      }
+      const notCalendar = (err as Error).message === ICAL_NOT_CALENDAR;
+      throw new BadRequestException(this.i18n.t(notCalendar ? 'errors.ICAL_URL_NOT_CALENDAR' : 'errors.ICAL_URL_UNREACHABLE'));
+    }
+
+    const source = await this.prisma.icalSource.create({
+      data: { listingId, name: dto.name?.trim() || icalSourceName(url), url },
+    });
+    await this.syncIcalSource(source.id, text);
+    return serializeIcalSource(await this.prisma.icalSource.findUniqueOrThrow({ where: { id: source.id } }));
   }
 
   async removeIcalSource(userId: string, listingId: string, sourceId: string) {
     await this.assertOwnership(userId, listingId);
-    await this.prisma.icalOccupancy.deleteMany({ where: { sourceId } });
-    await this.prisma.blockedTerm.deleteMany({ where: { icalSourceId: sourceId } });
-    await this.prisma.icalSource.deleteMany({ where: { id: sourceId, listingId } });
+    // Dizajn 33: the imported dates used to be deleted by source id alone, so
+    // any owner could clear another listing's; the source has to be this listing's.
+    const source = await this.prisma.icalSource.findFirst({ where: { id: sourceId, listingId }, select: { id: true } });
+    if (!source) throw new NotFoundException(this.i18n.t('errors.ICAL_SOURCE_NOT_FOUND'));
+    await this.prisma.$transaction([
+      this.prisma.icalOccupancy.deleteMany({ where: { sourceId } }),
+      this.prisma.blockedTerm.deleteMany({ where: { icalSourceId: sourceId } }),
+      this.prisma.icalSource.delete({ where: { id: sourceId } }),
+    ]);
     return { message: 'ok' };
   }
 
   async listIcalSources(userId: string, listingId: string) {
     await this.assertOwnership(userId, listingId);
-    return this.prisma.icalSource.findMany({ where: { listingId } });
+    const sources = await this.prisma.icalSource.findMany({ where: { listingId }, orderBy: [{ name: 'asc' }, { url: 'asc' }] });
+    return sources.map(serializeIcalSource);
+  }
+
+  /**
+   * Dizajn 33 (frame 572:641): everything the listing's iCal page shows, the
+   * breadcrumb, the export feed and the connected calendars, or why the
+   * listing can't use them yet.
+   */
+  async getIcalOverview(userId: string, listingId: string) {
+    const listing = await this.prisma.listing.findUnique({
+      where: { id: listingId },
+      include: {
+        city: { select: { name: true } },
+        cityArea: { select: { name: true } },
+        subscription: { select: { package: { select: { hasIcal: true } } } },
+      },
+    });
+    if (!listing || listing.status === 'DELETED') throw new NotFoundException(this.i18n.t('errors.LISTING_NOT_FOUND'));
+    if (listing.userId !== userId) throw new ForbiddenException();
+
+    const availability = getIcalAvailability(listing, !!listing.subscription?.package.hasIcal);
+    let exportToken: string | null = null;
+    let sources: IcalSource[] = [];
+    if (availability === 'AVAILABLE') {
+      // Stays get a token when they are created; one that somehow has none gets it here.
+      exportToken =
+        listing.icalExportToken ??
+        (await this.prisma.listing.update({ where: { id: listingId }, data: { icalExportToken: crypto.randomUUID() } })).icalExportToken;
+      sources = await this.prisma.icalSource.findMany({ where: { listingId }, orderBy: [{ name: 'asc' }, { url: 'asc' }] });
+    }
+
+    return {
+      listing: {
+        id: listing.id,
+        title: listing.title,
+        status: listing.status,
+        cityName: listing.city?.name ?? null,
+        cityAreaName: listing.cityArea?.name ?? null,
+      },
+      availability,
+      exportToken,
+      sources: sources.map(serializeIcalSource),
+    };
   }
 
   /**
@@ -381,20 +565,22 @@ export class AvailabilityService {
     }
   }
 
-  async syncIcalSource(sourceId: string) {
+  /** `feedText` is the feed addIcalSource has just fetched, so it isn't fetched twice. */
+  async syncIcalSource(sourceId: string, feedText?: string) {
     const source = await this.prisma.icalSource.findUniqueOrThrow({ where: { id: sourceId } });
     let text: string;
     try {
-      const response = await fetch(source.url);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      text = await response.text();
+      text = feedText ?? (await fetchIcalFeed(source.url, this.allowPrivateFeedAddresses));
     } catch (err) {
+      if (err instanceof NonPublicAddressError) {
+        this.logger.warn(`iCal source ${sourceId} points at a non-public host (${err.host}); not fetched`);
+      }
       const failureCount = source.failureCount + 1;
       await this.prisma.icalSource.update({
         where: { id: sourceId },
         data: { failureCount, lastError: (err as Error).message },
       });
-      if (failureCount >= 3) {
+      if (failureCount >= ICAL_FAILURE_ALERT_THRESHOLD) {
         this.events.emit('availability.ical_sync_failed', { listingId: source.listingId, sourceId });
       }
       return;
@@ -451,6 +637,12 @@ export class AvailabilityService {
     if (listing.userId !== userId) throw new ForbiddenException();
     return listing;
   }
+}
+
+/** A date's own price first, then the weekend price on a Friday or Saturday, then the base price. */
+function datePricedUnit(override: bigint | undefined, isWeekend: boolean, basePrice: bigint, weekendPrice: bigint | null): PricedUnit {
+  if (override !== undefined) return { price: override, kind: 'SPECIAL' };
+  return isWeekend && weekendPrice ? { price: weekendPrice, kind: 'WEEKEND' } : { price: basePrice, kind: 'BASE' };
 }
 
 function isExclusionViolation(err: unknown): boolean {

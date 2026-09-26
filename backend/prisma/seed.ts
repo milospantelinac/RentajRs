@@ -152,8 +152,14 @@ async function seedSettings() {
     },
     { key: 'daily_new_conversation_limit', value: 10, description: 'R77' },
     { key: 'listing_index_threshold', value: 3, description: 'R135' },
-    { key: 'review_window_days', value: 14, description: 'R96' },
+    { key: 'review_window_days', value: 14, description: 'Dizajn 43: days after a booking completes in which its guest can leave a review' },
+    { key: 'review_edit_days', value: 7, description: 'Dizajn 43: days after a review goes public in which its author can change it' },
     { key: 'default_payment_deadline_hours', value: 48, description: 'R59' },
+    {
+      key: 'booking_request_response_hours',
+      value: 48,
+      description: 'Dizajn 41: hours an owner has to answer a booking request before it expires (sooner if the term starts first)',
+    },
     { key: 'moderation_sla_hours', value: 24, description: 'R30' },
     {
       key: 'admin_new_booking_notifications',
@@ -165,6 +171,12 @@ async function seedSettings() {
       value: null,
       description:
         'Ch.18.3 — YouTube/Vimeo/direct video URL for the homepage "how it works" section; section is hidden entirely while this is empty',
+    },
+    {
+      key: 'homepage_video_thumbnail',
+      value: null,
+      description:
+        'Poster image shown over the homepage "how it works" video before playback; uploaded from /admin/sadrzaj. Falls back to YouTube\'s own thumbnail when empty',
     },
   ];
 
@@ -199,6 +211,39 @@ async function seedLocations() {
     Kosovo: ['Kosovska Mitrovica'],
   };
 
+  // Locative for headings like "Oglasi u Beogradu" (Dizajn 8). Listed rather
+  // than derived: the ending changes irregularly (Šabac -> Šapcu, Čačak ->
+  // Čačku) and two-word names decline the adjective too.
+  const locative: Record<string, string> = {
+    Beograd: 'Beogradu',
+    'Novi Sad': 'Novom Sadu',
+    Subotica: 'Subotici',
+    Zrenjanin: 'Zrenjaninu',
+    Pančevo: 'Pančevu',
+    Sombor: 'Somboru',
+    Kikinda: 'Kikindi',
+    'Sremska Mitrovica': 'Sremskoj Mitrovici',
+    Kragujevac: 'Kragujevcu',
+    Kruševac: 'Kruševcu',
+    Jagodina: 'Jagodini',
+    Čačak: 'Čačku',
+    'Gornji Milanovac': 'Gornjem Milanovcu',
+    Užice: 'Užicu',
+    Valjevo: 'Valjevu',
+    Šabac: 'Šapcu',
+    Loznica: 'Loznici',
+    Zaječar: 'Zaječaru',
+    Bor: 'Boru',
+    Negotin: 'Negotinu',
+    Kladovo: 'Kladovu',
+    Niš: 'Nišu',
+    Leskovac: 'Leskovcu',
+    Vranje: 'Vranju',
+    Pirot: 'Pirotu',
+    Prokuplje: 'Prokuplju',
+    'Kosovska Mitrovica': 'Kosovskoj Mitrovici',
+  };
+
   const beogradAreas = [
     'Vračar',
     'Novi Beograd',
@@ -223,8 +268,16 @@ async function seedLocations() {
     for (const cityName of cities) {
       const city = await prisma.city.upsert({
         where: { slug: slugify(cityName) },
-        update: {},
-        create: { regionId: region.id, name: cityName, slug: slugify(cityName) },
+        // Unlike the rest of this seed, the locative is backfilled on every
+        // run: it was added after these rows already existed, and it is
+        // reference data no admin edits, so there is nothing to overwrite.
+        update: { nameLocative: locative[cityName] ?? null },
+        create: {
+          regionId: region.id,
+          name: cityName,
+          slug: slugify(cityName),
+          nameLocative: locative[cityName] ?? null,
+        },
       });
 
       const areas = cityName === 'Beograd' ? beogradAreas : cityName === 'Novi Sad' ? novisadAreas : [];
@@ -292,6 +345,8 @@ interface CategorySeed {
   allowedPriceUnits: PriceUnit[];
   defaultPriceUnit: PriceUnit;
   icon: string;
+  /** Dizajn 17 — the grey line under the category's card on /oglasi/novi, copy from frame 172:287. */
+  shortDescription?: string;
   attributes: AttributeSeed[];
   children?: CategorySeed[];
 }
@@ -325,6 +380,7 @@ const CATEGORY_TREE: CategorySeed[] = [
   {
     name: 'Nekretnine',
     icon: 'home',
+    shortDescription: 'Stanovi, kuće i vikendice',
     defaultBookingModel: BookingModel.PER_STAY,
     allowedPriceUnits: [PriceUnit.NIGHT, PriceUnit.MONTH],
     defaultPriceUnit: PriceUnit.NIGHT,
@@ -383,6 +439,7 @@ const CATEGORY_TREE: CategorySeed[] = [
   {
     name: 'Prostori za proslave',
     icon: 'party',
+    shortDescription: 'Sale, bašte i restorani',
     defaultBookingModel: BookingModel.PER_SLOT,
     allowedPriceUnits: [PriceUnit.HOUR, PriceUnit.SLOT],
     defaultPriceUnit: PriceUnit.SLOT,
@@ -403,6 +460,7 @@ const CATEGORY_TREE: CategorySeed[] = [
   {
     name: 'Igraonice',
     icon: 'toy',
+    shortDescription: 'Igraonice i rođendaonice',
     defaultBookingModel: BookingModel.PER_SLOT,
     allowedPriceUnits: [PriceUnit.HOUR, PriceUnit.SLOT],
     defaultPriceUnit: PriceUnit.SLOT,
@@ -418,6 +476,7 @@ const CATEGORY_TREE: CategorySeed[] = [
   {
     name: 'Vozila',
     icon: 'car',
+    shortDescription: 'Putnička i dostavna vozila',
     defaultBookingModel: BookingModel.PER_STAY,
     allowedPriceUnits: [PriceUnit.DAY, PriceUnit.HOUR],
     defaultPriceUnit: PriceUnit.DAY,
@@ -470,8 +529,32 @@ const CATEGORY_TREE: CategorySeed[] = [
     ],
   },
   {
+    name: 'Magacini i skladišta',
+    icon: 'warehouse',
+    shortDescription: 'Magacini, skladišta i hladnjače',
+    defaultBookingModel: BookingModel.PER_STAY,
+    allowedPriceUnits: [PriceUnit.MONTH],
+    defaultPriceUnit: PriceUnit.MONTH,
+    attributes: [
+      // T66 — kept as wizard/detail fields (required, showOnCard) but
+      // intentionally not a search filter — the document explicitly asked
+      // for these to be left out of the /pretraga panel for now.
+      // T40 — dropdown of preset values instead of free numeric input; the
+      // option's own name carries the unit since LIST rendering never
+      // appends `unit` the way NUMBER does.
+      { key: 'povrsina', name: 'Površina', type: AttributeType.LIST, required: true, showOnCard: true, options: opts(['20 m²', '50 m²', '100 m²', '200 m²', '300 m²', '500 m²', '1000 m²', 'Preko 1000 m²']) },
+      { key: 'visina_prostora', name: 'Visina prostora', type: AttributeType.LIST, required: true, showOnCard: true, options: opts(['2 m', '2.5 m', '3 m', '4 m', '5 m', '6 m', 'Preko 6 m']) },
+      { key: 'tip_prostora', name: 'Tip prostora', type: AttributeType.LIST, required: true, isFilter: true, filterType: FilterType.SELECT, showOnCard: true, options: opts(['Privatni magacin', 'Poslovni magacin', 'Industrijski magacin', 'Skladišni prostor', 'Hladnjača']) },
+      {
+        key: 'sadrzaji', name: 'Sadržaji', type: AttributeType.CHECKBOX_GROUP, isFilter: true, filterType: FilterType.SELECT,
+        options: opts(['Alarm / sigurnosni sistem', 'Video nadzor / kamere', 'Protivpožarni sistem', 'Grejanje', 'Klima', 'Paletni regali / police', 'Parking', 'Pristup kamionima', 'Rampa za utovar']),
+      },
+    ],
+  },
+  {
     name: 'Građevinske mašine',
     icon: 'excavator',
+    shortDescription: 'Bageri, viljuškari, platforme',
     defaultBookingModel: BookingModel.PER_STAY,
     allowedPriceUnits: [PriceUnit.DAY],
     defaultPriceUnit: PriceUnit.DAY,
@@ -540,28 +623,6 @@ const CATEGORY_TREE: CategorySeed[] = [
       { key: 'radni_domet_viljuskar', name: 'Radni domet', type: AttributeType.LIST, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'viljuskar', options: opts(['0.5 m', '1 m', '1.5 m', '2 m', 'Preko 2 m']) },
     ],
   },
-  {
-    name: 'Magacini i skladišta',
-    icon: 'warehouse',
-    defaultBookingModel: BookingModel.PER_STAY,
-    allowedPriceUnits: [PriceUnit.MONTH],
-    defaultPriceUnit: PriceUnit.MONTH,
-    attributes: [
-      // T66 — kept as wizard/detail fields (required, showOnCard) but
-      // intentionally not a search filter — the document explicitly asked
-      // for these to be left out of the /pretraga panel for now.
-      // T40 — dropdown of preset values instead of free numeric input; the
-      // option's own name carries the unit since LIST rendering never
-      // appends `unit` the way NUMBER does.
-      { key: 'povrsina', name: 'Površina', type: AttributeType.LIST, required: true, showOnCard: true, options: opts(['20 m²', '50 m²', '100 m²', '200 m²', '300 m²', '500 m²', '1000 m²', 'Preko 1000 m²']) },
-      { key: 'visina_prostora', name: 'Visina prostora', type: AttributeType.LIST, required: true, showOnCard: true, options: opts(['2 m', '2.5 m', '3 m', '4 m', '5 m', '6 m', 'Preko 6 m']) },
-      { key: 'tip_prostora', name: 'Tip prostora', type: AttributeType.LIST, required: true, isFilter: true, filterType: FilterType.SELECT, showOnCard: true, options: opts(['Privatni magacin', 'Poslovni magacin', 'Industrijski magacin', 'Skladišni prostor', 'Hladnjača']) },
-      {
-        key: 'sadrzaji', name: 'Sadržaji', type: AttributeType.CHECKBOX_GROUP, isFilter: true, filterType: FilterType.SELECT,
-        options: opts(['Alarm / sigurnosni sistem', 'Video nadzor / kamere', 'Protivpožarni sistem', 'Grejanje', 'Klima', 'Paletni regali / police', 'Parking', 'Pristup kamionima', 'Rampa za utovar']),
-      },
-    ],
-  },
   // "Oprema" and "Usluge" (T03) were dropped from v1 scope entirely — see
   // pruneRemovedCategories() below, which deletes them (and any other
   // never-real leftover category) from the DB on every reseed rather than
@@ -592,6 +653,13 @@ async function seedCategoryNode(node: CategorySeed, parentId: string | null, ord
       defaultBookingModel: node.defaultBookingModel,
       allowedPriceUnits: node.allowedPriceUnits,
       defaultPriceUnit: node.defaultPriceUnit,
+      // Dizajn 46: CATEGORY_TREE is the one source of truth for which
+      // categories exist AND what order they appear in, everywhere they are
+      // listed (homepage, /pretraga tiles, footer, /oglasi/novi). Without
+      // this line an existing database kept whatever order it was first
+      // created with, and a reseed could never repair it, so the frontend
+      // carried a second hardcoded order to paper over the difference.
+      displayOrder: order,
     },
     create: {
       parentId,
@@ -606,6 +674,9 @@ async function seedCategoryNode(node: CategorySeed, parentId: string | null, ord
   });
 
   await setTranslation('CATEGORY', category.id, 'name', node.name);
+  if (node.shortDescription) {
+    await setTranslation('CATEGORY', category.id, 'shortDescription', node.shortDescription);
+  }
 
   for (const [i, attr] of node.attributes.entries()) {
     const attrFields = {

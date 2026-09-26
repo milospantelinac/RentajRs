@@ -20,10 +20,10 @@ class CreateUncategorizedListingDto {
 }
 exports.CreateUncategorizedListingDto = CreateUncategorizedListingDto;
 __decorate([
-    (0, swagger_1.ApiProperty)(),
+    (0, swagger_1.ApiProperty)({ maxLength: 70 }),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsNotEmpty)(),
-    (0, class_validator_1.MaxLength)(200),
+    (0, class_validator_1.MaxLength)(70),
     __metadata("design:type", String)
 ], CreateUncategorizedListingDto.prototype, "title", void 0);
 __decorate([
@@ -41,7 +41,7 @@ __decorate([
     (0, swagger_1.ApiPropertyOptional)(),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
-    (0, class_validator_1.MaxLength)(2000),
+    (0, class_validator_1.MaxLength)(1200),
     __metadata("design:type", String)
 ], CreateUncategorizedListingDto.prototype, "description", void 0);
 //# sourceMappingURL=create-uncategorized-listing.dto.js.map

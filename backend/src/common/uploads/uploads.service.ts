@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { I18nService } from 'nestjs-i18n';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
@@ -18,7 +19,10 @@ const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
  */
 @Injectable()
 export class UploadsService {
-  constructor(private config: ConfigService) {}
+  constructor(
+    private config: ConfigService,
+    private i18n: I18nService,
+  ) {}
 
   async saveImage(
     file: Express.Multer.File,
@@ -26,7 +30,8 @@ export class UploadsService {
     options: { maxWidth: number; maxHeight?: number; maxSizeMb?: number } = { maxWidth: 1600 },
   ): Promise<{ url: string; relativePath: string }> {
     if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
-      throw new BadRequestException('Only JPEG, PNG or WEBP images are allowed');
+      // Dizajn 27: the photos step now shows this to the owner, so it has to be in their language.
+      throw new BadRequestException(this.i18n.t('errors.IMAGE_TYPE_NOT_ALLOWED'));
     }
 
     // R85 needs a tighter cap for message images (5MB) than the general
@@ -35,7 +40,7 @@ export class UploadsService {
     const maxSizeMb = options.maxSizeMb ?? this.config.get<number>('uploads.maxPhotoSizeMb')!;
     const maxSizeBytes = maxSizeMb * 1024 * 1024;
     if (file.size > maxSizeBytes) {
-      throw new BadRequestException('File is too large');
+      throw new BadRequestException(this.i18n.t('errors.IMAGE_TOO_LARGE', { args: { max: maxSizeMb } }));
     }
 
     let processed: Buffer;
@@ -46,7 +51,7 @@ export class UploadsService {
         .webp({ quality: 82 })
         .toBuffer();
     } catch {
-      throw new BadRequestException('The uploaded file is not a valid image');
+      throw new BadRequestException(this.i18n.t('errors.IMAGE_INVALID'));
     }
 
     const dir = path.join(process.cwd(), this.config.get<string>('uploads.dir')!, folder);

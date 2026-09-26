@@ -6,7 +6,9 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
 import { BookingsService } from '../bookings/bookings.service';
 import { paraToRsd } from '../../common/utils/money';
+import { OPEN_DISPUTE_STATUSES, PAYMENT_REPORT_HOLD_MS } from '../../common/utils/payment-report';
 import { PaymentSettingsService } from '../../common/payment/nestpay/payment-settings.service';
+import { UploadsService } from '../../common/uploads/uploads.service';
 import { UpdatePaymentSettingsDto } from '../../common/payment/nestpay/dto/payment-settings.dto';
 import {
   ReportListingDto,
@@ -31,6 +33,7 @@ export class AdminService {
     private i18n: I18nService,
     private events: EventEmitter2,
     private paymentSettings: PaymentSettingsService,
+    private uploads: UploadsService,
   ) {}
 
   // -- Users -----------------------------------------------------------
@@ -101,7 +104,7 @@ export class AdminService {
   // -- Disputes ----------------------------------------------------------
 
   async listDisputes(status?: ProcessingStatus) {
-    return this.prisma.dispute.findMany({
+    const disputes = await this.prisma.dispute.findMany({
       where: status ? { status } : undefined,
       orderBy: { createdAt: 'desc' },
       include: {
@@ -109,9 +112,25 @@ export class AdminService {
         // T90 — startsAt/endsAt/guest let the admin tell apart which of a
         // listing's several bookings a dispute is actually about, without
         // needing to open the linked booking first.
-        booking: { select: { id: true, status: true, startsAt: true, endsAt: true, guest: { select: { firstName: true, lastName: true } } } },
+        booking: {
+          select: {
+            id: true,
+            status: true,
+            startsAt: true,
+            endsAt: true,
+            paymentDeadline: true,
+            guest: { select: { firstName: true, lastName: true } },
+          },
+        },
         submittedByUser: { select: { id: true, firstName: true, lastName: true } },
       },
+    });
+    // T94: an open payment report holds its unpaid booking past the payment
+    // deadline (BookingsService.expireUnpaidBookings), at most until this.
+    return disputes.map((dispute) => {
+      const deadline = dispute.booking?.status === 'AWAITING_PAYMENT' ? dispute.booking.paymentDeadline : null;
+      const open = dispute.type === 'UNCONFIRMED_PAYMENT' && OPEN_DISPUTE_STATUSES.includes(dispute.status);
+      return { ...dispute, paymentHeldUntil: open && deadline ? new Date(deadline.getTime() + PAYMENT_REPORT_HOLD_MS) : null };
     });
   }
 
@@ -253,6 +272,35 @@ export class AdminService {
     await this.prisma.setting.update({ where: { key }, data: { value: dto.value as any } });
     await this.logAction(adminId, 'update_setting', 'Setting', key, existing.value, dto.value);
     return { message: this.i18n.t('common.SUCCESS') };
+  }
+
+  // -- Homepage video poster --------------------------------------------
+
+  /**
+   * The poster shown over the homepage video before it is played. Stored as a
+   * Setting rather than its own table so it lives beside homepage_video_url
+   * and reuses the settings audit trail.
+   */
+  async setHomepageVideoThumbnail(adminId: string, file: Express.Multer.File) {
+    if (!file) throw new BadRequestException(this.i18n.t('errors.FILE_REQUIRED'));
+    const { url } = await this.uploads.saveImage(file, 'homepage', { maxWidth: 1600 });
+    return this.writeVideoThumbnail(adminId, url);
+  }
+
+  async removeHomepageVideoThumbnail(adminId: string) {
+    return this.writeVideoThumbnail(adminId, '');
+  }
+
+  private async writeVideoThumbnail(adminId: string, url: string) {
+    const key = 'homepage_video_thumbnail';
+    const existing = await this.prisma.setting.findUnique({ where: { key } });
+    await this.prisma.setting.upsert({
+      where: { key },
+      create: { key, value: url, description: 'Poster image for the homepage "how it works" video' },
+      update: { value: url },
+    });
+    await this.logAction(adminId, 'update_setting', 'Setting', key, existing?.value ?? null, url);
+    return { thumbnailUrl: url || null };
   }
 
   // -- Payment settings (Banca Intesa NestPay connector) ----------------

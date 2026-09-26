@@ -1,8 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsArray, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
+import { IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
 
-const GUEST_TAGS = ['ARRIVED_ON_TIME', 'RETURNED_NEATLY', 'COMMUNICATIVE', 'LATE', 'DAMAGE', 'NO_SHOW'] as const;
-
+/** Dizajn 43: the guest's review of a completed booking, public once sent. */
 export class CreateReviewDto {
   @ApiProperty()
   @IsUUID('4')
@@ -19,12 +18,21 @@ export class CreateReviewDto {
   @IsString()
   @MaxLength(2000)
   comment?: string;
+}
 
-  @ApiPropertyOptional({ enum: GUEST_TAGS, isArray: true, description: 'Owner-to-guest direction only' })
+/** Dizajn 43: the author's change, for review_edit_days after the review went public. */
+export class UpdateReviewDto {
+  @ApiProperty({ minimum: 1, maximum: 5 })
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  rating: number;
+
+  @ApiPropertyOptional({ description: 'Empty clears the comment' })
   @IsOptional()
-  @IsArray()
-  @IsIn(GUEST_TAGS, { each: true })
-  tags?: (typeof GUEST_TAGS)[number][];
+  @IsString()
+  @MaxLength(2000)
+  comment?: string;
 }
 
 export class ReplyToReviewDto {

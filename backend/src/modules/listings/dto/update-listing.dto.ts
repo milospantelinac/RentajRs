@@ -10,7 +10,6 @@ import {
   IsNumber,
   IsOptional,
   IsString,
-  IsUrl,
   Matches,
   Max,
   MaxLength,
@@ -18,6 +17,10 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { BookingModel, CancellationPolicyType, PaymentMethod, PriceUnit, SlotSubmode } from '@prisma/client';
+
+// Dizajn 20: a listing video has to be a YouTube link, the same links
+// frontend/utils/youtube.js recognises (watch, embed, shorts, youtu.be).
+const YOUTUBE_URL = /^(?:https?:\/\/)?(?:(?:www|m)\.)?(?:youtube\.com\/(?:watch\?(?:[^#\s]*&)?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{11})(?:[?&#/]\S*)?$/i;
 
 class MandatoryFeeDto {
   @IsString()
@@ -55,16 +58,17 @@ export class UpdateListingDto {
   slotSubmode?: SlotSubmode;
 
   // Korak 3
-  @ApiPropertyOptional()
+  // Dizajn 20: the wizard's counters allow 70 characters for the title and 1200 for the description.
+  @ApiPropertyOptional({ maxLength: 70 })
   @IsOptional()
   @IsString()
-  @MaxLength(200)
+  @MaxLength(70)
   title?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ maxLength: 1200 })
   @IsOptional()
   @IsString()
-  @MaxLength(5000)
+  @MaxLength(1200)
   description?: string;
 
   @ApiPropertyOptional({ type: [String] })
@@ -73,10 +77,12 @@ export class UpdateListingDto {
   @IsString({ each: true })
   keywords?: string[];
 
-  @ApiPropertyOptional()
+  // null removes the link.
+  @ApiPropertyOptional({ nullable: true })
   @IsOptional()
-  @IsUrl()
-  videoUrl?: string;
+  @IsString()
+  @Matches(YOUTUBE_URL, { message: 'validation.VIDEO_URL_YOUTUBE' })
+  videoUrl?: string | null;
 
   // Korak 7 — cena i nacin plaanja
   @ApiPropertyOptional({ enum: PriceUnit })

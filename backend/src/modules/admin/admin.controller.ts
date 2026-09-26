@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags } from '@nestjs/swagger';
 import { ProcessingStatus, Language, BookingStatus } from '@prisma/client';
 import { AdminService } from './admin.service';
@@ -110,6 +111,21 @@ export class AdminController {
   @Patch('admin/settings/:key')
   updateSetting(@CurrentUser('id') adminId: string, @Param('key') key: string, @Body() dto: UpdateSettingDto) {
     return this.adminService.updateSetting(adminId, key, dto);
+  }
+
+  // -- Admin: homepage video poster ------------------------------------
+
+  @RequirePermissions('manage_settings')
+  @Post('admin/homepage-video-thumbnail')
+  @UseInterceptors(FileInterceptor('file'))
+  setHomepageVideoThumbnail(@CurrentUser('id') adminId: string, @UploadedFile() file: Express.Multer.File) {
+    return this.adminService.setHomepageVideoThumbnail(adminId, file);
+  }
+
+  @RequirePermissions('manage_settings')
+  @Delete('admin/homepage-video-thumbnail')
+  removeHomepageVideoThumbnail(@CurrentUser('id') adminId: string) {
+    return this.adminService.removeHomepageVideoThumbnail(adminId);
   }
 
   // -- Admin: payment settings (Banca Intesa NestPay connector) --------
