@@ -27,7 +27,7 @@ import { UpsertFaqsDto } from './dto/upsert-faqs.dto';
 import { UpsertExtraServicesDto } from './dto/upsert-extra-services.dto';
 import { RejectListingDto } from './dto/reject-listing.dto';
 import { CreateUncategorizedListingDto } from './dto/create-uncategorized-listing.dto';
-import { FALLBACK_CATEGORY_SLUG } from '../taxonomy/taxonomy.service';
+import { FALLBACK_CATEGORY_SLUG, LISTING_COUNTS_CACHE_KEY } from '../taxonomy/taxonomy.service';
 
 // Once a listing is ACTIVE, title/location/photos must go through the
 // moderation queue instead of writing straight to the live row (R31) — each
@@ -285,6 +285,10 @@ export class ListingsService {
     }
 
     const updated = await this.prisma.listing.update({ where: { id: listing.id }, data });
+    // "Trenutno nedostupno" (R34) takes a live listing out of search, or back in.
+    if (dto.available !== undefined && dto.available !== listing.available) {
+      await this.cache.del(LISTING_COUNTS_CACHE_KEY);
+    }
 
     if (descriptionFlaggedContact) {
       this.events.emit('listing.description_flagged_contact_info', { listingId: listing.id });
@@ -607,6 +611,7 @@ export class ListingsService {
       where: { id: listing.id },
       data: { status: ListingStatus.DELETED, deletedAt: new Date() },
     });
+    await this.cache.del(LISTING_COUNTS_CACHE_KEY);
     // T21 — a checkout started for this listing but never completed
     // (AWAITING_PAYMENT, linked via pendingListingId rather than the
     // listing's own subscriptionId) can never be finished now that the
@@ -803,7 +808,7 @@ export class ListingsService {
     if (isFirstApproval) {
       await this.users.ensureProfileSlug(listing.userId);
     }
-    await this.cache.delByPrefix('taxonomy:category:');
+    await this.cache.del(LISTING_COUNTS_CACHE_KEY);
     this.events.emit('listing.approved', { listingId, userId: listing.userId });
     return this.serialize(updated);
   }
@@ -824,6 +829,8 @@ export class ListingsService {
         decidedAt: new Date(),
       },
     });
+    // Nothing stops the API from rejecting a live listing, which leaves search.
+    await this.cache.del(LISTING_COUNTS_CACHE_KEY);
     this.events.emit('listing.rejected', { listingId, userId: listing.userId, reason: dto.reason, note: dto.note });
     return this.serialize(updated);
   }
@@ -961,6 +968,8 @@ export class ListingsService {
         ...this.bookingFieldsForCategory(listing, category),
       },
     });
+    // A live listing moves its count from the hidden Ostalo, or from another category.
+    await this.cache.del(LISTING_COUNTS_CACHE_KEY);
     // Dizajn 18 — the "Otključaj svoju kategoriju" form tells the owner we'll
     // email them once the category is open. Only when the listing was still
     // waiting for one, so moving it again later doesn't repeat the email.

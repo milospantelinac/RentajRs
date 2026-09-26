@@ -10,7 +10,7 @@ Rentaj is a commission-free rental marketplace for the Serbian market. Owners pu
 |---|---|---|
 | Backend | NestJS (TypeScript) | Modular DI, guards/pipes, first-class OpenAPI — matches the Bible's "clear separation of concerns" requirement |
 | ORM / DB | Prisma + PostgreSQL 16 | Typed schema close to Ch.17's table definitions; raw-SQL migration layer for what Prisma can't express (GiST exclusion constraint, triggers) |
-| Cache / queue backing | Redis (via `ioredis`) | Category tree, search facets, rate limiting |
+| Cache / queue backing | Redis (via `ioredis`) | Category tree, attributes, listing counts, locations, packages (§8); optional, the site answers from Postgres without it |
 | Auth | Passport (local + Google OAuth2), JWT access+refresh, TOTP 2FA (admin only) | Matches R12/R13 (role is *derived*, never stored) and R127 |
 | Email | Nodemailer + MJML, DB-backed templates | R166 — copy must be admin-editable without a deploy |
 | Frontend | Nuxt 3 (Vue 3 Composition API, plain JS) | SSR for SEO; talks to the backend over HTTP only |
@@ -168,13 +168,22 @@ Conventions:
 
 ## 8. Caching
 
-Redis, via `common/cache/cache.service.ts` (`get`/`set`/`getOrSet`/`delByPrefix`). Used deliberately narrowly — only for things that are expensive to compute and don't change per-request:
+Redis, via `common/cache/cache.service.ts`. Used deliberately narrowly, only for things that are expensive to compute and don't change per-request:
 
-| What | TTL | Invalidated when |
-|---|---|---|
-| Category tree | 300s | Any admin category create/update/merge/promote/approve/reject |
-| Resolved attribute set per category | 300s | Same as above (attribute upsert/delete) |
-| Active packages list | 300s | Admin package price update |
+| What | Key | TTL | Invalidated when |
+|---|---|---|---|
+| Category tree, structure only | `taxonomy:tree:v3` | 30 min | Any admin category create/update/merge/promote/approve/reject/delete, attribute upsert/delete, a category proposal |
+| Live listings per category (ACTIVE and available, as search counts them) | `taxonomy:listing-counts` | 60 s | A listing's status, availability or category changes, a package runs out or is renewed, an account is deleted, and with the tree |
+| Category page (category, resolved attributes, subcategories) | `taxonomy:category:v2:<slug>` | 30 min | With the tree |
+| Resolved attribute set per category | `taxonomy:attributes:v2:<id>` | 30 min | With the tree |
+| Regions, cities, city areas | `taxonomy:regions`, `taxonomy:cities:*`, `taxonomy:areas:*` | 30 min | Only the seed changes them (see below) |
+| Active packages list | `subscriptions:packages` | 5 min | Admin package price update |
+| Search ranking weights | `settings:ranking_weights` | 5 min | TTL only, so an admin edit takes up to 5 min |
+| Google sign-in exchange code | `auth:google-exchange:<code>` | 30 s | Used once; not a copy of anything, Redis is the only place it lives |
+
+**Redis is optional.** `getOrSet`, `del` and `delByPrefix` never fail a request: without Redis a read goes straight to Postgres. A command is refused at once while disconnected (`enableOfflineQueue: false`) and given up after 500 ms on a stalled connection (`commandTimeout`), and after a failure `getOrSet` leaves Redis alone for 5 s, so during an outage only about one request in 5 s waits on it. One warning is logged per outage and one line when Redis answers again. `get` and `set` still throw, for the Google sign-in codes: without Redis that sign-in fails outright instead of reporting an expired code.
+
+**Copies never outlive a deploy, a reseed or an outage.** Every `taxonomy:`, `subscriptions:` and `settings:` key (`DERIVED_KEY_PREFIXES`, `common/cache/derived-keys.ts`) is dropped whenever the backend connects to Redis, on the first answer after a failure (an invalidation may have been missed meanwhile), and at the end of `prisma db seed` for a backend that is already running. Redis outlives deploys and reseeds (in docker-compose it also keeps a snapshot on its volume), which is how a deploy of Dizajn 46 would have shown the old category order for up to 30 minutes. The Google sign-in codes are never dropped.
 
 Never cached: bookings, messages, availability, anything user-specific or money-adjacent — correctness matters more than shaving a query there.
 

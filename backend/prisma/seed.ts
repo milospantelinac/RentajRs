@@ -1,5 +1,7 @@
 import { PrismaClient, Language, BookingModel, PriceUnit, AttributeType, FilterType } from '@prisma/client';
 import * as argon2 from 'argon2';
+import Redis from 'ioredis';
+import { DERIVED_KEY_PREFIXES, deleteByPrefix } from '../src/common/cache/derived-keys';
 import { emailTemplates } from './email-templates.seed-data';
 import { staticPages } from './static-pages.seed-data';
 import { faqs } from './faqs.seed-data';
@@ -819,6 +821,34 @@ async function seedFaqs() {
   console.log(`Seeded ${faqs.length} FAQ items x 2 languages`);
 }
 
+// The backend keeps copies of categories, locations, packages and settings in
+// Redis for up to half an hour, and a reseed rewrites exactly those rows (the
+// category order of Dizajn 46, for one). A backend that starts after the seed
+// drops them itself when it connects; this covers one that is already running.
+// Redis being out of reach is no reason to fail the seed.
+async function clearDerivedCache() {
+  const redis = new Redis({
+    host: process.env.REDIS_HOST || 'localhost',
+    port: parseInt(process.env.REDIS_PORT || '6379', 10),
+    lazyConnect: true,
+    connectTimeout: 3000,
+    maxRetriesPerRequest: 0,
+    retryStrategy: () => null,
+  });
+  redis.on('error', () => undefined); // the failed connect() below reports it
+  try {
+    await redis.connect();
+    for (const prefix of DERIVED_KEY_PREFIXES) await deleteByPrefix(redis, prefix);
+    console.log(`Cleared the cached ${DERIVED_KEY_PREFIXES.join(', ')} keys`);
+  } catch (err) {
+    console.warn(
+      `Redis cache not cleared (${(err as Error).message}): a running backend can show the old categories for up to 30 minutes, or until it restarts`,
+    );
+  } finally {
+    redis.disconnect();
+  }
+}
+
 async function main() {
   await seedPackages();
   await seedPermissionsAndAdmin();
@@ -829,6 +859,7 @@ async function main() {
   await seedEmailTemplates();
   await seedStaticPages();
   await seedFaqs();
+  await clearDerivedCache();
 }
 
 main()

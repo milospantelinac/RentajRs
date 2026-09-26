@@ -19,6 +19,7 @@ const nestjs_i18n_1 = require("nestjs-i18n");
 const prisma_service_1 = require("../../prisma/prisma.service");
 const cache_service_1 = require("../../common/cache/cache.service");
 const listings_service_1 = require("../listings/listings.service");
+const taxonomy_service_1 = require("../taxonomy/taxonomy.service");
 const payment_provider_interface_1 = require("../../common/payment/payment-provider.interface");
 const nestpay_checkout_service_1 = require("../../common/payment/nestpay/nestpay-checkout.service");
 const fiscalization_provider_interface_1 = require("../../common/fiscalization/fiscalization-provider.interface");
@@ -402,7 +403,7 @@ let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
             }
         }
         if (reactivate && listings.some((listing) => listing.status === 'EXPIRED')) {
-            await this.cache.delByPrefix('taxonomy:category:');
+            await this.cache.del(taxonomy_service_1.LISTING_COUNTS_CACHE_KEY);
         }
     }
     async rebankRunningDays(listingId) {
@@ -808,8 +809,10 @@ let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
                         leftSearch.push(listing.id);
                 }
             }
-            if (leftSearch.length)
+            if (leftSearch.length) {
                 this.events.emit('subscription.expired', { subscriptionId: sub.id, listingIds: leftSearch });
+                await this.cache.del(taxonomy_service_1.LISTING_COUNTS_CACHE_KEY);
+            }
         }
     }
     async expireBankedDayCoverage() {
@@ -822,7 +825,12 @@ let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
                 where: { listingId: banked.listingId, usedAt: null, validUntil: { gt: new Date() } },
             });
             if (stillCovered === 0) {
-                await this.prisma.listing.updateMany({ where: { id: banked.listingId, status: 'ACTIVE' }, data: { status: 'EXPIRED' } });
+                const { count } = await this.prisma.listing.updateMany({
+                    where: { id: banked.listingId, status: 'ACTIVE' },
+                    data: { status: 'EXPIRED' },
+                });
+                if (count)
+                    await this.cache.del(taxonomy_service_1.LISTING_COUNTS_CACHE_KEY);
             }
         }
     }

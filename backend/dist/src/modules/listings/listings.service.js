@@ -219,6 +219,9 @@ let ListingsService = class ListingsService {
             }
         }
         const updated = await this.prisma.listing.update({ where: { id: listing.id }, data });
+        if (dto.available !== undefined && dto.available !== listing.available) {
+            await this.cache.del(taxonomy_service_2.LISTING_COUNTS_CACHE_KEY);
+        }
         if (descriptionFlaggedContact) {
             this.events.emit('listing.description_flagged_contact_info', { listingId: listing.id });
         }
@@ -443,6 +446,7 @@ let ListingsService = class ListingsService {
             where: { id: listing.id },
             data: { status: client_1.ListingStatus.DELETED, deletedAt: new Date() },
         });
+        await this.cache.del(taxonomy_service_2.LISTING_COUNTS_CACHE_KEY);
         await this.prisma.subscription.deleteMany({
             where: { pendingListingId: listing.id, status: 'AWAITING_PAYMENT' },
         });
@@ -585,7 +589,7 @@ let ListingsService = class ListingsService {
         if (isFirstApproval) {
             await this.users.ensureProfileSlug(listing.userId);
         }
-        await this.cache.delByPrefix('taxonomy:category:');
+        await this.cache.del(taxonomy_service_2.LISTING_COUNTS_CACHE_KEY);
         this.events.emit('listing.approved', { listingId, userId: listing.userId });
         return this.serialize(updated);
     }
@@ -605,6 +609,7 @@ let ListingsService = class ListingsService {
                 decidedAt: new Date(),
             },
         });
+        await this.cache.del(taxonomy_service_2.LISTING_COUNTS_CACHE_KEY);
         this.events.emit('listing.rejected', { listingId, userId: listing.userId, reason: dto.reason, note: dto.note });
         return this.serialize(updated);
     }
@@ -711,6 +716,7 @@ let ListingsService = class ListingsService {
                 ...this.bookingFieldsForCategory(listing, category),
             },
         });
+        await this.cache.del(taxonomy_service_2.LISTING_COUNTS_CACHE_KEY);
         if (listing.pendingCategoryAssignment) {
             this.events.emit('listing.category_assigned', { listingId, userId: listing.userId });
         }

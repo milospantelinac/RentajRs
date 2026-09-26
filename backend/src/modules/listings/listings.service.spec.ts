@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { ListingsService } from './listings.service';
+import { LISTING_COUNTS_CACHE_KEY } from '../taxonomy/taxonomy.service';
 
 const i18n = { t: jest.fn((key: string) => key) };
 
@@ -171,6 +172,68 @@ describe('ListingsService#deleteListing', () => {
     expect(error).toBeInstanceOf(BadRequestException);
     expect(error.message).toBe('errors.LISTING_HAS_ACTIVE_BOOKINGS');
     expect(prisma.listing.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('ListingsService keeps the category counts in step with search', () => {
+  function makeCounted(prisma: any) {
+    const cache = { del: jest.fn(async () => undefined) };
+    const events = { emit: jest.fn() };
+    const service = new ListingsService(prisma, cache as any, {} as any, {} as any, {} as any, {} as any, i18n as any, events as any);
+    return { service, cache };
+  }
+
+  it('drops them when a listing is approved', async () => {
+    const row = listingRow({ status: 'PENDING_APPROVAL', publishedAt: new Date('2026-08-01') });
+    const prisma = {
+      listing: { findUniqueOrThrow: jest.fn().mockResolvedValue(row), update: jest.fn().mockResolvedValue({ ...row, status: 'ACTIVE' }) },
+      listingModeration: { updateMany: jest.fn() },
+    };
+    const { service, cache } = makeCounted(prisma);
+
+    await service.adminApprove('admin-1', 'l1');
+    expect(cache.del).toHaveBeenCalledWith(LISTING_COUNTS_CACHE_KEY);
+  });
+
+  it('drops them when a listing is rejected, deleted or filed under another category', async () => {
+    const row = listingRow({ bookingModel: 'PER_STAY', priceUnit: 'NIGHT', icalExportToken: 'token' });
+    const prisma = {
+      listing: {
+        findUnique: jest.fn().mockResolvedValue(row),
+        findUniqueOrThrow: jest.fn().mockResolvedValue(row),
+        update: jest.fn().mockResolvedValue(row),
+      },
+      listingModeration: { updateMany: jest.fn() },
+      booking: { count: jest.fn().mockResolvedValue(0) },
+      subscription: { deleteMany: jest.fn() },
+      category: {
+        findUniqueOrThrow: jest
+          .fn()
+          .mockResolvedValue({ id: 'c2', defaultBookingModel: 'PER_STAY', allowedPriceUnits: ['NIGHT'], defaultPriceUnit: 'NIGHT' }),
+      },
+    };
+    const { service, cache } = makeCounted(prisma);
+
+    await service.adminReject('admin-1', 'l1', { reason: 'OTHER' } as any);
+    expect(cache.del).toHaveBeenCalledTimes(1);
+    await service.deleteListing('u1', 'l1');
+    expect(cache.del).toHaveBeenCalledTimes(2);
+    await service.adminAssignCategory('l1', 'c2');
+    expect(cache.del).toHaveBeenCalledTimes(3);
+    expect(cache.del.mock.calls).toEqual([[LISTING_COUNTS_CACHE_KEY], [LISTING_COUNTS_CACHE_KEY], [LISTING_COUNTS_CACHE_KEY]]);
+  });
+
+  it('drops them when the availability switch flips, and only then', async () => {
+    const row = listingRow({ available: true });
+    const prisma = { listing: { findUnique: jest.fn().mockResolvedValue(row), update: jest.fn().mockResolvedValue(row) } };
+    const { service, cache } = makeCounted(prisma);
+
+    await service.updateListing('u1', 'l1', { available: true } as any);
+    await service.updateListing('u1', 'l1', { description: 'Novi opis' } as any);
+    expect(cache.del).not.toHaveBeenCalled();
+
+    await service.updateListing('u1', 'l1', { available: false } as any);
+    expect(cache.del).toHaveBeenCalledWith(LISTING_COUNTS_CACHE_KEY);
   });
 });
 

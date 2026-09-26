@@ -17,16 +17,24 @@ exports.CacheService = void 0;
 const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
 const ioredis_1 = __importDefault(require("ioredis"));
+const derived_keys_1 = require("./derived-keys");
+const COMMAND_TIMEOUT_MS = 500;
+const BYPASS_AFTER_FAILURE_MS = 5000;
 let CacheService = CacheService_1 = class CacheService {
     constructor(config) {
         this.logger = new common_1.Logger(CacheService_1.name);
+        this.unavailable = false;
+        this.bypassUntil = 0;
         this.client = new ioredis_1.default({
             host: config.get('redis.host'),
             port: config.get('redis.port'),
             lazyConnect: false,
             maxRetriesPerRequest: 2,
+            enableOfflineQueue: false,
+            commandTimeout: COMMAND_TIMEOUT_MS,
         });
         this.client.on('error', (err) => this.logger.warn(`Redis error: ${err.message}`));
+        this.client.on('ready', () => this.backInUse());
     }
     async get(key) {
         const raw = await this.client.get(key);
@@ -37,27 +45,55 @@ let CacheService = CacheService_1 = class CacheService {
     }
     async del(...keys) {
         if (keys.length)
-            await this.client.del(keys);
+            await this.optional(() => this.client.del(keys));
     }
     async delByPrefix(prefix) {
-        const stream = this.client.scanStream({ match: `${prefix}*`, count: 100 });
-        const toDelete = [];
-        for await (const keys of stream) {
-            toDelete.push(...keys);
-        }
-        if (toDelete.length)
-            await this.client.del(toDelete);
+        await this.optional(() => (0, derived_keys_1.deleteByPrefix)(this.client, prefix));
     }
     async getOrSet(key, ttlSeconds, compute) {
-        const cached = await this.get(key);
-        if (cached !== null)
-            return cached;
+        if (this.bypassing())
+            return compute();
+        const cached = await this.optional(() => this.client.get(key));
+        if (cached)
+            return JSON.parse(cached);
         const value = await compute();
-        await this.set(key, value, ttlSeconds);
+        const serialized = JSON.stringify(value);
+        if (!this.bypassing())
+            await this.optional(() => this.client.set(key, serialized, 'EX', ttlSeconds));
         return value;
     }
     async onModuleDestroy() {
-        await this.client.quit();
+        await this.client.quit().catch(() => this.client.disconnect());
+    }
+    backInUse() {
+        if (this.unavailable)
+            this.logger.log('Redis answers again, cache back in use');
+        this.unavailable = false;
+        this.bypassUntil = 0;
+        void this.dropDerivedData();
+    }
+    async dropDerivedData() {
+        for (const prefix of derived_keys_1.DERIVED_KEY_PREFIXES)
+            await this.delByPrefix(prefix);
+    }
+    bypassing() {
+        return Date.now() < this.bypassUntil;
+    }
+    async optional(command) {
+        try {
+            const result = await command();
+            if (this.unavailable)
+                this.backInUse();
+            return result;
+        }
+        catch (err) {
+            this.bypassUntil = Date.now() + BYPASS_AFTER_FAILURE_MS;
+            if (!this.unavailable) {
+                this.unavailable = true;
+                this.logger.warn(`Redis unavailable, reading from the database: ${err.message}`);
+            }
+            return undefined;
+        }
     }
 };
 exports.CacheService = CacheService;

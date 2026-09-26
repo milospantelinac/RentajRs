@@ -32,9 +32,14 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const client_1 = require("@prisma/client");
 const argon2 = __importStar(require("argon2"));
+const ioredis_1 = __importDefault(require("ioredis"));
+const derived_keys_1 = require("../src/common/cache/derived-keys");
 const email_templates_seed_data_1 = require("./email-templates.seed-data");
 const static_pages_seed_data_1 = require("./static-pages.seed-data");
 const faqs_seed_data_1 = require("./faqs.seed-data");
@@ -662,6 +667,29 @@ async function seedFaqs() {
     }
     console.log(`Seeded ${faqs_seed_data_1.faqs.length} FAQ items x 2 languages`);
 }
+async function clearDerivedCache() {
+    const redis = new ioredis_1.default({
+        host: process.env.REDIS_HOST || 'localhost',
+        port: parseInt(process.env.REDIS_PORT || '6379', 10),
+        lazyConnect: true,
+        connectTimeout: 3000,
+        maxRetriesPerRequest: 0,
+        retryStrategy: () => null,
+    });
+    redis.on('error', () => undefined);
+    try {
+        await redis.connect();
+        for (const prefix of derived_keys_1.DERIVED_KEY_PREFIXES)
+            await (0, derived_keys_1.deleteByPrefix)(redis, prefix);
+        console.log(`Cleared the cached ${derived_keys_1.DERIVED_KEY_PREFIXES.join(', ')} keys`);
+    }
+    catch (err) {
+        console.warn(`Redis cache not cleared (${err.message}): a running backend can show the old categories for up to 30 minutes, or until it restarts`);
+    }
+    finally {
+        redis.disconnect();
+    }
+}
 async function main() {
     await seedPackages();
     await seedPermissionsAndAdmin();
@@ -672,6 +700,7 @@ async function main() {
     await seedEmailTemplates();
     await seedStaticPages();
     await seedFaqs();
+    await clearDerivedCache();
 }
 main()
     .catch((e) => {
