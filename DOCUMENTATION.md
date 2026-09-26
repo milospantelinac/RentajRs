@@ -156,6 +156,8 @@ Conventions:
 
 **Editing copy**: `/admin/email-sabloni` (admin panel) — every template, both languages, subject/heading/body/button-label, live.
 
+**Delivery**: plain SMTP through nodemailer, so the provider is configuration only. Dev sends into MailDev (docker-compose points `SMTP_HOST` at it). Production sends through Postmark's transactional stream: `smtp.postmarkapp.com:587`, an SMTP token as the login (STARTTLS is required whenever a login is set), and the rentaj.rs domain verified in Postmark with DKIM and a Return-Path CNAME. Every message carries `X-PM-Tag: <template key>`, so Postmark's Activity can be filtered by email type. Postmark's SMTP endpoint accepts every message and records bounces afterwards, so a `SENT` row in `EmailLog` means Postmark took the message; delivery and bounces are in Postmark's Activity (kept 45 days).
+
 **New cron jobs added to wire this up** that didn't previously exist: booking unopened-request reminder (6h), payment-deadline reminders (half-point and final-day), day-before-stay reminder, subscription-expiring-soon (−7/−3/−1 days, autoRenew-off subscriptions only), and a price-drop-on-favorite check. Booking reminders are deduplicated via `Booking.remindersSent String[]`; the price-drop check via `Favorite.priceDropNotifiedAt`.
 
 **Account deletion** (Ch.22.4 "Zahtev za brisanje naloga", R175 — must be confirmed from the registered inbox) is a two-step, token-gated flow that didn't exist before this pass: `POST /users/me/deletion/request` emails a confirmation link; `POST /users/deletion/confirm` (public, token-only — the confirmation may be opened on a device with no active session) performs the actual anonymize-and-cancel. Admin-initiated deletion (`AdminService.deleteUserAsAdmin`) bypasses this gate and calls the underlying `UsersService.executeDeletion()` directly, since the admin already carries that authority.
@@ -220,7 +222,7 @@ Never cached: bookings, messages, availability, anything user-specific or money-
 | `JWT_ACCESS_SECRET`, `JWT_ACCESS_EXPIRES_IN`, `JWT_REFRESH_SECRET`, `JWT_REFRESH_EXPIRES_IN`, `SESSION_REMEMBER_ME_DAYS` | Auth tokens |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALLBACK_URL` | OAuth (optional — unset disables the button functionally, doesn't crash the app) |
 | `TWO_FACTOR_APP_NAME` | Shown in the authenticator app |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM_NAME`, `MAIL_FROM_ADDRESS` | Email delivery (MailDev by default) |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM_NAME`, `MAIL_FROM_ADDRESS` | Email delivery: MailDev in dev, Postmark over SMTP in production (values in `backend/.env.example`, see §7) |
 | `UPLOADS_DIR`, `UPLOADS_BASE_URL`, `MAX_PHOTO_SIZE_MB`, `MAX_PHOTOS_PER_LISTING` | Photo storage |
 | `GEOCODING_PROVIDER`, `GOOGLE_MAPS_API_KEY` | `nominatim` (default, free, no key) or `google` |
 | `PAYMENT_PROVIDER`, `BANCA_INTESA_*` | `mock` (default) or real Banca Intesa credentials |
@@ -268,4 +270,4 @@ Worth knowing about because they're the kind that don't show up until you actual
 
 Per the Bible's own "Za naredne verzije" (next versions) list, intentionally not built: rating criteria broken down per category (O19), extended dashboard analytics (O20), a dedicated mobile dashboard layout (O21), an agency-tier package above Pro, verified-owner badges, team accounts/organizations, SMS notifications.
 
-Also not built, and worth flagging explicitly rather than silently omitting: a real payment/fiscalization provider (mock only, by design — see §13), NBS IPS-QR conformance validation, and an actual production transactional email provider swap-in (MailDev only, by design for dev).
+Also not built, and worth flagging explicitly rather than silently omitting: a real payment/fiscalization provider (mock only, by design — see §13) and NBS IPS-QR conformance validation.
