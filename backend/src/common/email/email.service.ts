@@ -39,6 +39,10 @@ export class EmailService {
       port: mail.port,
       secure: mail.secure,
       auth: mail.user ? { user: mail.user, pass: mail.pass } : undefined,
+      // The login (Postmark's SMTP token in production) never goes out in the
+      // clear: with one set, port 587 has to upgrade with STARTTLS instead of
+      // only when the server offers it. MailDev in dev has no login.
+      requireTLS: Boolean(mail.user),
     });
     this.frontendUrl = this.config.get<string>('frontendUrl')!;
     this.fromName = mail.fromName;
@@ -93,6 +97,9 @@ export class EmailService {
         to: opts.to,
         subject: interpolate(template.subject, opts.context),
         html,
+        // Postmark files the message under its template key (Activity filter,
+        // stats per email type); MailDev just shows it as a header.
+        headers: { 'X-PM-Tag': opts.key },
       });
     } catch (err) {
       status = 'FAILED';

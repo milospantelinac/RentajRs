@@ -65,6 +65,7 @@ let EmailService = EmailService_1 = class EmailService {
             port: mail.port,
             secure: mail.secure,
             auth: mail.user ? { user: mail.user, pass: mail.pass } : undefined,
+            requireTLS: Boolean(mail.user),
         });
         this.frontendUrl = this.config.get('frontendUrl');
         this.fromName = mail.fromName;
@@ -105,6 +106,7 @@ let EmailService = EmailService_1 = class EmailService {
                 to: opts.to,
                 subject: (0, interpolate_1.interpolate)(template.subject, opts.context),
                 html,
+                headers: { 'X-PM-Tag': opts.key },
             });
         }
         catch (err) {
