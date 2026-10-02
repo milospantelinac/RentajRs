@@ -455,7 +455,7 @@ const NOTIFICATION_CATEGORIES = [
   },
   { key: 'Messages', events: ['new_message'] },
   { key: 'Reviews', events: ['review_invitation', 'reviews_published', 'review_reminder_7d', 'review_replied'] },
-  { key: 'Subscription', events: ['subscription_activated', 'subscription_renewed', 'subscription_renewal_reminder', 'subscription_expiring_soon', 'subscription_expired'] },
+  { key: 'Subscription', events: ['subscription_activated', 'subscription_renewed', 'subscription_expiring_soon', 'subscription_expired'] },
   { key: 'Account', events: ['welcome_registration', 'data_export_ready'] },
 ]
 const notificationCategories = NOTIFICATION_CATEGORIES
