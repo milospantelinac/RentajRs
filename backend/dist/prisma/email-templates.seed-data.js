@@ -168,36 +168,6 @@ exports.emailTemplates = [
         },
     },
     {
-        key: 'listing_edit_approved',
-        sr: {
-            subject: 'Izmene su objavljene',
-            heading: 'Izmene oglasa "{oglas}" su objavljene',
-            bodyText: 'Izmene koje ste poslali na proveru su odobrene i sada su vidljive na oglasu.',
-            buttonLabel: 'Pogledaj oglas',
-        },
-        en: {
-            subject: 'Your edits are live',
-            heading: 'Your edits to "{oglas}" are live',
-            bodyText: 'The changes you submitted for review have been approved and are now visible on the listing.',
-            buttonLabel: 'View listing',
-        },
-    },
-    {
-        key: 'listing_edit_rejected',
-        sr: {
-            subject: 'Izmene nisu prihvaćene',
-            heading: 'Izmene oglasa "{oglas}" nisu prihvaćene',
-            bodyText: 'Razlog: {razlog}. Oglas ostaje u prethodnom stanju dok ponovo ne pošaljete izmene na proveru.',
-            buttonLabel: 'Ispravi izmene',
-        },
-        en: {
-            subject: 'Your edits were not accepted',
-            heading: 'Your edits to "{oglas}" were not accepted',
-            bodyText: 'Reason: {razlog}. The listing stays as it was until you resubmit your changes for review.',
-            buttonLabel: 'Fix edits',
-        },
-    },
-    {
         key: 'booking_requested_guest',
         sr: {
             subject: 'Zahtev je poslat — čekate odgovor',
