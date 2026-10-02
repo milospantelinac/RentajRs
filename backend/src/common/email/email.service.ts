@@ -1,9 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 import { Language } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationsService } from '../../modules/notifications/notifications.service';
+import { emailTemplates } from '../../../prisma/email-templates.seed-data';
 import { interpolate } from '../utils/interpolate';
 import { renderEmailHtml } from './mjml-layout';
 import { CRITICAL_EMAIL_EVENTS } from './critical-events';
@@ -21,7 +22,7 @@ export interface SendEmailOptions {
 }
 
 @Injectable()
-export class EmailService {
+export class EmailService implements OnApplicationBootstrap {
   private readonly logger = new Logger(EmailService.name);
   private readonly transporter: nodemailer.Transporter;
   private readonly frontendUrl: string;
@@ -47,6 +48,26 @@ export class EmailService {
     this.frontendUrl = this.config.get<string>('frontendUrl')!;
     this.fromName = mail.fromName;
     this.fromAddress = mail.fromAddress;
+  }
+
+  /**
+   * The seed writes the template copy, but nothing runs it when the production
+   * image starts, and send() skips an email whose template has no row. So a
+   * template this build sends and the database lacks gets its default copy
+   * here; the rows that exist keep whatever an admin made of them (R166).
+   */
+  async onApplicationBootstrap() {
+    const rows = emailTemplates.flatMap((template) => [
+      { key: template.key, language: Language.SR, ...template.sr },
+      { key: template.key, language: Language.EN, ...template.en },
+    ]);
+    try {
+      const { count } = await this.prisma.emailTemplate.createMany({ data: rows, skipDuplicates: true });
+      if (count) this.logger.log(`Added ${count} email template row(s) the database was missing`);
+    } catch (err) {
+      // Mail whose template is missing stays unsent, as before; the backend still starts.
+      this.logger.error(`Could not add the missing email templates: ${(err as Error).message}`);
+    }
   }
 
   /**

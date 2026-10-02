@@ -545,6 +545,7 @@ export class SubscriptionsService {
           errorMessage: verification.errMsg || `ProcReturnCode ${verification.procReturnCode}`,
         },
       });
+      this.emitCheckoutFailed(subscription, listingId);
       return `${frontendUrl}${paymentFailedPath(listingId, subscription.renewsSubscriptionId)}`;
     }
 
@@ -662,9 +663,24 @@ export class SubscriptionsService {
     });
     await this.prisma.subscription.delete({ where: { id: subscription.id } });
 
-    return listingId
-      ? `${frontendUrl}${paymentFailedPath(listingId, subscription.renewsSubscriptionId)}`
-      : `${frontendUrl}/kontrolna-tabla/pretplate?payment=failed`;
+    if (!listingId) return `${frontendUrl}/kontrolna-tabla/pretplate?payment=failed`;
+    this.emitCheckoutFailed(subscription, listingId);
+    return `${frontendUrl}${paymentFailedPath(listingId, subscription.renewsSubscriptionId)}`;
+  }
+
+  /**
+   * A card payment that was declined or given up on, whatever it was for (a first
+   * package, a move to Pro, a renewal). The checkout's subscription row is deleted
+   * by now, so the event carries what the email needs.
+   */
+  private emitCheckoutFailed(subscription: Subscription, listingId: string) {
+    this.events.emit('subscription.checkout_failed', {
+      userId: subscription.userId,
+      packageId: subscription.packageId,
+      amount: subscription.priceAtPurchase,
+      listingId,
+      renewsSubscriptionId: subscription.renewsSubscriptionId,
+    });
   }
 
   private async bankRemainingDays(listingId: string, oldSubscription: Subscription & { package: { id: string } }) {

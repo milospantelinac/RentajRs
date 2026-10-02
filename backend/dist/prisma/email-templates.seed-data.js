@@ -573,6 +573,21 @@ exports.emailTemplates = [
         },
     },
     {
+        key: 'subscription_checkout_failed',
+        sr: {
+            subject: 'Plaćanje nije uspelo',
+            heading: 'Plaćanje za paket {paket} nije uspelo',
+            bodyText: 'Uplata od {iznos} nije prošla ili je otkazana. Oglas "{oglas}" je sačuvan i na njemu ništa nije promenjeno, pa možete pokušati ponovo.',
+            buttonLabel: 'Pokušaj ponovo',
+        },
+        en: {
+            subject: 'Payment failed',
+            heading: 'Payment for the {paket} package failed',
+            bodyText: 'The payment of {iznos} didn’t go through or was cancelled. Your listing "{oglas}" is saved and nothing about it has changed, so you can try again.',
+            buttonLabel: 'Try again',
+        },
+    },
+    {
         key: 'subscription_expiring_soon',
         sr: {
             subject: 'Oglas prestaje da radi za {broj} dana',

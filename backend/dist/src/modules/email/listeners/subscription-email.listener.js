@@ -107,6 +107,24 @@ let SubscriptionEmailListener = class SubscriptionEmailListener {
             buttonUrl: `${this.frontendUrl}/kontrolna-tabla/pretplate`,
         });
     }
+    async onCheckoutFailed({ userId, packageId, amount, listingId, renewsSubscriptionId, }) {
+        const [user, pkg, listing] = await Promise.all([
+            this.prisma.user.findUnique({ where: { id: userId } }),
+            this.prisma.package.findUnique({ where: { id: packageId } }),
+            this.prisma.listing.findUnique({ where: { id: listingId }, select: { id: true, title: true } }),
+        ]);
+        if (!user || !pkg || !listing)
+            return;
+        const retryUrl = `${this.frontendUrl}/oglasi/${listing.id}/paket`;
+        await this.email.send({
+            key: 'subscription_checkout_failed',
+            to: user.email,
+            language: user.language,
+            userId,
+            context: { paket: pkg.key, iznos: (0, format_1.formatRsd)(amount), oglas: listing.title },
+            buttonUrl: renewsSubscriptionId ? `${retryUrl}?obnova=${renewsSubscriptionId}` : retryUrl,
+        });
+    }
     async onProFormaIssued({ userId, subscriptionId }) {
         const sub = await this.loadSub(subscriptionId);
         if (!sub)
@@ -160,6 +178,12 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], SubscriptionEmailListener.prototype, "onRenewed", null);
+__decorate([
+    (0, event_emitter_1.OnEvent)('subscription.checkout_failed'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], SubscriptionEmailListener.prototype, "onCheckoutFailed", null);
 __decorate([
     (0, event_emitter_1.OnEvent)('subscription.pro_forma_issued'),
     __metadata("design:type", Function),

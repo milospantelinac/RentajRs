@@ -443,6 +443,7 @@ let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
                     errorMessage: verification.errMsg || `ProcReturnCode ${verification.procReturnCode}`,
                 },
             });
+            this.emitCheckoutFailed(subscription, listingId);
             return `${frontendUrl}${paymentFailedPath(listingId, subscription.renewsSubscriptionId)}`;
         }
         await this.prisma.transaction.create({
@@ -546,9 +547,19 @@ let SubscriptionsService = SubscriptionsService_1 = class SubscriptionsService {
             },
         });
         await this.prisma.subscription.delete({ where: { id: subscription.id } });
-        return listingId
-            ? `${frontendUrl}${paymentFailedPath(listingId, subscription.renewsSubscriptionId)}`
-            : `${frontendUrl}/kontrolna-tabla/pretplate?payment=failed`;
+        if (!listingId)
+            return `${frontendUrl}/kontrolna-tabla/pretplate?payment=failed`;
+        this.emitCheckoutFailed(subscription, listingId);
+        return `${frontendUrl}${paymentFailedPath(listingId, subscription.renewsSubscriptionId)}`;
+    }
+    emitCheckoutFailed(subscription, listingId) {
+        this.events.emit('subscription.checkout_failed', {
+            userId: subscription.userId,
+            packageId: subscription.packageId,
+            amount: subscription.priceAtPurchase,
+            listingId,
+            renewsSubscriptionId: subscription.renewsSubscriptionId,
+        });
     }
     async bankRemainingDays(listingId, oldSubscription) {
         if (!oldSubscription.expiresAt)

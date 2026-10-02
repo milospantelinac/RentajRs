@@ -50,6 +50,7 @@ const nodemailer = __importStar(require("nodemailer"));
 const client_1 = require("@prisma/client");
 const prisma_service_1 = require("../../prisma/prisma.service");
 const notifications_service_1 = require("../../modules/notifications/notifications.service");
+const email_templates_seed_data_1 = require("../../../prisma/email-templates.seed-data");
 const interpolate_1 = require("../utils/interpolate");
 const mjml_layout_1 = require("./mjml-layout");
 const critical_events_1 = require("./critical-events");
@@ -70,6 +71,20 @@ let EmailService = EmailService_1 = class EmailService {
         this.frontendUrl = this.config.get('frontendUrl');
         this.fromName = mail.fromName;
         this.fromAddress = mail.fromAddress;
+    }
+    async onApplicationBootstrap() {
+        const rows = email_templates_seed_data_1.emailTemplates.flatMap((template) => [
+            { key: template.key, language: client_1.Language.SR, ...template.sr },
+            { key: template.key, language: client_1.Language.EN, ...template.en },
+        ]);
+        try {
+            const { count } = await this.prisma.emailTemplate.createMany({ data: rows, skipDuplicates: true });
+            if (count)
+                this.logger.log(`Added ${count} email template row(s) the database was missing`);
+        }
+        catch (err) {
+            this.logger.error(`Could not add the missing email templates: ${err.message}`);
+        }
     }
     async send(opts) {
         if (opts.userId && !critical_events_1.CRITICAL_EMAIL_EVENTS.has(opts.key)) {

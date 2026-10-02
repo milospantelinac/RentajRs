@@ -23,6 +23,7 @@ export const CRITICAL_EMAIL_EVENTS = new Set<string>([
   'booking_payment_reported_owner',
   'subscription_invoice',
   'subscription_pro_forma',
+  'subscription_checkout_failed',
   // Confirmed bookings
   'booking_confirmed_cash',
   'booking_cancelled',

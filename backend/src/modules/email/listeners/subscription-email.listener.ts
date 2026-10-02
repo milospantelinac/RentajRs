@@ -133,6 +133,44 @@ export class SubscriptionEmailListener {
     });
   }
 
+  /**
+   * A card payment at checkout that was declined or given up on: a first package,
+   * a move to Pro and a renewal all end here. Nothing is left of the checkout by
+   * then, so the event brings its package, amount and listing. "Pokušaj ponovo"
+   * opens the same package choice as the button on the failure page.
+   */
+  @OnEvent('subscription.checkout_failed')
+  async onCheckoutFailed({
+    userId,
+    packageId,
+    amount,
+    listingId,
+    renewsSubscriptionId,
+  }: {
+    userId: string;
+    packageId: string;
+    amount: bigint;
+    listingId: string;
+    renewsSubscriptionId: string | null;
+  }) {
+    const [user, pkg, listing] = await Promise.all([
+      this.prisma.user.findUnique({ where: { id: userId } }),
+      this.prisma.package.findUnique({ where: { id: packageId } }),
+      this.prisma.listing.findUnique({ where: { id: listingId }, select: { id: true, title: true } }),
+    ]);
+    if (!user || !pkg || !listing) return;
+
+    const retryUrl = `${this.frontendUrl}/oglasi/${listing.id}/paket`;
+    await this.email.send({
+      key: 'subscription_checkout_failed',
+      to: user.email,
+      language: user.language,
+      userId,
+      context: { paket: pkg.key, iznos: formatRsd(amount), oglas: listing.title },
+      buttonUrl: renewsSubscriptionId ? `${retryUrl}?obnova=${renewsSubscriptionId}` : retryUrl,
+    });
+  }
+
   @OnEvent('subscription.pro_forma_issued')
   async onProFormaIssued({ userId, subscriptionId }: { userId: string; subscriptionId: string }) {
     const sub = await this.loadSub(subscriptionId);

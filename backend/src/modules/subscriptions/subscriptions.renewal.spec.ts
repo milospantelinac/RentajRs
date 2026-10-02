@@ -343,6 +343,68 @@ describe('SubscriptionsService renewal payment', () => {
   });
 });
 
+describe('SubscriptionsService failed card payment', () => {
+  const awaiting = (extra: Row = {}) => subscription({ id: 'c1', status: 'AWAITING_PAYMENT', pendingListingId: 'l1', ...extra });
+  const draft = () => listing({ id: 'l1', status: 'DRAFT', publishedAt: null });
+  const failed = (extra: Row = {}) => [
+    'subscription.checkout_failed',
+    { userId: 'u1', packageId: 'pkg-standard', amount: 334_000n, listingId: 'l1', renewsSubscriptionId: null, ...extra },
+  ];
+
+  it('tells the owner when the bank sends a first package to the fail address', async () => {
+    const { service, tables, events } = setup({ subscription: [awaiting()], listing: [draft()] });
+    (service as any).nestpay.verifyCallback.mockResolvedValueOnce({ valid: true, approved: false, oid: 'c1', errMsg: 'Not authenticated' });
+    const url = await service.handleNestPayFail({ oid: 'c1' });
+
+    expect(url).toBe('http://front/oglasi/l1/placanje-neuspesno');
+    expect(tables.subscription).toEqual([]);
+    expect(tables.transaction).toEqual([
+      expect.objectContaining({ userId: 'u1', amount: 334_000n, status: 'FAILED', errorMessage: 'Not authenticated' }),
+    ]);
+    expect(events.emit.mock.calls).toEqual([failed()]);
+  });
+
+  it('counts an answer on the fail address that carries no valid signature', async () => {
+    const { service, tables, events } = setup({ subscription: [awaiting()], listing: [draft()] });
+    (service as any).nestpay.verifyCallback.mockResolvedValueOnce({ valid: false, reason: 'Missing HASHPARAMS or HASH in response', approved: false, oid: 'c1' });
+    await service.handleNestPayFail({ oid: 'c1' });
+
+    expect(tables.transaction).toEqual([expect.objectContaining({ status: 'FAILED', errorMessage: 'Payment declined' })]);
+    expect(events.emit.mock.calls).toEqual([failed()]);
+  });
+
+  it('covers a renewal the bank declines on the success address', async () => {
+    const { service, events } = setup({
+      subscription: [subscription({ id: 's1', status: 'ACTIVE', expiresAt: new Date(Date.now() + DAY) }), awaiting({ renewsSubscriptionId: 's1' })],
+      listing: [listing({ id: 'l1', subscriptionId: 's1' })],
+    });
+    (service as any).nestpay.verifyCallback.mockResolvedValueOnce({ valid: true, approved: false, oid: 'c1', procReturnCode: '05' });
+    const url = await service.handleNestPaySuccess({ oid: 'c1' });
+
+    expect(url).toBe('http://front/oglasi/l1/placanje-neuspesno?obnova=s1');
+    expect(events.emit.mock.calls).toEqual([failed({ renewsSubscriptionId: 's1' })]);
+  });
+
+  it('says nothing about a checkout that is already closed', async () => {
+    const { service, tables, events } = setup({ subscription: [awaiting()], listing: [draft()] });
+    await service.handleNestPayFail({ oid: 'c1' });
+    events.emit.mockClear();
+    const again = await service.handleNestPayFail({ oid: 'c1' });
+
+    expect(again).toBe('http://front/kontrolna-tabla/pretplate?payment=failed');
+    expect(tables.transaction).toHaveLength(1);
+    expect(events.emit).not.toHaveBeenCalled();
+  });
+
+  it('stays out of a payment that went through', async () => {
+    const { service, events } = setup({ subscription: [awaiting()], listing: [draft()] });
+    const url = await service.handleNestPaySuccess({ oid: 'c1' });
+
+    expect(url).toBe('http://front/oglasi/l1/poslato?subscriptionId=c1');
+    expect(events.emit.mock.calls).toEqual([['subscription.purchased', { userId: 'u1', subscriptionId: 'c1' }]]);
+  });
+});
+
 describe('SubscriptionsService expiry with renewals', () => {
   it('hands the listings to the paid renewal without a gap or an email', async () => {
     const { service, tables, events, cache } = setup({
