@@ -49,6 +49,7 @@ const event_emitter_1 = require("@nestjs/event-emitter");
 const QRCode = __importStar(require("qrcode"));
 const prisma_service_1 = require("../../../prisma/prisma.service");
 const email_service_1 = require("../../../common/email/email.service");
+const escape_html_1 = require("../../../common/utils/escape-html");
 const request_expiry_1 = require("../../../common/utils/request-expiry");
 const format_1 = require("../format");
 let BookingEmailListener = class BookingEmailListener {
@@ -149,12 +150,12 @@ let BookingEmailListener = class BookingEmailListener {
         const extraMjml = `
       <mj-text font-weight="600" padding-bottom="8px">${isEn ? 'Payment details' : 'Detalji uplate'}</mj-text>
       <mj-text padding-bottom="2px">${isEn ? 'Amount' : 'Iznos'}: ${(0, format_1.formatRsd)(b.amountDue)}</mj-text>
-      <mj-text padding-bottom="2px">${isEn ? 'Account' : 'Račun'}: ${b.owner.bankAccount ?? ''}</mj-text>
+      <mj-text padding-bottom="2px">${isEn ? 'Account' : 'Račun'}: ${(0, escape_html_1.escapeHtml)(b.owner.bankAccount ?? '')}</mj-text>
       <mj-text padding-bottom="2px">${isEn ? 'Reference number' : 'Poziv na broj'}: ${b.id.replace(/-/g, '').slice(0, 20)}</mj-text>
       <mj-text padding-bottom="12px">${isEn ? 'Deadline' : 'Rok'}: ${(0, format_1.formatDateTime)(b.paymentDeadline, locale)}</mj-text>
       ${qrDataUrl ? `<mj-image src="${qrDataUrl}" width="200px" padding-bottom="12px" />` : ''}
       ${b.cancellationTermsSnapshot
-            ? `<mj-text font-size="13px" color="#6b7280" padding-bottom="8px">${isEn ? 'Cancellation terms' : 'Uslovi otkazivanja'}: ${b.cancellationTermsSnapshot}</mj-text>`
+            ? `<mj-text font-size="13px" color="#6b7280" padding-bottom="8px">${isEn ? 'Cancellation terms' : 'Uslovi otkazivanja'}: ${(0, escape_html_1.escapeHtml)(b.cancellationTermsSnapshot)}</mj-text>`
             : ''}
       <mj-text font-size="12px" color="#6b7280">${isEn
             ? 'Payment goes directly to the owner. Rentaj never mediates payment.'

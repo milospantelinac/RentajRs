@@ -15,14 +15,6 @@ const event_emitter_1 = require("@nestjs/event-emitter");
 const prisma_service_1 = require("../../../prisma/prisma.service");
 const email_service_1 = require("../../../common/email/email.service");
 const SUPPORT_INBOX = 'office@rentaj.rs';
-function escapeHtml(value) {
-    return value
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-}
 let ContactEmailListener = class ContactEmailListener {
     constructor(prisma, email) {
         this.prisma = prisma;
@@ -36,10 +28,10 @@ let ContactEmailListener = class ContactEmailListener {
             key: 'contact_message_received',
             to: SUPPORT_INBOX,
             context: {
-                ime: escapeHtml(message.name),
-                email: escapeHtml(message.email),
-                naslov: escapeHtml(message.subject),
-                poruka: escapeHtml(message.message).replace(/\n/g, '<br/>'),
+                ime: message.name,
+                email: message.email,
+                naslov: message.subject,
+                poruka: message.message,
             },
         });
     }

@@ -5,6 +5,7 @@ import * as QRCode from 'qrcode';
 import { Booking, Listing, User } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { EmailService } from '../../../common/email/email.service';
+import { escapeHtml } from '../../../common/utils/escape-html';
 import { getRequestExpiresAt, readRequestResponseHours } from '../../../common/utils/request-expiry';
 import { formatRsd, formatDateTime, localeFor } from '../format';
 
@@ -125,16 +126,18 @@ export class BookingEmailListener {
     const isEn = b.guest.language === 'EN';
     const qrDataUrl = b.ipsQrData ? await QRCode.toDataURL(b.ipsQrData, { width: 240, margin: 1 }) : null;
 
+    // This block goes into the email as raw MJML, so the two values that are
+    // stored text (the owner's account, the terms snapshot) are escaped here.
     const extraMjml = `
       <mj-text font-weight="600" padding-bottom="8px">${isEn ? 'Payment details' : 'Detalji uplate'}</mj-text>
       <mj-text padding-bottom="2px">${isEn ? 'Amount' : 'Iznos'}: ${formatRsd(b.amountDue)}</mj-text>
-      <mj-text padding-bottom="2px">${isEn ? 'Account' : 'Račun'}: ${b.owner.bankAccount ?? ''}</mj-text>
+      <mj-text padding-bottom="2px">${isEn ? 'Account' : 'Račun'}: ${escapeHtml(b.owner.bankAccount ?? '')}</mj-text>
       <mj-text padding-bottom="2px">${isEn ? 'Reference number' : 'Poziv na broj'}: ${b.id.replace(/-/g, '').slice(0, 20)}</mj-text>
       <mj-text padding-bottom="12px">${isEn ? 'Deadline' : 'Rok'}: ${formatDateTime(b.paymentDeadline, locale)}</mj-text>
       ${qrDataUrl ? `<mj-image src="${qrDataUrl}" width="200px" padding-bottom="12px" />` : ''}
       ${
         b.cancellationTermsSnapshot
-          ? `<mj-text font-size="13px" color="#6b7280" padding-bottom="8px">${isEn ? 'Cancellation terms' : 'Uslovi otkazivanja'}: ${b.cancellationTermsSnapshot}</mj-text>`
+          ? `<mj-text font-size="13px" color="#6b7280" padding-bottom="8px">${isEn ? 'Cancellation terms' : 'Uslovi otkazivanja'}: ${escapeHtml(b.cancellationTermsSnapshot)}</mj-text>`
           : ''
       }
       <mj-text font-size="12px" color="#6b7280">${

@@ -5,6 +5,7 @@ import { Language } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationsService } from '../../modules/notifications/notifications.service';
 import { emailTemplates } from '../../../prisma/email-templates.seed-data';
+import { escapeHtml } from '../utils/escape-html';
 import { interpolate } from '../utils/interpolate';
 import { renderEmailHtml } from './mjml-layout';
 import { CRITICAL_EMAIL_EVENTS } from './critical-events';
@@ -17,8 +18,22 @@ export interface SendEmailOptions {
   userId?: string;
   context?: Record<string, string | number>;
   buttonUrl?: string;
-  /** Structured, non-editable data block (payment details, IPS QR, invoice numbers) as raw MJML. */
+  /**
+   * Structured, non-editable data block (payment details, IPS QR, invoice numbers) as raw MJML.
+   * It is placed in the email as it is, so the caller escapes any value it puts into it.
+   */
   extraMjml?: string;
+}
+
+/** The context values as they go into the email's HTML; in the body a line break stays a line break. */
+function htmlValues(context: SendEmailOptions['context'], lineBreaks = false) {
+  if (!context) return context;
+  return Object.fromEntries(
+    Object.entries(context).map(([token, value]) => {
+      const escaped = escapeHtml(String(value));
+      return [token, lineBreaks ? escaped.replace(/\r\n|\r|\n/g, '<br/>') : escaped];
+    }),
+  );
 }
 
 @Injectable()
@@ -98,12 +113,18 @@ export class EmailService implements OnApplicationBootstrap {
       return;
     }
 
+    // The copy is the admin's and may carry tags of its own (the contact
+    // template has <br/>). The values are written by users: listing titles,
+    // reasons, names, the browser's User-Agent. So only the values are escaped
+    // on their way into the HTML, or a title could put a link of its own into
+    // an email to someone else. The subject and the bell are plain text and
+    // take the values as they are.
     const heading = interpolate(template.heading, opts.context);
     const bodyText = interpolate(template.bodyText, opts.context);
     const html = renderEmailHtml({
-      heading,
-      bodyText,
-      buttonLabel: template.buttonLabel ? interpolate(template.buttonLabel, opts.context) : null,
+      heading: interpolate(template.heading, htmlValues(opts.context)),
+      bodyText: interpolate(template.bodyText, htmlValues(opts.context, true)),
+      buttonLabel: template.buttonLabel ? interpolate(template.buttonLabel, htmlValues(opts.context)) : null,
       buttonUrl: opts.buttonUrl,
       extraMjml: opts.extraMjml,
       language,

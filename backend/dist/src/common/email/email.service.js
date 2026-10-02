@@ -51,9 +51,18 @@ const client_1 = require("@prisma/client");
 const prisma_service_1 = require("../../prisma/prisma.service");
 const notifications_service_1 = require("../../modules/notifications/notifications.service");
 const email_templates_seed_data_1 = require("../../../prisma/email-templates.seed-data");
+const escape_html_1 = require("../utils/escape-html");
 const interpolate_1 = require("../utils/interpolate");
 const mjml_layout_1 = require("./mjml-layout");
 const critical_events_1 = require("./critical-events");
+function htmlValues(context, lineBreaks = false) {
+    if (!context)
+        return context;
+    return Object.fromEntries(Object.entries(context).map(([token, value]) => {
+        const escaped = (0, escape_html_1.escapeHtml)(String(value));
+        return [token, lineBreaks ? escaped.replace(/\r\n|\r|\n/g, '<br/>') : escaped];
+    }));
+}
 let EmailService = EmailService_1 = class EmailService {
     constructor(config, prisma, notifications) {
         this.config = config;
@@ -105,9 +114,9 @@ let EmailService = EmailService_1 = class EmailService {
         const heading = (0, interpolate_1.interpolate)(template.heading, opts.context);
         const bodyText = (0, interpolate_1.interpolate)(template.bodyText, opts.context);
         const html = (0, mjml_layout_1.renderEmailHtml)({
-            heading,
-            bodyText,
-            buttonLabel: template.buttonLabel ? (0, interpolate_1.interpolate)(template.buttonLabel, opts.context) : null,
+            heading: (0, interpolate_1.interpolate)(template.heading, htmlValues(opts.context)),
+            bodyText: (0, interpolate_1.interpolate)(template.bodyText, htmlValues(opts.context, true)),
+            buttonLabel: template.buttonLabel ? (0, interpolate_1.interpolate)(template.buttonLabel, htmlValues(opts.context)) : null,
             buttonUrl: opts.buttonUrl,
             extraMjml: opts.extraMjml,
             language,

@@ -79,3 +79,67 @@ describe('EmailService#send', () => {
     expect(prisma.emailLog.create).not.toHaveBeenCalled();
   });
 });
+
+describe('EmailService#send with text a user wrote', () => {
+  const prismaWith = (template: Record<string, string | null>) => ({
+    notificationSetting: { findUnique: jest.fn(async () => null) },
+    emailTemplate: { findUnique: jest.fn(async () => template) },
+    emailLog: { create: jest.fn(async () => ({})) },
+  });
+  const cancelled = {
+    subject: 'Rezervacija je otkazana: {oglas}',
+    heading: 'Rezervacija za "{oglas}" je otkazana',
+    bodyText: 'Razlog: {razlog}',
+    buttonLabel: 'Otvori {oglas}',
+  };
+  const link = '<a href="http://evil.example">Klikni</a>';
+  const sent = (sendMail: jest.Mock) => sendMail.mock.calls[0][0] as { subject: string; html: string };
+
+  it('keeps markup in a value out of the email and leaves the subject and the bell as typed', async () => {
+    const { service, sendMail, notifications } = setup(prismaWith(cancelled));
+    await service.send({
+      key: 'booking_cancelled',
+      to: 'vlasnik@example.com',
+      userId: 'u1',
+      context: { oglas: `Stan & ${link}`, razlog: link },
+      buttonUrl: 'http://front/rezervacije/b1',
+    });
+
+    const { subject, html } = sent(sendMail);
+    const escaped = '&lt;a href=&quot;http://evil.example&quot;&gt;Klikni&lt;/a&gt;';
+    expect(html).toContain(`Rezervacija za "Stan &amp; ${escaped}" je otkazana`);
+    expect(html).toContain(`Razlog: ${escaped}`);
+    expect(html).toContain(`Otvori Stan &amp; ${escaped}`);
+    expect(html).not.toContain('href="http://evil.example"');
+    expect(html).toContain('href="http://front/rezervacije/b1"');
+    expect(subject).toBe(`Rezervacija je otkazana: Stan & ${link}`);
+    expect(notifications.createFromEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ title: `Rezervacija za "Stan & ${link}" je otkazana`, content: `Razlog: ${link}` }),
+    );
+  });
+
+  it('cannot close the text block to add a button of its own', async () => {
+    const { service, sendMail } = setup(prismaWith(cancelled));
+    const breakout = '</mj-text><mj-button href="http://evil.example">Plati</mj-button><mj-text>';
+    await service.send({ key: 'booking_cancelled', to: 'vlasnik@example.com', context: { oglas: 'Stan', razlog: breakout } });
+
+    const { html } = sent(sendMail);
+    expect(html).not.toContain('href="http://evil.example"');
+    expect(html).toContain('Razlog: &lt;/mj-text&gt;&lt;mj-button href=&quot;http://evil.example&quot;&gt;Plati&lt;/mj-button&gt;&lt;mj-text&gt;');
+  });
+
+  it('keeps the tags of the copy itself and the line breaks of a message', async () => {
+    const copy = { subject: 'Nova poruka: {naslov}', heading: 'Nova poruka', bodyText: 'Od: {ime}<br/><br/>{poruka}', buttonLabel: null };
+    const { service, sendMail, notifications } = setup(prismaWith(copy));
+    await service.send({
+      key: 'contact_message_received',
+      to: 'office@rentaj.rs',
+      context: { ime: "Ana O'Neil", naslov: 'Pitanje o "Pro" & cenama', poruka: 'Prvi red\r\ndrugi <b>red</b>\ntreći' },
+    });
+
+    const { subject, html } = sent(sendMail);
+    expect(html).toContain('Od: Ana O&#39;Neil<br/><br/>Prvi red<br/>drugi &lt;b&gt;red&lt;/b&gt;<br/>treći');
+    expect(subject).toBe('Nova poruka: Pitanje o "Pro" & cenama');
+    expect(notifications.createFromEmail).not.toHaveBeenCalled();
+  });
+});
