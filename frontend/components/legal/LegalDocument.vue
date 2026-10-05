@@ -15,7 +15,13 @@
       <div class="legal-split">
         <div class="legal-aside">
           <div class="legal-aside-inner">
-            <nav v-if="doc.sections.length" ref="tocRef" class="legal-toc" :aria-label="t('legalPages.toc')">
+            <nav
+              v-if="doc.sections.length"
+              ref="tocRef"
+              class="legal-toc"
+              :class="{ 'is-plain': !numbered }"
+              :aria-label="t('legalPages.toc')"
+            >
               <p class="legal-toc-title" aria-hidden="true">{{ t('legalPages.toc') }}</p>
               <a
                 v-for="section in doc.sections"
@@ -48,6 +54,7 @@
 // h2 sections next to the text, the Kontakt support card under it. The
 // list's anchors scroll smoothly and the item of the section on screen is
 // marked; below lg it is one column, the list above the text, not sticky.
+// Dizajn 49 (1652:3441) adds the variant without numerals and the note block.
 const props = defineProps({
   // StaticPage row: { title, bodyHtml, updatedAt }
   page: { type: Object, required: true },
@@ -57,6 +64,7 @@ const props = defineProps({
 const { t } = useI18n()
 
 const doc = computed(() => buildLegalDocument(props.page.bodyHtml))
+const numbered = computed(() => doc.value.sections.some((section) => section.num))
 
 // The frame mutes the title's last word ("Politika privatnosti").
 const titleParts = computed(() => {
@@ -224,6 +232,7 @@ onBeforeUnmount(() => {
   min-height: 0;
   padding: 24px 24px 20px;
   overflow-y: auto;
+  scrollbar-width: thin;
   border: 1px solid $color-border;
   border-radius: 16px;
   background: $color-surface;
@@ -280,6 +289,20 @@ onBeforeUnmount(() => {
 .legal-toc-item.is-active .legal-toc-label {
   font-weight: 500;
   color: $color-text;
+}
+
+// 1655:3490: without numerals the items sit 2 apart with 7 above and below,
+// and the title is 12 over the first one.
+.legal-toc.is-plain {
+  gap: 2px;
+}
+
+.legal-toc.is-plain .legal-toc-title {
+  margin-bottom: 10px;
+}
+
+.legal-toc.is-plain .legal-toc-item {
+  padding: 7px 8px 7px 12px;
 }
 
 .legal-support {
@@ -432,6 +455,18 @@ onBeforeUnmount(() => {
 
 .legal-body :deep(h3 + *) {
   margin-top: 12px;
+}
+
+// 1655:3341: a paragraph the body marks as a note ("Napomena: ...") is a
+// tinted block 20 under the text before it; the editor keeps the class.
+.legal-body :deep(.legal-note) {
+  margin-top: 20px;
+  padding: 16px 20px;
+  border-radius: 12px;
+  background: $color-accent-tint;
+  font-size: 16px;
+  line-height: 26px;
+  color: $color-text;
 }
 
 @include respond-between(lg, xl) {
