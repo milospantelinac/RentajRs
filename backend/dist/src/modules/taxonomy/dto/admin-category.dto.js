@@ -123,6 +123,12 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", Number)
 ], UpdateCategoryDto.prototype, "displayOrder", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Dizajn 50: "Prikaži na sajtu", whether the site lists the category' }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsBoolean)(),
+    __metadata("design:type", Boolean)
+], UpdateCategoryDto.prototype, "published", void 0);
 class RejectCategoryDto {
 }
 exports.RejectCategoryDto = RejectCategoryDto;

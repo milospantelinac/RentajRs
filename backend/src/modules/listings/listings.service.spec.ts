@@ -237,6 +237,53 @@ describe('ListingsService keeps the category counts in step with search', () => 
   });
 });
 
+describe('ListingsService takes a listing only into a published category (Dizajn 50)', () => {
+  const ostalo = (published: boolean) => ({
+    id: 'c-ost',
+    slug: 'ostalo',
+    status: 'ACTIVE',
+    published,
+    children: [],
+    defaultBookingModel: 'PER_STAY',
+    allowedPriceUnits: ['DAY', 'NIGHT', 'MONTH', 'HOUR', 'SLOT'],
+    defaultPriceUnit: 'DAY',
+  });
+
+  it('refuses a new draft in a category that is not published', async () => {
+    const prisma = {
+      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', restrictedUntil: null }) },
+      category: { findUnique: jest.fn().mockResolvedValue(ostalo(false)) },
+      listing: { create: jest.fn() },
+    };
+    await expect(makeService(prisma).createDraft('u1', { categoryId: 'c-ost' } as any)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(prisma.listing.create).not.toHaveBeenCalled();
+  });
+
+  it('moves a draft into Ostalo once it is published, and not before', async () => {
+    const draft = listingRow({ status: 'DRAFT', bookingModel: 'PER_STAY', priceUnit: 'NIGHT', icalExportToken: 'token' });
+    const update = jest.fn().mockResolvedValue({ ...draft, categoryId: 'c-ost' });
+    const prisma = {
+      listing: { findUnique: jest.fn().mockResolvedValue(draft), update },
+      listingAttribute: { deleteMany: jest.fn() },
+      category: { findUnique: jest.fn().mockResolvedValue(ostalo(false)) },
+      $transaction: jest.fn(async (writes: Promise<unknown>[]) => Promise.all(writes)),
+    };
+    const taxonomy = { resolveAttributesForCategory: jest.fn().mockResolvedValue([]) };
+    const service = makeService(prisma, taxonomy);
+
+    await expect(service.changeCategory('u1', 'l1', 'c-ost')).rejects.toBeInstanceOf(BadRequestException);
+    expect(update).not.toHaveBeenCalled();
+
+    prisma.category.findUnique.mockResolvedValue(ostalo(true));
+    await expect(service.changeCategory('u1', 'l1', 'c-ost')).resolves.toMatchObject({ categoryId: 'c-ost' });
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ categoryId: 'c-ost', priceUnit: 'NIGHT' }) }),
+    );
+  });
+});
+
 describe('ListingsService#getPublicBySlug (found in Dizajn 39)', () => {
   const owner = {
     id: 'u1',

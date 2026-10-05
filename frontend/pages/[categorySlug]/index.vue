@@ -65,7 +65,9 @@ const { data: category, error: categoryError } = await useAsyncData(`category-${
   api.get(`/categories/${route.params.categorySlug}`),
 )
 
-if (categoryError.value || !category.value) {
+// Dizajn 50: a category the admin hasn't published (Ostalo until the owner
+// does) has no page of its own; the endpoint still answers for the wizard.
+if (categoryError.value || !category.value || category.value.published === false) {
   throw createError({ statusCode: 404, statusMessage: 'Category not found' })
 }
 

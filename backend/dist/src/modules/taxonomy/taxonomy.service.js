@@ -17,7 +17,7 @@ const client_1 = require("@prisma/client");
 const prisma_service_1 = require("../../prisma/prisma.service");
 const cache_service_1 = require("../../common/cache/cache.service");
 const CACHE_TTL = 60 * 30;
-const TREE_CACHE_KEY = 'taxonomy:tree:v3';
+const TREE_CACHE_KEY = 'taxonomy:tree:v4';
 exports.LISTING_COUNTS_CACHE_KEY = 'taxonomy:listing-counts';
 const LISTING_COUNTS_TTL = 60;
 const FUZZY_THRESHOLD = 0.35;
@@ -51,7 +51,7 @@ let TaxonomyService = class TaxonomyService {
     async getCategoryStructure() {
         return this.cache.getOrSet(TREE_CACHE_KEY, CACHE_TTL, async () => {
             const categories = await this.prisma.category.findMany({
-                where: { status: 'ACTIVE', slug: { not: exports.FALLBACK_CATEGORY_SLUG } },
+                where: { status: 'ACTIVE', published: true },
                 orderBy: { displayOrder: 'asc' },
             });
             const categoryIds = categories.map((c) => c.id);
@@ -78,7 +78,7 @@ let TaxonomyService = class TaxonomyService {
         });
     }
     async getCategoryBySlug(slug) {
-        return this.cache.getOrSet(`taxonomy:category:v2:${slug}`, CACHE_TTL, () => this.loadCategoryBySlug(slug));
+        return this.cache.getOrSet(`taxonomy:category:v3:${slug}`, CACHE_TTL, () => this.loadCategoryBySlug(slug));
     }
     async loadCategoryBySlug(slug) {
         const category = await this.prisma.category.findUnique({ where: { slug } });
@@ -278,6 +278,7 @@ let TaxonomyService = class TaxonomyService {
                 allowedPriceUnits: dto.allowedPriceUnits,
                 defaultPriceUnit: dto.defaultPriceUnit,
                 displayOrder: dto.displayOrder,
+                published: dto.published,
             },
         });
         if (dto.name)

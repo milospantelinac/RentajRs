@@ -1363,6 +1363,10 @@ watch(
   () => {
     if (form.bookingModel === 'PER_SLOT' && form.priceUnit !== 'GUEST') {
       form.priceUnit = form.slotSubmode === 'DEFINED_SLOTS' ? 'SLOT' : 'HOUR'
+    } else if (form.bookingModel === 'PER_STAY' && form.priceUnit === 'SLOT') {
+      // Dizajn 50: an Ostalo listing priced per slot without booking, switched
+      // to online booking, takes the category's default unit instead.
+      form.priceUnit = listing.value?.category?.defaultPriceUnit || 'DAY'
     }
   },
 )
@@ -1394,7 +1398,11 @@ const allowedPriceUnitsForChoice = computed(() => {
   if (form.bookingModel === 'PER_SLOT') {
     return isPartyHallCategory.value ? [autoSlotPriceUnit.value, 'GUEST'] : [autoSlotPriceUnit.value]
   }
-  return listing.value?.category?.allowedPriceUnits || []
+  const units = listing.value?.category?.allowedPriceUnits || []
+  // Dizajn 50: "po terminu" belongs to slot booking. Only Ostalo allows it next
+  // to stay booking (its units cover whatever "Otključaj svoju kategoriju"
+  // sends), so an online Ostalo listing is priced by day, night, month or hour.
+  return form.bookingModel === 'PER_STAY' ? units.filter((unit) => unit !== 'SLOT') : units
 })
 // A listing without booking is never charged, so its weekend price stays hidden
 // (and kept) until online booking is back on.
@@ -3166,16 +3174,20 @@ useSeoMeta({ title: () => wizardTitle.value })
   white-space: nowrap;
 }
 
+// Dizajn 50: the solid icons are drawn larger and scaled to 18 here. The box
+// sets the height; the 31-wide ones (Sobe, both vehicles) spill evenly past it.
 .wizard-category-icon {
   display: flex;
   flex-shrink: 0;
+  justify-content: center;
   width: 18px;
   height: 18px;
 }
 
 .wizard-category-icon :deep(svg) {
   display: block;
-  width: 100%;
+  flex-shrink: 0;
+  width: auto;
   height: 100%;
 }
 

@@ -343,7 +343,7 @@ let SearchService = class SearchService {
                 select: { slug: true, publishedAt: true },
             }),
             this.prisma.category.findMany({
-                where: { status: 'ACTIVE' },
+                where: { status: 'ACTIVE', published: true },
                 select: { slug: true },
             }),
             this.prisma.listing.groupBy({
@@ -357,7 +357,7 @@ let SearchService = class SearchService {
         const categoryIds = [...new Set(qualifying.map((g) => g.categoryId))];
         const cityIds = [...new Set(qualifying.map((g) => g.cityId))];
         const [cats, cities] = await Promise.all([
-            this.prisma.category.findMany({ where: { id: { in: categoryIds } }, select: { id: true, slug: true } }),
+            this.prisma.category.findMany({ where: { id: { in: categoryIds }, published: true }, select: { id: true, slug: true } }),
             this.prisma.city.findMany({ where: { id: { in: cityIds } }, select: { id: true, slug: true } }),
         ]);
         const categorySlugById = new Map(cats.map((c) => [c.id, c.slug]));

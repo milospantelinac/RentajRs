@@ -18,8 +18,9 @@ const CACHE_TTL = 60 * 30; // 30 min — categories/attributes change rarely and
 // (DERIVED_KEY_PREFIXES), so a deploy never serves a shape cached before it.
 // Bump the suffix anyway when a tree node gains or loses a field, for an old
 // instance still writing during a rolling deploy. v3: the listing counts
-// moved to their own key.
-const TREE_CACHE_KEY = 'taxonomy:tree:v3';
+// moved to their own key. v4: Dizajn 50 picks the categories by the published
+// flag, where an older instance left Ostalo out by its slug.
+const TREE_CACHE_KEY = 'taxonomy:tree:v4';
 /**
  * Live listings per category (getListingCounts). Kept apart from the tree,
  * which changes only when an admin edits a category: the counts change
@@ -98,10 +99,10 @@ export class TaxonomyService {
   private async getCategoryStructure(): Promise<CategoryNode[]> {
     return this.cache.getOrSet(TREE_CACHE_KEY, CACHE_TTL, async () => {
       const categories = await this.prisma.category.findMany({
-        // T60 — "Ostalo" is an internal fallback for uncategorized listings
-        // (createUncategorizedListing), never a real browsable/selectable
-        // category; it must never appear in the wizard or /pretraga's chips.
-        where: { status: 'ACTIVE', slug: { not: FALLBACK_CATEGORY_SLUG } },
+        // Dizajn 50: only what an admin has published. This used to leave out
+        // "Ostalo" by its slug (T60); it is now the seventh category, hidden
+        // by the same switch until the owner publishes it.
+        where: { status: 'ACTIVE', published: true },
         orderBy: { displayOrder: 'asc' },
       });
       const categoryIds = categories.map((c) => c.id);
@@ -135,8 +136,9 @@ export class TaxonomyService {
 
   async getCategoryBySlug(slug: string) {
     // v2 (Dizajn 25): attribute options come in their displayOrder now, and the new key
-    // keeps Redis from serving the old order after a deploy.
-    return this.cache.getOrSet(`taxonomy:category:v2:${slug}`, CACHE_TTL, () => this.loadCategoryBySlug(slug));
+    // keeps Redis from serving the old order after a deploy. v3 (Dizajn 50): the
+    // category carries `published`, which its public page checks.
+    return this.cache.getOrSet(`taxonomy:category:v3:${slug}`, CACHE_TTL, () => this.loadCategoryBySlug(slug));
   }
 
   private async loadCategoryBySlug(slug: string) {
@@ -391,6 +393,7 @@ export class TaxonomyService {
         allowedPriceUnits: dto.allowedPriceUnits,
         defaultPriceUnit: dto.defaultPriceUnit,
         displayOrder: dto.displayOrder,
+        published: dto.published,
       },
     });
     if (dto.name) await this.setTranslation('CATEGORY', id, 'name', dto.name);

@@ -349,6 +349,12 @@ interface CategorySeed {
   icon: string;
   /** Dizajn 17 — the grey line under the category's card on /oglasi/novi, copy from frame 172:287. */
   shortDescription?: string;
+  /**
+   * Dizajn 50: whether a new database shows the category on the site. Only
+   * written when the row is created; after that it belongs to the admin's
+   * "Prikaži na sajtu" switch, so a reseed never publishes or hides one.
+   */
+  published?: boolean;
   attributes: AttributeSeed[];
   children?: CategorySeed[];
 }
@@ -629,15 +635,18 @@ const CATEGORY_TREE: CategorySeed[] = [
   // pruneRemovedCategories() below, which deletes them (and any other
   // never-real leftover category) from the DB on every reseed rather than
   // just omitting them here, since upsert-only seeding never removes a row.
-  // Hidden fallback parent for rejected category proposals and "Otključaj
-  // svoju kategoriju" intake listings (R6/§3.1, Kategorije spec §8) — never
-  // shown in navigation, has no SEO page. allowedPriceUnits covers every
-  // unit the intake form can send (R25's DB trigger rejects anything
-  // outside a listing's category's allowed set), since the real category —
-  // and its real constraint — isn't assigned until an admin reviews it.
+  // Fallback parent for rejected category proposals and "Otključaj svoju
+  // kategoriju" intake listings (R6/§3.1, Kategorije spec §8). Dizajn 50 makes
+  // it the seventh category, last and without subcategories, shown wherever
+  // the other six are once the owner publishes it in /admin/kategorije; a new
+  // database creates it unpublished. allowedPriceUnits covers every unit the
+  // intake form can send (R25's DB trigger rejects anything outside a
+  // listing's category's allowed set), since the real category, and its real
+  // constraint, isn't assigned until an admin reviews it.
   {
     name: 'Ostalo',
     icon: 'other',
+    published: false,
     defaultBookingModel: BookingModel.PER_STAY,
     allowedPriceUnits: [PriceUnit.DAY, PriceUnit.NIGHT, PriceUnit.MONTH, PriceUnit.HOUR, PriceUnit.SLOT],
     defaultPriceUnit: PriceUnit.DAY,
@@ -661,7 +670,9 @@ async function seedCategoryNode(node: CategorySeed, parentId: string | null, ord
       // this line an existing database kept whatever order it was first
       // created with, and a reseed could never repair it, so the frontend
       // carried a second hardcoded order to paper over the difference.
+      // Counted from 0, so Ostalo (Dizajn 50) is 6, the seventh and last.
       displayOrder: order,
+      // `published` is left out on purpose: it is the admin's switch (Dizajn 50).
     },
     create: {
       parentId,
@@ -672,6 +683,7 @@ async function seedCategoryNode(node: CategorySeed, parentId: string | null, ord
       allowedPriceUnits: node.allowedPriceUnits,
       defaultPriceUnit: node.defaultPriceUnit,
       displayOrder: order,
+      published: node.published ?? true,
     },
   });
 

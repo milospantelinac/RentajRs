@@ -66,6 +66,10 @@ export class ListingsService {
 
     const category = await this.prisma.category.findUnique({ where: { id: dto.categoryId } });
     if (!category) throw new NotFoundException(this.i18n.t('errors.LISTING_NOT_FOUND'));
+    // Dizajn 50: the picker only lists published categories, so an unpublished
+    // one (Ostalo until the owner publishes it) can't be picked through the API
+    // either. "Otključaj svoju kategoriju" parks its drafts there on its own path.
+    if (!category.published) throw new BadRequestException(this.i18n.t('errors.CATEGORY_NOT_SELECTABLE'));
 
     const slug = await this.uniqueSlug('novi-oglas');
     const listing = await this.prisma.listing.create({
@@ -925,13 +929,13 @@ export class ListingsService {
     if (listing.status !== ListingStatus.DRAFT || listing.pendingCategoryAssignment) {
       throw new BadRequestException(this.i18n.t('errors.LISTING_CATEGORY_CHANGE_NOT_ALLOWED'));
     }
-    // Only what the category picker offers: an active category without active
-    // subcategories, never the hidden Ostalo fallback.
+    // Only what the category picker offers: an active, published category
+    // without active subcategories. Ostalo counts once it is published (Dizajn 50).
     const category = await this.prisma.category.findUnique({
       where: { id: categoryId },
       include: { children: { where: { status: 'ACTIVE' }, select: { id: true } } },
     });
-    if (!category || category.status !== 'ACTIVE' || category.children.length || category.slug === FALLBACK_CATEGORY_SLUG) {
+    if (!category || category.status !== 'ACTIVE' || category.children.length || !category.published) {
       throw new BadRequestException(this.i18n.t('errors.CATEGORY_NOT_SELECTABLE'));
     }
     if (category.id === listing.categoryId) return this.serialize(listing);

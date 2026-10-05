@@ -102,6 +102,11 @@ export class UpdateCategoryDto {
   @ApiPropertyOptional()
   @IsOptional()
   displayOrder?: number;
+
+  @ApiPropertyOptional({ description: 'Dizajn 50: "Prikaži na sajtu", whether the site lists the category' })
+  @IsOptional()
+  @IsBoolean()
+  published?: boolean;
 }
 
 export class RejectCategoryDto {

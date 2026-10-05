@@ -1,4 +1,5 @@
-// Dizajn 8 — icons for the seven category tiles above the search results.
+// Dizajn 8: icons for the category tiles above the search results ("Sve" and
+// one per category).
 // The SVGs are the exact exports from the Figma frame, kept byte-for-byte as
 // Figma produced them. Figma bakes the tile's state colour into each export
 // (#CED6DE while idle, #0957DF on the active tile), so the two state colours
@@ -6,6 +7,8 @@
 // icon family is that colour is inherited from the surrounding text, never
 // hardcoded. Only those two hexes are touched; the clip-path mask's white
 // stays white.
+import { getCategoryIconMarkup } from './categoryIcons'
+
 const rawIcons = import.meta.glob('../assets/icons/search-categories/*.svg', { as: 'raw', eager: true })
 
 const STATE_COLORS = /#CED6DE|#0957DF/gi
@@ -25,6 +28,7 @@ export const ALL_CATEGORIES_SLUG = 'sve'
 // re-syncs it on every reseed, so /categories already arrives in the one order
 // the ticket fixes, and this file is only about icons again.
 
+// Dizajn 50: Ostalo, the seventh tile, comes from the solid set at its 30px.
 export function getSearchCategoryIconMarkup(slug) {
-  return REGISTRY[slug] || REGISTRY[ALL_CATEGORIES_SLUG] || ''
+  return REGISTRY[slug] || getCategoryIconMarkup(slug) || REGISTRY[ALL_CATEGORIES_SLUG] || ''
 }

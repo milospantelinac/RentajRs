@@ -60,20 +60,38 @@ describe('TaxonomyService#getCategoryTree', () => {
     expect(prisma.listing.groupBy).toHaveBeenCalledWith(expect.objectContaining({ where: { status: 'ACTIVE', available: true } }));
   });
 
+  it('lists only the active categories an admin has published (Dizajn 50)', async () => {
+    const { service } = makeService(prisma);
+    await service.getCategoryTree();
+    expect(prisma.category.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { status: 'ACTIVE', published: true }, orderBy: { displayOrder: 'asc' } }),
+    );
+  });
+
+  it('drops the tree when an admin publishes or hides a category', async () => {
+    const update = jest.fn().mockResolvedValue({});
+    const { service, cache } = makeService({
+      category: { findUnique: jest.fn().mockResolvedValue(category('c-ost', 'ostalo')), update },
+    });
+    await service.adminUpdateCategory('c-ost', { published: true });
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ published: true }) }));
+    expect(cache.del).toHaveBeenCalledWith('taxonomy:tree:v4', LISTING_COUNTS_CACHE_KEY);
+  });
+
   it('caches the counts for a minute, apart from the tree an admin changes', async () => {
     const { service, cache } = makeService(prisma);
     await service.getCategoryTree();
 
     const calls = cache.getOrSet.mock.calls.map(([key, ttl]) => [key, ttl]);
-    expect(calls).toEqual(expect.arrayContaining([[LISTING_COUNTS_CACHE_KEY, 60], ['taxonomy:tree:v3', 1800]]));
-    const structure = await cache.getOrSet.mock.results[calls.findIndex(([key]) => key === 'taxonomy:tree:v3')].value;
+    expect(calls).toEqual(expect.arrayContaining([[LISTING_COUNTS_CACHE_KEY, 60], ['taxonomy:tree:v4', 1800]]));
+    const structure = await cache.getOrSet.mock.results[calls.findIndex(([key]) => key === 'taxonomy:tree:v4')].value;
     expect(JSON.stringify(structure)).not.toContain('listingCount');
   });
 
   it('drops the counts along with the tree when an admin changes the categories', async () => {
     const { service, cache } = makeService({ category: { update: jest.fn().mockResolvedValue({ id: 'c1', proposedByUserId: null }) } });
     await service.adminApproveCategory('c1');
-    expect(cache.del).toHaveBeenCalledWith('taxonomy:tree:v3', LISTING_COUNTS_CACHE_KEY);
+    expect(cache.del).toHaveBeenCalledWith('taxonomy:tree:v4', LISTING_COUNTS_CACHE_KEY);
   });
 });
 
@@ -87,7 +105,7 @@ describe('TaxonomyService#getCategoryBySlug', () => {
     jest.spyOn(service, 'resolveAttributesForCategory').mockResolvedValue([]);
 
     await expect(service.getCategoryBySlug('nekretnine')).resolves.toMatchObject({ slug: 'nekretnine', name: 'Nekretnine', children: [] });
-    expect(cache.getOrSet).toHaveBeenCalledWith('taxonomy:category:v2:nekretnine', 1800, expect.any(Function));
+    expect(cache.getOrSet).toHaveBeenCalledWith('taxonomy:category:v3:nekretnine', 1800, expect.any(Function));
   });
 
   it('still answers 404 for an archived category', async () => {

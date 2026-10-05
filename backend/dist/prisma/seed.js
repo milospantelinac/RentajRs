@@ -528,6 +528,7 @@ const CATEGORY_TREE = [
     {
         name: 'Ostalo',
         icon: 'other',
+        published: false,
         defaultBookingModel: client_1.BookingModel.PER_STAY,
         allowedPriceUnits: [client_1.PriceUnit.DAY, client_1.PriceUnit.NIGHT, client_1.PriceUnit.MONTH, client_1.PriceUnit.HOUR, client_1.PriceUnit.SLOT],
         defaultPriceUnit: client_1.PriceUnit.DAY,
@@ -555,6 +556,7 @@ async function seedCategoryNode(node, parentId, order) {
             allowedPriceUnits: node.allowedPriceUnits,
             defaultPriceUnit: node.defaultPriceUnit,
             displayOrder: order,
+            published: node.published ?? true,
         },
     });
     await setTranslation('CATEGORY', category.id, 'name', node.name);

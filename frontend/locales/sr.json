@@ -1552,6 +1552,15 @@
     "attrRequired": "obavezno",
     "attrIsFilter": "koristi se kao filter",
     "listingCount": "Broj oglasa",
+    "categoryOnSite": "Na sajtu",
+    "categoryVisibility": {
+      "published": "Objavljena",
+      "hidden": "Skrivena"
+    },
+    "publishCategory": "Objavi",
+    "hideCategory": "Sakrij",
+    "publishCategoryConfirm": "Objaviti kategoriju \"{name}\"? Pojaviće se svuda gde i ostale kategorije: na naslovnoj, u pretrazi, u futeru i u izboru kategorije za novi oglas.",
+    "hideCategoryConfirm": "Sakriti kategoriju \"{name}\" sa sajta? Neće se videti na naslovnoj, u pretrazi, u futeru ni u izboru kategorije, a njena strana se zatvara. Postojeći oglasi ostaju gde jesu.",
     "emailTemplates": "E-mail šabloni",
     "searchTemplates": "Pretraga po ključu šablona",
     "subject": "Naslov e-maila",
@@ -1752,6 +1761,7 @@
     "categoryVozila": "Vozila",
     "categoryMagacini": "Magacini",
     "categoryMasine": "Mašine",
+    "categoryOstalo": "Ostalo",
     "categoriesTitle": "Šta vam je potrebno?",
     "featuredTitleStrong": "Izdvajamo iz",
     "featuredTitleLight": "ponude",

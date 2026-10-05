@@ -1552,6 +1552,15 @@
     "attrRequired": "required",
     "attrIsFilter": "used as filter",
     "listingCount": "Listings",
+    "categoryOnSite": "On the site",
+    "categoryVisibility": {
+      "published": "Published",
+      "hidden": "Hidden"
+    },
+    "publishCategory": "Publish",
+    "hideCategory": "Hide",
+    "publishCategoryConfirm": "Publish category \"{name}\"? It will appear wherever the other categories do: on the homepage, in search, in the footer and in the category choice for a new listing.",
+    "hideCategoryConfirm": "Hide category \"{name}\" from the site? It will no longer show on the homepage, in search, in the footer or in the category choice, and its page closes. Existing listings stay where they are.",
     "emailTemplates": "Email templates",
     "searchTemplates": "Search by template key",
     "subject": "Email subject",
@@ -1752,6 +1761,7 @@
     "categoryVozila": "Vehicles",
     "categoryMagacini": "Warehouses",
     "categoryMasine": "Construction machinery",
+    "categoryOstalo": "Other",
     "categoriesTitle": "What are you looking for?",
     "featuredTitleStrong": "Featured",
     "featuredTitleLight": "listings",

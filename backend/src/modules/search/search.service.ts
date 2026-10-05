@@ -457,8 +457,9 @@ export class SearchService {
         where: { status: 'ACTIVE' },
         select: { slug: true, publishedAt: true },
       }),
+      // Dizajn 50: a category the admin hasn't published has no public page.
       this.prisma.category.findMany({
-        where: { status: 'ACTIVE' },
+        where: { status: 'ACTIVE', published: true },
         select: { slug: true },
       }),
       this.prisma.listing.groupBy({
@@ -476,7 +477,7 @@ export class SearchService {
     const categoryIds = [...new Set(qualifying.map((g) => g.categoryId))];
     const cityIds = [...new Set(qualifying.map((g) => g.cityId as string))];
     const [cats, cities] = await Promise.all([
-      this.prisma.category.findMany({ where: { id: { in: categoryIds } }, select: { id: true, slug: true } }),
+      this.prisma.category.findMany({ where: { id: { in: categoryIds }, published: true }, select: { id: true, slug: true } }),
       this.prisma.city.findMany({ where: { id: { in: cityIds } }, select: { id: true, slug: true } }),
     ]);
     const categorySlugById = new Map(cats.map((c) => [c.id, c.slug]));

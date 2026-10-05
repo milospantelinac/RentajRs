@@ -369,26 +369,23 @@ function submitSearch(event) {
   navigateTo(searchLink.value)
 }
 
-// Fixed 6-tile quick-links strip from the Figma homepage design — a curated
-// marketing shortcut, not the full (growing, admin-managed) category list
-// used in the search filter dropdown above.
-// T01 — Nekretnine 1st, Prostori za proslave 2nd; the rest is unspecified,
-// left in its prior relative order.
-// Dizajn 7 — "Prostori, Nekretnine, Igraonice, Vozila, Magacini, Mašine",
-// matching the Figma tile order exactly.
-// Dizajn 46: one order on every surface that lists categories, so the first
-// two tiles swap back to the taxonomy's own order (Nekretnine, then Prostori
-// za proslave); the strip itself stays a curated six, not the live list.
+// The quick-links strip under the hero (Dizajn 7). Its icons and short labels
+// are the homepage's own; the categories, their order and whether one shows at
+// all come from /categories (Dizajn 46 and 50), so Ostalo appears last once
+// the owner publishes it. A category added later from the admin panel has no
+// tile of its own here and stays off the strip.
 // T112: a tile opens /pretraga with only its category selected (no query,
 // city or price from the hero search), not the /:categorySlug page.
-const homeCategories = [
-  { slug: 'nekretnine', icon: '/images/categories/nekretnine.svg', labelKey: 'home.categoryNekretnine' },
-  { slug: 'prostori-za-proslave', icon: '/images/categories/prostori.svg', labelKey: 'home.categoryProstori' },
-  { slug: 'igraonice', icon: '/images/categories/igraonice.svg', labelKey: 'home.categoryIgraonice' },
-  { slug: 'vozila', icon: '/images/categories/vozila.svg', labelKey: 'home.categoryVozila' },
-  { slug: 'magacini-i-skladista', icon: '/images/categories/magacini.svg', labelKey: 'home.categoryMagacini' },
-  { slug: 'gradjevinske-masine', icon: '/images/categories/masine.svg', labelKey: 'home.categoryMasine' },
-]
+const HOME_CATEGORY_TILES = {
+  nekretnine: { icon: '/images/categories/nekretnine.svg', labelKey: 'home.categoryNekretnine' },
+  'prostori-za-proslave': { icon: '/images/categories/prostori.svg', labelKey: 'home.categoryProstori' },
+  igraonice: { icon: '/images/categories/igraonice.svg', labelKey: 'home.categoryIgraonice' },
+  vozila: { icon: '/images/categories/vozila.svg', labelKey: 'home.categoryVozila' },
+  'magacini-i-skladista': { icon: '/images/categories/magacini.svg', labelKey: 'home.categoryMagacini' },
+  'gradjevinske-masine': { icon: '/images/categories/masine.svg', labelKey: 'home.categoryMasine' },
+  // Dizajn 50 (1651:3254, section 5): the 30px component, idle grey.
+  ostalo: { icon: '/images/categories/ostalo.svg', labelKey: 'home.categoryOstalo' },
+}
 
 // Admin-set via /admin/sadrzaj (Setting key homepage_video_url) — the
 // section only renders once a URL is actually set (RNT-052: an empty
@@ -473,6 +470,9 @@ const { data: homeData } = await useAsyncData('home-page-data', async () => {
 })
 
 const categories = computed(() => homeData.value?.categories || [])
+const homeCategories = computed(() =>
+  categories.value.filter((c) => HOME_CATEGORY_TILES[c.slug]).map((c) => ({ slug: c.slug, ...HOME_CATEGORY_TILES[c.slug] })),
+)
 const cities = computed(() => homeData.value?.cities || [])
 const featuredListings = computed(() => homeData.value?.featuredListings || [])
 
@@ -1088,16 +1088,17 @@ useHead({
   padding: 24px 16px;
 }
 
-// Figma spreads the six tiles by their own widths (space-between) rather than
+// Figma spreads the tiles by their own widths (space-between) rather than
 // centring each in an equal column, so the outer two sit flush with the
-// panel's inner padding.
+// panel's inner padding. Dizajn 50: the row (26:316) ends 39.73 above the
+// panel's edge, which makes the panel the frame's 189.
 @include respond-above(lg) {
   .hero-categories-panel {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
     gap: 0;
-    padding: 39px 81px;
+    padding: 39px 81px 39.73px;
   }
 }
 
@@ -1114,15 +1115,25 @@ useHead({
   text-decoration: none;
 }
 
+// Dizajn 50: with Ostalo there are seven tiles, so in the two-column grid
+// below lg the last one stands alone; it sits centred under both columns.
+// The desktop row is a flex row, where neither property applies.
+.hero-category-tile:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+  justify-self: center;
+}
+
+// Dizajn 50, as frame 26:318 draws every tile: 66x67.71, radius 11, a white
+// fill and a soft grey shadow (5.5 down, Figma's 13.75 blur).
 .hero-category-icon-wrap {
   display: flex;
   align-items: center;
   justify-content: center;
   width: 66px;
-  height: 66px;
-  border-radius: $radius-input;
+  height: 67.71px;
+  border-radius: 11px;
   background: $color-surface;
-  box-shadow: 0 2px 6px rgba(15, 27, 51, 0.06);
+  box-shadow: 0 5.5px 27.5px rgba(207, 207, 207, 0.5);
 }
 
 .hero-category-icon {
@@ -1143,8 +1154,9 @@ useHead({
     font-size: 20px;
   }
 
+  // 26:320: the label's box starts 20.55 under the tile.
   .hero-category-tile {
-    gap: 21px;
+    gap: 20.55px;
   }
 }
 

@@ -69,6 +69,7 @@
           <tr>
             <th>{{ t('admin.categoryName') }}</th>
             <th>{{ t('admin.statusLabel') }}</th>
+            <th>{{ t('admin.categoryOnSite') }}</th>
             <th>{{ t('admin.listingCount') }}</th>
             <th></th>
           </tr>
@@ -83,9 +84,19 @@
                 {{ t(`admin.categoryStatus.${c.status}`) }}
               </span>
             </td>
+            <!-- Dizajn 50: "Prikaži na sajtu", which only means something for an active category. -->
+            <td :data-label="t('admin.categoryOnSite')">
+              <span v-if="c.status === 'ACTIVE'" class="admin-pill" :class="c.published ? 'admin-pill-success' : 'admin-pill-neutral'">
+                {{ t(`admin.categoryVisibility.${c.published ? 'published' : 'hidden'}`) }}
+              </span>
+              <span v-else>-</span>
+            </td>
             <td :data-label="t('admin.listingCount')">{{ c.listingCount }}</td>
             <td class="admin-cell-actions">
               <div class="admin-actions">
+                <button v-if="c.status === 'ACTIVE'" class="admin-action" @click="togglePublished(c)">
+                  {{ t(c.published ? 'admin.hideCategory' : 'admin.publishCategory') }}
+                </button>
                 <button class="admin-action" @click="selectedAttrCategory = c; loadAttributes()">{{ t('admin.attributes') }}</button>
                 <button v-if="c.level > 1" class="admin-action" @click="promote(c.id)">{{ t('admin.promote') }}</button>
                 <button v-if="c.status === 'ACTIVE'" class="admin-action" @click="openMerge(c)">{{ t('admin.merge') }}</button>
@@ -331,6 +342,19 @@ async function rejectCategory(id) {
 async function promote(id) {
   await api.post(`/admin/categories/${id}/promote`, {})
   await refreshTree()
+}
+
+// Dizajn 50: shows or hides an active category everywhere the site lists
+// categories. Ostalo is the one that starts hidden, waiting for the owner.
+async function togglePublished(c) {
+  const confirmKey = c.published ? 'admin.hideCategoryConfirm' : 'admin.publishCategoryConfirm'
+  if (!confirm(t(confirmKey, { name: c.name }))) return
+  try {
+    await api.patch(`/admin/categories/${c.id}`, { published: !c.published })
+    await refreshTree()
+  } catch (e) {
+    alert(extractErrorMessage(e, t('auth.genericError')))
+  }
 }
 
 // Reuses the same endpoint the proposal-rejection flow calls — it already

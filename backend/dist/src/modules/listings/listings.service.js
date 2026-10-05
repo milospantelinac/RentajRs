@@ -54,6 +54,8 @@ let ListingsService = class ListingsService {
         const category = await this.prisma.category.findUnique({ where: { id: dto.categoryId } });
         if (!category)
             throw new common_1.NotFoundException(this.i18n.t('errors.LISTING_NOT_FOUND'));
+        if (!category.published)
+            throw new common_1.BadRequestException(this.i18n.t('errors.CATEGORY_NOT_SELECTABLE'));
         const slug = await this.uniqueSlug('novi-oglas');
         const listing = await this.prisma.listing.create({
             data: {
@@ -684,7 +686,7 @@ let ListingsService = class ListingsService {
             where: { id: categoryId },
             include: { children: { where: { status: 'ACTIVE' }, select: { id: true } } },
         });
-        if (!category || category.status !== 'ACTIVE' || category.children.length || category.slug === taxonomy_service_2.FALLBACK_CATEGORY_SLUG) {
+        if (!category || category.status !== 'ACTIVE' || category.children.length || !category.published) {
             throw new common_1.BadRequestException(this.i18n.t('errors.CATEGORY_NOT_SELECTABLE'));
         }
         if (category.id === listing.categoryId)

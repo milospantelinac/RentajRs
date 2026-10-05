@@ -1,33 +1,13 @@
-// Dizajn 19: the 18px icon in the wizard's category pill. Igraonice comes from
-// frame 185:287, every other category from its own korak 6 frame (545:514 to
-// 552:1557). The SVGs are the exact exports, kept byte-for-byte. Figma bakes a
-// colour into each one (#061B31 in the Igraonice frame, #0957DF in the rest),
-// so both are rewritten to currentColor and the pill sets the colour.
-import { ALL_CATEGORIES_SLUG, getSearchCategoryIconMarkup } from './searchCategoryIcons'
+// The 18px icon in the wizard's category pill. Dizajn 19 drew it as a line
+// icon; Dizajn 50 (frame 1651:3254, section 7) puts the solid one in its place:
+// the subcategory's own, and for a listing filed on a category without
+// subcategories (Igraonice, Magacini, Mašine, Ostalo) that category's, from the
+// Dizajn 17 cards for the first three. The pill's CSS scales whichever it gets
+// to 18 and gives it the text colour.
+import { getCategoryIconMarkup } from './categoryIcons'
+import { getWizardCategoryIconMarkup } from './wizardCategoryIcons'
 
-const rawIcons = import.meta.glob('../assets/icons/wizard-pill-categories/*.svg', {
-  query: '?raw',
-  import: 'default',
-  eager: true,
-})
-
-const BAKED_COLORS = /#061B31|#0957DF/gi
-
-const REGISTRY = Object.fromEntries(
-  Object.entries(rawIcons).map(([path, content]) => [
-    path.match(/([^/]+)\.svg$/)[1],
-    content.replace(BAKED_COLORS, 'currentColor'),
-  ]),
-)
-
-// Listings sit on leaf categories. Figma draws one "Prostori za proslave" pill,
-// and both of that category's bookable leaves use its icon.
-const LEAF_TO_ICON = {
-  'sale-za-proslave': 'prostori-za-proslave',
-  'konferencijske-sale': 'prostori-za-proslave',
-}
-
-/** A category added later from the admin panel has no frame icon, so it gets the search tiles' generic one. */
+/** A category added later from the admin panel has no icon of its own, so it gets the search tiles' generic one. */
 export function getWizardPillCategoryIconMarkup(slug) {
-  return REGISTRY[LEAF_TO_ICON[slug] || slug] || getSearchCategoryIconMarkup(ALL_CATEGORIES_SLUG)
+  return getCategoryIconMarkup(slug) || getWizardCategoryIconMarkup(slug)
 }

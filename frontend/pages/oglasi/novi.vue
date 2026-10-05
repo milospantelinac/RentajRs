@@ -17,16 +17,19 @@
             class="category-card"
             @click="selectTopCategory(cat)"
           >
-            <span class="category-card-icon" aria-hidden="true" v-html="iconMarkup(cat.slug)" />
+            <span
+              class="category-card-icon"
+              :class="{ 'category-card-icon-solid': hasSolidIcon(cat.slug) }"
+              aria-hidden="true"
+              v-html="iconMarkup(cat.slug)"
+            />
             <span class="category-card-text">
               <span class="category-card-name">{{ cat.name }}</span>
               <span v-if="cat.shortDescription" class="category-card-desc">{{ cat.shortDescription }}</span>
             </span>
           </button>
-          <!-- T60 — "Ostalo" isn't a real category to pick (it's the internal
-               fallback createUncategorizedListing uses), so this tile is fixed
-               UI, not driven by the categories list — it never leaks as a
-               selectable category, here or in /pretraga's chips. -->
+          <!-- Fixed UI, always last. Dizajn 50: Ostalo itself is one of the
+               categories above once the owner publishes it. -->
           <button v-if="!changingListingId" type="button" class="category-card category-card-unlock" @click="step = 'propose'">
             <span class="category-card-unlock-icon" aria-hidden="true">
               <img src="/images/icons/plus-brand.svg" alt="" />
@@ -39,8 +42,8 @@
         </div>
       </template>
 
-      <!-- No frame of its own — same header and cards as the category step,
-           under the parent category's icon. -->
+      <!-- Same header and grid as the category step. Dizajn 50 (1651:3254,
+           section 6) draws the cards, each with its subcategory's own icon. -->
       <template v-else-if="step === 'sub'">
         <header class="category-pick-hero">
           <p class="category-pick-eyebrow">{{ t(changingListingId ? 'listing.changeCategoryEyebrow' : 'listing.newListingEyebrow') }}</p>
@@ -54,10 +57,15 @@
             v-for="sub in activeTopCategory.children"
             :key="sub.id"
             type="button"
-            class="category-card"
+            class="category-card category-card-sub"
             @click="selectLeafCategory(sub.id)"
           >
-            <span class="category-card-icon" aria-hidden="true" v-html="iconMarkup(activeTopCategory.slug)" />
+            <span
+              class="category-card-icon"
+              :class="{ 'category-card-icon-solid': hasSolidIcon(sub.slug) }"
+              aria-hidden="true"
+              v-html="iconMarkup(sub.slug, activeTopCategory.slug)"
+            />
             <span class="category-card-text">
               <span class="category-card-name">{{ sub.name }}</span>
               <span v-if="sub.shortDescription" class="category-card-desc">{{ sub.shortDescription }}</span>
@@ -212,7 +220,11 @@ const { data: categories } = await useAsyncData('wizard-categories', () => api.g
 // place the category order is written down, so nothing is re-sorted here.
 const topCategories = computed(() => categories.value || [])
 
-const iconMarkup = (slug) => getWizardCategoryIconMarkup(slug)
+// Dizajn 50: every subcategory and Ostalo have a solid icon of their own, drawn
+// at the cards' 26px; the six categories keep their 172:287 exports. A
+// subcategory an admin adds later shows its parent's icon, as all of them did.
+const hasSolidIcon = (slug) => Boolean(getCategoryIconMarkup(slug))
+const iconMarkup = (slug, parentSlug) => getCategoryIconMarkup(slug) || getWizardCategoryIconMarkup(parentSlug || slug)
 
 // 651:1085 — "dan" is the unit the frame shows for Po boravku.
 const uncategorized = reactive({ title: '', bookingModel: 'PER_STAY', priceUnit: 'DAY', description: '' })
@@ -407,6 +419,27 @@ useSeoMeta({ title: () => t(changingListingId.value ? 'listing.changeCategory' :
 
 .category-card-icon {
   display: flex;
+}
+
+// Dizajn 50 (1651:3254): the solid icons are 30px components drawn at the
+// cards' 26. The box sets the height; the 31-wide ones (Sobe, both vehicles)
+// spill evenly past it, as they do in Figma.
+.category-card-icon-solid {
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+}
+
+.category-card-icon-solid :deep(svg) {
+  flex-shrink: 0;
+  width: auto;
+  height: 100%;
+}
+
+// 1662:3280: unlike 172:287's cards, the subcategory card keeps its stroke
+// outside the padding, 22 round the content and 26 below the name.
+.category-card-sub {
+  padding: 22px 22px 26px;
 }
 
 .category-card-text {

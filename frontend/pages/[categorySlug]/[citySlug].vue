@@ -45,7 +45,8 @@ const { data: category, error: categoryError } = await useAsyncData(`cc-category
 const { data: cities } = await useAsyncData('cc-cities', () => api.get('/locations/cities'))
 const city = computed(() => cities.value?.find((c) => c.slug === route.params.citySlug))
 
-if (categoryError.value || !category.value || !city.value) {
+// Dizajn 50: nor does an unpublished category have city pages.
+if (categoryError.value || !category.value || category.value.published === false || !city.value) {
   throw createError({ statusCode: 404, statusMessage: 'Not found' })
 }
 

@@ -23,9 +23,11 @@ const markup = computed(() => getSearchCategoryIconMarkup(props.slug))
   color: inherit;
 }
 
+// Dizajn 50: each icon keeps the size its SVG was exported at, centred in the
+// 32px box the way frame 133:2 places it (Sve 26, Nekretnine 27.8, Igraonice,
+// Magacini and Ostalo 30, the other three 32). They used to be stretched to 32.
 .category-tile-icon :deep(svg) {
   display: block;
-  width: 100%;
-  height: 100%;
+  flex-shrink: 0;
 }
 </style>

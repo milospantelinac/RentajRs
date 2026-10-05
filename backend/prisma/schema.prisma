@@ -415,6 +415,11 @@ model Category {
   allowedPriceUnits   PriceUnit[]
   defaultPriceUnit    PriceUnit
   displayOrder        Int            @default(0)
+  /// Dizajn 50: "Prikaži na sajtu" in /admin/kategorije. An active category that
+  /// isn't published stays out of every list the site shows (/categories, the
+  /// sitemap, its own page) and can't take a listing from the owner's picker;
+  /// the seed never changes it, so only an admin publishes or hides one.
+  published           Boolean        @default(true)
   proposedByUserId    String?        @db.Uuid
   proposalComment     String?
   proposalCount       Int            @default(0)
