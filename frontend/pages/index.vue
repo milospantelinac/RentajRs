@@ -152,7 +152,12 @@
 
         <div class="hero-categories-frame">
           <div class="hero-categories-panel">
-            <NuxtLink v-for="cat in homeCategories" :key="cat.slug" :to="`/${cat.slug}`" class="hero-category-tile">
+            <NuxtLink
+              v-for="cat in homeCategories"
+              :key="cat.slug"
+              :to="{ path: '/pretraga', query: { categorySlug: cat.slug } }"
+              class="hero-category-tile"
+            >
               <span class="hero-category-icon-wrap">
                 <img :src="cat.icon" alt="" class="hero-category-icon" />
               </span>
@@ -374,6 +379,8 @@ function submitSearch(event) {
 // Dizajn 46: one order on every surface that lists categories, so the first
 // two tiles swap back to the taxonomy's own order (Nekretnine, then Prostori
 // za proslave); the strip itself stays a curated six, not the live list.
+// T112: a tile opens /pretraga with only its category selected (no query,
+// city or price from the hero search), not the /:categorySlug page.
 const homeCategories = [
   { slug: 'nekretnine', icon: '/images/categories/nekretnine.svg', labelKey: 'home.categoryNekretnine' },
   { slug: 'prostori-za-proslave', icon: '/images/categories/prostori.svg', labelKey: 'home.categoryProstori' },

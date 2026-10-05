@@ -29,7 +29,7 @@
         <button type="submit" class="search-bar-submit">{{ t('search.submit') }}</button>
       </form>
 
-      <div class="category-tiles">
+      <div ref="categoryTilesRow" class="category-tiles">
         <button
           v-for="tile in categoryTiles"
           :key="tile.slug || 'all'"
@@ -428,6 +428,24 @@ const categoryTiles = computed(() => [
 
 // A subcategory keeps its parent's tile highlighted.
 const activeCategorySlug = computed(() => selectedCategory.value?.slug || '')
+
+// T112: below lg the tile row scrolls sideways and opens at its start, so a
+// category chosen before the page opened (a homepage tile, the hero search, a
+// shared link) could sit off screen. Centre the active tile inside the row
+// only; scrollIntoView would move the page as well.
+const categoryTilesRow = ref(null)
+
+function revealActiveCategoryTile() {
+  const row = categoryTilesRow.value
+  const tile = row?.querySelector('.category-tile-active')
+  if (!row || !tile || row.scrollWidth <= row.clientWidth) return
+  const rowBox = row.getBoundingClientRect()
+  const tileBox = tile.getBoundingClientRect()
+  if (tileBox.left >= rowBox.left && tileBox.right <= rowBox.right) return
+  row.scrollLeft += tileBox.left - rowBox.left - (rowBox.width - tileBox.width) / 2
+}
+
+watch(activeCategorySlug, revealActiveCategoryTile, { flush: 'post' })
 
 // Dizajn 10 — "Sve <kategorija>" first, then each child, each with the count
 // the categories endpoint reports (a parent's is its whole subtree).
