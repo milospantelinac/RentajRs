@@ -280,10 +280,14 @@ $listing-card-saved: #f43f5e;
   height: 15px;
 }
 
+// 626:536 wraps: facts that don't fit beside each other move to a second line
+// (12 across, 6 down) and their text is never cut. Only a fact longer than
+// the whole row breaks inside itself.
 .listing-card-facts {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 6px 12px;
 }
 
 .listing-card-fact {
@@ -292,7 +296,6 @@ $listing-card-saved: #f43f5e;
   gap: 5px;
   min-width: 0;
   color: $color-text;
-  flex-shrink: 1;
 }
 
 // 626:536: grey icons beside dark text on every frame.
@@ -303,9 +306,6 @@ $listing-card-saved: #f43f5e;
 .listing-card-fact-text {
   font-size: 13px;
   font-weight: $font-weight-card-title;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .listing-card-divider {
