@@ -1,5 +1,5 @@
 <template>
-  <footer class="site-footer">
+  <footer class="site-footer" :class="{ 'has-divider': hasDivider }">
     <div class="container">
       <div class="footer-top">
         <div class="footer-brand">
@@ -105,7 +105,12 @@
 <script setup>
 const { t } = useI18n()
 const auth = useAuthStore()
+const route = useRoute()
 const year = new Date().getFullYear()
+
+// The homepage frames (26:12, 26:3073) end on the CTA banner and draw no rule
+// over the footer; every other page frame does.
+const hasDivider = computed(() => route.path !== '/')
 
 const { data: categories } = await useAsyncData('footer-categories', async () => {
   const api = useApi()
@@ -118,11 +123,23 @@ const { data: categories } = await useAsyncData('footer-categories', async () =>
 </script>
 
 <style lang="scss" scoped>
-// Figma draws no rules anywhere in the footer — the columns are held apart by
-// spacing alone. The logo sits 121px below the CTA banner's lower edge.
+// The columns are held apart by spacing alone. The logo sits 121px below the
+// CTA banner's lower edge.
 .site-footer {
   background: $color-surface;
   padding: 57px 0 40px;
+}
+
+// Every page frame but the homepage draws a 1px #E4EBF2 rule across the
+// content column at the footer's top edge ("Footer divider", 140:155 in
+// 133:2). It takes the first of the 57 top pixels, so nothing below it moves.
+.site-footer.has-divider {
+  padding-top: 0;
+}
+
+.site-footer.has-divider .footer-top {
+  border-top: 1px solid $color-border;
+  padding-top: 56px;
 }
 
 .footer-top {
