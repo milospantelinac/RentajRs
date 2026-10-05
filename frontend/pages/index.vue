@@ -189,7 +189,16 @@
       </div>
     </section>
 
-    <section class="container possibilities-section">
+    <!-- Dizajn 51: six states that rotate every 6 s; a click shows one at once. -->
+    <section
+      ref="possibilitiesSection"
+      class="container possibilities-section"
+      :class="{ 'is-rotating': rotationEnabled, 'is-paused': rotationPaused }"
+      @pointerenter="onPossibilitiesPointer($event, true)"
+      @pointerleave="onPossibilitiesPointer($event, false)"
+      @focusin="onPossibilitiesFocusIn"
+      @focusout="onPossibilitiesFocusOut"
+    >
       <h2 class="section-title possibilities-title">
         <span class="section-title-strong">{{ t('home.possibilitiesTitleStrong') }}</span>
         <span class="section-title-light">{{ t('home.possibilitiesTitleLight') }}</span>
@@ -200,14 +209,14 @@
           <button
             v-for="(feature, index) in features"
             :key="feature.titleKey"
+            type="button"
             class="possibility-item"
             :class="{ 'possibility-item-active': activeFeature === index }"
-            :style="{ '--possibility-order': index * 2 }"
             :aria-expanded="activeFeature === index"
-            @click="activeFeature = index"
+            @click="showFeature(index)"
           >
             <span class="possibility-head">
-              <span class="possibility-number">{{ String(index + 1).padStart(2, '0') }}</span>
+              <span class="possibility-number">{{ featureNumber(index) }}</span>
               <span class="possibility-title">{{ t(feature.titleKey) }}</span>
               <img
                 :src="activeFeature === index ? '/images/icons/chevron-up-12-brand.svg' : '/images/icons/chevron-up-12.svg'"
@@ -215,52 +224,92 @@
                 class="possibility-chevron"
               />
             </span>
-            <span v-if="activeFeature === index" class="possibility-text">{{ t(feature.textKey) }}</span>
+            <!-- The open row holds every state's text in one cell and shows its
+                 own, so it is as tall as the longest and rotation moves nothing. -->
+            <span v-if="activeFeature === index" class="possibility-texts">
+              <span
+                v-for="(other, otherIndex) in features"
+                :key="other.titleKey"
+                class="possibility-text"
+                :class="{ 'is-current': otherIndex === index }"
+                :style="{ '--text-width': other.listTextWidth, '--text-width-phone': other.listTextWidthPhone }"
+                :aria-hidden="otherIndex === index ? undefined : 'true'"
+              >{{ t(other.listTextKey) }}</span>
+            </span>
           </button>
         </div>
 
-        <!-- On a phone (94:27) the card sits inside the open row: the list
-             unwraps and this frame is ordered right after the active item,
-             drawing the rest of its outline. Above md it has no box at all. -->
-        <div class="possibilities-showcase-frame" :style="{ '--possibility-order': activeFeature * 2 + 1 }">
-          <div class="possibilities-showcase">
-            <span class="possibilities-showcase-watermark">{{ String(activeFeature + 1).padStart(2, '0') }}</span>
+        <!-- The card repeats the open row's title and text, so screen readers
+             get the list alone. -->
+        <div class="possibilities-showcase" aria-hidden="true">
+          <div
+            v-for="(feature, index) in features"
+            :key="feature.titleKey"
+            class="possibilities-slide"
+            :class="{ 'is-active': activeFeature === index }"
+          >
+            <span class="possibilities-showcase-watermark" :style="{ '--watermark-right': feature.watermarkRight }">{{
+              featureNumber(index)
+            }}</span>
             <span class="possibilities-showcase-icon">
-              <img :src="features[activeFeature].icon" alt="" width="32" height="32" />
+              <img :src="feature.icon" alt="" :style="{ '--icon-width': feature.iconWidth, '--icon-height': feature.iconHeight }" />
             </span>
-            <p class="possibilities-showcase-title">{{ t(features[activeFeature].titleKey) }}</p>
-            <!-- The card carries its own, shorter copy in Figma — not the list's. -->
-            <p class="possibilities-showcase-text">{{ t(features[activeFeature].cardTextKey) }}</p>
+            <p class="possibilities-showcase-title">{{ t(feature.titleKey) }}</p>
+            <p class="possibilities-showcase-text" :style="{ '--text-width': feature.cardTextWidth }">{{ t(feature.cardTextKey) }}</p>
 
-            <div class="possibilities-mockup">
-              <div class="possibilities-mockup-header">
-                <img src="/images/home/guest-avatar.png" alt="" class="possibilities-mockup-avatar" />
-                <div class="possibilities-mockup-header-text">
-                  <p class="possibilities-mockup-name">{{ t('home.mockupGuestName') }}</p>
-                  <p class="possibilities-mockup-label">{{ t('home.mockupGuestPayment') }}</p>
-                </div>
-                <span class="possibilities-mockup-status">
-                  <img src="/images/icons/check-circle.svg" alt="" class="possibilities-mockup-status-icon" />
-                  {{ t('home.mockupStatus') }}
-                </span>
-              </div>
-              <div class="possibilities-mockup-body">
-                <div class="possibilities-mockup-body-text">
-                  <p class="possibilities-mockup-amount">{{ t('home.mockupAmount') }}</p>
-                  <p class="possibilities-mockup-note">{{ t('home.mockupAmountNote') }}</p>
-                </div>
-                <span class="possibilities-mockup-commission">{{ t('home.mockupCommission') }}</span>
-              </div>
-            </div>
-
-            <div class="possibilities-dots">
-              <span
-                v-for="(feature, index) in features"
-                :key="feature.titleKey"
-                class="possibilities-dot"
-                :class="{ 'possibilities-dot-active': activeFeature === index }"
+            <div class="possibilities-art">
+              <img
+                v-if="feature.art"
+                :src="feature.art"
+                alt=""
+                width="631"
+                height="300"
+                loading="lazy"
+                decoding="async"
+                class="possibilities-art-image"
               />
+              <div v-else class="possibilities-mockup">
+                <div class="possibilities-mockup-header">
+                  <img src="/images/home/guest-avatar.png" alt="" class="possibilities-mockup-avatar" />
+                  <div class="possibilities-mockup-header-text">
+                    <p class="possibilities-mockup-name">{{ t('home.mockupGuestName') }}</p>
+                    <p class="possibilities-mockup-label">{{ t('home.mockupGuestPayment') }}</p>
+                  </div>
+                  <span class="possibilities-mockup-status">
+                    <img src="/images/icons/check-circle.svg" alt="" class="possibilities-mockup-status-icon" />
+                    {{ t('home.mockupStatus') }}
+                  </span>
+                </div>
+                <div class="possibilities-mockup-body">
+                  <div class="possibilities-mockup-body-text">
+                    <p class="possibilities-mockup-amount">{{ t('home.mockupAmount') }}</p>
+                    <p class="possibilities-mockup-note">{{ t('home.mockupAmountNote') }}</p>
+                  </div>
+                  <span class="possibilities-mockup-commission">{{ t('home.mockupCommission') }}</span>
+                </div>
+              </div>
             </div>
+          </div>
+
+          <!-- Mouse shortcuts to the same states as the list; the dash of the open
+               state fills over the 6 s and moves on when it is full. -->
+          <div class="possibilities-dots">
+            <button
+              v-for="(feature, index) in features"
+              :key="feature.titleKey"
+              type="button"
+              tabindex="-1"
+              class="possibilities-dot"
+              :class="{ 'possibilities-dot-active': activeFeature === index }"
+              @click="showFeature(index)"
+            >
+              <span
+                v-if="activeFeature === index"
+                :key="rotationCycle"
+                class="possibilities-dot-fill"
+                @animationend="showNextFeature"
+              />
+            </button>
           </div>
         </div>
       </div>
@@ -352,7 +401,6 @@ const searchQuery = ref('')
 const searchCategorySlug = ref('')
 const searchCityId = ref('')
 const searchPriceBucket = ref('')
-const activeFeature = ref(0)
 const filtersOpen = ref(false)
 
 function resetFilters() {
@@ -447,17 +495,179 @@ const priceBuckets = computed(() => [
   { value: '30000-', label: '30.000+ RSD' },
 ])
 
-// Icons are the exact SVGs exported from the six Figma showcase-card states
-// (nodes 26:357, 26:1199, 26:1653, 26:2078, 26:2500, 26:3010) — white strokes
-// meant to sit on the blue gradient card, so they render as plain <img>.
+// "Sve mogucnosti" (Dizajn 51): one state per Figma frame, 01 in "Homepage A"
+// 26:12 and 02 to 06 in the five 842 tall "Homepage A" frames (26:845, 26:1299,
+// 26:1726, 26:2148, 26:2656).
+// - Icons are the frames' own SVG exports, each at its drawn size centred in
+//   the 80 badge (26, 28, 31.5x15.75, 32 and 32x29.7).
+// - The illustrations of 02 to 06 are composed from the frames' SVG exports of
+//   their layers, on a transparent canvas the size of the card's lower band
+//   (631x300, card y 260 to 560). State 01's payment card stays markup: 26:12
+//   still draws "€ 145.00", the site shows RSD since the client's audit.
+// - Texts come from the frames: 02 to 06 use their card text in the list too.
+//   The widths are the frames' text boxes, so the lines break where they do.
+// - watermarkRight: how far the number's box starts from the card's right edge
+//   (631 - 445, or 631 - 435 for 04 to 06).
 const features = [
-  { titleKey: 'home.feature1Title', textKey: 'home.feature1Text', cardTextKey: 'home.feature1CardText', icon: '/images/home/features/direktne-rezervacije.svg' },
-  { titleKey: 'home.feature2Title', textKey: 'home.feature2Text', cardTextKey: 'home.feature2CardText', icon: '/images/home/features/po-boravku-po-terminu.svg' },
-  { titleKey: 'home.feature3Title', textKey: 'home.feature3Text', cardTextKey: 'home.feature3CardText', icon: '/images/home/features/rezervacioni-sistem.svg' },
-  { titleKey: 'home.feature4Title', textKey: 'home.feature4Text', cardTextKey: 'home.feature4CardText', icon: '/images/home/features/poruke.svg' },
-  { titleKey: 'home.feature5Title', textKey: 'home.feature5Text', cardTextKey: 'home.feature5CardText', icon: '/images/home/features/ical-sinhronizacija.svg' },
-  { titleKey: 'home.feature6Title', textKey: 'home.feature6Text', cardTextKey: 'home.feature6CardText', icon: '/images/home/features/otkljucaj-kategoriju.svg' },
+  {
+    titleKey: 'home.feature1Title',
+    listTextKey: 'home.feature1Text',
+    cardTextKey: 'home.feature1CardText',
+    icon: '/images/home/features/direktne-rezervacije.svg',
+    iconWidth: 32,
+    iconHeight: 32,
+    art: null,
+    listTextWidth: 440,
+    listTextWidthPhone: 259,
+    cardTextWidth: 355,
+    watermarkRight: 186,
+  },
+  {
+    titleKey: 'home.feature2Title',
+    listTextKey: 'home.feature2CardText',
+    cardTextKey: 'home.feature2CardText',
+    icon: '/images/home/features/po-boravku-po-terminu.svg',
+    iconWidth: 26,
+    iconHeight: 26,
+    art: '/images/home/features/mogucnosti-02-boravak-termin.svg',
+    listTextWidth: 456,
+    listTextWidthPhone: 280,
+    cardTextWidth: 359,
+    watermarkRight: 186,
+  },
+  {
+    titleKey: 'home.feature3Title',
+    listTextKey: 'home.feature3CardText',
+    cardTextKey: 'home.feature3CardText',
+    icon: '/images/home/features/rezervacioni-sistem.svg',
+    iconWidth: 31.5,
+    iconHeight: 15.75,
+    art: '/images/home/features/mogucnosti-03-rezervacioni-sistem.svg',
+    listTextWidth: 502,
+    listTextWidthPhone: 280,
+    cardTextWidth: 355,
+    watermarkRight: 186,
+  },
+  {
+    titleKey: 'home.feature4Title',
+    listTextKey: 'home.feature4CardText',
+    cardTextKey: 'home.feature4CardText',
+    icon: '/images/home/features/poruke.svg',
+    iconWidth: 32,
+    iconHeight: 32,
+    art: '/images/home/features/mogucnosti-04-poruke.svg',
+    listTextWidth: 464,
+    listTextWidthPhone: 280,
+    cardTextWidth: 355,
+    watermarkRight: 196,
+  },
+  {
+    titleKey: 'home.feature5Title',
+    listTextKey: 'home.feature5CardText',
+    cardTextKey: 'home.feature5CardText',
+    icon: '/images/home/features/ical-sinhronizacija.svg',
+    iconWidth: 32,
+    iconHeight: 29.7105,
+    art: '/images/home/features/mogucnosti-05-ical.svg',
+    listTextWidth: 480,
+    listTextWidthPhone: 280,
+    cardTextWidth: 355,
+    watermarkRight: 196,
+  },
+  {
+    titleKey: 'home.feature6Title',
+    listTextKey: 'home.feature6CardText',
+    cardTextKey: 'home.feature6CardText',
+    icon: '/images/home/features/otkljucaj-kategoriju.svg',
+    iconWidth: 28,
+    iconHeight: 28,
+    art: '/images/home/features/mogucnosti-06-otkljucaj.svg',
+    listTextWidth: 428,
+    listTextWidthPhone: 219,
+    cardTextWidth: 402,
+    watermarkRight: 196,
+  },
 ]
+
+function featureNumber(index) {
+  return String(index + 1).padStart(2, '0')
+}
+
+// Rotation: the open state's dash fills in a 6 s CSS animation whose end moves
+// on to the next state, so the bar and the switch cannot drift apart and a
+// pause is just animation-play-state. It starts after mount (the server render
+// shows a full dash) and never for visitors who ask for reduced motion. It
+// pauses under a mouse, while keyboard focus is in the section, while the
+// section is off screen and while the tab is hidden.
+const activeFeature = ref(0)
+const rotationCycle = ref(0)
+const rotationEnabled = ref(false)
+const possibilitiesSection = ref(null)
+const pointerInPossibilities = ref(false)
+const keyboardInPossibilities = ref(false)
+const possibilitiesInView = ref(false)
+const pageVisible = ref(true)
+const rotationPaused = computed(
+  () => pointerInPossibilities.value || keyboardInPossibilities.value || !possibilitiesInView.value || !pageVisible.value,
+)
+
+// A click shows that state and starts its 6 s again, the open one included.
+function showFeature(index) {
+  activeFeature.value = index
+  rotationCycle.value++
+}
+
+function showNextFeature() {
+  showFeature((activeFeature.value + 1) % features.length)
+}
+
+// Only a real mouse pauses: on a touch screen the "hover" would outlast the tap.
+function onPossibilitiesPointer(event, inside) {
+  if (event.pointerType === 'mouse') pointerInPossibilities.value = inside
+}
+
+// Focus a mouse click leaves on a row is not :focus-visible, so it does not pause.
+function onPossibilitiesFocusIn(event) {
+  keyboardInPossibilities.value = event.target.matches(':focus-visible')
+}
+
+function onPossibilitiesFocusOut(event) {
+  if (!possibilitiesSection.value?.contains(event.relatedTarget)) keyboardInPossibilities.value = false
+}
+
+let possibilitiesObserver = null
+let reducedMotionQuery = null
+
+function syncReducedMotion() {
+  rotationEnabled.value = !reducedMotionQuery.matches
+}
+
+function syncPageVisible() {
+  pageVisible.value = document.visibilityState === 'visible'
+}
+
+onMounted(() => {
+  reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
+  syncReducedMotion()
+  reducedMotionQuery.addEventListener('change', syncReducedMotion)
+  syncPageVisible()
+  document.addEventListener('visibilitychange', syncPageVisible)
+  // "On screen" is a quarter of the section in view; isIntersecting alone
+  // would stay true down to the last visible pixel.
+  possibilitiesObserver = new IntersectionObserver(
+    ([entry]) => {
+      possibilitiesInView.value = entry.intersectionRatio >= 0.249
+    },
+    { threshold: 0.25 },
+  )
+  possibilitiesObserver.observe(possibilitiesSection.value)
+})
+
+onBeforeUnmount(() => {
+  reducedMotionQuery?.removeEventListener('change', syncReducedMotion)
+  document.removeEventListener('visibilitychange', syncPageVisible)
+  possibilitiesObserver?.disconnect()
+})
 
 // One useAsyncData covering everything the page needs, fetched concurrently.
 const { data: homeData } = await useAsyncData('home-page-data', async () => {
@@ -1366,9 +1576,12 @@ useHead({
 }
 
 // Possibilities / feature list ---------------------------------------------
-// Every value below is read off the Figma nodes for this section rather than
-// eyeballed: the section sits under a full-width hairline (26:290, x=112
-// w=1218), the left list is 555 wide and the showcase card 631, 26px apart.
+// Dizajn 51. Every value is read off the state frames ("Homepage A" 26:12 for
+// 01, the five 842 tall frames for 02 to 06): the section sits under a
+// full-width hairline (x=112 w=1218), the list is 555 wide and the card
+// 631x560, 26px apart. The five 842 frames agree to the pixel; 26:12 draws the
+// list 4px left and 16px higher, and the section must not move between
+// states, so they win.
 .possibilities-section {
   border-top: 1px solid $color-border;
   padding-top: 54px;
@@ -1395,14 +1608,15 @@ useHead({
     align-items: flex-start;
   }
 
-  // 555 + 26 gap + 631 = the 1216 Figma content width.
   .possibilities-list {
     flex: 0 0 555px;
     min-width: 0;
   }
 
+  // 631 as drawn (4px short of the column's edge); narrower desktops get what
+  // is left of the column.
   .possibilities-showcase {
-    flex: 1;
+    flex: 0 1 631px;
     min-width: 0;
   }
 }
@@ -1412,23 +1626,28 @@ useHead({
   flex-direction: column;
 }
 
-// Inactive rows are a plain 78px band with a hairline under them; only the
-// active one becomes a filled, outlined card carrying the description.
+// Inactive rows are a 78px band with a straight hairline under them; only the
+// open one becomes a 152px filled, outlined card carrying its text. Figma draws
+// the 1px line inside both boxes, so the number sits 32 in and the padding is 31.
 .possibility-item {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  min-height: 78px;
-  padding: 0 32px;
+  height: 78px;
+  padding: 0 31px;
   border: 1px solid transparent;
   border-bottom-color: $color-border;
-  border-radius: 15px;
   background: none;
   text-align: left;
   cursor: pointer;
 }
 
-// Number column 36px wide, 20px to the label (144 / 200 in the Figma frame).
+// The row right above the open card has no line of its own in any frame.
+.possibility-item:has(+ .possibility-item-active) {
+  border-bottom-color: transparent;
+}
+
+// Number column 36px wide, 20px to the label (144 / 200 in the Figma frames).
 .possibility-head {
   display: flex;
   align-items: center;
@@ -1451,20 +1670,22 @@ useHead({
   color: $color-text;
 }
 
-// Starts at the padding edge, not indented under the title (Figma x=144).
-.possibility-text {
-  font-size: 18px;
-  font-weight: 400;
-  line-height: 1.5;
-  color: $color-text-muted;
-  margin-top: 4px;
-}
-
+// The number 22 below the card's top and the text right under its line, as in
+// 26:243, 26:1559, 26:1986, 26:2405 and 26:2913 (26:1105 alone starts at 16).
+// The right padding is 16 so 03's 502 wide text box fits. The outline is the
+// frames' gradient stroke: primary fading to nothing towards the bottom right
+// (object-space transform [0.5936 0.7697 -0.1786], 168deg on a 555x152 box),
+// drawn over the fill as Figma's inside stroke is.
 .possibility-item-active {
-  min-height: 152px;
-  padding: 22px 32px;
-  background: $color-background;
-  border-color: $color-primary;
+  justify-content: flex-start;
+  height: 152px;
+  padding: 21px 16px 0 31px;
+  border-color: transparent;
+  border-radius: 15px;
+  background:
+    linear-gradient($color-background, $color-background) padding-box,
+    linear-gradient(168.07deg, rgba($color-primary, 1) 13.1%, rgba($color-primary, 0) 86.45%) border-box,
+    linear-gradient($color-background, $color-background) border-box;
 }
 
 .possibility-item-active .possibility-number,
@@ -1472,22 +1693,344 @@ useHead({
   color: $color-primary;
 }
 
+.possibility-texts {
+  display: grid;
+}
+
+// 16px in all six: 26:12 alone draws 18, and the five other frames 16 in the
+// same 152 card.
+.possibility-text {
+  grid-area: 1 / 1;
+  max-width: calc(var(--text-width) * 1px);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.5;
+  color: $color-text-muted;
+  visibility: hidden;
+}
+
+.possibility-text.is-current {
+  visibility: visible;
+  animation: possibilities-fade-in 0.3s ease;
+}
+
 .possibility-chevron {
   display: none;
 }
 
-// Above md the showcase frame draws no box of its own.
-.possibilities-showcase-frame {
-  display: contents;
+// Figma 26:1198: 631x560, radius 25, 128deg gradient, blue drop shadow. Each
+// state is a layer in the same grid cell, so the card is as tall as the
+// tallest one and a switch is a 0.3s cross-fade that moves nothing. --u is
+// one Figma pixel of the card's 631 (less on narrower cards); the
+// illustration band is drawn in it everywhere and the whole card on phones.
+.possibilities-showcase {
+  --u: calc(min(100cqw, 631px) / 631);
+  position: relative;
+  display: grid;
+  overflow: hidden;
+  container-type: inline-size;
+  border-radius: 25px;
+  background: linear-gradient(
+    128.18deg,
+    $color-gradient-start 0%,
+    $color-gradient-mid 55%,
+    $color-gradient-end 100%
+  );
+  box-shadow: 0 20px 40px rgba(0, 54, 246, 0.25);
+  color: $color-surface;
 }
 
-// Dizajn 42 (94:27): on a phone the list is an accordion. The rows follow the
-// clean second column (26:3355), since the first one draws its numbers across
-// the rules and its arrows 20px above the text: 65.4 a row with the number 15
-// down, a 0.74px rule under it and a 12x6 arrow on the right, a few px under
-// the text's middle. The open row is a page-grey card with a 1px blue outline,
-// number 21 in and text 259 wide; the list unwraps so its showcase can follow
-// inside the same outline (.possibilities-showcase-frame, ordered after it).
+.possibilities-slide {
+  position: relative;
+  grid-area: 1 / 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 560px;
+  padding: 37px 0 0 38px;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 0.3s ease,
+    visibility 0s linear 0.3s;
+}
+
+.possibilities-slide.is-active {
+  opacity: 1;
+  visibility: visible;
+  transition:
+    opacity 0.3s ease,
+    visibility 0s;
+}
+
+// Figma: 185.66px Medium white at 10%, its box starting 445 (01 to 03) or 435
+// (04 to 06) from the card's left edge, the second digit cut by the right
+// edge. Anchored to that edge, so a narrower card keeps the same cut.
+.possibilities-showcase-watermark {
+  position: absolute;
+  top: -47px;
+  left: calc(100% - var(--watermark-right) * 1px);
+  font-size: 185.66px;
+  font-weight: 500;
+  line-height: 1.1;
+  white-space: nowrap;
+  opacity: 0.1;
+  pointer-events: none;
+}
+
+// Figma: an 80x80 glass badge at (42, 37), 4px right of the text below it, the
+// icon at its own drawn size in the middle.
+.possibilities-showcase-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 80px;
+  height: 80px;
+  margin-left: 4px;
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.possibilities-showcase-icon img {
+  display: block;
+  width: calc(var(--icon-width) * 1px);
+  height: calc(var(--icon-height) * 1px);
+}
+
+// Title at y=149, text at y=196 (both x=38).
+.possibilities-showcase-title {
+  margin: 32px 0 0;
+  font-size: 26px;
+  font-weight: 500;
+  line-height: 1.1;
+}
+
+.possibilities-showcase-text {
+  max-width: calc(var(--text-width) * 1px);
+  margin: 18.4px 0 0;
+  font-size: 16px;
+  font-weight: 300;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+}
+
+// The illustration band: card x 0 to 631, y 260 to 560, held at the bottom left
+// and scaled with the card when it is narrower than 631.
+.possibilities-art {
+  position: relative;
+  flex-shrink: 0;
+  width: calc(631 * var(--u));
+  height: calc(300 * var(--u));
+  margin: auto 0 0 -38px;
+}
+
+.possibilities-art-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+// State 01's payment card, Figma 1667:3376 and its layers in 26:12: 555x170 at
+// (38, 305), radius 15, everything in card pixels so it scales like the images.
+.possibilities-mockup {
+  position: absolute;
+  left: calc(38 * var(--u));
+  top: calc(45 * var(--u));
+  width: calc(555 * var(--u));
+  height: calc(170 * var(--u));
+  padding: calc(24 * var(--u)) calc(22 * var(--u)) 0 calc(24 * var(--u));
+  border-radius: calc(15 * var(--u));
+  background: $color-surface;
+}
+
+// The rule (1667:3399) is black at 10%, 9 under the avatar.
+.possibilities-mockup-header {
+  display: flex;
+  align-items: center;
+  gap: calc(10 * var(--u));
+  padding-bottom: calc(9 * var(--u));
+  border-bottom: calc(1 * var(--u)) solid rgba(0, 0, 0, 0.1);
+}
+
+.possibilities-mockup-avatar {
+  width: calc(49 * var(--u));
+  height: calc(49 * var(--u));
+  flex-shrink: 0;
+  border-radius: $radius-pill;
+  object-fit: cover;
+}
+
+.possibilities-mockup-header-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.possibilities-mockup-name {
+  margin: 0;
+  color: #00082c;
+  font-size: calc(20 * var(--u));
+  font-weight: 500;
+  line-height: 1.1;
+}
+
+.possibilities-mockup-label {
+  margin: calc(3 * var(--u)) 0 0;
+  color: #8d96a3;
+  font-size: calc(14 * var(--u));
+  line-height: 1.3;
+}
+
+// Figma 1667:3387: 110x40 pill, #CDFAD1 on #1DB82B, 23.55px check glyph.
+.possibilities-mockup-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  gap: calc(7.697 * var(--u));
+  width: calc(110 * var(--u));
+  height: calc(40 * var(--u));
+  padding: 0 calc(15.315 * var(--u)) 0 calc(10 * var(--u));
+  border-radius: $radius-pill;
+  background: #cdfad1;
+  color: #1db82b;
+  font-size: calc(16 * var(--u));
+  font-weight: 500;
+  letter-spacing: -0.04em;
+  white-space: nowrap;
+}
+
+.possibilities-mockup-status-icon {
+  width: calc(23.548 * var(--u));
+  height: calc(23.548 * var(--u));
+}
+
+.possibilities-mockup-body {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: calc(12 * var(--u));
+  padding-top: calc(10 * var(--u));
+}
+
+// The amount and its note start 3 right of the avatar and the rule (x 65).
+.possibilities-mockup-body-text {
+  min-width: 0;
+  padding-left: calc(3 * var(--u));
+}
+
+.possibilities-mockup-amount {
+  margin: 0 0 calc(7.4 * var(--u));
+  color: #00082c;
+  font-size: calc(26 * var(--u));
+  font-weight: 500;
+  line-height: 1.1;
+}
+
+.possibilities-mockup-note {
+  margin: 0;
+  color: #8d96a3;
+  font-size: calc(14 * var(--u));
+  line-height: 1.3;
+}
+
+// Figma 1667:3397: 29px pill, #ECF2FC with primary ink; 11 either side of
+// the text, as around "Provizija: €0" in its 98px box.
+.possibilities-mockup-commission {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  height: calc(29 * var(--u));
+  padding: 0 calc(11 * var(--u));
+  border-radius: $radius-pill;
+  background: $color-accent-tint;
+  color: $color-primary;
+  font-size: calc(14 * var(--u));
+  font-weight: 500;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+// Figma: six 30x4 dashes 2px apart at (38, 519), white at 10%, the open one
+// all white. While the states rotate, the open one fills over its 6 s instead.
+.possibilities-dots {
+  position: absolute;
+  left: 38px;
+  bottom: 37px;
+  display: flex;
+  gap: 2px;
+}
+
+.possibilities-dot {
+  position: relative;
+  width: 30px;
+  height: 4px;
+  padding: 0;
+  border: none;
+  border-radius: $radius-pill;
+  background: rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+}
+
+// A taller target than the 4px dash, without moving anything.
+.possibilities-dot::before {
+  content: '';
+  position: absolute;
+  inset: -10px -1px;
+}
+
+.possibilities-dot-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  border-radius: inherit;
+  background: $color-surface;
+}
+
+.is-rotating .possibilities-dot-fill {
+  animation: possibilities-progress 6s linear forwards;
+}
+
+.is-paused .possibilities-dot-fill {
+  animation-play-state: paused;
+}
+
+@keyframes possibilities-progress {
+  from {
+    width: 0;
+  }
+
+  to {
+    width: 100%;
+  }
+}
+
+@keyframes possibilities-fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+// No rotation at all then: a full dash and clicks only.
+@media (prefers-reduced-motion: reduce) {
+  .is-rotating .possibilities-dot-fill {
+    animation: none;
+  }
+}
+
+// Phones (Dizajn 51 over 42): the list on top and the card under it, as the
+// ticket asks; 94:27 draws them as an accordion. The rows keep 94:27's clean
+// second column (26:3355): 65.4 a row with the number 15 down, a 0.74px rule
+// and a 12x6 arrow a few px under the text's middle. The open row is a
+// page-grey card with the same fading outline (160deg on its ~343x160 box),
+// number 21 in.
 @include mobile-only {
   .possibilities-section {
     padding-top: 35px;
@@ -1503,24 +2046,15 @@ useHead({
   }
 
   .possibilities-grid {
-    gap: 0;
-  }
-
-  .possibilities-list {
-    display: contents;
+    gap: 24px;
   }
 
   .possibility-item {
-    order: var(--possibility-order);
-    min-height: 0;
+    height: auto;
     padding: 15px 10.58px 13.37px 25px;
     border: none;
     border-bottom: 1px solid rgba(228, 235, 242, 0.74);
     border-radius: 0;
-  }
-
-  .possibility-item:has(+ .possibility-item-active) {
-    border-bottom-color: transparent;
   }
 
   .possibility-head {
@@ -1546,10 +2080,14 @@ useHead({
   }
 
   .possibility-item-active {
-    padding: 14.38px 27px 0 20px;
-    border: 1px solid $color-primary;
-    border-bottom: none;
-    border-radius: 10px 10px 0 0;
+    height: auto;
+    padding: 14.38px 27px 16px 20px;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    background:
+      linear-gradient($color-background, $color-background) padding-box,
+      linear-gradient(160.2deg, rgba($color-primary, 1) 13.1%, rgba($color-primary, 0) 86.4%) border-box,
+      linear-gradient($color-background, $color-background) border-box;
   }
 
   .possibility-item-active .possibility-head {
@@ -1560,346 +2098,72 @@ useHead({
     transform: translateY(3.9px);
   }
 
-  .possibility-text {
-    max-width: 259px;
+  .possibility-texts {
     margin-top: 8.52px;
+  }
+
+  .possibility-text {
+    max-width: calc(var(--text-width-phone) * 1px);
     font-size: 14px;
   }
 
-  .possibilities-showcase-frame {
-    display: block;
-    order: var(--possibility-order);
-    padding: 22px 8.5px 12.4px;
-    background: $color-background;
-    border: 1px solid $color-primary;
-    border-top: none;
-    border-radius: 0 0 10px 10px;
-  }
-}
-
-// Figma 26:356 — 631x568, radius 25, 128deg gradient, blue drop shadow. The
-// bottom padding is deliberately deeper than the top: the dots sit 74px above
-// the card's lower edge in the design.
-.possibilities-showcase {
-  position: relative;
-  overflow: hidden;
-  border-radius: 25px;
-  background: linear-gradient(
-    128.18deg,
-    $color-gradient-start 0%,
-    $color-gradient-mid 55%,
-    $color-gradient-end 100%
-  );
-  box-shadow: 0 20px 40px rgba(0, 54, 246, 0.25);
-  color: $color-surface;
-  padding: 38px 38px 74px;
-  display: flex;
-  flex-direction: column;
-}
-
-// Figma 26:367 — 185.66px Medium white at 10% opacity, bleeding off the card's
-// top-right corner (the card clips it).
-.possibilities-showcase-watermark {
-  position: absolute;
-  top: -76px;
-  left: 445px;
-  font-size: 185.66px;
-  font-weight: 500;
-  line-height: 1.1;
-  opacity: 0.1;
-  pointer-events: none;
-}
-
-// Figma 26:357 — 80x80 glass badge, radius 15, 32px icon.
-.possibilities-showcase-icon {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 80px;
-  height: 80px;
-  border-radius: 15px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-
-  img {
-    display: block;
-    width: 32px;
-    height: 32px;
-  }
-}
-
-.possibilities-showcase-title {
-  font-size: 26px;
-  font-weight: 500;
-  line-height: 1.1;
-  margin: 2px 0 0;
-  position: relative;
-}
-
-.possibilities-showcase-text {
-  font-size: 16px;
-  font-weight: 300;
-  line-height: 1.3;
-  letter-spacing: -0.02em;
-  margin: 18px 0 0;
-  max-width: 355px;
-  position: relative;
-}
-
-// Figma 26:368 — 555x170 white card, radius 15, 67px below the description.
-.possibilities-mockup {
-  background: $color-surface;
-  border-radius: 15px;
-  padding: 24px;
-  margin-top: 67px;
-  position: relative;
-}
-
-.possibilities-mockup-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid $color-border;
-}
-
-.possibilities-mockup-avatar {
-  width: 49px;
-  height: 49px;
-  flex-shrink: 0;
-  border-radius: $radius-pill;
-  object-fit: cover;
-}
-
-.possibilities-mockup-header-text {
-  flex: 1;
-  min-width: 0;
-}
-
-.possibilities-mockup-label {
-  color: #8d96a3;
-  font-size: 14px;
-  line-height: 1.3;
-  margin: 3px 0 0;
-}
-
-.possibilities-mockup-name {
-  color: #00082c;
-  font-weight: 500;
-  font-size: 20px;
-  line-height: 1.1;
-  margin: 0;
-}
-
-// Figma 26:414 — 110x40 pill, #CDFAD1 on #1DB82B, 23.5px check glyph.
-.possibilities-mockup-status {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  width: 110px;
-  height: 40px;
-  background: #cdfad1;
-  color: #1db82b;
-  font-weight: 500;
-  font-size: 16px;
-  letter-spacing: -0.04em;
-  padding: 0 15px 0 10px;
-  border-radius: $radius-pill;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.possibilities-mockup-status-icon {
-  width: 23.5px;
-  height: 23.5px;
-}
-
-.possibilities-mockup-body {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  padding-top: 10px;
-}
-
-.possibilities-mockup-body-text {
-  min-width: 0;
-}
-
-.possibilities-mockup-amount {
-  font-size: 26px;
-  font-weight: 500;
-  line-height: 1.1;
-  color: #00082c;
-  margin: 0 0 8px;
-}
-
-.possibilities-mockup-note {
-  color: #8d96a3;
-  font-size: 14px;
-  line-height: 1.3;
-  margin: 0;
-}
-
-// Figma 26:424 — 98x29 pill, tinted #ECF2FC with primary ink.
-.possibilities-mockup-commission {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 29px;
-  background: $color-accent-tint;
-  color: $color-primary;
-  font-weight: 500;
-  font-size: 14px;
-  line-height: 1.1;
-  padding: 0 12px;
-  border-radius: $radius-pill;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-// Figma 26:369–26:374 — six equal 30x4 dashes 2px apart, 44px under the card;
-// only the colour marks the active one.
-.possibilities-dots {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  margin-top: 44px;
-  position: relative;
-}
-
-.possibilities-dot {
-  width: 30px;
-  height: 4px;
-  border-radius: $radius-pill;
-  background: rgba(255, 255, 255, 0.3);
-  transition: background-color 0.15s ease;
-}
-
-.possibilities-dot-active {
-  background: $color-surface;
-}
-
-// Dizajn 42 (26:3199): on a phone the card is 324 wide inside the open row,
-// radius 8, with the desktop parts at about half size except the 16px title
-// and 12px text. The first column lays that title 7px over the icon; here it
-// sits 2px under it, as on the desktop.
-@include mobile-only {
+  // The card at the phone frames' proportions: the desktop card in --u, with
+  // 26:3073's 16 and 12px text, radius 8 and shadow (approved in Dizajn 42).
   .possibilities-showcase {
-    padding: 19.3px 19.57px 45.68px;
     border-radius: 8px;
     box-shadow: 0 10.3px 20.6px rgba(0, 54, 246, 0.25);
   }
 
-  .possibilities-showcase-watermark {
-    top: -47.38px;
-    left: 229.2px;
-    font-size: 95.63px;
+  .possibilities-slide {
+    min-height: calc(560 * var(--u));
+    padding: calc(37 * var(--u)) 0 0 calc(38 * var(--u));
   }
 
-  // Both phone columns set the badge 2px right of the text below it.
-  .possibilities-showcase-icon {
-    width: 41.2px;
-    height: 41.2px;
-    margin-left: 2.06px;
-    border-radius: 7.73px;
-    border-color: rgba(255, 255, 255, 0.155);
+  .possibilities-showcase-watermark {
+    top: calc(-47 * var(--u));
+    left: calc(100% - var(--watermark-right) * var(--u));
+    font-size: calc(185.66 * var(--u));
+  }
 
-    img {
-      width: 16.48px;
-      height: 16.48px;
-    }
+  // A 1px ring at half the alpha reads like the frame's 0.5px one.
+  .possibilities-showcase-icon {
+    width: calc(80 * var(--u));
+    height: calc(80 * var(--u));
+    margin-left: calc(4 * var(--u));
+    border-radius: calc(15 * var(--u));
+    border-color: rgba(255, 255, 255, 0.155);
+  }
+
+  .possibilities-showcase-icon img {
+    width: calc(var(--icon-width) * var(--u));
+    height: calc(var(--icon-height) * var(--u));
   }
 
   .possibilities-showcase-title {
+    margin-top: calc(32 * var(--u));
     font-size: 16px;
   }
 
+  // Text top at 196 card pixels under a 16px title line.
   .possibilities-showcase-text {
     max-width: 229px;
-    margin-top: 6.66px;
+    margin-top: calc(47 * var(--u) - 17.6px);
     font-size: 12px;
   }
 
-  .possibilities-mockup {
-    margin-top: 16.8px;
-    padding: 12.36px 11.33px 10.72px 12.36px;
-    border-radius: 7.73px;
-  }
-
-  // The frame's 0.5px rule takes no room; the 1px border here takes half from each side.
-  .possibilities-mockup-header {
-    gap: 5.15px;
-    padding-bottom: 4.65px;
-    border-bottom-color: rgba(0, 0, 0, 0.05);
-  }
-
-  .possibilities-mockup-avatar {
-    width: 25.24px;
-    height: 25.24px;
-  }
-
-  .possibilities-mockup-name {
-    font-size: 10px;
-  }
-
-  .possibilities-mockup-label {
-    margin-top: 1.88px;
-    font-size: 8px;
-  }
-
-  .possibilities-mockup-status {
-    gap: 3.97px;
-    width: 56.66px;
-    height: 20.6px;
-    padding: 0 7.89px 0 5.15px;
-    font-size: 8px;
-  }
-
-  .possibilities-mockup-status-icon {
-    width: 12.13px;
-    height: 12.13px;
-  }
-
-  .possibilities-mockup-body {
-    gap: 6px;
-    padding-top: 4.65px;
-  }
-
-  .possibilities-mockup-body-text {
-    padding-left: 1.55px;
-  }
-
-  .possibilities-mockup-amount {
-    margin-bottom: 3.14px;
-    font-size: 14px;
-  }
-
-  .possibilities-mockup-note {
-    font-size: 8px;
-  }
-
-  .possibilities-mockup-commission {
-    height: 14.94px;
-    padding: 0 3.24px;
-    font-size: 8px;
+  .possibilities-art {
+    margin-left: calc(-38 * var(--u));
   }
 
   .possibilities-dots {
-    gap: 1.03px;
-    margin-top: 30.75px;
+    left: calc(38 * var(--u));
+    bottom: calc(37 * var(--u));
+    gap: calc(2 * var(--u));
   }
 
   .possibilities-dot {
-    width: 15.45px;
-    height: 2.06px;
-    background: rgba(255, 255, 255, 0.1);
-  }
-
-  .possibilities-dot-active {
-    background: $color-surface;
+    width: calc(30 * var(--u));
+    height: calc(4 * var(--u));
   }
 }
 
