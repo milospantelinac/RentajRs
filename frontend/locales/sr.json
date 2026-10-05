@@ -1024,6 +1024,7 @@
   },
   "legalPages": {
     "lastUpdated": "Poslednja izmena: {date}",
+    "toc": "Sadržaj",
     "reviewNotice": "Ovaj tekst je pripremljen na osnovu poslovnih pravila platforme opisanih u Rentaj Product Bible-u i treba da prođe pravnu proveru pre zvaničnog objavljivanja (Poglavlje 16.5).",
     "privacyTitle": "Politika privatnosti",
     "privacySubtitle": "Kako Rentaj prikuplja, koristi i štiti vaše podatke.",

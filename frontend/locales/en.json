@@ -1024,6 +1024,7 @@
   },
   "legalPages": {
     "lastUpdated": "Last updated: {date}",
+    "toc": "Contents",
     "reviewNotice": "This text was drafted from the platform's own business rules (Rentaj Product Bible) and needs a legal review before it goes live (Chapter 16.5).",
     "privacyTitle": "Privacy Policy",
     "privacySubtitle": "How Rentaj collects, uses, and protects your data.",

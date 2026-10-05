@@ -282,70 +282,78 @@ export const staticPages: StaticPageSeed[] = [
     },
   },
   {
-    // Same migration note as uslovi-koriscenja above — real text from
-    // staging.rentaj.rs/politika-privatnosti, 2026-08-20.
+    // Dizajn 48: the text as it was live on rentaj.dev (saved through the
+    // admin on 2026-08-24), word for word, in the structure of Figma frame
+    // 1652:3356; migration 20261005130000_structure_privacy_policy brings
+    // existing databases to the same body.
     slug: 'politika-privatnosti',
     sr: {
       title: 'Politika privatnosti',
       bodyHtml: `
-<h2>1. Uvod</h2>
-<p>Platforma rentaj.rs (kojom upravlja Tamara Božović preduzetnik Veb portali RENTAJ.RS Nova Pazova, MB 68188032, PIB 115213635, sa sedištem u Novoj Pazovi, Janka Čmelika br. 2) obavezuje se da štiti podatke svih korisnika platforme, na način kako je to propisano zakonodavstvom Republike Srbije, a naročito u skladu sa Zakonom o zaštiti podataka o ličnosti („Sl. glasnik RS", br. 87/2018). Podacima rukuje isključivo platforma rentaj.rs.</p>
+<h2>I UVOD</h2>
+<p>Platforma <a target="_blank" rel="noopener noreferrer nofollow" href="http://rentaj.rs">rentaj.rs</a> (kojom upravlja Tamara Božović preduzetnik Veb portali <a target="_blank" rel="noopener noreferrer nofollow" href="http://RENTAJ.RS">RENTAJ.RS</a> Nova Pazova, MB 68188032, PIB 115213635, sa sedištem u Novoj Pazovi, Janka Čmelika br. 2) obavezuje se da štiti podatke svih korisnika platforme, na način kako je to propisano zakonodavstvom Republike Srbije, a naročito u skladu sa Zakonom o zaštiti podataka o ličnosti („Sl. glasnik RS“, br. 87/2018). Podacima rukovodi isključivo platforma <a target="_blank" rel="noopener noreferrer nofollow" href="http://rentaj.rs">rentaj.rs</a>.</p>
 <p>Podatak o ličnosti predstavlja svaki podatak koji se odnosi na fizičko lice čiji je identitet određen ili odrediv, neposredno ili posredno, posebno na osnovu oznake identiteta, kao što je ime i identifikacioni broj, podataka o lokaciji, identifikatora u elektronskim komunikacionim mrežama ili jednog, odnosno više obeležja njegovog fizičkog, fiziološkog, genetskog, mentalnog, ekonomskog, kulturnog i društvenog identiteta.</p>
 <p>Pod obradom podataka o ličnosti podrazumeva se svaka radnja ili skup radnji koje se vrše automatizovano ili neautomatizovano sa podacima o ličnosti ili njihovim skupovima, kao što su prikupljanje, beleženje, razvrstavanje, grupisanje, odnosno strukturisanje, pohranjivanje, upodobljavanje ili menjanje, otkrivanje, uvid, upotreba, otkrivanje prenosom, odnosno dostavljanjem, umnožavanje, širenje ili na drugi način činjenje dostupnim, upoređivanje, ograničavanje, brisanje ili uništavanje.</p>
-<p>Obrađivačem podataka, u skladu sa zakonom, u konkretnom smislu smatra se platforma rentaj.rs.</p>
-<h2>2. Podaci koje platforma rentaj.rs prikuplja</h2>
-<p>Podaci koje platforma rentaj.rs prikuplja podeljeni su u dve grupe: podaci o oglašivačima i podaci o krajnjim korisnicima.</p>
-<p>Podaci o oglašivačima su:</p>
+<p>Obrađivačem podataka, u skladu sa zakonom, u konkretnom smislu smatra se platforma <a target="_blank" rel="noopener noreferrer nofollow" href="http://rentaj.rs">rentaj.rs</a></p>
+<h2>II PODACI KOJE PLATFORMA RENTAJ.RS PRIKUPLJA</h2>
+<p>Podaci koje platforma <a target="_blank" rel="noopener noreferrer nofollow" href="http://rentaj.rs">rentaj.rs</a> prikuplja podeljeni su u dve grupe:</p>
 <ul>
-<li>adresa elektronske pošte (u daljem tekstu: e-mail)</li>
-<li>korisničko ime</li>
-<li>lozinka</li>
-<li>broj telefona oglašivača</li>
-<li>lokacija objekta oglašivača ili lokacija usluge oglašivača</li>
+<li><p>Podaci o oglašivačima;</p></li>
+<li><p>Podaci o krajnjim korisnicima.</p></li>
 </ul>
-<p>Takođe, oglašivači mogu ostavljati i druge podatke, na sopstvenu odgovornost, kao što su, na primer, podaci o načinu uplate za usluge koje oglašivači pružaju, te sve druge informacije neophodne za svrhu zbog koje su isti registrovani na platformi rentaj.rs.</p>
-<p>Podaci o krajnjim korisnicima su:</p>
-<ul>
-<li>adresa elektronske pošte (u daljem tekstu: e-mail)</li>
-<li>korisničko ime</li>
-<li>lozinka</li>
-<li>broj telefona krajnjeg korisnika</li>
-</ul>
-<p>Ukoliko se prijava — registracija na platformu rentaj.rs vrši posredstvom neke druge platforme (npr. Google, Facebook, Outlook i sl.), platforma rentaj.rs prikuplja podatke koji su dostupni od strane tih drugih platformi. U skladu sa politikama privatnosti drugih platformi sa kojih se prikupljaju podaci, platforma rentaj.rs neće prikupljati lozinku sa drugih platformi, budući da ona predstavlja tajni podatak.</p>
-<p>Pored ovih podataka, platforma rentaj.rs omogućava oglašivačima i krajnjim korisnicima mogućnost razmene međusobnih poruka. Platforma rentaj.rs neće otkrivati sadržaj poruka trećim licima, niti će činiti dostupnim razmenjene podatke, sem u slučajevima predviđenim Zakonom. Razmenjene poruke između oglašivača i krajnjih korisnika predstavljaju tajnu.</p>
-<h2>3. Svrha i način prikupljanja i obrade podataka</h2>
-<p>Svi podaci koji su navedeni u prethodnom odeljku prikupljaju se u svrhu funkcionisanja platforme rentaj.rs, u svemu u skladu sa Opštim uslovima poslovanja platforme rentaj.rs, a sve radi upravljanja korisničkim nalozima, međusobne komunikacije korisnika platforme, te radi eventualnog sprečavanja zloupotrebe korišćenja platforme rentaj.rs.</p>
-<p>Podaci se prikupljaju direktno od korisnika prilikom same registracije na platformu rentaj.rs, kao i automatski posredstvom kolačića („cookies") prilikom korišćenja platforme rentaj.rs. Platforma rentaj.rs koristi neophodne kolačiće koji su neophodni za osnovno funkcionisanje sajta, kao i opcione kolačiće (npr. analitičke) koji se koriste isključivo uz saglasnost korisnika. Korisnicima je omogućeno da prilikom prve posete sajtu prihvate ili odbiju upotrebu kolačića koji nisu neophodni, putem odgovarajućeg obaveštenja (cookie banner).</p>
-<p>Podaci svih registrovanih lica čuvaju se u skladu sa propisima Republike Srbije i mogu biti dostupni trećim licima samo na način predviđen zakonima Republike Srbije, a svako lice ima pravo da traži brisanje svojih podataka, pri čemu je platforma rentaj.rs dužna da, prilikom brisanja registracije lica na platformi rentaj.rs, izbriše podatke u svemu u skladu sa čl. 30 Zakona o zaštiti podataka o ličnosti.</p>
+<h3>Podaci o oglašivačima su:</h3>
+<ol>
+<li><p>adresa elektronske pošte (u daljem tekstu: e-mail)</p></li>
+<li><p>korisničko ime</p></li>
+<li><p>lozinka</p></li>
+<li><p>broj telefona oglašivača</p></li>
+<li><p>lokacija objekta oglašivača ili lokacija usluge oglašivača</p></li>
+</ol>
+<p>Takođe, oglašivači mogu ostavljati i druge podatke, na sopstvenu odgovornosti, kao što su, na primer, podaci o načinu uplate za usluge koje oglašivači pružaju, te sve druge informacije neophodne za svrhu zbog koje su isti registrovani na platformi <a target="_blank" rel="noopener noreferrer nofollow" href="http://rentaj.rs">rentaj.rs</a></p>
+<h3>Podaci o krajnjim korisnicima su:</h3>
+<ol>
+<li><p>adresa elektronske pošte (u daljem tekstu: e-mail)</p></li>
+<li><p>korisničko ime</p></li>
+<li><p>lozinka</p></li>
+<li><p>broj telefona krajnjeg korisnika</p></li>
+</ol>
+<p>Ukoliko se prijava – registracija na platformu <a target="_blank" rel="noopener noreferrer nofollow" href="http://rentaj.rs">rentaj.rs</a> vrši posredstvom neke druge platforme (npr. Google i sl.), platforma <a target="_blank" rel="noopener noreferrer nofollow" href="http://rentaj.rs">rentaj.rs</a> prikuplja podatke koji su dostupni od strane tih drugih platformi. U skladu sa politikama privatnosti drugih platformi sa kojih se prikupljaju podaci, platforma <a target="_blank" rel="noopener noreferrer nofollow" href="http://rentaj.rs">rentaj.rs</a> neće prikupljati lozinku sa drugih platformi, budući da ona predstavlja tajni podatak.</p>
+<p>Pored ovih podataka, platforma <a target="_blank" rel="noopener noreferrer nofollow" href="http://rentaj.rs">rentaj.rs</a> omogućava oglašivačima i krajnjim korisnicima mogućnost razmene međusobnih poruka. Platforma <a target="_blank" rel="noopener noreferrer nofollow" href="http://rentaj.rs">rentaj.rs</a> neće otkrivati sadržaj poruka trećim licima, niti će činiti dostupnim razmenjene podatke, sem u slučajevima predviđenim Zakonom. Razmenjene poruke između oglašivača i krajnjih korisnika predstavljaju tajnu.</p>
+<h2>III SVRHA I NAČIN PRIKUPLJANJA I OBRADE PODATAKA</h2>
+<p>Svi podaci koji su navedeni pod poglavljem II prikupljaju se u svrhu funkcionisanja platforme <a target="_blank" rel="noopener noreferrer nofollow" href="http://rentaj.rs">rentaj.rs</a>, u svemu u skladu sa Opštim uslovima poslovanja platforme <a target="_blank" rel="noopener noreferrer nofollow" href="http://rentaj.rs">rentaj.rs</a>, a sve radi upravljanja korisničkim nalozima, međusobne komunikacije korisnika platforme, te radi eventualnog sprečavanja zloupotrebe korišćenja platforme <a target="_blank" rel="noopener noreferrer nofollow" href="http://rentaj.rs">rentaj.rs</a>.</p>
+<p>Podaci se prikupljaju direktno od korisnika prilikom same registracije na platformu <a target="_blank" rel="noopener noreferrer nofollow" href="http://rentaj.rs">rentaj.rs</a> kao i automatski posredstvom kolačića (,,cookies“) prilikom korišćenja platforme <a target="_blank" rel="noopener noreferrer nofollow" href="http://rentaj.rs">rentaj.rs</a>. Platforma <a target="_blank" rel="noopener noreferrer nofollow" href="http://rentaj.rs">rentaj.rs</a> koristi neophodne kolačiće koji su neophodni za osnovno funkcionisanje sajta, kao i opcione kolačiće (npr. analitičke) koji se koriste isključivo uz saglasnost korisnika. Korisnicima je omogućeno da prilikom prve posete sajtu prihvate ili odbiju upotrebu kolačića koji nisu neophodni, putem odgovarajućeg obaveštenja (cookie banner).</p>
+<p>Podaci svih registrovanih lica čuvaju se u skladu sa propisima Republike Srbije i mogu biti dostupni trećim licima samo na način predviđen zakonima Republike Srbije i svako lice ima pravo da traži brisanje svojih podataka, a platforma <a target="_blank" rel="noopener noreferrer nofollow" href="http://rentaj.rs">rentaj.rs</a> je dužna da, prilikom brisanja registracije lica na platformi <a target="_blank" rel="noopener noreferrer nofollow" href="http://rentaj.rs">rentaj.rs</a> izbriše, u svemu u skladu sa čl. 30 Zakona o zaštiti podataka o ličnosti.</p>
 <p>Podaci o ličnosti mogu se deliti u sledećim slučajevima:</p>
 <ul>
-<li>oglašivač – krajnji korisnik – a sve u cilju funkcionisanja platforme, budući da bez vidljivih podataka (npr. ime oglašivača, vrsta usluge, mesto usluge ili objekta, e-mail i dr.) nije moguće pružanje usluga od strane platforme rentaj.rs;</li>
-<li>zakonska obaveza davanja podataka – u slučaju da nadležni državni organ u Republici Srbiji zahteva od platforme rentaj.rs da se dostave određeni podaci;</li>
-<li>uz izričitu saglasnost registrovanih lica.</li>
+<li><p>oglašivač – krajnji korisnik – a sve u cilju funkcionisanja platforme, budući da bez vidljivih podataka ( npr. ime oglašivača, vrsta usluge, mesto usluge ili objekta, e-mail i dr.) nije moguće pružanje usluga od strane platforme <a target="_blank" rel="noopener noreferrer nofollow" href="http://rentaj.rs">rentaj.rs</a></p></li>
+<li><p>zakonska obaveza davanja podataka – u slučaju da nadležni državni organ u Republici Srbiji zahteva od platforme <a target="_blank" rel="noopener noreferrer nofollow" href="http://rentaj.rs">rentaj.rs</a> da se dostave određeni podaci;</p></li>
+<li><p>uz izričitu saglasnost registrovanih lica.</p></li>
 </ul>
-<p><strong>Podaci o platnim karticama:</strong></p>
-<p>Platforma rentaj.rs ne prikuplja, ne obrađuje, ne čuva niti arhivira podatke o platnim karticama korisnika, uključujući broj platne kartice, datum isteka i sigurnosni kod (CVC2/CVV), ni u elektronskom ni u bilo kom drugom obliku.</p>
-<p>Prilikom unošenja podataka o platnoj kartici, poverljive informacije se prenose putem javne mreže u zaštićenoj (kriptovanoj) formi upotrebom SSL protokola i PKI sistema, kao trenutno najsavremenije kriptografske tehnologije.</p>
-<p>Sigurnost podataka prilikom kupovine garantuje procesor platnih kartica, Banca Intesa ad Beograd, pa se tako kompletan proces naplate obavlja na stranicama banke. Ni u jednom trenutku podaci o platnoj kartici nisu dostupni našem sistemu.</p>
-<h2>4. Čuvanje podataka, odricanje od odgovornosti</h2>
-<p>Platforma rentaj.rs obavezuje se da podatke čuva u skladu sa važećim propisima u Republici Srbiji. Ukoliko dođe do promene propisa koji znatno utiču na zaštitu prava podataka o ličnosti, platforma rentaj.rs obavezuje se da sva registrovana lica čiji su podaci registrovani na samoj platformi obavesti i predoči im nove uslove poslovanja i politike privatnosti.</p>
-<p>Platforma rentaj.rs ne ulazi u istinitost i tačnost podataka koji su registrovani na samoj platformi. U vezi sa tim, platforma rentaj.rs nije odgovorna za obradu plaćanja koja se vrše direktno na račun oglašivača ili putem platforme, budući da ista nema uvid u finansijske tokove oglašivač-korisnik, niti ima mehanizam provere tačnosti unetih podataka. Takođe, platforma rentaj.rs ne garantuje ni oglašivačima da će obaveza plaćanja od strane krajnjih korisnika biti ispunjena, niti je u obavezi da dostavlja oglašivačima podatke krajnjih korisnika, i obrnuto.</p>
-<p>Trećim licima onemogućen je pristup registrovanim podacima koji se čuvaju u skladu sa propisima Republike Srbije, te se u tom smislu platforma rentaj.rs obavezuje da obezbedi da treća lica ne mogu doći do tih podataka, i u tom cilju preduzima tehničke i druge mere za zaštitu svih podataka koji se štite Zakonom o zaštiti podataka o ličnosti.</p>
-<p>Internet prodajno mesto ne koristi linkove ka spoljnim sajtovima trećih strana, osim kada je to neophodno za obradu porudžbine i uz prethodno obaveštavanje korisnika. Platforma rentaj.rs preduzima tehničke i organizacione mere kako bi zaštitila podatke korisnika i ne preuzima odgovornost za sadržaje i funkcionalnosti trećih strana.</p>
-<h2>5. Prava oglašivača i krajnjih korisnika</h2>
-<p>Oglašivači i krajnji korisnici platforme rentaj.rs imaju sledeća prava:</p>
+<h3>Podaci o platnim karticama:</h3>
 <ul>
-<li>Pravo na pristup platformi rentaj.rs uz korišćenje podataka;</li>
-<li>Pravo na informisanje – registrovani korisnici imaju pravo da se informišu na koji način se njihovi podaci obrađuju i za koju svrhu;</li>
-<li>Pravo na pristup korisničkom nalogu i pravo na uvid u istoriju komunikacije sa trećim licima, pravo na uvid u prethodne transakcije, te pravo na brisanje poruka na platformi;</li>
-<li>Pravo na ispravljanje podataka i pravo na brisanje podataka – svi registrovani podaci mogu biti ispravljeni na zahtev registrovanih lica, ali i obrisani ukoliko su netačni ili neistiniti, s tim da, ukoliko registrovano lice ima nameru da i dalje koristi platformu rentaj.rs, minimum podataka mora postojati da bi se ostvarila svrha same registracije;</li>
-<li>Pravo na prigovor;</li>
-<li>Pravo na opozivanje pristanka za obradu;</li>
-<li>Pravo na trajno brisanje podataka kroz opciju na svom profilu „brisanje korisničkog naloga" (brisanjem korisničkog naloga brišu se i podaci);</li>
-<li>Pravo da ne pristanu na marketinške aktivnosti – korisnici platforme imaju pravo da u svakom trenutku odbiju ili povuku saglasnost za prijem promotivnih i marketinških obaveštenja. Davanje saglasnosti za marketinške aktivnosti nije uslov za korišćenje platforme rentaj.rs.</li>
+<li><p>Platforma <a target="_blank" rel="noopener noreferrer nofollow" href="http://rentaj.rs">rentaj.rs</a> ne prikuplja, ne obrađuje, ne čuva niti arhivira podatke o platnim karticama korisnika, uključujući broj platne kartice, datum isteka i sigurnosni kod (CVC2/CVV), ni u elektronskom ni u bilo kom drugom obliku.</p></li>
+<li><p>Prilikom unošenja podataka o platnoj kartici, poverljive informacija se prenose putem javne mreže u zaštićenoj (kriptovanoj) formi upotrebom SSL protokola i PKI sistema, kao trenutno najsavremenije kriptografske tehnologije.</p></li>
+<li><p>Sigurnost podataka prilikom kupovine, garantuje procesor platnih kartica, Banca Intesa ad Beograd, pa se tako kompletni proces naplate obavlja na stranicama banke. Niti jednog trenutka podaci o platnoj kartici nisu dostupni našem sistemu.</p></li>
 </ul>
-<p>Prigovori i zahtevi u vezi sa Vašim podacima ostvarivaće se putem e-mail adrese <a href="mailto:office@rentaj.rs">office@rentaj.rs</a>.</p>
-<h2>6. Završne odredbe</h2>
+<h2>IV ČUVANJE PODATAKA, ODRICANJE OD OGOVORNOSTI</h2>
+<p>Platforma <a target="_blank" rel="noopener noreferrer nofollow" href="http://rentaj.rs">rentaj.rs</a> obavezuje se da podatke čuva u skladu sa važećim propisima u Republici Srbiji. Ukoliko dođe do promene propisa koji znatno utiču na zaštitu prava podataka o ličnosti, platforma <a target="_blank" rel="noopener noreferrer nofollow" href="http://rentaj.rs">rentaj.rs</a> obavezuje se da sva registrovana lica čiji su podaci registrovani na samoj platformi obavesti i predoči im nove uslove poslovanja i politike privatnosti.</p>
+<p>Platforma <a target="_blank" rel="noopener noreferrer nofollow" href="http://rentaj.rs">rentaj.rs</a> ne ulazi u istinitost i tačnost podataka koji su registrovani na samoj platformi. U vezi sa tim, platforma <a target="_blank" rel="noopener noreferrer nofollow" href="http://rentaj.rs">rentaj.rs</a> nije odgovorna za obradu plaćanja koja se vrše direktno na račun oglašivača ili putem platforme, budući da ista nema uvid u finansijske tokove oglašivač-korisnik, niti da ista ima mehanizam provere za tačnost unetih podataka. Takođe, platforma <a target="_blank" rel="noopener noreferrer nofollow" href="http://rentaj.rs">rentaj.rs</a> ne garantuje ni oglašivačima da će od strane krajnjih korisnika obaveza plaćanja biti ispunjena, niti je ista u obavezi da dostavlja oglašivačima podatke od krajnjih korisnika, i obrnuto.</p>
+<p>Trećim licima onemogućen je pristup registrovanim podacima koji se čuvaju u skladu sa propisima Republike Srbije, te u tom smislu platfoma <a target="_blank" rel="noopener noreferrer nofollow" href="http://rentaj.rs">rentaj.rs</a> se obavezuje da obezbedi da treća lica ne mogu doći do registrovanih podataka koji se čuvaju u skladu sa propisima Republike Srbije, te se u tom cilju obavezuje da preduzme i preduzima tehničke i druge mere za zaštitu svih podataka koji se štite Zakonom o zaštiti podataka o ličnosti.</p>
+<p>Internet prodajno mesto ne koristi linkove ka spoljnim sajtovima trećih strana, osim kada je to neophodno za obradu porudžbine i uz prethodno obaveštavanje korisnika. Platforma <a target="_blank" rel="noopener noreferrer nofollow" href="http://rentaj.rs">rentaj.rs</a> preduzima tehničke i organizacione mere kako bi zaštitila podatke korisnika i ne preuzima odgovornost za sadržaje i funkcionalnosti trećih strana.</p>
+<h2>V PRAVA OGLAŠIVAČA I KRANJIH KORISNIKA</h2>
+<p>Oglašivači i krajnji korisnici platforme <a target="_blank" rel="noopener noreferrer nofollow" href="http://rentaj.rs">rentaj.rs</a> imaju sledeća prava:</p>
+<ul>
+<li><p>Pravo na pristup platformi <a target="_blank" rel="noopener noreferrer nofollow" href="http://rentaj.rs">rentaj.rs</a> uz korišćenje podataka</p></li>
+<li><p>Pravo na informisanje – registrovani korisnici imaju pravo da se informišu na koji način se njihovi podaci obrađuju i za koju svrhu;</p></li>
+<li><p>Pravo na pristup korisničkom nalogu i pravo na uvid u istoriju komunikacije sa trećim licima, pravo na uvid u prethodne transakcije, te pravo na brisanje poruka na platformi;</p></li>
+<li><p>Pravo na ispravljanje podataka i pravo na brisanje podataka – svi registrovani podaci mogu biti ispravljeni na zahtev registrovanih lica, ali i obrisani, ukoliko su netačni, neistiniti, i dr, ali ukoliko registrovano lice ima nameru da i dalje koristi platformu <a target="_blank" rel="noopener noreferrer nofollow" href="http://rentaj.rs">rentaj.rs</a>, minimum podataka mora postojati da bi se ostvarila svrha same registracije i da bi to lice moglo da koristi platformu <a target="_blank" rel="noopener noreferrer nofollow" href="http://rentaj.rs">rentaj.rs</a> ;</p></li>
+<li><p>Pravo na prigovor;</p></li>
+<li><p>Pravo na opozivanje pristanka za obradu;</p></li>
+<li><p>Pravo na trajno brisanje podataka kroz opciju na svom profilu ,,brisanje korisiničkog naloga” (brisanjem korisničkog naloga brišu se i podaci)</p></li>
+<li><p>Pravo da ne pristanu na marketinške aktivnosti – korisnici platforme imaju pravo da u svakom trenutku odbiju ili povuku saglasnost za prijem promotivnih i marketinških obaveštenja. Davanje saglasnosti za marketinške aktivnosti nije uslov za korišćenje platforme <a target="_blank" rel="noopener noreferrer nofollow" href="http://rentaj.rs">rentaj.rs</a>.</p></li>
+</ul>
+<p>Prigovori i zahtevi u vezi sa Vašim podacima ostvarivaće se putem e-mail adrese <a target="_blank" rel="noopener noreferrer nofollow" href="mailto:office@rentaj.rs">office@rentaj.rs</a></p>
+<h2>VI ZAVRŠNE ODREDBE</h2>
 <p>Prihvatanjem Opštih uslova poslovanja i ove Politike privatnosti, saglasni ste sa svim gore navedenim, te samim tim dajete svoj pristanak na ovakav način obrade podataka o ličnosti.</p>`.trim(),
     },
     en: {
