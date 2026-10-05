@@ -58,43 +58,7 @@
           </form>
         </div>
 
-        <aside class="contact-aside">
-          <div class="contact-support">
-            <div class="contact-support-row">
-              <span class="contact-support-icon"><img src="/images/icons/mail-line.svg" alt="" /></span>
-              <div class="contact-support-text">
-                <p class="contact-support-label">{{ t('contactPage.supportEmailLabel') }}</p>
-                <a href="mailto:office@rentaj.rs" class="contact-support-email">office@rentaj.rs</a>
-              </div>
-            </div>
-
-            <div class="contact-support-divider" />
-
-            <div class="contact-support-row">
-              <span class="contact-support-icon"><img src="/images/icons/clock-line.svg" alt="" /></span>
-              <div class="contact-support-text">
-                <p class="contact-support-label">{{ t('contactPage.responseTimeLabel') }}</p>
-                <p class="contact-support-hours">{{ t('contactPage.responseTimeValue') }}</p>
-              </div>
-            </div>
-          </div>
-
-          <div class="contact-quicklinks">
-            <p class="contact-quicklinks-title">{{ t('contactPage.quickLinksTitle') }}</p>
-            <NuxtLink to="/faq" class="contact-quicklink">
-              {{ t('contactPage.faqLink') }}
-              <img src="/images/icons/arrow-right-brand-sm.svg" alt="" />
-            </NuxtLink>
-            <NuxtLink to="/uslovi-koriscenja" class="contact-quicklink">
-              {{ t('footer.termsLong') }}
-              <img src="/images/icons/arrow-right-brand-sm.svg" alt="" />
-            </NuxtLink>
-            <NuxtLink to="/politika-privatnosti" class="contact-quicklink">
-              {{ t('footer.privacy') }}
-              <img src="/images/icons/arrow-right-brand-sm.svg" alt="" />
-            </NuxtLink>
-          </div>
-        </aside>
+        <SupportAside class="contact-aside" :links="supportLinks" />
       </div>
     </div>
   </div>
@@ -106,6 +70,12 @@
 const { t } = useI18n()
 const api = useApi()
 const { onInvalidCapture, onInputCapture } = useLocalizedFormValidation()
+
+const supportLinks = computed(() => [
+  { to: '/faq', label: t('contactPage.faqLink') },
+  { to: '/uslovi-koriscenja', label: t('footer.termsLong') },
+  { to: '/politika-privatnosti', label: t('footer.privacy') },
+])
 
 const form = reactive({ name: '', email: '', subject: '', message: '', consent: false, website: '' })
 const error = ref('')
@@ -356,118 +326,6 @@ useSeoMeta({ title: t('contactPage.title'), description: t('contactPage.subtitle
 .contact-submit-icon {
   width: 16px;
   height: 16px;
-}
-
-.contact-aside {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-// 214:322 — Figma's stroke sits inside the frame, so its 26px padding is 25
-// plus the 1px border here.
-.contact-support {
-  display: flex;
-  flex-direction: column;
-  gap: 22px;
-  padding: 25px;
-  border: 1px solid $color-border;
-  border-radius: 16px;
-  background: $color-surface;
-}
-
-.contact-support-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
-}
-
-.contact-support-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  background: $color-background;
-}
-
-.contact-support-icon img {
-  width: 20px;
-  height: 20px;
-}
-
-.contact-support-text {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-  min-width: 0;
-}
-
-.contact-support-label {
-  font-size: 13px;
-  line-height: normal;
-  color: $color-text-muted;
-}
-
-.contact-support-email {
-  font-size: 17px;
-  font-weight: 500;
-  line-height: normal;
-  color: $color-text;
-}
-
-.contact-support-email:hover {
-  color: $color-primary;
-}
-
-.contact-support-hours {
-  font-size: 15px;
-  line-height: 22px;
-  color: $color-text;
-}
-
-.contact-support-divider {
-  height: 1px;
-  background: $color-border;
-}
-
-// 214:340
-.contact-quicklinks {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 14px;
-  padding-top: 22px;
-}
-
-.contact-quicklinks-title {
-  font-size: 14px;
-  font-weight: 500;
-  line-height: normal;
-  color: $color-text-muted;
-}
-
-.contact-quicklink {
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  font-size: 15px;
-  font-weight: 500;
-  line-height: normal;
-  color: $color-primary;
-}
-
-.contact-quicklink:hover {
-  text-decoration: underline;
-}
-
-.contact-quicklink img {
-  width: 14px;
-  height: 14px;
 }
 
 @include respond-below(lg) {
