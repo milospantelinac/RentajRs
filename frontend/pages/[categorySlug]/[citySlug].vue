@@ -42,11 +42,12 @@ const { data: category, error: categoryError } = await useAsyncData(`cc-category
   api.get(`/categories/${route.params.categorySlug}`),
 )
 
-const { data: cities } = await useAsyncData('cc-cities', () => api.get('/locations/cities'))
+const { data: cities, error: citiesError } = await useAsyncData('cc-cities', () => api.get('/locations/cities'))
 const city = computed(() => cities.value?.find((c) => c.slug === route.params.citySlug))
 
 // Dizajn 50: nor does an unpublished category have city pages.
-if (categoryError.value || !category.value || category.value.published === false || !city.value) {
+if (categoryError.value || citiesError.value) throw createError(pageLoadError(categoryError.value || citiesError.value, 'Not found'))
+if (!category.value || category.value.published === false || !city.value) {
   throw createError({ statusCode: 404, statusMessage: 'Not found' })
 }
 

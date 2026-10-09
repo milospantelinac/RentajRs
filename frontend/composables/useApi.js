@@ -16,9 +16,11 @@ export function useApi() {
   // Inside Docker, SSR fetches must hit the backend container by its
   // service name; the browser must hit the publicly reachable URL.
   const baseURL = import.meta.server ? config.apiBaseInternal : config.public.apiBase
+  const forwardedFor = import.meta.server ? visitorForwardedFor() : null
 
   async function request(path, options = {}) {
     const headers = { ...(options.headers || {}) }
+    if (forwardedFor) headers['x-forwarded-for'] = forwardedFor
     if (auth.accessToken) {
       headers.Authorization = `Bearer ${auth.accessToken}`
     }
@@ -52,4 +54,17 @@ export function useApi() {
     delete: (path, opts) => request(path, { method: 'DELETE', ...opts }),
     raw: request,
   }
+}
+
+// The backend rate-limits per client IP and trusts one proxy hop, so it reads
+// the last X-Forwarded-For entry. Without this, every page rendered on the
+// server reached it from the Nuxt container's own address, all visitors
+// shared one bucket and a busy minute turned listing pages into 404s. The
+// header nginx set is passed on as it came (its last entry is the visitor);
+// a request that reached Nuxt directly sends its own address.
+function visitorForwardedFor() {
+  const req = useRequestEvent()?.node.req
+  if (!req) return null
+  const header = req.headers['x-forwarded-for']
+  return (Array.isArray(header) ? header.join(', ') : header) || req.socket?.remoteAddress || null
 }

@@ -74,14 +74,11 @@ const api = useApi()
 const route = useRoute()
 const auth = useAuthStore()
 
-const { data: profile } = await useAsyncData(`owner-${route.params.slug}`, async () => {
-  try {
-    return await api.get(`/users/profile/${route.params.slug}`)
-  } catch {
-    return null
-  }
-})
+const { data: profile, error: profileError } = await useAsyncData(`owner-${route.params.slug}`, () =>
+  api.get(`/users/profile/${route.params.slug}`),
+)
 
+if (profileError.value) throw createError(pageLoadError(profileError.value, 'Profile not found'))
 if (!profile.value) {
   throw createError({ statusCode: 404, statusMessage: 'Profile not found' })
 }

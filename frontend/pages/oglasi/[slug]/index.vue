@@ -10,14 +10,11 @@ const { t } = useI18n()
 const api = useApi()
 const route = useRoute()
 
-const { data: listing } = await useAsyncData(`listing-${route.params.slug}`, async () => {
-  try {
-    return await api.get(`/listings/public/${route.params.slug}`)
-  } catch {
-    return null
-  }
-})
+const { data: listing, error: listingError } = await useAsyncData(`listing-${route.params.slug}`, () =>
+  api.get(`/listings/public/${route.params.slug}`),
+)
 
+if (listingError.value) throw createError(pageLoadError(listingError.value, 'Listing not found'))
 if (!listing.value) {
   throw createError({ statusCode: 404, statusMessage: 'Listing not found' })
 }
