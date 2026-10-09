@@ -361,6 +361,7 @@
                 </div>
                 <p v-if="paymentErrors[field.key]" class="rules-error"><img src="/images/icons/field-error.svg" alt="" />{{ paymentErrors[field.key] }}</p>
                 <p v-else class="rules-hint">{{ field.hint }}</p>
+                <p v-if="field.note" class="rules-hint is-note">{{ field.note }}</p>
               </div>
             </div>
           </div>
@@ -1335,14 +1336,15 @@ watch(bookingChoice, (val) => {
   form.bookingModel = val === 'ONLINE' ? listing.value?.category?.defaultBookingModel || 'PER_STAY' : 'NO_BOOKING'
   if (form.bookingModel === 'PER_SLOT' && !form.slotSubmode) form.slotSubmode = 'WORKING_HOURS'
 })
-// Dizajn 21 (249:287, 249:300): both choices as option cards. The online card is
-// worded for the category's own booking model.
+// Dizajn 21 (249:287, 249:300): both choices as option cards. The online card's
+// description is worded for the category's own booking model; T123 keeps the
+// title (also the Pregled row) to "Online rezervacije" for every model.
 const bookingOptions = computed(() => {
   const perSlot = listing.value?.category?.defaultBookingModel === 'PER_SLOT'
   return [
     {
       value: 'ONLINE',
-      title: t(perSlot ? 'listing.pricingBookingOnlineSlot' : 'listing.pricingBookingOnlineStay'),
+      title: t('listing.pricingBookingOnline'),
       description: t(perSlot ? 'listing.pricingBookingOnlineSlotDesc' : 'listing.pricingBookingOnlineStayDesc'),
     },
     { value: 'NONE', title: t('listing.pricingBookingNone'), description: t('listing.pricingBookingNoneDesc') },
@@ -1720,6 +1722,8 @@ const paymentAdvanceFields = computed(() => [
     unit: '%',
     placeholder: '100',
     hint: t('listing.advancePercentHint'),
+    // T123: for the owner only, in blue under the hint.
+    note: t('listing.advancePercentRest'),
   },
   {
     key: 'paymentDeadlineHours',
@@ -4440,6 +4444,11 @@ $field-danger-border: #f43f5e;
   font-weight: 300;
   line-height: 18px;
   color: $color-text-muted;
+
+  // T123: the sentence the owner reads in blue under the advance hint.
+  &.is-note {
+    color: $color-primary;
+  }
 }
 
 // 258:335
