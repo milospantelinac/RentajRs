@@ -518,8 +518,14 @@ const WEEKDAY_KEYS = ['dayMon', 'dayTue', 'dayWed', 'dayThu', 'dayFri', 'daySat'
 const bookingTerms = computed(() => {
   const l = props.listing
   const rows = []
-  if (l.pickupTime) rows.push({ label: t('listing.termArrival'), value: t('listing.termFromTime', { time: l.pickupTime }) })
-  if (l.returnTime) rows.push({ label: t('listing.termDeparture'), value: t('listing.termUntilTime', { time: l.returnTime }) })
+  // T117: the wizard's own words, a vehicle or a machine is picked up and returned.
+  const pickupReturn = usesPickupAndReturn(l)
+  if (l.pickupTime) {
+    rows.push({ label: t(pickupReturn ? 'booking.pickup' : 'listing.termArrival'), value: t('listing.termFromTime', { time: l.pickupTime }) })
+  }
+  if (l.returnTime) {
+    rows.push({ label: t(pickupReturn ? 'booking.dropoff' : 'listing.termDeparture'), value: t('listing.termUntilTime', { time: l.returnTime }) })
+  }
   // Dizajn 23: a defined slot has its own length, so neither the duration nor the
   // gap applies to it, and working hours count in hours even when priced per guest.
   const durationRules = !isDefinedSlotsListing(l)
@@ -536,17 +542,28 @@ const bookingTerms = computed(() => {
       value: `${l.maxDuration} ${srDurationUnitWord(durationUnit, l.maxDuration)}`,
     })
   }
-  if (durationRules && l.gapAfterMinutes) {
+  // T117: nor does it follow a day booking, the pickup and return times do that job.
+  if (durationRules && !isDayStay(l) && l.gapAfterMinutes) {
     rows.push({ label: t('listing.termGapAfter'), value: formatMinutes(l.gapAfterMinutes) })
   }
+  // T122: the wizard's names for the two rules, "7 sati pre početka" and
+  // "30 dana unapred" ("Najraniji rok za zahtev" read as the opposite).
   if (l.earliestBookingHours) {
-    rows.push({ label: t('listing.termEarliest'), value: durationLabel('termHours', l.earliestBookingHours) })
+    rows.push({
+      label: t('listing.termLatest'),
+      value: t('listing.rulesSummaryBeforeStart', { hours: durationLabel('termHours', l.earliestBookingHours) }),
+    })
   }
   if (l.maxAdvanceBookingDays) {
-    rows.push({ label: t('listing.termHorizon'), value: durationLabel('termDays', l.maxAdvanceBookingDays) })
+    rows.push({
+      label: t('listing.termEarliestAhead'),
+      value: t('listing.rulesSummaryAhead', { days: durationLabel('termDays', l.maxAdvanceBookingDays) }),
+    })
   }
   const guestCap = maxGuestCap.value
-  if (guestCap) rows.push({ label: t('listing.termGuests'), value: t('listing.termAtMost', { count: guestCap }) })
+  // T127: a playroom's limit counts children, as its Detalji and request page say.
+  const guestsKey = l.guestUnit === 'children' ? 'listing.termChildren' : 'listing.termGuests'
+  if (guestCap) rows.push({ label: t(guestsKey), value: t('listing.termAtMost', { count: guestCap }) })
   return rows
 })
 
@@ -602,9 +619,16 @@ onMounted(async () => {
   measureDescription()
   window.addEventListener('resize', measureDescription)
 
+  // T127: as far ahead as the request page looks (it used to stop at 90 days),
+  // so the booking card never offers a start that runs into a booking.
+  const horizonDays = props.listing.maxAdvanceBookingDays || 365
   const [similar, avail] = await Promise.all([
     props.preview ? Promise.resolve(null) : api.get(`/search/similar?slug=${props.listing.slug}`).catch(() => null),
-    api.get(`/listings/${props.listing.id}/availability`).catch(() => null),
+    api
+      .get(`/listings/${props.listing.id}/availability`, {
+        query: { from: new Date().toISOString(), to: new Date(Date.now() + horizonDays * 86_400_000).toISOString() },
+      })
+      .catch(() => null),
   ])
   similarListings.value = similar?.results ?? []
   availability.value = avail

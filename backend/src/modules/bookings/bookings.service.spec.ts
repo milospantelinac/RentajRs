@@ -175,12 +175,31 @@ describe('BookingsService price lines (Dizajn 34)', () => {
     expect(result.totalAmount).toBe(2950000n);
   });
 
-  it('prices every hour of a working-hours booking at the rule its start time falls under', async () => {
-    const availability = { resolveHourlyPrice: jest.fn().mockResolvedValue({ price: 420000n, kind: 'WEEKEND' }) };
-    const result = await totals(availability, pricingListing(), 2);
-    expect(result.priceLines).toEqual([{ price: 420000n, kind: 'WEEKEND', count: 2 }]);
-    expect(result.unitPriceTotal).toBe(840000n);
-    expect(availability.resolveHourlyPrice.mock.calls[0][4]).toBe(420000n);
+  it('prices each hour of a working-hours booking at its own rule (T127)', async () => {
+    const availability = {
+      getWorkingHoursPrices: jest.fn().mockResolvedValue([
+        { price: 420000n, kind: 'WEEKEND' },
+        { price: 120000n, kind: 'RANGE' },
+        { price: 120000n, kind: 'RANGE' },
+      ]),
+      resolveHourlyPrice: jest.fn(),
+    };
+    const result = await totals(availability, pricingListing(), 3);
+    expect(result.priceLines).toEqual([
+      { price: 420000n, kind: 'WEEKEND', count: 1 },
+      { price: 120000n, kind: 'RANGE', count: 2 },
+    ]);
+    expect(result.unitPriceTotal).toBe(660000n);
+    expect(availability.getWorkingHoursPrices.mock.calls[0].slice(3)).toEqual([350000n, 420000n]);
+    expect(availability.resolveHourlyPrice).not.toHaveBeenCalled();
+  });
+
+  it('prices a per-guest working-hours booking once per guest, at the rate it starts at, without the weekend price', async () => {
+    const availability = { resolveHourlyPrice: jest.fn().mockResolvedValue({ price: 90000n, kind: 'RANGE' }), getWorkingHoursPrices: jest.fn() };
+    const result = await totals(availability, pricingListing({ priceUnit: 'GUEST', price: 80000n }), 30);
+    expect(result.priceLines).toEqual([{ count: 30, price: 90000n, kind: 'RANGE' }]);
+    expect(availability.resolveHourlyPrice.mock.calls[0][4]).toBeNull();
+    expect(availability.getWorkingHoursPrices).not.toHaveBeenCalled();
   });
 
   it('keeps a defined slot at its own price', async () => {
@@ -1031,5 +1050,93 @@ describe('BookingsService#getOne for the sent request (Dizajn 41)', () => {
   it('falls back to no photo and the 48 hours a listing gets by default', async () => {
     const service = setup('REQUESTED', {});
     await expect(service.getOne('g1', 'b1')).resolves.toMatchObject({ listing: { coverPhotoUrl: null, paymentDeadlineHours: 48 } });
+  });
+});
+
+describe('BookingsService#createRequest (T127, T117)', () => {
+  function requestService(listingOverrides: Record<string, unknown>, options: { children?: boolean; fits?: boolean } = {}) {
+    const listing = {
+      id: 'l1',
+      userId: 'owner',
+      categoryId: 'c1',
+      status: 'ACTIVE',
+      bookingModel: 'PER_SLOT',
+      slotSubmode: 'WORKING_HOURS',
+      priceUnit: 'HOUR',
+      price: 100000n,
+      weekendPrice: null,
+      pricePerGuest: null,
+      mandatoryFees: null,
+      advancePercent: null,
+      minDuration: null,
+      maxDuration: null,
+      minGuests: null,
+      maxGuests: null,
+      earliestBookingHours: null,
+      maxAdvanceBookingDays: null,
+      gapAfterMinutes: 30,
+      paymentMethod: 'CASH',
+      requiresApproval: true,
+      cancellationPolicyType: null,
+      cancellationThreshold: null,
+      subscription: { package: { hasBookings: true } },
+      ...listingOverrides,
+    };
+    const prisma = {
+      listing: { findUniqueOrThrow: jest.fn(async () => listing) },
+      user: { findUniqueOrThrow: jest.fn(async () => ({ id: 'g1', restrictedUntil: null, language: 'SR' })) },
+      listingAttribute: { findMany: jest.fn(async () => []) },
+      listingExtraService: { findMany: jest.fn(async () => []) },
+      booking: { create: jest.fn(async ({ data }: any) => ({ id: 'b1', createdAt: new Date(), ...data })) },
+      bookingHistory: { create: jest.fn(async () => ({})) },
+    };
+    const availability = {
+      fitsWorkingHours: jest.fn(async () => options.fits ?? true),
+      getWorkingHoursPrices: jest.fn(async () => [
+        { price: 100000n, kind: 'BASE' },
+        { price: 120000n, kind: 'RANGE' },
+      ]),
+      getNightlyPrices: jest.fn(async () => [{ price: 100000n, kind: 'BASE' }]),
+      lockTerm: jest.fn(async () => ({})),
+      applyGapAfter: jest.fn(async () => undefined),
+    };
+    const taxonomy = {
+      resolveAttributesForCategory: jest.fn(async () => (options.children ? [{ key: 'kapacitet_dece' }] : [])),
+      getCategoryTree: jest.fn(async () => [{ id: 'root', slug: 'root', children: [{ id: 'c1', slug: 'c1' }] }]),
+    };
+    const i18n = { t: jest.fn((key: string) => key) };
+    const service = new BookingsService(prisma as any, availability as any, i18n as any, { emit: jest.fn() } as any, taxonomy as any);
+    return { service, prisma, availability };
+  }
+  const hours = { startsAt: '2026-10-12T14:00:00.000Z', endsAt: '2026-10-12T16:00:00.000Z', guestCount: 12, adultCount: 3 };
+
+  it('refuses a working-hours term that runs past closing, before anything is saved', async () => {
+    const { service, prisma, availability } = requestService({}, { children: true, fits: false });
+    await expect(service.createRequest('g1', 'l1', hours as any)).rejects.toThrow('bookings.OUTSIDE_WORKING_HOURS');
+    expect(availability.fitsWorkingHours).toHaveBeenCalledWith('l1', new Date(hours.startsAt), new Date(hours.endsAt));
+    expect(prisma.booking.create).not.toHaveBeenCalled();
+  });
+
+  it("keeps a playroom's adults and prices each hour on its own", async () => {
+    const { service, prisma, availability } = requestService({}, { children: true });
+    const booking = await service.createRequest('g1', 'l1', hours as any);
+    const data = (prisma.booking.create.mock.calls[0] as any)[0].data;
+    expect(data).toMatchObject({ guestCount: 12, adultCount: 3, unitCount: 2, totalAmount: 220000n });
+    expect(booking.totalAmount).toBe(2200);
+    expect(availability.applyGapAfter).toHaveBeenCalledWith('l1', 'b1', new Date(hours.endsAt), 30);
+  });
+
+  it('drops the adults where the listing does not count children', async () => {
+    const { service, prisma } = requestService({}, { children: false });
+    await service.createRequest('g1', 'l1', hours as any);
+    expect((prisma.booking.create.mock.calls[0] as any)[0].data.adultCount).toBeNull();
+  });
+
+  it('adds no gap after a day booking, so the return day stays free for the next pickup', async () => {
+    const { service, availability } = requestService({ bookingModel: 'PER_STAY', slotSubmode: null, priceUnit: 'DAY', gapAfterMinutes: 120 });
+    await service.createRequest('g1', 'l1', { startsAt: '2026-10-20T00:00:00.000Z', endsAt: '2026-10-21T00:00:00.000Z' } as any);
+    expect(availability.lockTerm).toHaveBeenCalled();
+    expect(availability.applyGapAfter).not.toHaveBeenCalled();
+    expect(availability.fitsWorkingHours).not.toHaveBeenCalled();
   });
 });

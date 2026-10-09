@@ -8,7 +8,10 @@ import { EmailService } from '../../../common/email/email.service';
 import { escapeHtml } from '../../../common/utils/escape-html';
 import { IPS_QR_IMAGE_OPTIONS, bookingPaymentReference, formatBankAccount } from '../../../common/utils/ips-qr';
 import { getRequestExpiresAt, readRequestResponseHours } from '../../../common/utils/request-expiry';
-import { formatRsd, formatDateTime, localeFor } from '../format';
+import { GuestUnit, getGuestUnits } from '../../../common/utils/guest-capacity';
+import { toBelgradeDateOnly, toBelgradeHHMM } from '../../../common/utils/timezone';
+import { TaxonomyService } from '../../taxonomy/taxonomy.service';
+import { formatRsd, formatDate, formatDateTime, localeFor } from '../format';
 
 type FullBooking = Booking & { listing: Listing; guest: User; owner: User };
 
@@ -20,6 +23,7 @@ export class BookingEmailListener {
     private prisma: PrismaService,
     private email: EmailService,
     config: ConfigService,
+    private taxonomy: TaxonomyService,
   ) {
     this.frontendUrl = config.get<string>('frontendUrl')!;
   }
@@ -39,6 +43,7 @@ export class BookingEmailListener {
   async onRequested({ bookingId }: { bookingId: string }) {
     const b = await this.load(bookingId);
     if (!b) return;
+    const guestUnit = (await getGuestUnits(this.taxonomy, [b.listing.categoryId])).get(b.listing.categoryId);
     await Promise.all([
       this.email.send({
         key: 'booking_requested_guest',
@@ -55,6 +60,7 @@ export class BookingEmailListener {
         userId: b.owner.id,
         context: { oglas: b.listing.title },
         buttonUrl: this.bookingUrl(b.id),
+        extraMjml: requestDetailsMjml(b, guestUnit),
       }),
     ]);
   }
@@ -326,4 +332,43 @@ export class BookingEmailListener {
       }),
     ]);
   }
+}
+
+const DATE_UNITS = ['NIGHT', 'DAY'];
+const MONTH_UNITS = ['MONTH', 'YEAR'];
+
+/**
+ * T127: the owner's "Novi zahtev" email names what was asked for: the term
+ * and the guests, a playroom's children and the adults coming with them
+ * apart. The template text stays the admin's; this block is data.
+ */
+function requestDetailsMjml(b: FullBooking, guestUnit: GuestUnit | undefined): string {
+  const isEn = b.owner.language === 'EN';
+  const rows: Array<[string, string]> = [[isEn ? 'When' : 'Termin', formatRequestTerm(b, localeFor(b.owner.language))]];
+  if (guestUnit === 'children') {
+    if (b.guestCount) rows.push([isEn ? 'Children' : 'Broj dece', String(b.guestCount)]);
+    if (b.adultCount !== null && b.adultCount !== undefined) rows.push([isEn ? 'Adults' : 'Broj odraslih', String(b.adultCount)]);
+  } else if (b.guestCount) {
+    rows.push([isEn ? 'Guests' : 'Broj gostiju', String(b.guestCount)]);
+  }
+  return [
+    `<mj-text font-weight="600" padding-bottom="8px">${isEn ? 'Request details' : 'Detalji zahteva'}</mj-text>`,
+    ...rows.map(([label, value]) => `<mj-text padding-bottom="2px">${label}: ${escapeHtml(value)}</mj-text>`),
+  ].join('\n');
+}
+
+/** "12. oktobar 2026. - 14. oktobar 2026.", "novembar 2026.", "17. oktobar 2026., 16:00 - 18:00". */
+function formatRequestTerm(b: Pick<Booking, 'startsAt' | 'endsAt' | 'priceUnit'>, locale: 'sr-Latn-RS' | 'en-US'): string {
+  if (DATE_UNITS.includes(b.priceUnit)) return `${formatDate(b.startsAt, locale)} - ${formatDate(b.endsAt, locale)}`;
+  if (MONTH_UNITS.includes(b.priceUnit)) {
+    const month = (date: Date) => date.toLocaleDateString(locale, { month: 'long', year: 'numeric', timeZone: 'Europe/Belgrade' });
+    // A monthly stay ends on the first of the month after its last one.
+    const last = new Date(b.endsAt.getTime() - 86_400_000);
+    const [first, final] = [month(b.startsAt), month(last)];
+    return first === final ? first : `${first} - ${final}`;
+  }
+  if (toBelgradeDateOnly(b.startsAt).getTime() === toBelgradeDateOnly(b.endsAt).getTime()) {
+    return `${formatDate(b.startsAt, locale)}, ${toBelgradeHHMM(b.startsAt)} - ${toBelgradeHHMM(b.endsAt)}`;
+  }
+  return `${formatDateTime(b.startsAt, locale)} - ${formatDateTime(b.endsAt, locale)}`;
 }

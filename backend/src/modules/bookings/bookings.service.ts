@@ -10,7 +10,7 @@ import { TaxonomyService } from '../taxonomy/taxonomy.service';
 import { IPS_QR_IMAGE_OPTIONS, bookingBankTransfer } from '../../common/utils/ips-qr';
 import { paraToRsd, rsdToPara } from '../../common/utils/money';
 import { toBelgradeHHMM } from '../../common/utils/timezone';
-import { GUEST_CAPACITY_ATTRIBUTE_KEYS, getGuestUnits } from '../../common/utils/guest-capacity';
+import { GUEST_CAPACITY_ATTRIBUTE_KEYS, GuestUnit, getGuestUnits } from '../../common/utils/guest-capacity';
 import { canGuestCancel, getFreeCancellationUntil } from '../../common/utils/guest-cancellation';
 import { OPEN_PAYMENT_REPORT, isHeldByPaymentReport } from '../../common/utils/payment-report';
 import { readRequestResponseHours } from '../../common/utils/request-expiry';
@@ -107,6 +107,15 @@ export class BookingsService {
     const { startsAt, endsAt, slotPrice } = await this.resolveRequestedTerm(listing, dto);
     const effectiveMaxGuests = await this.getGuestCapacity(listingId, listing.maxGuests);
     this.assertTermRules({ ...listing, maxGuests: effectiveMaxGuests }, startsAt, endsAt, dto.guestCount);
+    // T127: no term outside the working hours (Tamara, 2026-10-09); the
+    // booking card and the request page only offer lengths up to closing.
+    if (isWorkingHours(listing) && !(await this.availability.fitsWorkingHours(listingId, startsAt, endsAt))) {
+      throw new BadRequestException(this.i18n.t('bookings.OUTSIDE_WORKING_HOURS'));
+    }
+    // T127: a playroom also asks how many adults come with the children. It is
+    // there for the owner only: no limit, no effect on the price.
+    const guestUnit = (await getGuestUnits(this.taxonomy, [listing.categoryId])).get(listing.categoryId);
+    const adultCount = guestUnit === 'children' ? (dto.adultCount ?? null) : null;
 
     const pricePerUnit = slotPrice ?? listing.price;
     const unitCount = resolvePricingUnitCount(listing.priceUnit, startsAt, endsAt, dto);
@@ -135,6 +144,7 @@ export class BookingsService {
         startsAt,
         endsAt,
         guestCount: dto.guestCount,
+        adultCount,
         guestMessage: dto.guestMessage,
         priceUnit: listing.priceUnit,
         pricePerUnit,
@@ -167,8 +177,9 @@ export class BookingsService {
       await this.prisma.booking.delete({ where: { id: booking.id } });
       throw err;
     }
-    // Dizajn 23: a defined slot has its own length, so the gap doesn't follow it.
-    if (listing.gapAfterMinutes && !isDefinedSlots(listing)) {
+    // Dizajn 23: a defined slot has its own length, so the gap doesn't follow it;
+    // T117: nor does it follow a day booking.
+    if (listing.gapAfterMinutes && !isDefinedSlots(listing) && !isDayStay(listing)) {
       await this.availability.applyGapAfter(listingId, booking.id, endsAt, listing.gapAfterMinutes);
     }
 
@@ -283,11 +294,10 @@ export class BookingsService {
    * RNT-029 — per-stay (night/day) bookings price each date individually
    * (weekend price, or an owner's per-date override) rather than a flat
    * rate x nights; "Po mesecu" prices each calendar month individually the
-   * same way; PER_SLOT + WORKING_HOURS resolves the owner's hourly rate
-   * windows/exceptions for the booking's start time (a booking that spans
-   * more than one rate window is billed at its start time's rate for the
-   * whole duration — splitting one booking across rates isn't supported).
-   * Every other combination keeps the flat unitPrice x unitCount calculation.
+   * same way; PER_SLOT + WORKING_HOURS prices each hour by the owner's
+   * hourly rate windows/exceptions (T127), or per guest at the rate the term
+   * starts at. Every other combination keeps the flat unitPrice x unitCount
+   * calculation.
    */
   private async computeTotals(
     listing: PricingListing,
@@ -332,23 +342,24 @@ export class BookingsService {
     if (listing.priceUnit === 'MONTH' && monthCount) {
       return groupPriceLines(await this.availability.getMonthlyPrices(listing.id, startsAt, monthCount, listing.price));
     }
+    // T127: each hour of the term at its own rate (Tamara, 2026-10-09).
+    if (isWorkingHours(listing) && listing.priceUnit === 'HOUR') {
+      return groupPriceLines(
+        await this.availability.getWorkingHoursPrices(listing.id, startsAt, endsAt, listing.price, listing.weekendPrice),
+      );
+    }
     // T111: GUEST-priced WORKING_HOURS listings still resolve the owner's
     // hourly rate windows/exceptions for the per-unit price (per the
     // decision: those apply to the per-guest rate exactly like they apply to
-    // the per-hour rate); only unitCount (guests, not hours, via
-    // resolvePricingUnitCount) differs from HOUR.
-    if (
-      listing.bookingModel === 'PER_SLOT' &&
-      listing.slotSubmode === 'WORKING_HOURS' &&
-      (listing.priceUnit === 'HOUR' || listing.priceUnit === 'GUEST')
-    ) {
+    // the per-hour rate); a guest pays the rate the term starts at, once.
+    if (isWorkingHours(listing) && listing.priceUnit === 'GUEST') {
       const unit = await this.availability.resolveHourlyPrice(
         listing.id,
         startsAt,
         toBelgradeHHMM(startsAt),
         listing.price,
         // Dizajn 21: the wizard offers a weekend price for the hourly rate, not the per-guest one.
-        listing.priceUnit === 'HOUR' ? listing.weekendPrice : null,
+        null,
       );
       return [{ count: unitCount, ...unit }];
     }
@@ -373,6 +384,11 @@ export class BookingsService {
       (cap): cap is number => cap != null && cap > 0,
     );
     return guestCaps.length ? Math.min(...guestCaps) : null;
+  }
+
+  /** T127: "children", "people" or "guests" for a listing's category (the admin's booking page). */
+  async getGuestUnit(categoryId: string): Promise<GuestUnit> {
+    return (await getGuestUnits(this.taxonomy, [categoryId])).get(categoryId) ?? 'guests';
   }
 
   /** T83 — live total for whatever the guest currently has selected, before they submit. Reads only, nothing persisted. */
@@ -1144,6 +1160,19 @@ function compareForList(
 /** Dizajn 23: a defined slot carries its own length, so the duration and gap rules skip it. */
 function isDefinedSlots(listing: { bookingModel: string; slotSubmode: string | null }): boolean {
   return listing.bookingModel === 'PER_SLOT' && listing.slotSubmode === 'DEFINED_SLOTS';
+}
+
+function isWorkingHours(listing: { bookingModel: string; slotSubmode: string | null }): boolean {
+  return listing.bookingModel === 'PER_SLOT' && listing.slotSubmode === 'WORKING_HOURS';
+}
+
+/**
+ * T117: "Po danu" (vehicles, machines) has no gap after a booking; the
+ * pickup and return times do that job, and the return day stays free for
+ * the next pickup (Tamara, 2026-10-09).
+ */
+function isDayStay(listing: { bookingModel: string; priceUnit: PriceUnit }): boolean {
+  return listing.bookingModel === 'PER_STAY' && listing.priceUnit === 'DAY';
 }
 
 /** Nights/days/hours/months/years between two timestamps, matching the listing's price unit. */

@@ -88,6 +88,12 @@ const rows = computed(() => {
     { label: t('admin.submittedAt'), value: formatDateTime(b.createdAt) },
     { label: t('booking.guestNameLabel'), value: `${b.guestName} · ${b.guestEmail}` },
     { label: t('admin.bookingOwnerLabel'), value: `${b.ownerName} · ${b.ownerEmail}` },
+    // T127: a playroom's children and the adults who come with them.
+    b.guestCount && {
+      label: b.guestUnit === 'children' ? t('bookingForm.childrenCount') : t('booking.guestCount'),
+      value: String(b.guestCount),
+    },
+    b.adultCount !== null && b.adultCount !== undefined && { label: t('bookingForm.adultsCount'), value: String(b.adultCount) },
     { label: t('booking.totalAmount'), value: money(b.totalAmount) },
     b.paymentMethod && {
       label: t('booking.paymentMethodLabel'),

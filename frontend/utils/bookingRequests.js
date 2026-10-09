@@ -157,8 +157,13 @@ export function formatBookingPriceBreakdown(t, booking) {
 // One of those parts, "2 dana × 9.000 RSD" on the request page too (369:424).
 export function formatPriceLine(t, booking, line) {
   const text = `${formatUnits(t, booking, booking.priceUnit, line.count)} × ${formatRsd(line.price)}`
-  const kind = PRICE_KIND_KEYS[line.kind]
-  return kind ? `${text} ${t(`bookingRequests.priceKind.${kind}`)}` : text
+  const kind = formatPriceKind(t, line.kind)
+  return kind ? `${text} ${kind}` : text
+}
+
+// "(vikend cena)", or nothing for the base price.
+export function formatPriceKind(t, kind) {
+  return PRICE_KIND_KEYS[kind] ? t(`bookingRequests.priceKind.${PRICE_KIND_KEYS[kind]}`) : ''
 }
 
 // 378:511: the listing, who booked it and for how many, the day and hours,
@@ -201,6 +206,12 @@ function getGuestHint(t, booking, guests) {
   if (booking.status === 'REQUESTED' && booking.paymentMethod === 'CASH') return t('bookingRequests.contactAfterApproval')
   if (booking.status === 'REQUESTED' || booking.status === 'AWAITING_PAYMENT') return t('bookingRequests.contactAfterPayment')
   return guests
+}
+
+// T127: the adults who come with a playroom's children, as the guest gave them.
+export function getAdultsFact(t, booking) {
+  if (booking.adultCount === null || booking.adultCount === undefined) return null
+  return { key: 'adults', label: t('bookingForm.adultsCount'), value: String(booking.adultCount), hint: '' }
 }
 
 function getPaymentFact(t, booking) {
@@ -332,6 +343,8 @@ export function buildRequestCard(t, booking, now = Date.now()) {
         : '',
     })
   }
+  const adults = getAdultsFact(t, booking)
+  if (adults) facts.push(adults)
   facts.push(getPaymentFact(t, booking))
   if (booking.guestPhone) {
     facts.push({

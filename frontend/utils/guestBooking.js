@@ -10,6 +10,7 @@ import {
   formatBookingTime,
   formatBookingWeekday,
   formatRsd,
+  getAdultsFact,
   getBookingStatusLabel,
 } from './bookingRequests'
 
@@ -244,6 +245,9 @@ export function buildGuestBookingView(t, booking, now = Date.now()) {
         : '',
     })
   }
+  // T127: the adults the guest said come along with the children.
+  const adults = getAdultsFact(t, booking)
+  if (adults) facts.push(adults)
   // Without a guest count the total takes the whole row, so the payment and
   // what was paid stay side by side as 528:744 has them.
   facts.push({

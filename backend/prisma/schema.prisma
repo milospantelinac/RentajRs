@@ -1109,6 +1109,9 @@ model Booking {
   startsAt                  DateTime      @db.Timestamptz
   endsAt                    DateTime      @db.Timestamptz
   guestCount                Int?
+  /// T127: adults coming with the children to a playroom, for the owner only
+  /// (no limit, no effect on the price); null everywhere else.
+  adultCount                Int?
   guestMessage              String?
   priceUnit                 PriceUnit
   pricePerUnit              BigInt

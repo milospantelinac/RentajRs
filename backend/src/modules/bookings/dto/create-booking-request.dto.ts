@@ -10,6 +10,7 @@ import {
   IsString,
   IsUUID,
   Matches,
+  Max,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -57,6 +58,15 @@ export class CreateBookingRequestDto {
   @IsInt()
   @Min(1)
   guestCount?: number;
+
+  // T127: the adults coming with the children to a playroom; the owner's
+  // information only, kept for a listing that counts children.
+  @ApiPropertyOptional({ description: 'Adults coming along (playrooms); never changes the price' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(9999)
+  adultCount?: number;
 
   @ApiPropertyOptional()
   @IsOptional()

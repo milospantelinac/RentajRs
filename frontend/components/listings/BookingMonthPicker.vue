@@ -30,25 +30,56 @@
     </p>
   </div>
 
-  <div v-else class="month-picker">
-    <div class="form-group mb-3">
-      <label class="form-label">{{ t('booking.monthStart') }}</label>
-      <select v-model="selectedMonth" class="form-control form-select">
-        <option v-for="m in availableMonths" :key="m.key" :value="m.key" :disabled="m.blocked || m.outsideRules">
-          {{ m.label }}{{ m.blocked ? ` (${t('listing.calendarBlocked')})` : m.price ? ` — ${formatPrice(m.price)} RSD` : '' }}
-        </option>
-      </select>
+  <!-- T128: the listing's booking card. Two fields like its Datum and Vreme:
+       the start month as a real select that shows what was picked, and the
+       count with its unit and the guests' -/+ buttons. -->
+  <div v-else class="month-card">
+    <div class="month-card-fields">
+      <label class="month-card-field month-card-field-select">
+        <span class="month-card-label">{{ t('booking.monthStart') }}</span>
+        <select v-model="selectedMonth" class="month-card-native">
+          <option value="" disabled>{{ t('booking.pickMonthPlaceholder') }}</option>
+          <option v-for="m in availableMonths" :key="m.key" :value="m.key" :disabled="m.blocked || m.outsideRules">
+            {{ m.blocked ? t('bookingForm.monthTaken', { month: m.label }) : m.label }}
+          </option>
+        </select>
+        <span class="month-card-value" :class="{ 'is-empty': !selectedMonth }">
+          {{ startLabel || t('booking.pickMonthPlaceholder') }}
+        </span>
+        <img src="/images/icons/chevron-down.svg" alt="" class="month-card-chevron" />
+      </label>
+      <div class="month-card-field" role="group" :aria-labelledby="`${fieldId}-count`">
+        <span :id="`${fieldId}-count`" class="month-card-label">{{ t('booking.monthCount') }}</span>
+        <span class="month-card-count">
+          <span class="month-card-value">{{ countLabel }}</span>
+          <span class="month-card-steps">
+            <button
+              type="button"
+              class="month-card-step"
+              :disabled="monthCount <= minCount"
+              :aria-label="t('booking.monthCountDecrease')"
+              @click="stepCount(-1)"
+            >
+              &minus;
+            </button>
+            <button
+              type="button"
+              class="month-card-step"
+              :disabled="monthCount >= maxCount"
+              :aria-label="t('booking.monthCountIncrease')"
+              @click="stepCount(1)"
+            >
+              +
+            </button>
+          </span>
+        </span>
+      </div>
     </div>
-    <div class="form-group mb-3">
-      <label class="form-label">{{ t('booking.monthCount') }}</label>
-      <input v-model.number="monthCount" type="number" :min="minDuration || 1" :max="maxDuration || 24" class="form-control" />
-    </div>
-    <p v-if="selectedMonth" class="text-muted">
-      {{ t('booking.monthRangeSummary', { start: startLabel, end: endLabel }) }}
+    <p v-if="selectedMonth && spanBlocked" class="month-card-error" role="alert">
+      <img src="/images/icons/field-error.svg" alt="" />{{ t('bookingForm.monthRangeBlocked') }}
     </p>
-    <p v-if="selectedMonth && spanBlocked" class="form-error mb-0">{{ t('booking.monthRangeBlocked') }}</p>
-    <p v-else-if="selectedMonth && durationViolation" class="form-error mb-0">{{ durationViolationMessage }}</p>
   </div>
+
 </template>
 
 <script setup>
@@ -63,9 +94,9 @@ const props = defineProps({
   // Dizajn 23: the server holds a month's first instant to the notice and the horizon.
   earliestBookingHours: { type: Number, default: null },
   maxAdvanceBookingDays: { type: Number, default: null },
-  // Dizajn 40: 'request' draws the request page's two fields; the listing
-  // page's booking card keeps the default.
-  variant: { type: String, default: 'default' },
+  // Dizajn 40: 'request' draws the request page's two fields; T128: 'card'
+  // the listing page's booking card's.
+  variant: { type: String, default: 'card' },
   // Dizajn 40: the choice the listing page's card handed over ("2026-10", 3).
   initialMonth: { type: String, default: '' },
   initialCount: { type: Number, default: 1 },
@@ -81,7 +112,6 @@ const isRequest = computed(() => props.variant === 'request')
 const fieldId = useId()
 
 const blocks = ref([])
-const overrides = ref(new Map())
 const selectedMonth = ref(props.initialMonth || '')
 const monthCount = ref(props.initialCount || 1)
 
@@ -95,8 +125,18 @@ const countOptions = computed(() => {
     return { value: count, label: t(`bookingRequests.units.MONTH${srPluralCategory(count)}`, { count }) }
   })
 })
-if (isRequest.value && !countOptions.value.some((option) => option.value === monthCount.value)) {
+if (!countOptions.value.some((option) => option.value === monthCount.value)) {
   monthCount.value = countOptions.value[0].value
+}
+
+// T128: the card steps the count within the same bounds, "1 mesec", "2 meseca".
+const minCount = computed(() => countOptions.value[0].value)
+const maxCount = computed(() => countOptions.value[countOptions.value.length - 1].value)
+const countLabel = computed(() =>
+  t(`bookingRequests.units.MONTH${srPluralCategory(monthCount.value)}`, { count: monthCount.value }),
+)
+function stepCount(delta) {
+  monthCount.value = Math.min(Math.max(monthCount.value + delta, minCount.value), maxCount.value)
 }
 
 function monthKey(date) {
@@ -132,7 +172,6 @@ const availableMonths = computed(() => {
       label: date.toLocaleDateString(t('listing.calendarLocale'), { month: 'long', year: 'numeric' }),
       blocked,
       outsideRules,
-      price: overrides.value.get(key),
     }
   })
 })
@@ -156,27 +195,8 @@ const durationViolation = computed(() => {
   if (props.maxDuration && monthCount.value > props.maxDuration) return 'max'
   return null
 })
-const durationViolationMessage = computed(() => {
-  if (durationViolation.value === 'min') {
-    return t('booking.minDurationMessage', { min: props.minDuration, unit: srDurationUnitWord('MONTH', props.minDuration) })
-  }
-  if (durationViolation.value === 'max') {
-    return t('booking.maxDurationMessage', { max: props.maxDuration, unit: srDurationUnitWord('MONTH', props.maxDuration) })
-  }
-  return ''
-})
 
 const startLabel = computed(() => availableMonths.value.find((m) => m.key === selectedMonth.value)?.label || '')
-const endLabel = computed(() => {
-  if (!selectedMonth.value) return ''
-  const [y, m] = selectedMonth.value.split('-').map(Number)
-  const end = new Date(y, m - 1 + monthCount.value - 1, 1)
-  return end.toLocaleDateString(t('listing.calendarLocale'), { month: 'long', year: 'numeric' })
-})
-
-function formatPrice(v) {
-  return new Intl.NumberFormat('sr-Latn-RS').format(v)
-}
 
 async function loadAvailability() {
   const now = new Date()
@@ -186,12 +206,6 @@ async function loadAvailability() {
     query: { from: from.toISOString(), to: to.toISOString() },
   })
   blocks.value = data.blocked || []
-  overrides.value = new Map(
-    (data.datePriceOverrides || []).map((o) => {
-      const d = new Date(o.date)
-      return [monthKey(d), o.price]
-    }),
-  )
 }
 
 // Dizajn 40: a month handed over by the listing page counts once the blocked
@@ -206,10 +220,130 @@ onMounted(loadAvailability)
 </script>
 
 <style lang="scss" scoped>
-.month-picker {
+// T128: ListingBookingPanel's own field look (.booking-panel-field): grey,
+// rounded, the small capital label over the value. One under the other, so
+// "12 meseci" and both buttons fit on a phone too.
+.month-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.month-card-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.month-card-field {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  margin: 0;
+  padding: 12px 16px;
+  background: $color-background;
+  border-radius: $radius-input;
+}
+
+.month-card-field-select {
+  padding-right: 44px;
+  cursor: pointer;
+}
+
+.month-card-field-select:has(.month-card-native:focus-visible) {
+  box-shadow: inset 0 0 0 1.5px $color-primary;
+}
+
+.month-card-label {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: $color-text;
+}
+
+.month-card-value {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 15px;
+  color: $color-text;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.month-card-value.is-empty {
+  color: $color-text-muted;
+}
+
+// The real select lies over the field (keyboard, a phone's own picker).
+.month-card-native {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.month-card-chevron {
+  position: absolute;
+  top: 50%;
+  right: 16px;
+  width: 16px;
+  height: 16px;
+  transform: translateY(-50%);
+}
+
+.month-card-count {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+
+// The guests' stepper buttons (.booking-panel-stepper-btn).
+.month-card-steps {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.month-card-step {
+  width: 28px;
+  height: 28px;
+  padding: 0;
   border: 1px solid $color-border;
-  border-radius: 14px;
-  padding: 16px;
+  border-radius: $radius-pill;
+  background: $color-surface;
+  color: $color-text;
+  font-family: $font-family-base;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.month-card-step:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.month-card-error {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-size: 13px;
+  line-height: normal;
+  color: $color-error;
+}
+
+.month-card-error img {
+  flex-shrink: 0;
+  width: 15px;
+  height: 15px;
 }
 
 // Dizajn 40, the fields of 375:406: two columns 20 apart, label Medium 14 10

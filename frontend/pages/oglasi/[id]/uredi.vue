@@ -1380,18 +1380,20 @@ const showFlatPriceFields = computed(() => !(form.bookingModel === 'PER_SLOT' &&
 // computeds rather than merged, per the tickets' explicit instruction not to
 // conflate the two root causes.
 const isDefinedSlotsModel = computed(() => form.bookingModel === 'PER_SLOT' && form.slotSubmode === 'DEFINED_SLOTS')
-// T36/T37 — rented as a whole unit, not per guest.
-const NO_GUEST_COUNT_CATEGORY_SLUGS = ['putnicka-vozila', 'dostavna-vozila', 'gradjevinske-masine', 'magacini-i-skladista']
-const showGuestCount = computed(() => !NO_GUEST_COUNT_CATEGORY_SLUGS.includes(listing.value?.category?.slug))
-// T37 only — T36 explicitly keeps "Razmak posle rezervacije" for Vozila/Mašine.
-const showGapAfter = computed(() => !isDefinedSlotsModel.value && listing.value?.category?.slug !== 'magacini-i-skladista')
+// T36/T37: rented as a whole unit, not per guest (utils/bookingRules.js).
+const showGuestCount = computed(() => asksGuestCount(listing.value))
+// T37: a warehouse has no gap. T117: nor has a day booking (Po danu, vehicles
+// and machines); its pickup and return times do that job (Tamara, 2026-10-09).
+const showGapAfter = computed(
+  () => !isDefinedSlotsModel.value && !isDayStay(form) && listing.value?.category?.slug !== 'magacini-i-skladista',
+)
 
 // Bug fix (found while working T36): listings always belong to a leaf
 // category (Putnička/Dostavna vozila), never the "Vozila" parent itself, so
 // comparing against the parent slug here meant these fields could never
-// actually show for a real listing.
-const VEHICLE_CATEGORY_SLUGS = ['putnicka-vozila', 'dostavna-vozila']
-const showVehicleTimes = computed(() => VEHICLE_CATEGORY_SLUGS.includes(listing.value?.category?.slug))
+// actually show for a real listing. T117: machines are picked up and
+// returned too.
+const showVehicleTimes = computed(() => usesPickupAndReturn(listing.value))
 // T111 — the only category allowed to charge "po gostu" instead of the
 // submode's usual per-hour/per-term rate.
 const isPartyHallCategory = computed(() => listing.value?.category?.slug === 'sale-za-proslave')
@@ -1550,7 +1552,7 @@ const rulesSections = computed(() => {
       note,
     })
   }
-  const hintSuffix = rulesSlotWording.value ? '' : 'Stay'
+  // T122: the same two names in the fields, the panel and on the listing.
   sections.push({
     key: 'when',
     title: t('listing.rulesWhenTitle'),
@@ -1559,13 +1561,13 @@ const rulesSections = computed(() => {
         'earliestBookingHours',
         t('listing.earliestBookingHours'),
         t('listing.rulesUnitHours'),
-        t(`listing.earliestBookingHoursHint${hintSuffix}`),
+        t('listing.earliestBookingHoursHint'),
       ),
       field(
         'maxAdvanceBookingDays',
         t('listing.maxAdvanceBookingDays'),
         t('listing.rulesUnitDays'),
-        t(`listing.maxAdvanceBookingDaysHint${hintSuffix}`),
+        t('listing.maxAdvanceBookingDaysHint'),
       ),
     ],
   })
@@ -2203,15 +2205,18 @@ const reviewRulesRows = computed(() => {
     else if (max) value = t('listing.rulesSummaryAtMost', { value: withUnit(max) })
     rows.push({ key: 'duration', label: rulesDurationTitle.value, value })
   }
+  // T122: the pair the rules step and the listing name them by.
   rows.push({
     key: 'notice',
-    label: t('listing.reviewRowNotice'),
-    value: form.earliestBookingHours ? termCount('termHours', form.earliestBookingHours) : t('listing.rulesSummaryUntilStart'),
+    label: t('listing.termLatest'),
+    value: form.earliestBookingHours
+      ? t('listing.rulesSummaryBeforeStart', { hours: termCount('termHours', form.earliestBookingHours) })
+      : t('listing.rulesSummaryUntilStart'),
   })
   rows.push({
     key: 'horizon',
-    label: t('listing.termHorizon'),
-    value: form.maxAdvanceBookingDays ? termCount('termDays', form.maxAdvanceBookingDays) : noLimit,
+    label: t('listing.termEarliestAhead'),
+    value: form.maxAdvanceBookingDays ? t('listing.rulesSummaryAhead', { days: termCount('termDays', form.maxAdvanceBookingDays) }) : noLimit,
   })
   if (showGuestCount.value) {
     const min = form.minGuests || 1

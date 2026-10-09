@@ -5,12 +5,13 @@
 // Belgrade time through bookingRequests.js; calendar days travel as
 // "2026-09-12" keys, which name the same day in any time zone.
 import { srPluralCategory } from './pluralize'
-import { isStartWithinRules } from './bookingRules'
+import { getHourlyDurationOptions, isStartWithinRules, usesPickupAndReturn } from './bookingRules'
 import {
   formatBookingDate,
   formatBookingDuration,
   formatBookingGuests,
   formatBookingTime,
+  formatPriceKind,
   formatPriceLine,
   formatRsd,
   formatUnits,
@@ -143,7 +144,13 @@ export function formatStayRangeTitle(t, startKey, endKey) {
 export function buildStayBox(t, listing, selection) {
   const { startsAt, endsAt } = selection || {}
   if (!startsAt) return null
-  if (!endsAt) return { title: formatLongDay(t, startsAt), detail: t('booking.rangePickerPickEnd') }
+  // T117: a vehicle or a machine is returned, not left.
+  if (!endsAt) {
+    return {
+      title: formatLongDay(t, startsAt),
+      detail: t(usesPickupAndReturn(listing) ? 'booking.rangePickerPickReturn' : 'booking.rangePickerPickEnd'),
+    }
+  }
   const count = Math.max(1, daysBetweenKeys(startsAt, endsAt))
   // Nights, or days for anything else a stay is priced by (the price rows count those).
   const unit = listing?.priceUnit === 'NIGHT' ? 'NIGHT' : 'DAY'
@@ -170,11 +177,93 @@ export function buildHoursBox(t, dateKey, startTime, hours) {
 }
 
 // "16:00 - 18:00", past midnight too.
-function formatHoursRange(startTime, hours) {
-  const [h, m] = startTime.split(':').map(Number)
-  const end = (h * 60 + m + hours * 60) % (24 * 60)
+export function formatHoursRange(startTime, hours) {
+  return `${startTime} - ${timeOfMinutes(minutesOfTime(startTime) + hours * 60)}`
+}
+
+function minutesOfTime(time) {
+  const [hours, minutes] = time.split(':').map(Number)
+  return hours * 60 + minutes
+}
+
+function timeOfMinutes(total) {
   const pad = (value) => String(value).padStart(2, '0')
-  return `${startTime} - ${pad(Math.floor(end / 60))}:${pad(end % 60)}`
+  const minutes = ((total % (24 * 60)) + 24 * 60) % (24 * 60)
+  return `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}`
+}
+
+// ---- Working hours (T127) ---------------------------------------------------------
+
+// The windows a day opens, in minutes from its midnight; one that ends at or
+// before it opens runs past midnight (T104).
+function dayWindows(workingHours, dateKey) {
+  const weekday = isoWeekdayOfKey(dateKey)
+  return (workingHours || [])
+    .filter((row) => row.dayOfWeek === weekday)
+    .map((row) => {
+      const opens = minutesOfTime(row.startsAt)
+      let closes = minutesOfTime(row.endsAt)
+      if (closes <= opens) closes += 24 * 60
+      return { opens, closes }
+    })
+}
+
+// Whether `hours` from a start stay inside its window (Tamara, 2026-10-09: no
+// term past closing) and run into no booking, block or imported event (T74).
+function hoursFit(availability, dateKey, window, startMinutes, hours) {
+  if (startMinutes + hours * 60 > window.closes) return false
+  const from = belgradeInstant(dateKey, timeOfMinutes(startMinutes))
+  const to = new Date(from.getTime() + hours * 3_600_000)
+  return !(availability?.blocked || []).some((b) => new Date(b.startsAt) < to && new Date(b.endsAt) > from)
+}
+
+// The start times a day offers: on the hour from each window's opening and
+// before midnight (a start is only offered on the day the owner set, T104),
+// inside the notice and the horizon (Dizajn 23), and only where the shortest
+// term fits before closing. Belgrade wall-clock times, whatever the browser's zone.
+export function getHourStarts(listing, availability, dateKey, now = Date.now()) {
+  if (!dateKey) return []
+  const shortest = listing?.minDuration || 1
+  const times = []
+  for (const window of dayWindows(availability?.workingHours, dateKey)) {
+    for (let minute = window.opens; minute < Math.min(window.closes, 24 * 60); minute += 60) {
+      const time = timeOfMinutes(minute)
+      if (isStartWithinRules(listing, belgradeInstant(dateKey, time), now) && hoursFit(availability, dateKey, window, minute, shortest)) {
+        times.push(time)
+      }
+    }
+  }
+  return times
+}
+
+// The lengths a start offers: whole hours from the minimum up to the maximum,
+// closing time or the next taken term, whichever comes first. Before a start
+// is picked, up to the maximum and the day's longest window.
+export function getHourLengths(listing, availability, dateKey, startTime) {
+  const all = getHourlyDurationOptions(listing)
+  if (!dateKey) return all
+  const windows = dayWindows(availability?.workingHours, dateKey)
+  if (!startTime) {
+    const longest = Math.max(0, ...windows.map((window) => window.closes - window.opens)) / 60
+    const lengths = all.filter((hours) => hours <= longest)
+    return lengths.length ? lengths : all.slice(0, 1)
+  }
+  const start = minutesOfTime(startTime)
+  const window = windows.find((candidate) => candidate.opens <= start && start < candidate.closes)
+  if (!window) return []
+  const lengths = []
+  for (const hours of all) {
+    if (!hoursFit(availability, dateKey, window, start, hours)) break
+    lengths.push(hours)
+  }
+  return lengths
+}
+
+// The length to keep when the choice of lengths changes: the same one, else
+// the longest that still fits under it, else the shortest on offer.
+export function keepHourLength(lengths, current) {
+  if (!lengths.length || lengths.includes(current)) return current
+  return lengths.filter((hours) => hours <= current).pop() ?? lengths[0]
 }
 
 // 369:418 / 538:798: "12. - 13. 9. 2026.", "12. 9. 2026. 11:00 - 12:30".
@@ -210,6 +299,12 @@ function addMonthsToKey(key, months) {
 
 export function getGuestLabel(t, listing) {
   return listing?.guestUnit === 'children' ? t('bookingForm.childrenCount') : t('booking.guestCount')
+}
+
+// T127: a playroom also asks how many adults come with the children, for
+// the owner only: from 0, no limit, no effect on the price.
+export function asksAdults(listing) {
+  return listing?.guestUnit === 'children'
 }
 
 // 369:421 "30" and 538:801 "18 dece": the frames name the children only.
@@ -255,9 +350,11 @@ export function buildFlowSteps(t, listing, flow) {
       { title: t('bookingForm.flow.confirmTitle'), text: t('bookingForm.flow.confirmText') },
     ]
   }
+  // T117: a vehicle or a machine is paid for when it is picked up.
+  const pickup = usesPickupAndReturn(listing) ? 'Pickup' : ''
   const payment = {
-    BOTH: { title: t('bookingForm.flow.bothTitle'), text: t('bookingForm.flow.bothText') },
-    CASH: { title: t('bookingForm.flow.cashTitle'), text: t('bookingForm.flow.cashText') },
+    BOTH: { title: t('bookingForm.flow.bothTitle'), text: t(`bookingForm.flow.bothText${pickup}`) },
+    CASH: { title: t('bookingForm.flow.cashTitle'), text: t(`bookingForm.flow.cashText${pickup}`) },
     BANK_TRANSFER: { title: t('bookingForm.flow.transferTitle'), text: t('bookingForm.flow.transferText', { hours }) },
   }[flow.accepts]
   return [
@@ -313,6 +410,24 @@ export function buildPriceRows(t, listing, quote, slot) {
   if (quote.guestFee > 0) rows.push({ key: 'guestFee', label: t('booking.guestFeeLine'), value: formatRsd(quote.guestFee) })
   if (quote.mandatoryFeesTotal > 0) rows.push({ key: 'fees', label: t('booking.mandatoryFeesLine'), value: formatRsd(quote.mandatoryFeesTotal) })
   if (quote.extraServicesTotal > 0) rows.push({ key: 'extras', label: t('listing.extraServices'), value: formatRsd(quote.extraServicesTotal) })
+  return rows
+}
+
+// T127: the listing's booking card prices the term the way the request page
+// does, one line per price it is charged at ("2 sata × 1.200 RSD" and that
+// line's total), the rule that set the price under it.
+export function buildCardPriceRows(t, listing, quote) {
+  if (!quote) return []
+  const booking = { priceUnit: listing.priceUnit, guestUnit: listing.guestUnit }
+  const lines = quote.priceLines?.length ? quote.priceLines : [{ count: quote.unitCount, price: quote.pricePerUnit, kind: 'BASE' }]
+  const rows = lines.map((line, index) => ({
+    key: `price${index}`,
+    label: `${formatUnits(t, booking, listing.priceUnit, line.count)} × ${formatRsd(line.price)}`,
+    note: formatPriceKind(t, line.kind),
+    value: formatRsd(line.count * line.price),
+  }))
+  if (quote.guestFee > 0) rows.push({ key: 'guestFee', label: t('booking.guestFeeLine'), value: formatRsd(quote.guestFee) })
+  if (quote.mandatoryFeesTotal > 0) rows.push({ key: 'fees', label: t('booking.mandatoryFeesLine'), value: formatRsd(quote.mandatoryFeesTotal) })
   return rows
 }
 

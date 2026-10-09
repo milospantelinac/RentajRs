@@ -368,3 +368,74 @@ describe('AvailabilityService#getIcalOverview (Dizajn 33)', () => {
     await expect(makeService(withPlace()).service.getIcalOverview('u2', 'l1')).rejects.toBeInstanceOf(ForbiddenException);
   });
 });
+
+describe('AvailabilityService working hours (T127)', () => {
+  const rsd = (value: number) => BigInt(value * 100);
+  function hoursService(rules: { overrides?: any[]; ranges?: any[]; hours?: any[] }) {
+    const prisma = {
+      slotPriceOverride: { findMany: jest.fn(async () => rules.overrides ?? []) },
+      hourlyPriceRange: { findMany: jest.fn(async () => rules.ranges ?? []) },
+      workingHours: { findMany: jest.fn(async () => rules.hours ?? []) },
+    };
+    return { service: new AvailabilityService(prisma as any, { emit: jest.fn() } as any, i18n as any, configWith(false) as any), prisma };
+  }
+  // Belgrade runs on UTC+2 until 25 October 2026: 12. 10. is a Monday, 10. 10. a Saturday.
+  const at = (iso: string) => new Date(iso);
+  const prices = (units: Array<{ price: bigint; kind: string }>) => units.map((u) => `${u.kind} ${Number(u.price) / 100}`);
+
+  it('prices each hour at the rate of its own part of the working hours', async () => {
+    const { service } = hoursService({ ranges: [{ dayOfWeek: null, startTime: '16:00', endTime: '20:00', price: rsd(1200) }] });
+    const units = await service.getWorkingHoursPrices('l1', at('2026-10-12T13:00:00Z'), at('2026-10-12T15:00:00Z'), rsd(1000), rsd(1500));
+    expect(prices(units)).toEqual(['BASE 1000', 'RANGE 1200']);
+  });
+
+  it('takes the weekend price on a Saturday where no range covers the hour', async () => {
+    const { service } = hoursService({ ranges: [{ dayOfWeek: null, startTime: '16:00', endTime: '20:00', price: rsd(1200) }] });
+    const units = await service.getWorkingHoursPrices('l1', at('2026-10-10T13:00:00Z'), at('2026-10-10T15:00:00Z'), rsd(1000), rsd(1500));
+    expect(prices(units)).toEqual(['WEEKEND 1500', 'RANGE 1200']);
+  });
+
+  it("puts the date's special price and that weekday's own range first", async () => {
+    const { service, prisma } = hoursService({
+      overrides: [{ startTime: '17:00', endTime: '18:00', price: rsd(3000) }],
+      ranges: [
+        { dayOfWeek: null, startTime: '16:00', endTime: '20:00', price: rsd(1200) },
+        { dayOfWeek: 1, startTime: '16:00', endTime: '17:00', price: rsd(1100) },
+      ],
+    });
+    const units = await service.getWorkingHoursPrices('l1', at('2026-10-12T14:00:00Z'), at('2026-10-12T17:00:00Z'), rsd(1000), null);
+    expect(prices(units)).toEqual(['RANGE 1100', 'SPECIAL 3000', 'RANGE 1200']);
+    expect(prisma.slotPriceOverride.findMany).toHaveBeenCalledWith({ where: { listingId: 'l1', date: new Date('2026-10-12T00:00:00Z') } });
+  });
+
+  it('keeps a Saturday evening that runs past midnight on Saturday, ranges across midnight included', async () => {
+    const plain = hoursService({});
+    const night = await plain.service.getWorkingHoursPrices('l1', at('2026-10-10T21:00:00Z'), at('2026-10-10T23:00:00Z'), rsd(5000), rsd(6000));
+    expect(prices(night)).toEqual(['WEEKEND 6000', 'WEEKEND 6000']);
+    const ranged = hoursService({ ranges: [{ dayOfWeek: null, startTime: '22:00', endTime: '02:00', price: rsd(7000) }] });
+    const late = await ranged.service.getWorkingHoursPrices('l1', at('2026-10-10T19:00:00Z'), at('2026-10-11T00:00:00Z'), rsd(5000), rsd(6000));
+    expect(prices(late)).toEqual(['WEEKEND 6000', 'RANGE 7000', 'RANGE 7000', 'RANGE 7000', 'RANGE 7000']);
+  });
+
+  it('prices a per-guest term once, at the rate it starts at', async () => {
+    const { service } = hoursService({ ranges: [{ dayOfWeek: null, startTime: '22:00', endTime: '02:00', price: rsd(900) }] });
+    await expect(service.resolveHourlyPrice('l1', at('2026-10-10T21:00:00Z'), '23:00', rsd(800))).resolves.toEqual({ price: rsd(900), kind: 'RANGE' });
+  });
+
+  it('accepts a term only inside one window of the working hours', async () => {
+    const { service } = hoursService({
+      hours: [
+        { dayOfWeek: 1, startsAt: '10:00', endsAt: '20:00' },
+        { dayOfWeek: 5, startsAt: '20:00', endsAt: '02:00' },
+      ],
+    });
+    const fits = (from: string, to: string) => service.fitsWorkingHours('l1', at(from), at(to));
+    await expect(fits('2026-10-12T16:00:00Z', '2026-10-12T18:00:00Z')).resolves.toBe(true); // Mon 18 to 20
+    await expect(fits('2026-10-12T17:00:00Z', '2026-10-12T19:00:00Z')).resolves.toBe(false); // Mon 19 to 21
+    await expect(fits('2026-10-12T07:00:00Z', '2026-10-12T09:00:00Z')).resolves.toBe(false); // Mon 9 to 11
+    await expect(fits('2026-10-16T21:00:00Z', '2026-10-16T23:00:00Z')).resolves.toBe(true); // Fri 23 to Sat 1
+    await expect(fits('2026-10-16T22:00:00Z', '2026-10-16T23:00:00Z')).resolves.toBe(true); // Sat 0 to 1, Friday's window
+    await expect(fits('2026-10-16T23:00:00Z', '2026-10-17T01:00:00Z')).resolves.toBe(false); // Sat 1 to 3
+    await expect(fits('2026-10-13T08:00:00Z', '2026-10-13T10:00:00Z')).resolves.toBe(false); // Tuesday is closed
+  });
+});

@@ -24,42 +24,100 @@
         </button>
       </div>
 
-      <div v-else-if="isMonthly" class="booking-panel-fields">
-        <button type="button" class="booking-panel-field booking-panel-field-full" @click="togglePicker">
-          <span class="booking-panel-field-label">{{ t('booking.monthLabel') }}</span>
-          <span class="booking-panel-field-value">{{ monthLabel || t('booking.pickMonthPlaceholder') }}</span>
-          <img src="/images/icons/chevron-down.svg" alt="" class="booking-panel-field-chevron" />
-        </button>
-      </div>
+      <!-- T128: the start month and the number of months are two fields of
+           the card's own kind, always in view, rather than a box that opened
+           under one. -->
+      <BookingMonthPicker
+        v-else-if="isMonthly"
+        variant="card"
+        :listing-id="listing.id"
+        :base-price="listing.price"
+        :min-duration="listing.minDuration"
+        :max-duration="listing.maxDuration"
+        :earliest-booking-hours="listing.earliestBookingHours"
+        :max-advance-booking-days="listing.maxAdvanceBookingDays"
+        :initial-month="monthStart"
+        :initial-count="monthCount"
+        @update:range="onMonthRangeUpdate"
+      />
 
-      <div v-else-if="isWorkingHours" class="booking-panel-fields">
-        <button type="button" class="booking-panel-field" @click="togglePicker">
-          <span class="booking-panel-field-label">{{ t('booking.dateLabel') }}</span>
-          <span class="booking-panel-field-value">{{ startLabel || t('booking.pickDatePlaceholder') }}</span>
-        </button>
-        <label class="booking-panel-field booking-panel-field-select">
-          <span class="booking-panel-field-label">{{ t('booking.timeLabel') }}</span>
-          <select v-model="slotStartTime" class="booking-panel-native-select">
-            <option value="" disabled>{{ t('booking.pickTimePlaceholder') }}</option>
-            <option v-for="time in dayTimeOptions" :key="time" :value="time">{{ time }}</option>
-          </select>
-          <span class="booking-panel-field-value">{{ slotStartTime || t('booking.pickTimePlaceholder') }}</span>
-          <img src="/images/icons/chevron-down.svg" alt="" class="booking-panel-field-chevron" />
-        </label>
-      </div>
+      <!-- T127: the day, then the start and the length, as on the request page.
+           Both selects only offer what fits before closing and is still free. -->
+      <template v-else-if="isWorkingHours">
+        <div class="booking-panel-fields">
+          <button
+            type="button"
+            class="booking-panel-field booking-panel-field-full"
+            :aria-expanded="pickerOpen"
+            @click="togglePicker"
+          >
+            <span class="booking-panel-field-label">{{ t('booking.dateLabel') }}</span>
+            <span class="booking-panel-field-value" :class="{ 'is-empty': !startsAt }">
+              {{ startLabel || t('booking.pickDatePlaceholder') }}
+            </span>
+            <img src="/images/icons/chevron-down.svg" alt="" class="booking-panel-field-chevron" />
+          </button>
+        </div>
 
+        <div v-if="pickerOpen" class="booking-panel-picker">
+          <BookingDateRangePicker
+            :listing-id="listing.id"
+            :show-pricing="false"
+            :earliest-booking-hours="listing.earliestBookingHours"
+            :max-advance-booking-days="listing.maxAdvanceBookingDays"
+            :available-days-of-week="availableDaysOfWeek"
+            :whole-day-blocking="false"
+            :single-date="true"
+            :initial-start="startsAt"
+            @update:range="onSingleDateUpdate"
+          />
+        </div>
+
+        <div class="booking-panel-fields">
+          <label v-if="hourStarts.length" class="booking-panel-field booking-panel-field-select">
+            <span class="booking-panel-field-label">{{ t('booking.startLabel') }}</span>
+            <select v-model="slotStartTime" class="booking-panel-native-select">
+              <option value="" disabled>{{ t('booking.pickTimePlaceholder') }}</option>
+              <option v-for="time in hourStarts" :key="time" :value="time">{{ time }}</option>
+            </select>
+            <span class="booking-panel-field-value" :class="{ 'is-empty': !slotStartTime }">
+              {{ slotStartTime || t('booking.pickTimePlaceholder') }}
+            </span>
+            <img src="/images/icons/chevron-down.svg" alt="" class="booking-panel-field-chevron" />
+          </label>
+          <!-- Without a day there is nothing to offer yet, so the field opens the calendar. -->
+          <button v-else type="button" class="booking-panel-field" @click="openPicker">
+            <span class="booking-panel-field-label">{{ t('booking.startLabel') }}</span>
+            <span class="booking-panel-field-value is-empty">{{ t('booking.pickTimePlaceholder') }}</span>
+            <img src="/images/icons/chevron-down.svg" alt="" class="booking-panel-field-chevron" />
+          </button>
+          <label class="booking-panel-field booking-panel-field-select">
+            <span class="booking-panel-field-label">{{ t('bookingForm.duration') }}</span>
+            <select v-model.number="slotDurationHours" class="booking-panel-native-select" :disabled="!hourLengths.length">
+              <option v-for="hours in hourLengths" :key="hours" :value="hours">{{ hoursText(hours) }}</option>
+            </select>
+            <span class="booking-panel-field-value">{{ hoursText(slotDurationHours) }}</span>
+            <img src="/images/icons/chevron-down.svg" alt="" class="booking-panel-field-chevron" />
+          </label>
+        </div>
+        <p v-if="startsAt && !hourStarts.length" class="booking-panel-hint booking-panel-hours-hint">
+          {{ t('booking.noWorkingHoursForDay') }}
+        </p>
+      </template>
+
+      <!-- T117: a vehicle or a machine is picked up and returned. -->
       <div v-else class="booking-panel-fields">
-        <button type="button" class="booking-panel-field" @click="togglePicker">
-          <span class="booking-panel-field-label">{{ t('booking.checkInLabel') }}</span>
-          <span class="booking-panel-field-value">{{ startLabel || t('booking.pickDatePlaceholder') }}</span>
+        <button type="button" class="booking-panel-field" :aria-expanded="pickerOpen" @click="togglePicker">
+          <span class="booking-panel-field-label">{{ t(pickupReturn ? 'booking.pickup' : 'booking.checkInLabel') }}</span>
+          <span class="booking-panel-field-value" :class="{ 'is-empty': !startsAt }">{{ startLabel || t('booking.pickDatePlaceholder') }}</span>
         </button>
-        <button type="button" class="booking-panel-field" @click="togglePicker">
-          <span class="booking-panel-field-label">{{ t('booking.checkOutLabel') }}</span>
-          <span class="booking-panel-field-value">{{ endLabel || t('booking.pickDatePlaceholder') }}</span>
+        <button type="button" class="booking-panel-field" :aria-expanded="pickerOpen" @click="togglePicker">
+          <span class="booking-panel-field-label">{{ t(pickupReturn ? 'booking.dropoff' : 'booking.checkOutLabel') }}</span>
+          <span class="booking-panel-field-value" :class="{ 'is-empty': !endsAt }">{{ endLabel || t('booking.pickDatePlaceholder') }}</span>
         </button>
       </div>
 
-      <div v-if="pickerOpen" class="booking-panel-picker">
+      <div v-if="pickerOpen && !isWorkingHours" class="booking-panel-picker">
         <div v-if="isDefinedSlots" class="booking-panel-slot-list">
           <button
             v-for="slot in slots"
@@ -75,29 +133,8 @@
           <p v-if="!slots.length" class="booking-panel-hint">{{ t('booking.noSlots') }}</p>
         </div>
 
-        <BookingMonthPicker
-          v-else-if="isMonthly"
-          :listing-id="listing.id"
-          :base-price="listing.price"
-          :min-duration="listing.minDuration"
-          :max-duration="listing.maxDuration"
-          :earliest-booking-hours="listing.earliestBookingHours"
-          :max-advance-booking-days="listing.maxAdvanceBookingDays"
-          @update:range="onMonthRangeUpdate"
-        />
-
-        <BookingDateRangePicker
-          v-else-if="isWorkingHours"
-          :listing-id="listing.id"
-          :show-pricing="false"
-          :earliest-booking-hours="listing.earliestBookingHours"
-          :max-advance-booking-days="listing.maxAdvanceBookingDays"
-          :available-days-of-week="availableDaysOfWeek"
-          :whole-day-blocking="false"
-          :single-date="true"
-          @update:range="onSingleDateUpdate"
-        />
-
+        <!-- T127: it opens on the dates already picked instead of handing an
+             empty range back and wiping them. -->
         <BookingDateRangePicker
           v-else
           :listing-id="listing.id"
@@ -109,14 +146,21 @@
           :max-duration="listing.maxDuration"
           :earliest-booking-hours="listing.earliestBookingHours"
           :max-advance-booking-days="listing.maxAdvanceBookingDays"
+          :initial-start="startsAt"
+          :initial-end="endsAt"
+          :pickup-return="pickupReturn"
           @update:range="onRangeUpdate"
         />
       </div>
 
-      <div class="booking-panel-guests-wrap">
+      <!-- T125: only where the guests shape the stay or the price; the request
+           page asks for them everywhere else. Typed or stepped, a number past
+           the listing's limit is never cut, it is pointed out. -->
+      <div v-if="showGuests" class="booking-panel-guests-wrap">
         <button
           type="button"
           class="booking-panel-field booking-panel-field-full"
+          :class="{ 'is-invalid': guestErrorShown }"
           :aria-expanded="guestsOpen"
           @click="guestsOpen = !guestsOpen"
         >
@@ -126,45 +170,59 @@
         </button>
 
         <div v-if="guestsOpen" class="booking-panel-guests-popover">
-          <span class="booking-panel-guests-caption">{{ guestCapCaption }}</span>
-          <span class="booking-panel-stepper">
-            <button
-              type="button"
-              class="booking-panel-stepper-btn"
-              :disabled="guestCount <= minGuests"
-              :aria-label="t('booking.guestCountDecrease')"
-              @click="stepGuests(-1)"
-            >
-              &minus;
-            </button>
-            <span class="booking-panel-stepper-value">{{ guestCount }}</span>
-            <button
-              type="button"
-              class="booking-panel-stepper-btn"
-              :disabled="maxGuests !== null && guestCount >= maxGuests"
-              :aria-label="t('booking.guestCountIncrease')"
-              @click="stepGuests(1)"
-            >
-              +
-            </button>
-          </span>
+          <div class="booking-panel-guests-row">
+            <label :for="guestInputId" class="booking-panel-guests-caption">{{ guestCapCaption }}</label>
+            <span class="booking-panel-stepper" :class="{ 'is-invalid': guestErrorShown }">
+              <button
+                type="button"
+                class="booking-panel-stepper-btn"
+                :disabled="guestCount <= minGuests"
+                :aria-label="t('booking.guestCountDecrease')"
+                @click="stepGuests(-1)"
+              >
+                &minus;
+              </button>
+              <input
+                :id="guestInputId"
+                ref="guestInputEl"
+                v-model="guestInput"
+                class="booking-panel-stepper-input"
+                type="text"
+                inputmode="numeric"
+                autocomplete="off"
+                maxlength="4"
+                :aria-invalid="guestErrorShown"
+                :aria-describedby="guestErrorShown ? guestErrorId : undefined"
+                @input="onGuestInput"
+                @blur="guestTouched = true"
+              />
+              <button
+                type="button"
+                class="booking-panel-stepper-btn"
+                :disabled="maxGuests !== null && guestCount >= maxGuests"
+                :aria-label="t('booking.guestCountIncrease')"
+                @click="stepGuests(1)"
+              >
+                +
+              </button>
+            </span>
+          </div>
+          <p v-if="guestErrorShown" :id="guestErrorId" class="booking-panel-guests-error" role="alert">
+            <img src="/images/icons/field-error.svg" alt="" />{{ guestError }}
+          </p>
         </div>
       </div>
 
       <template v-if="quote">
         <div class="booking-panel-divider" />
         <div class="booking-panel-breakdown">
-          <div class="booking-panel-row">
-            <span class="booking-panel-row-label">{{ unitLineLabel }}</span>
-            <span class="booking-panel-row-value">{{ formatPrice(quote.unitPriceTotal) }}</span>
-          </div>
-          <div v-if="quote.guestFee > 0" class="booking-panel-row">
-            <span class="booking-panel-row-label">{{ t('booking.guestFeeLine') }}</span>
-            <span class="booking-panel-row-value">{{ formatPrice(quote.guestFee) }}</span>
-          </div>
-          <div v-if="quote.mandatoryFeesTotal > 0" class="booking-panel-row">
-            <span class="booking-panel-row-label">{{ t('booking.mandatoryFeesLine') }}</span>
-            <span class="booking-panel-row-value">{{ formatPrice(quote.mandatoryFeesTotal) }}</span>
+          <!-- T127: one line per price the term is charged at, as the request page shows it. -->
+          <div v-for="row in priceRows" :key="row.key" class="booking-panel-row">
+            <span class="booking-panel-row-label">
+              {{ row.label }}
+              <span v-if="row.note" class="booking-panel-row-note">{{ row.note }}</span>
+            </span>
+            <span class="booking-panel-row-value">{{ row.value }}</span>
           </div>
           <div class="booking-panel-row-divider" />
           <div class="booking-panel-total">
@@ -179,6 +237,11 @@
       </div>
 
       <span v-if="preview" class="booking-panel-cta booking-panel-cta-inert">{{ t('listing.sendRequest') }}</span>
+      <!-- T125: a guest count the listing can't take goes nowhere until fixed;
+           the button shows why instead. -->
+      <button v-else-if="guestError" type="button" class="booking-panel-cta" @click="revealGuestError">
+        {{ t('listing.sendRequest') }}
+      </button>
       <NuxtLink v-else :to="requestLink" class="booking-panel-cta">{{ t('listing.sendRequest') }}</NuxtLink>
       <p class="booking-panel-note">{{ t('booking.requestGoesToOwner') }}</p>
     </template>
@@ -227,6 +290,9 @@ const isWorkingHours = computed(
   () => props.listing.bookingModel === 'PER_SLOT' && props.listing.slotSubmode === 'WORKING_HOURS',
 )
 
+// T117: a vehicle or a machine is picked up and returned.
+const pickupReturn = computed(() => usesPickupAndReturn(props.listing))
+
 const pickerOpen = ref(false)
 const guestsOpen = ref(false)
 const startsAt = ref('')
@@ -235,7 +301,7 @@ const monthStart = ref('')
 const monthCount = ref(1)
 const definedSlotId = ref(null)
 const slotStartTime = ref('')
-// Dizajn 23: the card has no length field, so it prices the shortest term allowed.
+// T127: from the shortest term allowed, as the request page starts.
 const slotDurationHours = ref(props.listing.minDuration || 1)
 // Dizajn 22: like the request page (T74), never offer a slot that overlaps a
 // blocked term: a booking on it, a blocked date or an imported calendar event.
@@ -252,81 +318,108 @@ const blocked = computed(() => props.availability?.blocked ?? [])
 // step Detalji ("Kapacitet ljudi" or "Kapacitet dece") both apply, so the lower one does.
 const maxGuests = computed(() => getGuestCap(props.listing))
 const minGuests = computed(() => props.listing.minGuests || 1)
-const guestCount = ref(1)
-
-onMounted(() => {
-  guestCount.value = minGuests.value
+// T125: a stay (every model) and a price per guest ask here; the rest only on the request page.
+const showGuests = computed(() => hasGuestPill(props.listing))
+const guestInput = ref(String(minGuests.value))
+const guestCount = computed(() => (/^\d+$/.test(guestInput.value) ? Number(guestInput.value) : 0))
+const guestTouched = ref(false)
+const guestInputEl = ref(null)
+const guestInputId = useId()
+const guestErrorId = useId()
+// Tamara, 2026-10-09: the request page's rule. Too many shows at once, too few
+// once the field is left; the number is never changed for the guest.
+const overCap = computed(() => maxGuests.value !== null && guestCount.value > maxGuests.value)
+const guestError = computed(() => {
+  if (!showGuests.value) return ''
+  if (overCap.value) return formatGuestLimit(t, props.listing, maxGuests.value)
+  if (guestCount.value < minGuests.value) return formatGuestMinimum(t, props.listing, minGuests.value)
+  return ''
 })
+const guestErrorShown = computed(() => !!guestError.value && (overCap.value || guestTouched.value))
+// The price always follows a count the listing takes.
+const quoteGuests = computed(() =>
+  showGuests.value ? Math.min(Math.max(guestCount.value, minGuests.value), maxGuests.value ?? Infinity) : minGuests.value,
+)
 
 const availableDaysOfWeek = computed(() =>
   workingHours.value.length ? [...new Set(workingHours.value.map((h) => h.dayOfWeek))] : null,
 )
 
+// T127: a calendar opened again hands the dates it was opened on straight
+// back; that first answer keeps them (it used to wipe the date and the time),
+// anything picked after it counts.
+let pickerOpening = false
 function togglePicker() {
   pickerOpen.value = !pickerOpen.value
+  pickerOpening = pickerOpen.value
+}
+function openPicker() {
+  if (!pickerOpen.value) togglePicker()
+}
+function pickerAnswered() {
+  const first = pickerOpening
+  pickerOpening = false
+  return !first
 }
 
 function onRangeUpdate(range) {
+  if (!pickerAnswered()) return
   startsAt.value = range.startsAt || ''
   endsAt.value = range.endsAt || ''
   if (startsAt.value && endsAt.value) pickerOpen.value = false
 }
 function onSingleDateUpdate(range) {
+  if (!pickerAnswered()) return
+  if ((range.startsAt || '') !== startsAt.value) slotStartTime.value = ''
   startsAt.value = range.startsAt || ''
-  slotStartTime.value = ''
   if (startsAt.value) pickerOpen.value = false
 }
 function onMonthRangeUpdate(range) {
   monthStart.value = range.monthStart || ''
   monthCount.value = range.monthCount || 1
-  if (monthStart.value) pickerOpen.value = false
 }
 function pickSlot(slot) {
   definedSlotId.value = slot.id
   pickerOpen.value = false
 }
+function onGuestInput() {
+  guestInput.value = guestInput.value.replace(/\D/g, '').slice(0, 4)
+}
 function stepGuests(delta) {
-  const next = guestCount.value + delta
-  if (next < minGuests.value) return
-  if (maxGuests.value !== null && next > maxGuests.value) return
-  guestCount.value = next
+  guestInput.value = String(Math.min(Math.max(guestCount.value + delta, minGuests.value), maxGuests.value ?? Infinity))
+}
+async function revealGuestError() {
+  guestTouched.value = true
+  guestsOpen.value = true
+  await nextTick()
+  guestInputEl.value?.focus()
 }
 
-function slotInstant(dateStr, timeStr) {
-  return new Date(`${dateStr}T${timeStr}:00`)
-}
 function overlapsBlocked(from, to) {
   const start = from.getTime()
   const end = to.getTime()
   return blocked.value.some((b) => new Date(b.startsAt).getTime() < end && new Date(b.endsAt).getTime() > start)
 }
 
-// Same derivation as the request page — a start time is only offered inside the
-// owner's configured working hours for that weekday, and never one whose term
-// would collide with an existing booking.
-const dayTimeOptions = computed(() => {
-  if (!startsAt.value) return []
-  const dayOfWeek = ((new Date(`${startsAt.value}T00:00:00`).getDay() + 6) % 7) + 1
-  const times = []
-  for (const range of workingHours.value.filter((h) => h.dayOfWeek === dayOfWeek)) {
-    const [sh, sm] = range.startsAt.split(':').map(Number)
-    const [eh, em] = range.endsAt.split(':').map(Number)
-    const startTotal = sh * 60 + sm
-    let endTotal = eh * 60 + em
-    if (endTotal <= startTotal) endTotal += 24 * 60
-    for (let minute = startTotal; minute < Math.min(endTotal, 24 * 60); minute += 60) {
-      times.push(`${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`)
-    }
-  }
-  // Dizajn 23: nor one inside the notice or past the horizon.
-  return times.filter((time) => {
-    const from = slotInstant(startsAt.value, time)
-    return (
-      isStartWithinRules(props.listing, from) &&
-      !overlapsBlocked(from, new Date(from.getTime() + slotDurationHours.value * 3600_000))
-    )
-  })
+// T127: the request page's own choice (utils/bookingRequestForm.js): starts on
+// the hour where the shortest term fits before closing, lengths from the
+// minimum up to closing or the next taken term, in Belgrade time.
+const hourStarts = computed(() =>
+  isWorkingHours.value ? getHourStarts(props.listing, props.availability, startsAt.value) : [],
+)
+const hourLengths = computed(() =>
+  isWorkingHours.value ? getHourLengths(props.listing, props.availability, startsAt.value, slotStartTime.value) : [],
+)
+watch(hourStarts, (times) => {
+  if (slotStartTime.value && !times.includes(slotStartTime.value)) slotStartTime.value = ''
 })
+watch(hourLengths, (lengths) => {
+  slotDurationHours.value = keepHourLength(lengths, slotDurationHours.value)
+})
+// "2 sata"
+function hoursText(hours) {
+  return formatUnits(t, {}, 'HOUR', hours)
+}
 
 const selectedSlot = computed(() => slots.value.find((s) => s.id === definedSlotId.value) || null)
 
@@ -344,11 +437,6 @@ function formatPrice(value) {
 
 const startLabel = computed(() => formatShortDate(startsAt.value))
 const endLabel = computed(() => formatShortDate(endsAt.value))
-const monthLabel = computed(() =>
-  monthStart.value
-    ? `${new Intl.DateTimeFormat('sr-Latn-RS', { month: 'long', year: 'numeric' }).format(new Date(`${monthStart.value}-01T00:00:00`))} · ${monthCount.value}`
-    : '',
-)
 const slotLabel = computed(() =>
   selectedSlot.value ? `${formatDateTime(selectedSlot.value.startsAt)} — ${formatDateTime(selectedSlot.value.endsAt)}` : '',
 )
@@ -357,7 +445,9 @@ const guestLabel = computed(
 )
 
 const guestCapCaption = computed(() =>
-  maxGuests.value ? t('booking.guestCapCaption', { count: maxGuests.value }) : t('booking.guestsLabel'),
+  maxGuests.value
+    ? t('booking.guestCapCaption', { guests: formatBookingGuests(t, props.listing.guestUnit, maxGuests.value) })
+    : t('booking.guestsLabel'),
 )
 
 const unitSuffix = computed(() =>
@@ -366,15 +456,13 @@ const unitSuffix = computed(() =>
     : `/ ${t(`listing.unit${props.listing.priceUnit.charAt(0)}${props.listing.priceUnit.slice(1).toLowerCase()}`)}`,
 )
 
-const unitLineLabel = computed(() => {
-  if (!quote.value) return ''
-  return `${formatPrice(quote.value.pricePerUnit)} × ${quote.value.unitCount} ${srDurationUnitWord(props.listing.priceUnit, quote.value.unitCount)}`
-})
+// T127: "2 sata × 1.200 RSD (cena za deo radnog vremena)", the request page's lines.
+const priceRows = computed(() => buildCardPriceRows(t, props.listing, quote.value))
 
 // The exact shape /bookings/quote expects, built the same way the request page
 // builds it so the number shown here is the number that page will show too.
 function buildQuotePayload() {
-  const base = { guestCount: guestCount.value }
+  const base = { guestCount: quoteGuests.value }
   if (definedSlotId.value) return { ...base, definedSlotId: definedSlotId.value }
   if (isMonthly.value) {
     if (!monthStart.value) return null
@@ -382,7 +470,8 @@ function buildQuotePayload() {
   }
   if (isWorkingHours.value) {
     if (!startsAt.value || !slotStartTime.value) return null
-    const from = slotInstant(startsAt.value, slotStartTime.value)
+    // T127: Belgrade wall-clock time, as the request page and the server read it.
+    const from = belgradeInstant(startsAt.value, slotStartTime.value)
     return {
       ...base,
       startsAt: from.toISOString(),
@@ -398,15 +487,19 @@ function buildQuotePayload() {
 }
 
 const quote = ref(null)
+let quoteRequest = 0
 async function refreshQuote() {
   const payload = buildQuotePayload()
+  const request = ++quoteRequest
   if (!payload) {
     quote.value = null
     return
   }
-  quote.value = await api.post(`/listings/${props.listing.id}/bookings/quote`, payload).catch(() => null)
+  const result = await api.post(`/listings/${props.listing.id}/bookings/quote`, payload).catch(() => null)
+  // A slower answer for an older choice never replaces a newer one.
+  if (request === quoteRequest) quote.value = result
 }
-watch([startsAt, endsAt, monthStart, monthCount, definedSlotId, slotStartTime, slotDurationHours, guestCount], refreshQuote)
+watch(() => JSON.stringify(buildQuotePayload()), refreshQuote)
 
 // R55 — Rentaj never takes a cut of a booking; the pill states that outright
 // rather than leaving a guest to wonder, and still reads the real figure the
@@ -424,7 +517,7 @@ const requestLink = computed(() => {
   if (monthCount.value > 1) query.set('monthCount', String(monthCount.value))
   if (slotStartTime.value) query.set('startTime', slotStartTime.value)
   if (isWorkingHours.value) query.set('hours', String(slotDurationHours.value))
-  query.set('guests', String(guestCount.value))
+  if (showGuests.value) query.set('guests', String(guestCount.value))
   return `/oglasi/${props.listing.slug}/rezervisi?${query.toString()}`
 })
 </script>
@@ -522,6 +615,22 @@ const requestLink = computed(() => {
   max-width: 100%;
 }
 
+// T127: a field that still waits for a choice reads as one.
+.booking-panel-field-value.is-empty {
+  color: $color-text-muted;
+}
+
+// T125: Dizajn 6's field with an error (214:429), as on the request page.
+.booking-panel-field.is-invalid {
+  background: #fcd8e0;
+  box-shadow: inset 0 0 0 1.5px #f43f5e;
+}
+
+// T127: a half-width field keeps its value clear of the chevron on a narrow phone.
+.booking-panel-field:has(.booking-panel-field-chevron) {
+  padding-right: 40px;
+}
+
 .booking-panel-field-chevron {
   position: absolute;
   right: 16px;
@@ -542,6 +651,15 @@ const requestLink = computed(() => {
   cursor: pointer;
 }
 
+.booking-panel-native-select:disabled {
+  cursor: default;
+}
+
+// The select is invisible, so its keyboard focus shows on the field.
+.booking-panel-field-select:has(.booking-panel-native-select:focus-visible) {
+  box-shadow: inset 0 0 0 1.5px $color-primary;
+}
+
 .booking-panel-guests-wrap {
   position: relative;
 }
@@ -555,14 +673,20 @@ const requestLink = computed(() => {
   left: 0;
   right: 0;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  flex-direction: column;
+  gap: 10px;
   padding: 14px 16px;
   background: $color-surface;
   border: 1px solid $color-border;
   border-radius: $radius-input;
   box-shadow: 0 6px 18px rgba(97, 115, 133, 0.08);
+}
+
+.booking-panel-guests-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
 }
 
 .booking-panel-guests-caption {
@@ -572,16 +696,53 @@ const requestLink = computed(() => {
 
 .booking-panel-stepper {
   display: inline-flex;
+  flex-shrink: 0;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
 }
 
-.booking-panel-stepper-value {
-  min-width: 16px;
-  text-align: center;
-  font-size: 15px;
-  font-weight: 500;
+// T125: the number can be typed too (a hall's 150 guests), 16px so a phone
+// doesn't zoom in on it.
+.booking-panel-stepper-input {
+  width: 56px;
+  height: 32px;
+  margin: 0;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 8px;
+  outline: none;
+  background: $color-background;
   color: $color-text;
+  font-family: $font-family-base;
+  font-size: 16px;
+  font-weight: 500;
+  text-align: center;
+}
+
+.booking-panel-stepper-input:focus {
+  box-shadow: inset 0 0 0 1.5px $color-primary;
+}
+
+.booking-panel-stepper.is-invalid .booking-panel-stepper-input {
+  background: #fcd8e0;
+  box-shadow: inset 0 0 0 1.5px #f43f5e;
+}
+
+// Dizajn 6 (214:438): the error under the field.
+.booking-panel-guests-error {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-size: 13px;
+  line-height: normal;
+  color: $color-error;
+}
+
+.booking-panel-guests-error img {
+  flex-shrink: 0;
+  width: 15px;
+  height: 15px;
 }
 
 .booking-panel-stepper-btn {
@@ -644,6 +805,10 @@ const requestLink = computed(() => {
   color: $color-text-muted;
 }
 
+.booking-panel-hours-hint {
+  margin: 0;
+}
+
 .booking-panel-divider {
   height: 1px;
   background: $color-border;
@@ -665,6 +830,13 @@ const requestLink = computed(() => {
 
 .booking-panel-row-label {
   color: $color-text-muted;
+}
+
+// T127: "(cena za deo radnog vremena)" under its line.
+.booking-panel-row-note {
+  display: block;
+  margin-top: 2px;
+  font-size: 13px;
 }
 
 .booking-panel-row-value {
@@ -709,12 +881,17 @@ const requestLink = computed(() => {
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 100%;
   height: 54px;
+  padding: 0;
+  border: 0;
   border-radius: 8px;
   background: linear-gradient(90deg, $color-gradient-start 0%, $color-gradient-mid 55%, $color-gradient-end 100%);
   color: $color-surface;
+  font-family: $font-family-base;
   font-size: 16px;
   font-weight: 500;
+  cursor: pointer;
 }
 
 .booking-panel-cta-inert {

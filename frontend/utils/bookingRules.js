@@ -27,6 +27,34 @@ export function isDefinedSlotsListing(listing) {
   return listing?.bookingModel === 'PER_SLOT' && listing?.slotSubmode === 'DEFINED_SLOTS'
 }
 
+// T117: a day booking (Po danu) has no gap after it, the pickup and return
+// times do that job (Tamara, 2026-10-09).
+export function isDayStay(listing) {
+  return listing?.bookingModel === 'PER_STAY' && listing?.priceUnit === 'DAY'
+}
+
+// T117: vehicles and machines are picked up and returned; the wizard asks for
+// both times and the listing names the two days that way.
+const PICKUP_RETURN_CATEGORY_SLUGS = ['putnicka-vozila', 'dostavna-vozila', 'gradjevinske-masine']
+
+export function usesPickupAndReturn(listing) {
+  return PICKUP_RETURN_CATEGORY_SLUGS.includes(listing?.category?.slug)
+}
+
+// T36/T37: rented as a whole, so no step asks how many guests come (T125).
+const NO_GUEST_COUNT_CATEGORY_SLUGS = ['putnicka-vozila', 'dostavna-vozila', 'gradjevinske-masine', 'magacini-i-skladista']
+
+export function asksGuestCount(listing) {
+  return !NO_GUEST_COUNT_CATEGORY_SLUGS.includes(listing?.category?.slug)
+}
+
+// T125: the listing's booking card asks for guests only where they shape the
+// stay or the price: a stay (Nekretnine, every model) and a price per guest.
+// Everywhere else the request page asks for them.
+export function hasGuestPill(listing) {
+  return asksGuestCount(listing) && (listing?.guestUnit === 'people' || listing?.priceUnit === 'GUEST')
+}
+
 // Working hours are booked by the hour, also when the price is per guest.
 export function getDurationUnit(listing) {
   return listing?.bookingModel === 'PER_SLOT' && !isDefinedSlotsListing(listing) ? 'HOUR' : listing?.priceUnit

@@ -41,6 +41,22 @@ export function belgradeDayStart(year: number, month: number, day: number): Date
 }
 
 /**
+ * T127: the instant a Belgrade wall-clock time ("16:00", as WorkingHours keeps
+ * it) names on a Belgrade calendar day, `day` being that day's UTC midnight
+ * as toBelgradeDateOnly returns it. The frontend's belgradeInstant reads the
+ * same time the same way.
+ */
+export function belgradeWallClock(day: Date, hhmm: string): Date {
+  const [hours, minutes] = hhmm.split(':').map(Number);
+  const wall = Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate(), hours, minutes);
+  for (const offsetHours of [2, 1]) {
+    const candidate = new Date(wall - offsetHours * 3_600_000);
+    if (toBelgradeHHMM(candidate) === hhmm && toBelgradeDateOnly(candidate).getTime() === day.getTime()) return candidate;
+  }
+  return new Date(wall - 3_600_000);
+}
+
+/**
  * The last instant of the Belgrade calendar day `days` days after the one
  * `from` falls on, so a window "until 29. 9." holds for all of that day.
  */

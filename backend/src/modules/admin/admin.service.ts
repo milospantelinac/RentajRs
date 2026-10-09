@@ -144,13 +144,17 @@ export class AdminService {
     const booking = await this.prisma.booking.findUnique({
       where: { id: bookingId },
       include: {
-        listing: { select: { title: true, slug: true } },
+        listing: { select: { title: true, slug: true, categoryId: true } },
         guest: { select: { firstName: true, lastName: true, email: true } },
         owner: { select: { firstName: true, lastName: true, email: true } },
       },
     });
     if (!booking) throw new NotFoundException();
     return {
+      // T127: how many came, a playroom's children and adults apart.
+      guestCount: booking.guestCount,
+      adultCount: booking.adultCount,
+      guestUnit: await this.bookings.getGuestUnit(booking.listing.categoryId),
       id: booking.id,
       status: booking.status,
       startsAt: booking.startsAt,

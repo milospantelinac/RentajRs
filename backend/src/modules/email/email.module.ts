@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { CommonEmailModule } from '../../common/email/email.module';
+import { TaxonomyModule } from '../taxonomy/taxonomy.module';
 import { AccountEmailListener } from './listeners/account-email.listener';
 import { ListingEmailListener } from './listeners/listing-email.listener';
 import { BookingEmailListener } from './listeners/booking-email.listener';
@@ -17,10 +18,12 @@ import { MessagingEmailListener } from './listeners/messaging-email.listener';
  * Listeners talk to PrismaService directly rather than injecting the
  * emitting feature's service, so this module never needs to import
  * BookingsModule/ListingsModule/etc. — same decoupling reason those modules
- * use EventEmitter2 instead of forwardRef() with each other.
+ * use EventEmitter2 instead of forwardRef() with each other. The taxonomy is
+ * the exception: it only reads (and caches) categories, and the booking
+ * request email names a playroom's children by it (T127).
  */
 @Module({
-  imports: [PrismaModule, CommonEmailModule],
+  imports: [PrismaModule, CommonEmailModule, TaxonomyModule],
   providers: [
     AccountEmailListener,
     ListingEmailListener,

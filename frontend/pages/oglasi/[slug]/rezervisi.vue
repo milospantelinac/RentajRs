@@ -52,6 +52,7 @@
               :initial-start="handedStart"
               :initial-end="handedEnd"
               :show-pricing="false"
+              :pickup-return="pickupReturn"
               :price-unit="listing.priceUnit"
               :min-duration="listing.minDuration"
               :max-duration="listing.maxDuration"
@@ -83,25 +84,31 @@
                     id="request-start-time"
                     v-model="slotStartTime"
                     class="request-select-control"
-                    :disabled="!dayTimeOptions.length"
+                    :disabled="!hourStarts.length"
                   >
                     <option value="" disabled>{{ t('bookingForm.startTimePlaceholder') }}</option>
-                    <option v-for="time in dayTimeOptions" :key="time" :value="time">{{ time }}</option>
+                    <option v-for="time in hourStarts" :key="time" :value="time">{{ time }}</option>
                   </select>
                   <img src="/images/icons/chevron-down-18.svg" alt="" />
                 </span>
-                <p v-if="!dayTimeOptions.length" class="request-hint">{{ t('booking.noWorkingHoursForDay') }}</p>
+                <p v-if="!hourStarts.length" class="request-hint">{{ t('booking.noWorkingHoursForDay') }}</p>
               </div>
               <div class="request-field">
                 <label class="request-label" for="request-duration">{{ t('bookingForm.duration') }}</label>
                 <span class="request-select">
-                  <select id="request-duration" v-model.number="slotDurationHours" class="request-select-control">
+                  <select
+                    id="request-duration"
+                    v-model.number="slotDurationHours"
+                    class="request-select-control"
+                    :disabled="!durationSelectOptions.length"
+                  >
                     <option v-for="option in durationSelectOptions" :key="option.value" :value="option.value">
                       {{ option.label }}
                     </option>
                   </select>
                   <img src="/images/icons/chevron-down-18.svg" alt="" />
                 </span>
+                <p v-if="slotStartTime" class="request-hint">{{ closingHint }}</p>
               </div>
             </div>
 
@@ -120,9 +127,11 @@
             </p>
           </section>
 
-          <!-- 375:406 -->
-          <div class="request-row">
-            <div class="request-field">
+          <!-- 375:406. T127: a playroom's adults sit next to its children and
+               the payment moves under them; T125: a vehicle, a machine or a
+               warehouse asks for no guests at all. -->
+          <div class="request-grid">
+            <div v-if="askGuests" class="request-field">
               <label class="request-label" for="request-guests">{{ guestLabel }}</label>
               <div class="request-stepper" :class="{ 'is-invalid': guestErrorShown }">
                 <input
@@ -163,6 +172,45 @@
                 <img src="/images/icons/field-error.svg" alt="" />{{ guestError }}
               </p>
               <p v-else-if="guestHint" :id="guestNoteId" class="request-hint">{{ guestHint }}</p>
+            </div>
+
+            <div v-if="askAdults" class="request-field">
+              <label class="request-label" for="request-adults">{{ t('bookingForm.adultsCount') }}</label>
+              <div class="request-stepper">
+                <input
+                  id="request-adults"
+                  v-model="adultInput"
+                  class="request-stepper-input"
+                  type="text"
+                  inputmode="numeric"
+                  autocomplete="off"
+                  maxlength="4"
+                  :aria-describedby="adultNoteId"
+                  @input="onAdultInput"
+                  @blur="onAdultBlur"
+                />
+                <span class="request-stepper-buttons">
+                  <button
+                    type="button"
+                    class="request-stepper-button"
+                    :disabled="adultCount <= 0"
+                    :aria-label="t('booking.adultCountDecrease')"
+                    @click="stepAdults(-1)"
+                  >
+                    &minus;
+                  </button>
+                  <button
+                    type="button"
+                    class="request-stepper-button"
+                    :disabled="adultCount >= 9999"
+                    :aria-label="t('booking.adultCountIncrease')"
+                    @click="stepAdults(1)"
+                  >
+                    +
+                  </button>
+                </span>
+              </div>
+              <p :id="adultNoteId" class="request-hint">{{ t('bookingForm.adultsHint') }}</p>
             </div>
 
             <div class="request-field">
@@ -257,9 +305,13 @@
                 <span class="request-bill-label">{{ t('bookingForm.term') }}</span>
                 <span class="request-bill-value">{{ termValue }}</span>
               </p>
-              <p class="request-bill-row">
+              <p v-if="askGuests" class="request-bill-row">
                 <span class="request-bill-label">{{ guestLabel }}</span>
                 <span class="request-bill-value">{{ guestValue }}</span>
+              </p>
+              <p v-if="askAdults" class="request-bill-row">
+                <span class="request-bill-label">{{ t('bookingForm.adultsCount') }}</span>
+                <span class="request-bill-value">{{ adultCount }}</span>
               </p>
               <p v-for="row in priceRows" :key="row.key" class="request-bill-row">
                 <span class="request-bill-label">{{ row.label }}</span>
@@ -336,6 +388,8 @@ if (listing.value && (listing.value.bookingModel === 'NO_BOOKING' || !listing.va
 }
 
 const model = computed(() => getRequestModel(listing.value))
+// T117: a vehicle or a machine is picked up and returned.
+const pickupReturn = computed(() => usesPickupAndReturn(listing.value))
 
 // T86 — the server already refuses this (errors.CANNOT_BOOK_OWN_LISTING),
 // but the form let an owner fill the whole thing in first and only found out
@@ -430,58 +484,51 @@ async function changeTerm() {
 // PER_SLOT + WORKING_HOURS: a picked date's day of the week gates which start
 // times are offered, straight from the owner's configured hours (T74).
 const workingHours = computed(() => availability.value?.workingHours || [])
-const blocked = computed(() => availability.value?.blocked || [])
 const availableDaysOfWeek = computed(() =>
   workingHours.value.length ? [...new Set(workingHours.value.map((h) => h.dayOfWeek))] : null,
 )
 const slotStartTime = ref(/^\d{2}:\d{2}$/.test(queryString(route.query.startTime)) ? route.query.startTime : '')
-// Dizajn 23: whole hours between the listing's minimum and maximum, starting from
-// the length the listing page's booking card priced.
-const durationOptions = computed(() => getHourlyDurationOptions(listing.value))
-const slotDurationHours = ref(
-  durationOptions.value.includes(Number(route.query.hours)) ? Number(route.query.hours) : durationOptions.value[0],
+// Dizajn 23: whole hours from the listing's minimum, starting from the length
+// the listing page's booking card priced.
+const slotDurationHours = ref(Number(route.query.hours) || listing.value?.minDuration || 1)
+
+// T127: starts on the hour where the shortest term fits before closing (T74:
+// and runs into nothing taken; Dizajn 23: inside the notice and the horizon),
+// lengths up to closing or the next taken term (Tamara, 2026-10-09).
+const hourStarts = computed(() =>
+  model.value === 'hours' && listing.value ? getHourStarts(listing.value, availability.value, form.startsAt, now.value) : [],
+)
+const hourLengths = computed(() =>
+  model.value === 'hours' && listing.value
+    ? getHourLengths(listing.value, availability.value, form.startsAt, slotStartTime.value)
+    : [],
 )
 const durationSelectOptions = computed(() =>
-  durationOptions.value.map((hours) => ({ value: hours, label: formatUnits(t, {}, 'HOUR', hours) })),
+  hourLengths.value.map((hours) => ({ value: hours, label: formatUnits(t, {}, 'HOUR', hours) })),
 )
-
-function overlapsBlocked(from, to) {
-  return blocked.value.some((b) => new Date(b.startsAt) < to && new Date(b.endsAt) > from)
-}
-
-const dayTimeOptions = computed(() => {
-  if (!form.startsAt) return []
-  const dayOfWeek = isoWeekdayOfKey(form.startsAt)
-  const times = []
-  for (const range of workingHours.value.filter((h) => h.dayOfWeek === dayOfWeek)) {
-    const [sh, sm] = range.startsAt.split(':').map(Number)
-    const [eh, em] = range.endsAt.split(':').map(Number)
-    const startTotal = sh * 60 + sm
-    let endTotal = eh * 60 + em
-    // T104: "do" <= "od" means the window crosses midnight; a start time is
-    // still only offered on the day the owner configured.
-    if (endTotal <= startTotal) endTotal += 24 * 60
-    for (let minute = startTotal; minute < Math.min(endTotal, 24 * 60); minute += 60) {
-      times.push(`${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`)
-    }
-  }
-  // T74: never a start whose term would collide with a booking or a block;
-  // Dizajn 23: nor one inside the notice or past the horizon.
-  return times.filter((time) => {
-    const from = belgradeInstant(form.startsAt, time)
-    const to = new Date(from.getTime() + slotDurationHours.value * 3_600_000)
-    return isStartWithinRules(listing.value, from, now.value) && !overlapsBlocked(from, to)
-  })
-})
-// T74: a length change can take the picked start time out of the list, and a
-// time handed over from the listing page may not be free (any more).
+// A time handed over from the listing page may not be free (any more).
 watch(
-  dayTimeOptions,
+  hourStarts,
   (times) => {
     if (slotStartTime.value && !times.includes(slotStartTime.value)) slotStartTime.value = ''
   },
   { immediate: true },
 )
+// A later start can't hold as long a term: the length steps down with it.
+watch(
+  hourLengths,
+  (lengths) => {
+    slotDurationHours.value = keepHourLength(lengths, slotDurationHours.value)
+  },
+  { immediate: true },
+)
+// "Termin može da traje najduže do 20:00."
+const closingHint = computed(() => {
+  const longest = hourLengths.value[hourLengths.value.length - 1]
+  return slotStartTime.value && longest
+    ? t('bookingForm.latestEnd', { time: formatHoursRange(slotStartTime.value, longest).split(' - ')[1] })
+    : ''
+})
 
 const hoursRange = computed(() => {
   if (model.value !== 'hours' || !form.startsAt || !slotStartTime.value) return null
@@ -540,8 +587,11 @@ const extrasLabelId = useId()
 
 const guestLabel = computed(() => getGuestLabel(t, listing.value))
 const guestHint = computed(() => formatGuestLimit(t, listing.value, guestCap.value))
+// T125: a vehicle, a machine or a warehouse is rented whole, with no guests.
+const askGuests = computed(() => asksGuestCount(listing.value))
 const overCap = computed(() => guestCap.value !== null && guestCount.value > guestCap.value)
 const guestError = computed(() => {
+  if (!askGuests.value) return ''
   if (overCap.value) return guestHint.value
   if (guestCount.value < minGuests.value) return formatGuestMinimum(t, listing.value, minGuests.value)
   return ''
@@ -558,6 +608,24 @@ function onGuestInput() {
 }
 function stepGuests(delta) {
   guestInput.value = String(Math.min(Math.max(guestCount.value + delta, minGuests.value), guestCap.value ?? Infinity))
+  error.value = ''
+}
+
+// T127: the adults coming with the children to a playroom, 1 to start with,
+// from 0 and without a limit; the owner's information, never in the price.
+const askAdults = computed(() => asksAdults(listing.value))
+const adultInput = ref('1')
+const adultCount = computed(() => (/^\d+$/.test(adultInput.value) ? Number(adultInput.value) : 0))
+const adultNoteId = useId()
+function onAdultInput() {
+  adultInput.value = adultInput.value.replace(/\D/g, '').slice(0, 4)
+  error.value = ''
+}
+function onAdultBlur() {
+  adultInput.value = String(adultCount.value)
+}
+function stepAdults(delta) {
+  adultInput.value = String(Math.min(Math.max(adultCount.value + delta, 0), 9999))
   error.value = ''
 }
 
@@ -620,7 +688,7 @@ const coverUrl = computed(() => {
 // price shown is never computed for a different term than the one sent.
 function buildTermPayload() {
   const base = {
-    guestCount: quoteGuests.value,
+    guestCount: askGuests.value ? quoteGuests.value : undefined,
     extraServices: form.extraServices.length ? form.extraServices : undefined,
   }
   if (model.value === 'slots') return selectedSlot.value ? { ...base, definedSlotId: selectedSlot.value.id } : null
@@ -663,7 +731,9 @@ async function submit() {
   error.value = ''
   guestTouched.value = true
   const payload = buildTermPayload()
-  errors.term = payload || stayTooShort.value || monthBlocked.value ? '' : t(`bookingForm.termRequired.${model.value}`)
+  // T117: a vehicle or a machine asks for its pickup and return days.
+  const termKind = model.value === 'stay' && pickupReturn.value ? 'pickup' : model.value
+  errors.term = payload || stayTooShort.value || monthBlocked.value ? '' : t(`bookingForm.termRequired.${termKind}`)
   errors.payment = flow.value.accepts === 'BOTH' && !form.paymentMethod ? t('bookingForm.paymentRequired') : ''
   if (!payload || errors.payment || guestError.value) {
     await nextTick()
@@ -674,7 +744,8 @@ async function submit() {
   try {
     const booking = await api.post(`/listings/${listing.value.id}/bookings`, {
       ...payload,
-      guestCount: guestCount.value,
+      guestCount: askGuests.value ? guestCount.value : undefined,
+      adultCount: askAdults.value ? adultCount.value : undefined,
       // T76: a listing that takes both methods books the one the guest picked.
       paymentMethod: flow.value.accepts === 'BOTH' ? form.paymentMethod : undefined,
       guestMessage: form.guestMessage.trim() || undefined,
@@ -843,6 +914,16 @@ $request-danger-border: #f43f5e;
   flex-direction: column;
   gap: 10px;
   min-width: 0;
+}
+
+// The guests and the payment (375:406), two columns 20 apart. T127: a
+// playroom's adults take the payment's place and it goes a row down, still
+// one column wide.
+.request-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 22px 20px;
 }
 
 // 375:409: 54 tall, 18 in on the left, the steppers 12 from the right.
@@ -1412,6 +1493,10 @@ $request-danger-border: #f43f5e;
 
   .request-row .request-field {
     flex: none;
+  }
+
+  .request-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .request-term-box {

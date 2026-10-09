@@ -10,7 +10,7 @@ import { parseIcs, buildIcsCalendar, icalSourceName, isIcsCalendar, normalizeIca
 import { ICAL_FAILURE_ALERT_THRESHOLD, getIcalAvailability } from '../../common/utils/ical-availability';
 import { NonPublicAddressError, fetchUserUrl } from '../../common/utils/outbound-fetch';
 import { paraToRsd, rsdToPara } from '../../common/utils/money';
-import { toBelgradeDateOnly, toBelgradeHHMM, toBelgradeISODayOfWeek } from '../../common/utils/timezone';
+import { belgradeWallClock, toBelgradeDateOnly, toBelgradeHHMM, toBelgradeISODayOfWeek } from '../../common/utils/timezone';
 import {
   SetWorkingHoursDto,
   CreateDefinedSlotDto,
@@ -334,12 +334,8 @@ export class AvailabilityService {
   }
 
   /**
-   * Resolves the actual price for one hourly booking: a date+time-specific
-   * SlotPriceOverride wins, then whichever HourlyPriceRange's window
-   * contains the booking's start time, then the weekend price when the
-   * booking starts on a Friday or Saturday, else the listing's flat base price.
-   * Compares HH:MM strings lexically, which is safe since they're always
-   * zero-padded 24h (matches the /^([01]\d|2[0-3]):[0-5]\d$/ DTO pattern).
+   * Resolves the price one working-hours booking starts at (a booking priced
+   * per guest pays it per guest, T111). The rules are pickHourlyPrice's.
    */
   async resolveHourlyPrice(
     listingId: string,
@@ -353,26 +349,61 @@ export class AvailabilityService {
     // UTC day), missing a same-day SlotPriceOverride; SlotPriceOverride.date
     // is itself a Belgrade calendar day, so both sides need the same zone.
     const dateOnly = toBelgradeDateOnly(date);
-    const override = await this.prisma.slotPriceOverride.findFirst({
-      where: { listingId, date: dateOnly, startTime: { lte: startTime }, endTime: { gt: startTime } },
-    });
-    if (override) return { price: override.price, kind: 'SPECIAL' };
+    const { overrides, ranges } = await this.loadHourlyPriceRules(listingId, dateOnly);
+    return pickHourlyPrice(overrides, ranges, toBelgradeISODayOfWeek(date), startTime, basePrice, weekendPrice);
+  }
 
-    // T104 — per-day mode stores each range with its own dayOfWeek; a
-    // day-specific match wins over a shared (dayOfWeek: null) one covering
-    // the same window, though in practice a listing only ever has one kind
-    // of range at a time (the editor doesn't mix modes).
-    const dayOfWeek = toBelgradeISODayOfWeek(date);
-    const ranges = await this.prisma.hourlyPriceRange.findMany({ where: { listingId } });
-    const daySpecific = ranges.find((r) => r.dayOfWeek === dayOfWeek && r.startTime <= startTime && r.endTime > startTime);
-    if (daySpecific) return { price: daySpecific.price, kind: 'RANGE' };
-    const shared = ranges.find((r) => r.dayOfWeek === null && r.startTime <= startTime && r.endTime > startTime);
-    if (shared) return { price: shared.price, kind: 'RANGE' };
+  /**
+   * T127: the price of each hour of a working-hours booking, so a term that
+   * runs from one part of the working hours into another pays each hour at
+   * its own rate (it used to pay every hour at the start's). All hours count
+   * to the day the term starts on: a Saturday evening that runs past
+   * midnight keeps Saturday's ranges, special prices and weekend price.
+   */
+  async getWorkingHoursPrices(
+    listingId: string,
+    startsAt: Date,
+    endsAt: Date,
+    basePrice: bigint,
+    weekendPrice: bigint | null,
+  ): Promise<PricedUnit[]> {
+    const dateOnly = toBelgradeDateOnly(startsAt);
+    const dayOfWeek = toBelgradeISODayOfWeek(startsAt);
+    const { overrides, ranges } = await this.loadHourlyPriceRules(listingId, dateOnly);
+    const prices: PricedUnit[] = [];
+    for (let time = startsAt.getTime(); time < endsAt.getTime(); time += 3600_000) {
+      prices.push(pickHourlyPrice(overrides, ranges, dayOfWeek, toBelgradeHHMM(new Date(time)), basePrice, weekendPrice));
+    }
+    return prices;
+  }
 
-    // Dizajn 21: the wizard's "Cena za vikend" covers hourly listings too, on
-    // the same Friday and Saturday as a stay's weekend nights (ISO 5 and 6).
-    const isWeekend = dayOfWeek === 5 || dayOfWeek === 6;
-    return isWeekend && weekendPrice ? { price: weekendPrice, kind: 'WEEKEND' } : { price: basePrice, kind: 'BASE' };
+  private async loadHourlyPriceRules(listingId: string, dateOnly: Date) {
+    const [overrides, ranges] = await Promise.all([
+      this.prisma.slotPriceOverride.findMany({ where: { listingId, date: dateOnly } }),
+      this.prisma.hourlyPriceRange.findMany({ where: { listingId } }),
+    ]);
+    return { overrides, ranges };
+  }
+
+  /**
+   * T127: whether a term lies inside one of the listing's working-hour
+   * windows, in Belgrade time. A window that ends at or before it opens runs
+   * past midnight (T104), so the day before the term's start counts too.
+   */
+  async fitsWorkingHours(listingId: string, startsAt: Date, endsAt: Date): Promise<boolean> {
+    const rows = await this.prisma.workingHours.findMany({ where: { listingId } });
+    const startDay = toBelgradeDateOnly(startsAt);
+    for (const dayOffset of [0, -1]) {
+      const day = new Date(startDay.getTime() + dayOffset * 86_400_000);
+      const dayOfWeek = ((day.getUTCDay() + 6) % 7) + 1;
+      for (const row of rows.filter((r) => r.dayOfWeek === dayOfWeek)) {
+        const closingDay = row.endsAt <= row.startsAt ? new Date(day.getTime() + 86_400_000) : day;
+        const opens = belgradeWallClock(day, row.startsAt);
+        const closes = belgradeWallClock(closingDay, row.endsAt);
+        if (opens <= startsAt && endsAt <= closes) return true;
+      }
+    }
+    return false;
   }
 
   /** Per-night price for a PER_STAY booking spanning [startsAt, endsAt) — override where set, weekend/base price otherwise. */
@@ -641,6 +672,41 @@ export class AvailabilityService {
     if (listing.userId !== userId) throw new ForbiddenException();
     return listing;
   }
+}
+
+/**
+ * Whether an HH:MM window covers a clock time. A window that ends at or
+ * before its start runs past midnight, as working hours do (T104); before
+ * T127 such a price range or special price never matched any hour.
+ */
+function coversTime(startTime: string, endTime: string, time: string): boolean {
+  return startTime < endTime ? startTime <= time && time < endTime : time >= startTime || time < endTime;
+}
+
+/**
+ * The price of one working-hours hour: the date's special price for that
+ * time, then the price for that part of the working hours (a range of that
+ * weekday before one of every day, T104), then the weekend price on a Friday
+ * or Saturday (Dizajn 21, the hourly rate only), else the base price. HH:MM
+ * strings compare lexically, which is safe since they're always zero-padded
+ * 24h (the DTO pattern /^([01]\d|2[0-3]):[0-5]\d$/).
+ */
+function pickHourlyPrice(
+  overrides: Array<{ startTime: string; endTime: string; price: bigint }>,
+  ranges: Array<{ dayOfWeek: number | null; startTime: string; endTime: string; price: bigint }>,
+  dayOfWeek: number,
+  time: string,
+  basePrice: bigint,
+  weekendPrice: bigint | null,
+): PricedUnit {
+  const override = overrides.find((o) => coversTime(o.startTime, o.endTime, time));
+  if (override) return { price: override.price, kind: 'SPECIAL' };
+  const daySpecific = ranges.find((r) => r.dayOfWeek === dayOfWeek && coversTime(r.startTime, r.endTime, time));
+  if (daySpecific) return { price: daySpecific.price, kind: 'RANGE' };
+  const shared = ranges.find((r) => r.dayOfWeek === null && coversTime(r.startTime, r.endTime, time));
+  if (shared) return { price: shared.price, kind: 'RANGE' };
+  const isWeekend = dayOfWeek === 5 || dayOfWeek === 6;
+  return isWeekend && weekendPrice ? { price: weekendPrice, kind: 'WEEKEND' } : { price: basePrice, kind: 'BASE' };
 }
 
 /** A date's own price first, then the weekend price on a Friday or Saturday, then the base price. */

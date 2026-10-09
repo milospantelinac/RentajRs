@@ -59,13 +59,15 @@
     <p v-if="!isRequest" class="range-picker-summary">
       <template v-if="singleDate">
         <template v-if="rangeStart">{{ formatDate(rangeStart) }}</template>
-        <template v-else>{{ t('booking.rangePickerPickStart') }}</template>
+        <template v-else>{{ t('booking.rangePickerPickDate') }}</template>
       </template>
       <template v-else-if="rangeStart && rangeEnd">
         {{ formatDate(rangeStart) }} → {{ formatDate(rangeEnd) }} · {{ nightCount }} {{ nightsLabel }}
       </template>
-      <template v-else-if="rangeStart">{{ t('booking.rangePickerPickEnd') }}</template>
-      <template v-else>{{ t('booking.rangePickerPickStart') }}</template>
+      <template v-else-if="rangeStart">
+        {{ t(pickupReturn ? 'booking.rangePickerPickReturn' : 'booking.rangePickerPickEnd') }}
+      </template>
+      <template v-else>{{ t(pickupReturn ? 'booking.rangePickerPickPickup' : 'booking.rangePickerPickStart') }}</template>
     </p>
     <p v-if="minDurationViolation && !isRequest" class="form-error range-picker-error mb-0 mt-1">{{ minDurationMessage }}</p>
   </div>
@@ -115,6 +117,8 @@ const props = defineProps({
   // panel with white free days and arrow buttons; the page itself names the
   // chosen dates and a stay that is too short.
   variant: { type: String, default: 'default' },
+  // T117: a vehicle or a machine is picked up and returned, not arrived at and left.
+  pickupReturn: { type: Boolean, default: false },
 })
 
 // `select` reports the dates as picked, also a stay still too short, which
@@ -206,6 +210,14 @@ function hasBlockedDateBetween(start, end) {
   return false
 }
 
+// T117: a taken day after the chosen first day, with every day before it
+// free, can close the range (it is the picked last day, or one to pick).
+function canEndOn(date) {
+  if (props.singleDate || !rangeStart.value || date <= rangeStart.value) return false
+  if (rangeEnd.value && date.getTime() !== rangeEnd.value.getTime()) return false
+  return !hasBlockedDateBetween(rangeStart.value, date)
+}
+
 function buildMonth(monthDate) {
   const year = monthDate.getFullYear()
   const month = monthDate.getMonth()
@@ -221,7 +233,10 @@ function buildMonth(monthDate) {
     const afterHorizon = props.singleDate
       ? !!maxSelectableDate.value && date > maxSelectableDate.value
       : stayStartsTooLate(date)
-    const blocked = props.wholeDayBlocking && isBlocked(date)
+    // T117: the day another booking starts can still be the last day of this
+    // one (a stay's checkout, a vehicle's return), as long as no taken day
+    // lies between, the way the server's [) terms already allow it.
+    const blocked = props.wholeDayBlocking && isBlocked(date) && !canEndOn(date)
     const dayOfWeek = ((date.getDay() + 6) % 7) + 1 // ISO Monday=1
     const dayUnavailable = !!props.availableDaysOfWeek && !props.availableDaysOfWeek.includes(dayOfWeek)
     const exceedsMaxFromStart =
@@ -282,7 +297,12 @@ const nightCount = computed(() => {
   if (!rangeStart.value || !rangeEnd.value) return 0
   return Math.round((rangeEnd.value.getTime() - rangeStart.value.getTime()) / 86400000)
 })
-const nightsLabel = computed(() => t(`booking.rangePickerNights${srPluralCategory(nightCount.value)}`))
+// T117: a day booking counts days (7. to 8. is 1 dan), a stay its nights.
+const nightsLabel = computed(() =>
+  props.priceUnit === 'DAY'
+    ? srDurationUnitWord('DAY', nightCount.value)
+    : t(`booking.rangePickerNights${srPluralCategory(nightCount.value)}`),
+)
 
 // T86 — max duration is enforced by disabling the dates that would exceed it
 // (see buildMonth above); min duration can't be enforced that way (any next
@@ -302,18 +322,23 @@ function selectDate(cell) {
     rangeEnd.value = null
     return
   }
+  // T117: a taken day can close a range but never open one.
+  const taken = props.wholeDayBlocking && isBlocked(cell.date)
   if (!rangeStart.value || (rangeStart.value && rangeEnd.value)) {
+    if (taken) return
     rangeStart.value = cell.date
     rangeEnd.value = null
     return
   }
   // Picking a second date before the first flips them instead of erroring.
   if (cell.date <= rangeStart.value) {
+    if (taken) return
     rangeStart.value = cell.date
     return
   }
   if (hasBlockedDateBetween(rangeStart.value, cell.date)) {
     // Can't span a blocked date — restart the selection from this date.
+    if (taken) return
     rangeStart.value = cell.date
     rangeEnd.value = null
     return
