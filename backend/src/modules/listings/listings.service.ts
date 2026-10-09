@@ -26,6 +26,7 @@ import {
 } from '../../common/utils/booking-models';
 import { rsdToPara, paraToRsd } from '../../common/utils/money';
 import { normalizeBankAccount } from '../../common/utils/ips-qr';
+import { maskPhone } from '../../common/utils/phone-mask';
 import { DAY_MS } from '../../common/utils/subscription-renewal';
 import { CreateListingDto } from './dto/create-listing.dto';
 import { UpdateListingDto } from './dto/update-listing.dto';
@@ -775,6 +776,30 @@ export class ListingsService {
   }
 
   /**
+   * T134: "Prikaži broj" on a live listing whose package has no messaging
+   * (Basic), the only listings whose page offers the phone at all. The
+   * controller limits how often one visitor may ask.
+   */
+  async revealOwnerPhone(slug: string) {
+    const listing = await this.prisma.listing.findUnique({
+      where: { slug },
+      select: {
+        status: true,
+        user: { select: { phone: true } },
+        subscription: { select: { package: { select: { hasMessaging: true } } } },
+      },
+    });
+    if (!listing || listing.status !== ListingStatus.ACTIVE) {
+      throw new NotFoundException(this.i18n.t('errors.LISTING_NOT_FOUND'));
+    }
+    const phone = listing.user.phone?.trim();
+    if (listing.subscription?.package?.hasMessaging || !phone) {
+      throw new NotFoundException(this.i18n.t('errors.OWNER_PHONE_NOT_AVAILABLE'));
+    }
+    return { phone };
+  }
+
+  /**
    * RNT-031 — the review step's checklist told an owner everything was ready
    * without ever showing what a guest would actually see; this reuses the
    * exact same display shape as the public page (ownership-gated instead of
@@ -834,7 +859,9 @@ export class ListingsService {
     // internal messaging (Osnovni/BASIC has neither). The guest-facing page
     // must know this up front so it never offers a CTA the backend will
     // reject; when neither is available, the owner's phone becomes the
-    // contact point, so it's only exposed in that fallback case.
+    // contact point, so it's only offered in that fallback case. T134: the
+    // page gets it masked ("062 *** ***"), the number itself only comes from
+    // revealOwnerPhone when a visitor asks for it.
     const canBook = listing.subscription?.package?.hasBookings ?? false;
     const canMessage = listing.subscription?.package?.hasMessaging ?? false;
     // The page names the owner "Marko P." (T80: the full name comes with a
@@ -869,7 +896,7 @@ export class ListingsService {
       owner: {
         ...ownerRest,
         lastInitial: lastName?.trim().charAt(0) || null,
-        phone: canMessage ? undefined : phone,
+        phoneMasked: !canMessage && phone ? maskPhone(phone) : undefined,
         listingCount: ownerListingCount,
       },
       attributes: attributes.map((a: any) => ({ ...a, value: valueMap.get(a.id) ?? null })),

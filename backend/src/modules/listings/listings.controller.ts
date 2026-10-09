@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   Param,
   Patch,
   Post,
@@ -11,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { ListingsService } from './listings.service';
 import { CreateListingDto } from './dto/create-listing.dto';
 import { UpdateListingDto } from './dto/update-listing.dto';
@@ -138,6 +140,16 @@ export class ListingsController {
   @Get('listings/public/:slug')
   getPublic(@Param('slug') slug: string) {
     return this.listingsService.getPublicBySlug(slug);
+  }
+
+  // T134: "Prikaži broj", 10 a minute per visitor across every listing, so
+  // the numbers can't be collected in bulk; never kept by a cache.
+  @Public()
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Header('Cache-Control', 'no-store')
+  @Get('listings/public/:slug/phone')
+  revealOwnerPhone(@Param('slug') slug: string) {
+    return this.listingsService.revealOwnerPhone(slug);
   }
 
   // -- Admin -----------------------------------------------------------

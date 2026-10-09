@@ -293,9 +293,23 @@
                 {{ t('listing.sendMessageAction') }}
               </NuxtLink>
               <p v-if="listing.canMessage" class="listing-fine-print">{{ t('listing.phoneAfterConfirmation') }}</p>
-              <a v-else-if="listing.owner?.phone" :href="`tel:${listing.owner.phone}`" class="listing-ghost-btn listing-ghost-btn-wide">
-                {{ t('listing.callOwner') }}: {{ listing.owner.phone }}
-              </a>
+              <!-- T134: the page has the number masked; the whole one comes on "Prikaži broj". -->
+              <template v-else-if="listing.owner?.phoneMasked">
+                <a v-if="ownerPhone" :href="ownerPhoneHref" class="listing-ghost-btn listing-ghost-btn-wide">
+                  {{ t('listing.callOwner') }}: {{ ownerPhone }}
+                </a>
+                <button
+                  v-else
+                  type="button"
+                  class="listing-ghost-btn listing-ghost-btn-wide"
+                  :disabled="preview || revealingPhone"
+                  @click="revealPhone"
+                >
+                  {{ listing.owner.phoneMasked }}
+                  <span class="listing-phone-action">{{ t('listing.showPhone') }}</span>
+                </button>
+                <p v-if="phoneError" class="listing-fine-print listing-phone-error">{{ phoneError }}</p>
+              </template>
             </div>
           </section>
         </div>
@@ -359,6 +373,13 @@ const { t, locale } = useI18n()
 const api = useApi()
 const auth = useAuthStore()
 const favoritesStore = useFavoritesStore()
+const {
+  phone: ownerPhone,
+  telHref: ownerPhoneHref,
+  revealing: revealingPhone,
+  error: phoneError,
+  reveal: revealPhone,
+} = useOwnerPhone(props.listing)
 
 // -- Header ---------------------------------------------------------------
 
@@ -736,6 +757,23 @@ onBeforeUnmount(() => window.removeEventListener('resize', measureDescription))
 .listing-ghost-btn-wide {
   align-self: flex-start;
   padding: 0 22px;
+}
+
+// T134: "062 *** ***  Prikaži broj", dimmed while the number loads and in the
+// owner's preview, where it does nothing.
+.listing-ghost-btn:disabled,
+.listing-ghost-btn:disabled:hover {
+  background: $color-background;
+  cursor: default;
+  opacity: 0.55;
+}
+
+.listing-phone-action {
+  color: $color-primary;
+}
+
+.listing-fine-print.listing-phone-error {
+  color: $color-error;
 }
 
 .listing-ghost-icon {

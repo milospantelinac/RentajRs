@@ -10,6 +10,7 @@
   "GOOGLE_ACCOUNT_EXISTS": "This account was registered via Google sign-in. Please use the Google button to log in",
   "CANNOT_BOOK_OWN_LISTING": "You cannot book your own listing",
   "LISTING_NOT_FOUND": "Listing not found",
+  "OWNER_PHONE_NOT_AVAILABLE": "This listing does not show the owner’s number",
   "LISTING_HAS_ACTIVE_BOOKINGS": "The listing can’t be deleted while it has open requests or bookings",
   "PAGE_NOT_FOUND": "Page not found",
   "LISTING_NOT_BOOKABLE": "This listing does not accept bookings",

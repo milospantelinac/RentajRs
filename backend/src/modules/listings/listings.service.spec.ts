@@ -339,7 +339,7 @@ describe('ListingsService#getPublicBySlug (found in Dizajn 39)', () => {
       avgResponseTimeMinutes: 30,
       verified: true,
       createdAt: owner.createdAt,
-      phone: undefined,
+      phoneMasked: undefined,
       listingCount: 3,
     });
     for (const field of ['user', 'address', 'icalExportToken', 'subscription', 'subscriptionId', 'wizardStep', 'viewCount', 'deletedAt', 'pendingCategoryAssignment']) {
@@ -349,9 +349,11 @@ describe('ListingsService#getPublicBySlug (found in Dizajn 39)', () => {
     expect(page).toMatchObject({ title: 'Igraonica', canBook: true, canMessage: true, price: 3500 });
   });
 
-  it('still gives the phone when the package has no messaging (R108)', async () => {
+  it('offers the phone masked when the package has no messaging, never the number (R108, T134)', async () => {
     const page: any = await setup(false).getPublicBySlug('igraonica');
-    expect(page.owner.phone).toBe('064 123 4567');
+    expect(page.owner.phoneMasked).toBe('064 *** ***');
+    expect(page.owner).not.toHaveProperty('phone');
+    expect(JSON.stringify(page)).not.toContain('123 4567');
     expect(page.canMessage).toBe(false);
   });
 
@@ -362,6 +364,41 @@ describe('ListingsService#getPublicBySlug (found in Dizajn 39)', () => {
 
     const plain: any = await setup(true).getPublicBySlug('igraonica');
     expect(plain.guestUnit).toBe('guests');
+  });
+});
+
+describe('ListingsService#revealOwnerPhone (T134)', () => {
+  function setup(row: Record<string, any> | null) {
+    const prisma = { listing: { findUnique: jest.fn().mockResolvedValue(row) } };
+    return { service: makeService(prisma), prisma };
+  }
+  const basic = {
+    status: 'ACTIVE',
+    user: { phone: ' 064 123 4567 ' },
+    subscription: { package: { hasMessaging: false } },
+  };
+
+  it('gives a live Basic listing’s number', async () => {
+    const { service, prisma } = setup(basic);
+    await expect(service.revealOwnerPhone('igraonica')).resolves.toEqual({ phone: '064 123 4567' });
+    expect(prisma.listing.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { slug: 'igraonica' } }));
+  });
+
+  it('gives nothing for a listing that is not live, or that is gone', async () => {
+    await expect(setup({ ...basic, status: 'PAUSED' }).service.revealOwnerPhone('igraonica')).rejects.toThrow(
+      'errors.LISTING_NOT_FOUND',
+    );
+    await expect(setup(null).service.revealOwnerPhone('igraonica')).rejects.toThrow('errors.LISTING_NOT_FOUND');
+  });
+
+  it('gives nothing when the package has messaging or the owner has no number', async () => {
+    const messaging = { ...basic, subscription: { package: { hasMessaging: true } } };
+    await expect(setup(messaging).service.revealOwnerPhone('igraonica')).rejects.toThrow(
+      'errors.OWNER_PHONE_NOT_AVAILABLE',
+    );
+    await expect(
+      setup({ ...basic, user: { phone: null } }).service.revealOwnerPhone('igraonica'),
+    ).rejects.toThrow('errors.OWNER_PHONE_NOT_AVAILABLE');
   });
 });
 

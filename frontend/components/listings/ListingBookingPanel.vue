@@ -266,9 +266,23 @@
     <NuxtLink v-else-if="listing.canMessage" :to="`/oglasi/${listing.slug}/poruka`" class="booking-panel-secondary">
       {{ t('listing.messageOwner') }}
     </NuxtLink>
-    <a v-else-if="listing.owner?.phone" :href="`tel:${listing.owner.phone}`" class="booking-panel-secondary">
-      {{ t('listing.callOwner') }}: {{ listing.owner.phone }}
-    </a>
+    <!-- T134: the page has the number masked; the whole one comes on "Prikaži broj". -->
+    <template v-else-if="listing.owner?.phoneMasked">
+      <a v-if="ownerPhone" :href="ownerPhoneHref" class="booking-panel-secondary">
+        {{ t('listing.callOwner') }}: {{ ownerPhone }}
+      </a>
+      <button
+        v-else
+        type="button"
+        class="booking-panel-secondary booking-panel-phone"
+        :disabled="revealingPhone"
+        @click="revealPhone"
+      >
+        {{ listing.owner.phoneMasked }}
+        <span class="booking-panel-phone-action">{{ t('listing.showPhone') }}</span>
+      </button>
+      <p v-if="phoneError" class="booking-panel-note booking-panel-phone-error">{{ phoneError }}</p>
+    </template>
   </div>
 </template>
 
@@ -288,6 +302,13 @@ const props = defineProps({
 
 const { t } = useI18n()
 const api = useApi()
+const {
+  phone: ownerPhone,
+  telHref: ownerPhoneHref,
+  revealing: revealingPhone,
+  error: phoneError,
+  reveal: revealPhone,
+} = useOwnerPhone(props.listing)
 
 const bookable = computed(() => props.listing.bookingModel !== 'NO_BOOKING' && props.listing.canBook)
 const isDefinedSlots = computed(
@@ -940,5 +961,28 @@ const requestLink = computed(() => {
   color: $color-text;
   font-size: 14px;
   font-weight: 500;
+}
+
+// T134: "062 *** ***  Prikaži broj" as the same grey bar, dimmed while the
+// number loads.
+.booking-panel-phone {
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.booking-panel-phone:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.booking-panel-phone-action {
+  color: $color-primary;
+}
+
+.booking-panel-note.booking-panel-phone-error {
+  color: $color-error;
 }
 </style>
