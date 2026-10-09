@@ -3027,6 +3027,7 @@ async function saveCurrentStep() {
       // Dizajn 25: a field hidden by another field's choice (a machine type's own fields)
       // goes out empty, so the listing page stops showing what was filled in for another type.
       const visibleIds = new Set(visibleCategoryAttributes.value.map((attr) => attr.id))
+      const types = new Map(visibleCategoryAttributes.value.map((attr) => [attr.id, attr.type]))
       const values = Object.entries(attributeValues).map(([attributeId, v]) =>
         visibleIds.has(attributeId)
           ? {
@@ -3034,7 +3035,10 @@ async function saveCurrentStep() {
               valueNumber: v.valueNumber,
               valueText: v.valueText,
               valueBoolean: v.valueBoolean,
-              valueOptionIds: v.singleOption ? [v.singleOption] : v.valueOptionIds,
+              // A list keeps its one choice, or none once emptied; a group keeps every
+              // ticked option. singleOption also holds a group's first saved option, so
+              // reading it for a group saved that one alone on every later save.
+              valueOptionIds: types.get(attributeId) === 'LIST' ? (v.singleOption ? [v.singleOption] : []) : v.valueOptionIds,
             }
           : { attributeId, valueNumber: null, valueText: '', valueBoolean: null, valueOptionIds: [] },
       )
