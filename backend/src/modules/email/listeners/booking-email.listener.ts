@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { OnEvent } from '@nestjs/event-emitter';
 import * as QRCode from 'qrcode';
-import { Booking, Listing, User } from '@prisma/client';
+import { Booking, DisputeOutcome, Listing, User } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { EmailService } from '../../../common/email/email.service';
 import { escapeHtml } from '../../../common/utils/escape-html';
@@ -296,5 +296,33 @@ export class BookingEmailListener {
       context: { oglas: b.listing.title },
       buttonUrl: this.bookingUrl(b.id),
     });
+  }
+
+  // T90: the guest's page promises the admin's decision and the owner's says
+  // the admin decides, so both hear it. An overturn also fires
+  // booking.no_show_overturned; this one event covers both outcomes.
+  @OnEvent('booking.no_show_dispute_resolved')
+  async onNoShowDisputeResolved({ bookingId, outcome }: { bookingId: string; outcome: DisputeOutcome }) {
+    const b = await this.load(bookingId);
+    if (!b) return;
+    const decision = outcome === 'OVERTURN_NO_SHOW' ? 'overturned' : 'upheld';
+    await Promise.all([
+      this.email.send({
+        key: `booking_no_show_${decision}_guest`,
+        to: b.guest.email,
+        language: b.guest.language,
+        userId: b.guest.id,
+        context: { oglas: b.listing.title },
+        buttonUrl: this.bookingUrl(b.id),
+      }),
+      this.email.send({
+        key: `booking_no_show_${decision}_owner`,
+        to: b.owner.email,
+        language: b.owner.language,
+        userId: b.owner.id,
+        context: { oglas: b.listing.title },
+        buttonUrl: this.bookingUrl(b.id),
+      }),
+    ]);
   }
 }

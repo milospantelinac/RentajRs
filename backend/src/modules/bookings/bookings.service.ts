@@ -692,7 +692,7 @@ export class BookingsService {
 
     const { listing } = booking;
     const isOwnerViewing = booking.ownerId === userId;
-    const [guestUnits, guestCapacity, categoryNames, messaging, openPaymentReports] = await Promise.all([
+    const [guestUnits, guestCapacity, categoryNames, messaging, openPaymentReports, decidedNoShowDisputes] = await Promise.all([
       getGuestUnits(this.taxonomy, [listing.categoryId]),
       this.getGuestCapacity(booking.listingId, listing.maxGuests),
       this.taxonomy.getCategoryNames([listing.categoryId]),
@@ -700,6 +700,11 @@ export class BookingsService {
       // While a report is open the guest's page drops "Prijavi da uplata nije
       // potvrđena", and both sides are told the booking waits past its deadline.
       booking.status === 'AWAITING_PAYMENT' ? this.prisma.dispute.count({ where: openPaymentReportWhere(booking.id) }) : 0,
+      // T90: once the admin has decided and the mark stood, neither page
+      // still says the decision is pending.
+      booking.status === 'NO_SHOW' && booking.noShowDisputed
+        ? this.prisma.dispute.count({ where: { bookingId: booking.id, type: 'DISPUTED_NO_SHOW', status: 'RESOLVED' } })
+        : 0,
     ]);
     const serialized = this.serialize(booking, userId);
 
@@ -734,6 +739,7 @@ export class BookingsService {
         freeUntil: getFreeCancellationUntil(booking),
       },
       paymentDisputed: openPaymentReports > 0,
+      noShowDisputeDecided: decidedNoShowDisputes > 0,
       ...(isOwnerViewing
         ? { guestShortName: shortName(booking.guest) }
         : // The guest already sees "Dragan S." on the listing's page; the full

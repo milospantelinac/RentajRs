@@ -265,8 +265,11 @@ function getOutcomeFact(t, booking) {
       const why = booking.expiredFrom === 'REQUESTED' ? 'bookingRequests.expiredUnanswered' : 'bookingRequests.expiredUnpaid'
       return fact(t(why), t('bookingRequests.termReleased'))
     }
-    case 'NO_SHOW':
-      return fact(t('bookingRequests.noShowMarked'), t(booking.noShowDisputed ? 'bookingRequests.noShowDisputed' : 'bookingRequests.noShowDisputable'))
+    case 'NO_SHOW': {
+      // T90: an overturned mark leaves NO_SHOW, so a decided one stood.
+      const dispute = !booking.noShowDisputed ? 'noShowDisputable' : booking.noShowDisputeDecided ? 'noShowUpheld' : 'noShowDisputed'
+      return fact(t('bookingRequests.noShowMarked'), t(`bookingRequests.${dispute}`))
+    }
     default:
       return null
   }

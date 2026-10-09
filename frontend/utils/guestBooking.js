@@ -134,7 +134,9 @@ function getNoteText(t, booking) {
       // Dizajn 41: a request nobody answered expires too.
       return t(booking.expiredFrom === 'REQUESTED' ? 'guestBooking.note.requestExpired' : 'guestBooking.note.expired')
     case 'NO_SHOW':
-      return t(booking.noShowDisputed ? 'guestBooking.note.noShowDisputed' : 'guestBooking.note.noShow')
+      if (!booking.noShowDisputed) return t('guestBooking.note.noShow')
+      // T90: an overturned mark leaves NO_SHOW, so a decided one stood.
+      return t(booking.noShowDisputeDecided ? 'guestBooking.note.noShowUpheld' : 'guestBooking.note.noShowDisputed')
     default:
       return ''
   }

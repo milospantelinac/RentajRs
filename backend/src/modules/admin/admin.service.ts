@@ -217,6 +217,9 @@ export class AdminService {
   /** Ch.6.7/ADR-019 — admin decides about the ACCOUNT, never about money; T90's OVERTURN_NO_SHOW is the one exception, and it's about the booking, never the account. */
   async resolveDispute(adminId: string, disputeId: string, dto: ResolveDisputeDto) {
     const dispute = await this.prisma.dispute.findUniqueOrThrow({ where: { id: disputeId } });
+    // A second "Reši" (a double click, a stale tab) would apply the outcome
+    // and mail both sides again.
+    if (dispute.status === 'RESOLVED') throw new BadRequestException(this.i18n.t('errors.DISPUTE_ALREADY_RESOLVED'));
 
     if (dto.outcome === 'OVERTURN_NO_SHOW') {
       if (dispute.type !== 'DISPUTED_NO_SHOW' || !dispute.bookingId) {
@@ -228,10 +231,11 @@ export class AdminService {
       await this.bookings.overturnNoShow(dispute.bookingId, adminId);
     }
 
-    await this.prisma.dispute.update({
-      where: { id: disputeId },
+    const resolved = await this.prisma.dispute.updateMany({
+      where: { id: disputeId, status: { not: 'RESOLVED' } },
       data: { status: 'RESOLVED', outcome: dto.outcome, adminNote: dto.adminNote, handledByUserId: adminId },
     });
+    if (resolved.count === 0) throw new BadRequestException(this.i18n.t('errors.DISPUTE_ALREADY_RESOLVED'));
 
     if (dto.targetUserId && dto.outcome !== 'NO_ACTION' && dto.outcome !== 'OVERTURN_NO_SHOW') {
       if (dto.outcome === 'BLOCK') {

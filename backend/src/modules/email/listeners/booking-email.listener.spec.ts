@@ -24,3 +24,33 @@ describe('BookingEmailListener#onAwaitingPayment', () => {
     expect(extraMjml).toContain('Poziv na broj: 3f2b1c9e0d4a4b7e9a51</mj-text>');
   });
 });
+
+describe('BookingEmailListener#onNoShowDisputeResolved (T90)', () => {
+  const booking = {
+    id: 'b1',
+    listing: { title: 'Sala' },
+    guest: { id: 'g1', email: 'gost@example.com', language: 'SR' },
+    owner: { id: 'o1', email: 'vlasnik@example.com', language: 'EN' },
+  };
+
+  async function decide(outcome: string) {
+    const prisma = { booking: { findUnique: jest.fn(async () => booking) } };
+    const email = { send: jest.fn(async () => undefined) };
+    const listener = new BookingEmailListener(prisma as any, email as any, { get: () => 'http://front' } as any);
+    await listener.onNoShowDisputeResolved({ bookingId: 'b1', outcome: outcome as any });
+    return (email.send.mock.calls as any[]).map(([opts]) => [opts.key, opts.to, opts.language, opts.buttonUrl]);
+  }
+
+  it('tells both sides the mark was removed', async () => {
+    expect(await decide('OVERTURN_NO_SHOW')).toEqual([
+      ['booking_no_show_overturned_guest', 'gost@example.com', 'SR', 'http://front/rezervacije/b1'],
+      ['booking_no_show_overturned_owner', 'vlasnik@example.com', 'EN', 'http://front/rezervacije/b1'],
+    ]);
+  });
+
+  it('tells both sides the mark stays, whatever happened to the account', async () => {
+    for (const outcome of ['NO_ACTION', 'WARNING', 'RESTRICTION', 'BLOCK']) {
+      expect((await decide(outcome)).map(([key]) => key)).toEqual(['booking_no_show_upheld_guest', 'booking_no_show_upheld_owner']);
+    }
+  });
+});

@@ -14,6 +14,8 @@ export const CRITICAL_EMAIL_EVENTS = new Set<string>([
   'new_device_login',
   'two_factor_reset_by_password_reset',
   'account_blocked',
+  'account_warning',
+  'account_restricted',
   'account_deletion_confirm',
   // Money
   'booking_payment_instructions',
@@ -28,6 +30,11 @@ export const CRITICAL_EMAIL_EVENTS = new Set<string>([
   'booking_confirmed_cash',
   'booking_cancelled',
   'booking_reminder_day_before',
+  // T90: the decision both sides were promised on a disputed no-show
+  'booking_no_show_overturned_guest',
+  'booking_no_show_upheld_guest',
+  'booking_no_show_overturned_owner',
+  'booking_no_show_upheld_owner',
   // Admin operational — not a personal preference
   'admin_new_listing_to_review',
   'admin_proposed_category',

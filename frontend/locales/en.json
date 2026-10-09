@@ -2086,6 +2086,7 @@
     "noShowMarked": "You marked a no-show",
     "noShowDisputable": "the guest can dispute the mark",
     "noShowDisputed": "the guest disputed the mark, an administrator decides",
+    "noShowUpheld": "an administrator reviewed the guest's dispute, the mark stays",
     "noteRequested": "The term is blocked until you respond. Respond as soon as possible; if you decline, the term is released right away.",
     "noteAwaitingPayment": "The guest received the payment instructions. When the money arrives, confirm receipt; if the deadline passes, the term is released.",
     "notePaymentReported": "The guest reported that they paid, but you have not confirmed the payment yet. Check your account and confirm it; the booking does not expire while an administrator reviews the report.",
@@ -2260,6 +2261,7 @@
       "expired": "The payment deadline passed, so the booking was cancelled and the time released.",
       "noShow": "The owner marked that you did not show up. If that is not right, dispute it.",
       "noShowDisputed": "You disputed the no-show mark. An administrator will review it and let you know.",
+      "noShowUpheld": "An administrator reviewed your dispute and the no-show mark stays.",
       "requestExpired": "The owner did not reply in time, so the request expired and the time was released. You can send a request for another time."
     },
     "sendMessage": "Message the owner",

@@ -1,8 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { OnEvent } from '@nestjs/event-emitter';
+import { DisputeOutcome } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { EmailService } from '../../../common/email/email.service';
+import { formatDateTime, localeFor } from '../format';
 
 @Injectable()
 export class AccountEmailListener {
@@ -108,5 +110,26 @@ export class AccountEmailListener {
       context: { razlog: reason },
       buttonUrl: `${this.frontendUrl}/kontakt`,
     });
+  }
+
+  // T90: a dispute outcome against an account reaches its holder. The admin's
+  // note stays internal; a block names the review as its reason instead.
+  @OnEvent('admin.dispute_outcome_applied')
+  async onDisputeOutcomeApplied({ userId, outcome }: { userId: string; outcome: DisputeOutcome }) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) return;
+    const base = { to: user.email, language: user.language, userId, buttonUrl: `${this.frontendUrl}/kontakt` };
+    if (outcome === 'WARNING') {
+      await this.email.send({ ...base, key: 'account_warning' });
+    } else if (outcome === 'RESTRICTION') {
+      await this.email.send({
+        ...base,
+        key: 'account_restricted',
+        context: { datum: formatDateTime(user.restrictedUntil, localeFor(user.language)) },
+      });
+    } else if (outcome === 'BLOCK') {
+      const razlog = user.language === 'EN' ? 'decision after reviewing a report' : 'odluka posle pregleda prijave';
+      await this.email.send({ ...base, key: 'account_blocked', context: { razlog } });
+    }
   }
 }

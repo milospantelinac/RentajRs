@@ -2086,6 +2086,7 @@
     "noShowMarked": "Označili ste nedolazak",
     "noShowDisputable": "gost može da ospori oznaku",
     "noShowDisputed": "gost je osporio oznaku, odluku donosi administrator",
+    "noShowUpheld": "administrator je pregledao prigovor gosta, oznaka ostaje",
     "noteRequested": "Termin je blokiran dok ne odgovorite. Odgovorite što pre - ako odbijete, termin se odmah oslobodi.",
     "noteAwaitingPayment": "Gost je dobio uputstvo za uplatu. Kada novac stigne, potvrdite prijem; ako rok istekne, termin se oslobađa.",
     "notePaymentReported": "Gost je prijavio da je uplatio, a prijem još niste potvrdili. Proverite račun i potvrdite prijem; dok administrator proverava prijavu, rezervacija ne ističe.",
@@ -2260,6 +2261,7 @@
       "expired": "Rok za uplatu je istekao, pa je rezervacija otkazana i termin oslobođen.",
       "noShow": "Vlasnik je označio da se niste pojavili. Ako to nije tačno, osporite oznaku.",
       "noShowDisputed": "Osporili ste oznaku nedolaska. Administrator će proveriti i javiti vam odluku.",
+      "noShowUpheld": "Administrator je pregledao vaš prigovor i oznaka nedolaska ostaje.",
       "requestExpired": "Vlasnik nije odgovorio na vreme, pa je zahtev istekao i termin je oslobođen. Možete poslati zahtev za drugi termin."
     },
     "sendMessage": "Pošalji poruku vlasniku",

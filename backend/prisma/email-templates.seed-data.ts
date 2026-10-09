@@ -124,6 +124,37 @@ export const emailTemplates: EmailTemplateSeed[] = [
       buttonLabel: 'Contact support',
     },
   },
+  // T90: the two milder dispute outcomes; a block sends account_blocked.
+  {
+    key: 'account_warning',
+    sr: {
+      subject: 'Upozorenje za vaš nalog',
+      heading: 'Dobili ste upozorenje',
+      bodyText: 'Posle pregleda prijave, administrator je izdao upozorenje za vaš nalog. Ponovljeni prekršaji mogu dovesti do ograničenja ili blokade naloga. Ako smatrate da je ovo greška, kontaktirajte podršku.',
+      buttonLabel: 'Kontaktiraj podršku',
+    },
+    en: {
+      subject: 'A warning on your account',
+      heading: 'You have received a warning',
+      bodyText: 'After reviewing a report, an administrator issued a warning on your account. Repeated violations can lead to a restriction or a block. If you believe this is a mistake, contact support.',
+      buttonLabel: 'Contact support',
+    },
+  },
+  {
+    key: 'account_restricted',
+    sr: {
+      subject: 'Vaš nalog je privremeno ograničen',
+      heading: 'Vaš nalog je privremeno ograničen',
+      bodyText: 'Posle pregleda prijave, administrator je privremeno ograničio vaš nalog. Do {datum} ne možete da objavljujete nove oglase ni da šaljete nove zahteve za rezervaciju. Postojeći oglasi i rezervacije ostaju. Ako smatrate da je ovo greška, kontaktirajte podršku.',
+      buttonLabel: 'Kontaktiraj podršku',
+    },
+    en: {
+      subject: 'Your account is temporarily restricted',
+      heading: 'Your account is temporarily restricted',
+      bodyText: 'After reviewing a report, an administrator temporarily restricted your account. Until {datum} you cannot publish new listings or send new booking requests. Your existing listings and bookings stay. If you believe this is a mistake, contact support.',
+      buttonLabel: 'Contact support',
+    },
+  },
 
   // -- Oglasi / Listings -----------------------------------------------------
   {
@@ -440,6 +471,67 @@ export const emailTemplates: EmailTemplateSeed[] = [
       heading: 'You were marked as a no-show',
       bodyText: 'The owner marked you as a no-show for the "{oglas}" booking. If you believe this is a mistake, you can dispute it.',
       buttonLabel: 'Dispute',
+    },
+  },
+  // T90: the admin's decision on a disputed no-show reaches both sides.
+  {
+    key: 'booking_no_show_overturned_guest',
+    sr: {
+      subject: 'Oznaka nedolaska je poništena',
+      heading: 'Vaš prigovor je prihvaćen',
+      bodyText: 'Administrator je prihvatio vaš prigovor za rezervaciju "{oglas}". Oznaka "nije se pojavio" je uklonjena i rezervacija je ponovo potvrđena.',
+      buttonLabel: 'Pogledaj rezervaciju',
+    },
+    en: {
+      subject: 'The no-show mark was removed',
+      heading: 'Your dispute was accepted',
+      bodyText: 'An administrator accepted your dispute for the "{oglas}" booking. The "no-show" mark was removed and the booking is confirmed again.',
+      buttonLabel: 'View booking',
+    },
+  },
+  {
+    key: 'booking_no_show_upheld_guest',
+    sr: {
+      subject: 'Odluka o prigovoru na oznaku nedolaska',
+      heading: 'Oznaka nedolaska ostaje',
+      bodyText: 'Administrator je pregledao vaš prigovor za rezervaciju "{oglas}" i oznaka "nije se pojavio" ostaje. Ako imate pitanja, kontaktirajte podršku.',
+      buttonLabel: 'Pogledaj rezervaciju',
+    },
+    en: {
+      subject: 'Decision on your no-show dispute',
+      heading: 'The no-show mark stays',
+      bodyText: 'An administrator reviewed your dispute for the "{oglas}" booking and the "no-show" mark stays. If you have questions, contact support.',
+      buttonLabel: 'View booking',
+    },
+  },
+  {
+    key: 'booking_no_show_overturned_owner',
+    sr: {
+      subject: 'Oznaka nedolaska je poništena: {oglas}',
+      heading: 'Administrator je poništio oznaku nedolaska',
+      bodyText: 'Gost je osporio oznaku "nije se pojavio" za rezervaciju "{oglas}" i administrator je prigovor prihvatio. Rezervacija je ponovo potvrđena.',
+      buttonLabel: 'Pogledaj rezervaciju',
+    },
+    en: {
+      subject: 'No-show mark removed: {oglas}',
+      heading: 'An administrator removed the no-show mark',
+      bodyText: 'The guest disputed the "no-show" mark on the "{oglas}" booking and an administrator accepted the dispute. The booking is confirmed again.',
+      buttonLabel: 'View booking',
+    },
+  },
+  {
+    key: 'booking_no_show_upheld_owner',
+    sr: {
+      subject: 'Oznaka nedolaska ostaje: {oglas}',
+      heading: 'Oznaka nedolaska ostaje',
+      bodyText: 'Administrator je pregledao prigovor gosta za rezervaciju "{oglas}". Vaša oznaka "nije se pojavio" ostaje.',
+      buttonLabel: 'Pogledaj rezervaciju',
+    },
+    en: {
+      subject: 'The no-show mark stays: {oglas}',
+      heading: 'The no-show mark stays',
+      bodyText: 'An administrator reviewed the guest\'s dispute for the "{oglas}" booking. Your "no-show" mark stays.',
+      buttonLabel: 'View booking',
     },
   },
 

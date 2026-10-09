@@ -35,6 +35,7 @@
   "ACCOUNT_RESTRICTED": "Nalog je privremeno ograničen zbog kršenja pravila platforme i ne može da izvrši ovu radnju",
   "PACKAGE_INCOMPATIBLE_BOOKING_MODEL": "Osnovni paket ne uključuje rezervacioni sistem. Izaberite Standard ili Pro paket, ili prvo promenite način rezervisanja na oglasu na „bez rezervacija”",
   "OVERTURN_NOT_APPLICABLE": "Ovaj ishod se primenjuje samo na sporove oko nedolaska koji su vezani za rezervaciju",
+  "DISPUTE_ALREADY_RESOLVED": "Ovaj spor je već rešen",
   "LISTING_CATEGORY_CHANGE_NOT_ALLOWED": "Kategorija može da se promeni samo dok oglas nije poslat na odobrenje",
   "CATEGORY_NOT_SELECTABLE": "Ova kategorija ne može da se izabere za oglas",
   "IMAGE_TYPE_NOT_ALLOWED": "Dozvoljene su samo JPG, PNG i WEBP fotografije",
