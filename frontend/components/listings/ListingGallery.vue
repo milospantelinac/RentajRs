@@ -107,7 +107,78 @@ const lightboxOpen = ref(false)
 const lightboxIndex = ref(0)
 const videoOpen = ref(false)
 
+// T116: a phone opens the photos in PhotoSwipe instead, across the whole
+// screen in either orientation and never cropped, with pinch and double-tap
+// zoom and a swipe to the next one. A phone held sideways is wider than the
+// phone breakpoint, so a short touch screen counts as a phone too.
+const PHONE_VIEWER_QUERY = '(max-width: 767.98px), (max-height: 500px) and (pointer: coarse)'
+// PhotoSwipe lays a slide out by its photo's size, which the API does not
+// send: a slide starts with the size the photo had when it was opened
+// before, or this one, and is laid out again once its photo has loaded.
+const FALLBACK_PHOTO_SIZE = { width: 1600, height: 1200 }
+const photoSizes = new Map()
+let phoneViewer = null
+
+function loadPhotoSize(url) {
+  return new Promise((resolve) => {
+    const image = new Image()
+    image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight })
+    image.onerror = () => resolve(null)
+    image.src = url
+  })
+}
+
+async function openPhoneViewer(index) {
+  const [{ default: PhotoSwipe }] = await Promise.all([
+    import('photoswipe'),
+    import('photoswipe/style.css'),
+  ])
+  // The photo that opens has its size from the start (the mosaic usually has it loaded already).
+  const first = props.photos[index]
+  if (!photoSizes.has(first.url)) {
+    const size = await loadPhotoSize(first.url)
+    if (size) photoSizes.set(first.url, size)
+  }
+  const dataSource = props.photos.map((photo) => ({
+    src: photo.url,
+    alt: photo.altText || props.title,
+    ...(photoSizes.get(photo.url) || FALLBACK_PHOTO_SIZE),
+  }))
+  phoneViewer = new PhotoSwipe({
+    dataSource,
+    index,
+    mainClass: 'listing-photo-viewer',
+    bgOpacity: 1,
+    padding: { top: 0, bottom: 0, left: 0, right: 0 },
+    showHideAnimationType: 'fade',
+    indexIndicatorSep: ' / ',
+    closeTitle: t('common.close'),
+    zoomTitle: t('listing.zoomPhoto'),
+    arrowPrevTitle: t('listing.previousPhoto'),
+    arrowNextTitle: t('listing.nextPhoto'),
+    errorMsg: t('listing.photoLoadError'),
+  })
+  phoneViewer.on('loadComplete', ({ content }) => {
+    const image = content.element
+    const item = dataSource[content.index]
+    if (!image?.naturalWidth || !item) return
+    if (item.width === image.naturalWidth && item.height === image.naturalHeight) return
+    item.width = image.naturalWidth
+    item.height = image.naturalHeight
+    photoSizes.set(item.src, { width: item.width, height: item.height })
+    phoneViewer?.refreshSlideContent(content.index)
+  })
+  phoneViewer.on('destroy', () => {
+    phoneViewer = null
+  })
+  phoneViewer.init()
+}
+
 function openLightbox(index) {
+  if (window.matchMedia(PHONE_VIEWER_QUERY).matches) {
+    openPhoneViewer(index)
+    return
+  }
   lightboxIndex.value = index
   lightboxOpen.value = true
 }
@@ -138,6 +209,7 @@ onMounted(() => window.addEventListener('keydown', onKeydown))
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown)
   document.body.style.overflow = ''
+  phoneViewer?.destroy()
 })
 </script>
 
@@ -361,5 +433,13 @@ onBeforeUnmount(() => {
     left: auto;
     right: 12px;
   }
+}
+</style>
+
+<style lang="scss">
+// T116: PhotoSwipe puts its dialog at the end of <body>, outside this
+// component's scope; its backdrop is the desktop lightbox's navy.
+.pswp.listing-photo-viewer {
+  --pswp-bg: #{$color-text};
 }
 </style>

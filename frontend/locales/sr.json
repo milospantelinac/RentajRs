@@ -772,6 +772,8 @@
     "watchVideo": "Pogledaj video",
     "previousPhoto": "Prethodna fotografija",
     "nextPhoto": "Sledeća fotografija",
+    "zoomPhoto": "Uvećaj fotografiju",
+    "photoLoadError": "Fotografija ne može da se učita.",
     "showAllPhotosOne": "Prikaži {count} sliku",
     "showAllPhotosFew": "Prikaži sve {count} slike",
     "showAllPhotosMany": "Prikaži svih {count} slika",

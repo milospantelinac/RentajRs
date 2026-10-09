@@ -25,6 +25,7 @@
     "@tiptap/vue-3": "^2.27.2",
     "leaflet": "^1.9.4",
     "nuxt": "^3.13.2",
+    "photoswipe": "^5.4.4",
     "pinia": "^2.2.4",
     "vue": "^3.5.10",
     "vue-router": "^4.4.5"
