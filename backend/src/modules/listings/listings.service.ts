@@ -17,6 +17,13 @@ import { UsersService } from '../users/users.service';
 import { containsContactInfo } from '../../common/utils/contact-detector';
 import { getIcalAvailability } from '../../common/utils/ical-availability';
 import { getGuestUnits } from '../../common/utils/guest-capacity';
+import {
+  DEFINED_SLOTS_ONLY_CATEGORY_SLUGS,
+  STAY_PRICE_UNITS,
+  changesDatePriceMeaning,
+  isDefinedSlotsSetup,
+  lowestUpcomingSlotPrice,
+} from '../../common/utils/booking-models';
 import { rsdToPara, paraToRsd } from '../../common/utils/money';
 import { normalizeBankAccount } from '../../common/utils/ips-qr';
 import { DAY_MS } from '../../common/utils/subscription-renewal';
@@ -42,6 +49,12 @@ const MY_LISTINGS_BOOKING_STATUSES: BookingStatus[] = [
   BookingStatus.AWAITING_PAYMENT,
   BookingStatus.CONFIRMED,
   BookingStatus.COMPLETED,
+];
+/** T140: the bookings that hold a listing's slot mode while they are ahead. */
+const FUTURE_BOOKING_STATUSES: BookingStatus[] = [
+  BookingStatus.REQUESTED,
+  BookingStatus.AWAITING_PAYMENT,
+  BookingStatus.CONFIRMED,
 ];
 
 @Injectable()
@@ -104,6 +117,7 @@ export class ListingsService {
       throw new ForbiddenException(this.i18n.t('errors.ACCOUNT_RESTRICTED'));
     }
 
+    this.assertProposalUnit(dto);
     const fallback = await this.prisma.category.findUniqueOrThrow({ where: { slug: FALLBACK_CATEGORY_SLUG } });
     const slug = await this.uniqueSlug(dto.title || 'novi-oglas');
     const listing = await this.prisma.listing.create({
@@ -135,6 +149,7 @@ export class ListingsService {
     if (!listing.pendingCategoryAssignment || listing.status !== ListingStatus.DRAFT) {
       throw new BadRequestException(this.i18n.t('errors.LISTING_PROPOSAL_CLOSED'));
     }
+    this.assertProposalUnit(dto);
     const fallback = await this.prisma.category.findUniqueOrThrow({ where: { slug: FALLBACK_CATEGORY_SLUG } });
     const updated = await this.prisma.listing.update({
       where: { id: listingId },
@@ -146,6 +161,19 @@ export class ListingsService {
       },
     });
     return this.serialize(updated);
+  }
+
+  /**
+   * T126: the proposal form pairs a stay with a night, a day or a month and
+   * slots with an hour or a slot; the API takes no other pair either, so no
+   * stay billed by the hour comes in this way.
+   */
+  private assertProposalUnit(dto: CreateUncategorizedListingDto) {
+    if (dto.bookingModel === 'NO_BOOKING' || !dto.priceUnit) return;
+    const stayUnit = STAY_PRICE_UNITS.includes(dto.priceUnit);
+    if (dto.bookingModel === 'PER_STAY' ? !stayUnit : stayUnit) {
+      throw new BadRequestException(this.i18n.t('errors.PRICE_UNIT_NOT_ALLOWED'));
+    }
   }
 
   /**
@@ -246,11 +274,24 @@ export class ListingsService {
     const listing = await this.getFullListing(listingId);
     if (!listing) throw new NotFoundException(this.i18n.t('errors.LISTING_NOT_FOUND'));
     if (listing.userId !== userId) throw new ForbiddenException();
-    return this.serialize(listing);
+    // T140: the wizard keeps the way terms are created while one is ahead.
+    return { ...this.serialize(listing), hasFutureBookings: await this.hasFutureBookings(listing.id) };
+  }
+
+  /** T140: a request, a booking waiting for payment or a confirmed one that hasn't ended. */
+  private async hasFutureBookings(listingId: string): Promise<boolean> {
+    const count = await this.prisma.booking.count({
+      where: { listingId, status: { in: FUTURE_BOOKING_STATUSES }, endsAt: { gt: new Date() } },
+    });
+    return count > 0;
   }
 
   async updateListing(userId: string, listingId: string, dto: UpdateListingDto) {
     const listing = await this.assertOwnership(userId, listingId);
+    const category =
+      dto.bookingModel !== undefined || dto.slotSubmode !== undefined
+        ? await this.prisma.category.findUniqueOrThrow({ where: { id: listing.categoryId } })
+        : null;
 
     // Dodavanje Oglasa spec §0/§2 — the owner only ever chooses "online
     // rezervacije" vs "bez rezervacije"; PER_STAY vs PER_SLOT always comes
@@ -259,11 +300,58 @@ export class ListingsService {
     // they're parked under the Ostalo fallback with their OWN owner-chosen
     // bookingModel until an admin assigns the real category, so Ostalo's
     // own defaultBookingModel isn't the constraint yet.
-    if (dto.bookingModel !== undefined && dto.bookingModel !== 'NO_BOOKING' && !listing.pendingCategoryAssignment) {
-      const category = await this.prisma.category.findUniqueOrThrow({ where: { id: listing.categoryId } });
+    if (category && dto.bookingModel !== undefined && dto.bookingModel !== 'NO_BOOKING' && !listing.pendingCategoryAssignment) {
       if (dto.bookingModel !== category.defaultBookingModel) {
         throw new BadRequestException('bookingModel must match the category\'s booking model, or be NO_BOOKING');
       }
+    }
+
+    // How the listing is booked once this update is saved.
+    const next = {
+      bookingModel: dto.bookingModel ?? listing.bookingModel,
+      slotSubmode: dto.slotSubmode !== undefined ? dto.slotSubmode : listing.slotSubmode,
+      priceUnit: dto.priceUnit ?? listing.priceUnit,
+    };
+    // T126: no stay is billed by the hour any more. Only a change to the model
+    // or the unit is checked, so a listing still on it can save its other steps.
+    const bookingUnitChanged = dto.bookingModel !== undefined || dto.priceUnit !== undefined;
+    if (bookingUnitChanged && next.bookingModel === 'PER_STAY' && !STAY_PRICE_UNITS.includes(next.priceUnit)) {
+      throw new BadRequestException(this.i18n.t('errors.PRICE_UNIT_NOT_ALLOWED'));
+    }
+    // T138: a party hall is booked by its defined slots only.
+    if (
+      category &&
+      dto.slotSubmode !== undefined &&
+      dto.slotSubmode !== 'DEFINED_SLOTS' &&
+      DEFINED_SLOTS_ONLY_CATEGORY_SLUGS.includes(category.slug)
+    ) {
+      throw new BadRequestException(this.i18n.t('errors.SLOT_MODE_NOT_ALLOWED'));
+    }
+
+    // T140: the guest only ever sees one way of creating terms, so saving
+    // another one deletes the old one's terms and prices in the same write
+    // (blocked dates stay, they belong to both). Not while a booking made the
+    // old way is still ahead (Tamara, 2026-10-09).
+    const slotModeChanged = dto.slotSubmode !== undefined && dto.slotSubmode !== listing.slotSubmode;
+    if (slotModeChanged && listing.slotSubmode !== null && (await this.hasFutureBookings(listing.id))) {
+      throw new BadRequestException(this.i18n.t('errors.SLOT_MODE_LOCKED_BY_BOOKINGS'));
+    }
+    const ownRows = { where: { listingId: listing.id } };
+    const cleanup: Prisma.PrismaPromise<unknown>[] = [];
+    if (slotModeChanged && next.slotSubmode === 'DEFINED_SLOTS') {
+      cleanup.push(
+        this.prisma.workingHours.deleteMany(ownRows),
+        this.prisma.hourlyPriceRange.deleteMany(ownRows),
+        this.prisma.slotPriceOverride.deleteMany(ownRows),
+      );
+    } else if (slotModeChanged && next.slotSubmode === 'WORKING_HOURS') {
+      cleanup.push(this.prisma.definedSlot.deleteMany(ownRows));
+    }
+    // T140, found checking the other models: a night's or a day's own price
+    // on the first of a month would become that month's price, and the other
+    // way round, so a switch between the two drops them (blocked dates stay).
+    if (dto.priceUnit !== undefined && changesDatePriceMeaning(listing.priceUnit, dto.priceUnit)) {
+      cleanup.push(this.prisma.datePriceOverride.deleteMany(ownRows));
     }
 
     // Dizajn 23: a minimum above its maximum would turn every request away. Only a
@@ -274,6 +362,8 @@ export class ListingsService {
       ['minGuests', 'maxGuests', 'errors.GUESTS_MIN_ABOVE_MAX'],
     ] as const;
     for (const [minField, maxField, message] of rulePairs) {
+      // A defined slot has no duration rules, they are cleared below.
+      if (minField === 'minDuration' && isDefinedSlotsSetup(next)) continue;
       const changed = [minField, maxField].some((field) => dto[field] !== undefined && dto[field] !== listing[field]);
       const min = dto[minField] !== undefined ? dto[minField] : listing[minField];
       const max = dto[maxField] !== undefined ? dto[maxField] : listing[maxField];
@@ -299,6 +389,19 @@ export class ListingsService {
     const { price, weekendPrice, pricePerGuest, title, mandatoryFees, ...rest } = dto;
     const data: Prisma.ListingUpdateInput = { ...rest, ...priceFields };
     if (mandatoryFees) data.mandatoryFees = mandatoryFees as unknown as Prisma.InputJsonValue;
+    // T140/T121: each defined slot has its own length and price, so such a
+    // listing keeps no duration, gap or weekend price, and its price is the
+    // lowest of its slots ahead ("Od X RSD"), whatever the step's hidden
+    // price field still held.
+    if (isDefinedSlotsSetup(next)) {
+      Object.assign(data, {
+        price: await lowestUpcomingSlotPrice(this.prisma, listing.id),
+        weekendPrice: null,
+        minDuration: null,
+        maxDuration: null,
+        gapAfterMinutes: null,
+      });
+    }
 
     const descriptionFlaggedContact =
       dto.description !== undefined ? containsContactInfo(dto.description) : undefined;
@@ -314,7 +417,8 @@ export class ListingsService {
       }
     }
 
-    const updated = await this.prisma.listing.update({ where: { id: listing.id }, data });
+    const update = this.prisma.listing.update({ where: { id: listing.id }, data });
+    const updated = cleanup.length ? (await this.prisma.$transaction([update, ...cleanup]))[0] as Listing : await update;
     // "Trenutno nedostupno" (R34) takes a live listing out of search, or back in.
     if (dto.available !== undefined && dto.available !== listing.available) {
       await this.cache.del(LISTING_COUNTS_CACHE_KEY);
@@ -1039,6 +1143,8 @@ export class ListingsService {
     });
     for (const favorite of favorites) {
       if (favorite.listing.status !== ListingStatus.ACTIVE) continue;
+      // T121: 0 on defined slots means no slot is ahead, not a lower price.
+      if (favorite.listing.price <= 0n) continue;
       if (favorite.listing.price >= favorite.priceAtAdd) continue;
       await this.prisma.favorite.update({
         where: { userId_listingId: { userId: favorite.userId, listingId: favorite.listingId } },

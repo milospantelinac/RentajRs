@@ -43,11 +43,10 @@ useHead(() => ({
             name: listing.value.title,
             description: listing.value.description,
             image: listing.value.photos?.map((p) => p.url) ?? [],
-            offers: {
-              '@type': 'Offer',
-              price: listing.value.price,
-              priceCurrency: 'RSD',
-            },
+            // T121: a listing on defined slots without one ahead has no price to offer.
+            ...(Number(listing.value.price) > 0
+              ? { offers: { '@type': 'Offer', price: listing.value.price, priceCurrency: 'RSD' } }
+              : {}),
             ...(listing.value.reviewCount > 0
               ? {
                   aggregateRating: {

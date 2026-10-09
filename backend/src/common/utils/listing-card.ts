@@ -53,6 +53,8 @@ export function serializeListingCard(
     avgRating: listing.avgRating,
     reviewCount: listing.reviewCount,
     bookingModel: listing.bookingModel,
+    // T121: on defined slots the price is the lowest slot ahead, "Od X RSD".
+    slotSubmode: listing.slotSubmode,
     city: listing.city,
     cityArea: listing.cityArea,
     category: {

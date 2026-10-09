@@ -432,7 +432,7 @@ const CATEGORY_TREE: CategorySeed[] = [
         name: 'Sobe',
         icon: 'bed',
         defaultBookingModel: BookingModel.PER_STAY,
-        allowedPriceUnits: [PriceUnit.NIGHT],
+        allowedPriceUnits: [PriceUnit.NIGHT, PriceUnit.MONTH],
         defaultPriceUnit: PriceUnit.NIGHT,
         attributes: [
           { key: 'kvadratura', name: 'Površina', type: AttributeType.NUMBER, unit: 'm²', required: true, isFilter: true, filterType: FilterType.RANGE, showOnCard: true },
@@ -461,7 +461,7 @@ const CATEGORY_TREE: CategorySeed[] = [
       },
     ],
     children: [
-      { name: 'Sale za proslave', icon: 'hall', defaultBookingModel: BookingModel.PER_SLOT, allowedPriceUnits: [PriceUnit.HOUR, PriceUnit.SLOT, PriceUnit.GUEST], defaultPriceUnit: PriceUnit.SLOT, attributes: [] },
+      { name: 'Sale za proslave', icon: 'hall', defaultBookingModel: BookingModel.PER_SLOT, allowedPriceUnits: [PriceUnit.SLOT, PriceUnit.GUEST], defaultPriceUnit: PriceUnit.SLOT, attributes: [] },
       { name: 'Konferencijske sale', icon: 'meeting', defaultBookingModel: BookingModel.PER_SLOT, allowedPriceUnits: [PriceUnit.HOUR], defaultPriceUnit: PriceUnit.HOUR, attributes: [] },
     ],
   },
@@ -486,7 +486,7 @@ const CATEGORY_TREE: CategorySeed[] = [
     icon: 'car',
     shortDescription: 'Putnička i dostavna vozila',
     defaultBookingModel: BookingModel.PER_STAY,
-    allowedPriceUnits: [PriceUnit.DAY, PriceUnit.HOUR],
+    allowedPriceUnits: [PriceUnit.DAY],
     defaultPriceUnit: PriceUnit.DAY,
     // Putnička/Dostavna get entirely separate attribute sets below — same
     // reasoning as Nekretnine's subcategories.
@@ -496,7 +496,7 @@ const CATEGORY_TREE: CategorySeed[] = [
         name: 'Putnička vozila',
         icon: 'sedan',
         defaultBookingModel: BookingModel.PER_STAY,
-        allowedPriceUnits: [PriceUnit.DAY, PriceUnit.HOUR],
+        allowedPriceUnits: [PriceUnit.DAY],
         defaultPriceUnit: PriceUnit.DAY,
         attributes: [
           { key: 'godina_proizvodnje', name: 'Godina proizvodnje', type: AttributeType.YEAR, required: true, isFilter: true, filterType: FilterType.RANGE, showOnCard: true },
@@ -513,7 +513,7 @@ const CATEGORY_TREE: CategorySeed[] = [
         name: 'Dostavna vozila',
         icon: 'van',
         defaultBookingModel: BookingModel.PER_STAY,
-        allowedPriceUnits: [PriceUnit.DAY, PriceUnit.HOUR],
+        allowedPriceUnits: [PriceUnit.DAY],
         defaultPriceUnit: PriceUnit.DAY,
         attributes: [
           { key: 'tip_vozila', name: 'Tip vozila', type: AttributeType.LIST, required: true, isFilter: true, filterType: FilterType.SELECT, showOnCard: true, options: opts(['Pickup', 'Kombi', 'Kamion']) },

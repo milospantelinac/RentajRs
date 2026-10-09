@@ -14,5 +14,6 @@
   "PAYMENT_ALREADY_REPORTED": "Već ste prijavili da uplata nije potvrđena. Administrator proverava prijavu.",
   "PAYMENT_DEADLINE_PASSED": "Rok za uplatu je prošao, pa prijava više nije moguća.",
   "NO_SHOW_ALREADY_DISPUTED": "Oznaku nedolaska ste već osporili. Administrator proverava prigovor.",
-  "STATE_CHANGED": "Rezervacija se u međuvremenu promenila, pa ova radnja više nije moguća."
+  "STATE_CHANGED": "Rezervacija se u međuvremenu promenila, pa ova radnja više nije moguća.",
+  "SLOT_REQUIRED": "Izaberite jedan od ponuđenih termina."
 }

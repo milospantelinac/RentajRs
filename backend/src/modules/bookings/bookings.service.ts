@@ -9,7 +9,6 @@ import { AvailabilityService, PriceKind, PricedUnit } from '../availability/avai
 import { TaxonomyService } from '../taxonomy/taxonomy.service';
 import { IPS_QR_IMAGE_OPTIONS, bookingBankTransfer } from '../../common/utils/ips-qr';
 import { paraToRsd, rsdToPara } from '../../common/utils/money';
-import { toBelgradeHHMM } from '../../common/utils/timezone';
 import { GUEST_CAPACITY_ATTRIBUTE_KEYS, GuestUnit, getGuestUnits } from '../../common/utils/guest-capacity';
 import { canGuestCancel, getFreeCancellationUntil } from '../../common/utils/guest-cancellation';
 import { OPEN_PAYMENT_REPORT, isHeldByPaymentReport } from '../../common/utils/payment-report';
@@ -198,6 +197,11 @@ export class BookingsService {
     listing: { id: string; bookingModel: string; slotSubmode: string | null },
     dto: CreateBookingRequestDto,
   ): Promise<{ startsAt: Date; endsAt: Date; slotPrice?: bigint }> {
+    // T140: a listing on defined slots is booked by one of its slots, and a
+    // slot books nothing on a listing that is booked another way.
+    if (isDefinedSlots(listing) !== !!dto.definedSlotId) {
+      throw new BadRequestException(this.i18n.t(dto.definedSlotId ? 'errors.TERM_NOT_AVAILABLE' : 'bookings.SLOT_REQUIRED'));
+    }
     if (dto.definedSlotId) {
       const slot = await this.prisma.definedSlot.findFirst({
         where: { id: dto.definedSlotId, listingId: listing.id },
@@ -342,30 +346,13 @@ export class BookingsService {
     if (listing.priceUnit === 'MONTH' && monthCount) {
       return groupPriceLines(await this.availability.getMonthlyPrices(listing.id, startsAt, monthCount, listing.price));
     }
-    // T127: each hour of the term at its own rate (Tamara, 2026-10-09).
+    // T127: each hour of the term at its own rate (Tamara, 2026-10-09). T138
+    // took away working hours priced per guest, and T126 the stay billed by
+    // the hour, so every other term is a count of units at one price.
     if (isWorkingHours(listing) && listing.priceUnit === 'HOUR') {
       return groupPriceLines(
         await this.availability.getWorkingHoursPrices(listing.id, startsAt, endsAt, listing.price, listing.weekendPrice),
       );
-    }
-    // T111: GUEST-priced WORKING_HOURS listings still resolve the owner's
-    // hourly rate windows/exceptions for the per-unit price (per the
-    // decision: those apply to the per-guest rate exactly like they apply to
-    // the per-hour rate); a guest pays the rate the term starts at, once.
-    if (isWorkingHours(listing) && listing.priceUnit === 'GUEST') {
-      const unit = await this.availability.resolveHourlyPrice(
-        listing.id,
-        startsAt,
-        toBelgradeHHMM(startsAt),
-        listing.price,
-        // Dizajn 21: the wizard offers a weekend price for the hourly rate, not the per-guest one.
-        null,
-      );
-      return [{ count: unitCount, ...unit }];
-    }
-    // Dizajn 21: a stay billed by the hour prices each hour the way a night is priced.
-    if (listing.bookingModel === 'PER_STAY' && listing.priceUnit === 'HOUR') {
-      return groupPriceLines(await this.availability.getHourlyStayPrices(listing.id, startsAt, endsAt, listing.price, listing.weekendPrice));
     }
     return [{ count: unitCount, price: pricePerUnit, kind: 'BASE' }];
   }

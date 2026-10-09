@@ -9,7 +9,7 @@
           <div class="avail-slot">
             <span class="avail-slot-date">{{ formatNumericDate(s.startsAt) }}</span>
             <span class="avail-slot-time">{{ formatTime(s.startsAt) }} - {{ formatTime(s.endsAt) }}</span>
-            <span class="avail-slot-price">{{ s.price ? `${formatPrice(s.price)} RSD` : '-' }}</span>
+            <span class="avail-slot-price">{{ s.price ? slotPriceText(s.price) : '-' }}</span>
             <!-- T105's copy, kept as a link beside the frame's delete icon. -->
             <button type="button" class="avail-link" :aria-expanded="copyingSlotId === s.id" @click="toggleCopyPanel(s)">
               {{ t('listing.dsCopySlot') }}
@@ -144,7 +144,7 @@
           <AvailabilityTimeSelect id="ds-to" v-model="form.to" variant="boxed" />
         </div>
         <div class="avail-add-field avail-add-price">
-          <label for="ds-price" class="avail-add-label">{{ t('listing.price') }} (RSD)<span class="avail-add-required">*</span></label>
+          <label for="ds-price" class="avail-add-label">{{ priceLabel }}<span class="avail-add-required">*</span></label>
           <input
             id="ds-price"
             type="text"
@@ -203,10 +203,20 @@
 <script setup>
 const props = defineProps({
   listingId: { type: String, required: true },
+  // T138: SLOT or GUEST, step 2's choice of what a slot's price is for.
+  priceUnit: { type: String, default: 'SLOT' },
 })
 
 const { t } = useI18n()
 const api = useApi()
+
+// T138 (with T141's wording): "Cena (RSD / termin)" or "Cena (RSD / gost)",
+// and a slot priced per guest says so in the list too.
+const perGuest = computed(() => props.priceUnit === 'GUEST')
+const priceLabel = computed(() => t('listing.dsPriceLabel', { unit: t(perGuest.value ? 'listing.unitGuest' : 'listing.unitSlot') }))
+function slotPriceText(price) {
+  return perGuest.value ? `${formatPrice(price)} RSD / ${t('listing.unitGuest')}` : `${formatPrice(price)} RSD`
+}
 
 const slots = ref([])
 // Every blocked term, bookings included, so the preview offers what a guest would see.
@@ -476,7 +486,7 @@ const preview = computed(() => {
     slots: daySlots.map((s) => ({
       id: s.id,
       time: `${formatTime(s.startsAt)} - ${formatTime(s.endsAt)}`,
-      price: s.price ? `${formatPrice(s.price)} RSD` : '-',
+      price: s.price ? slotPriceText(s.price) : '-',
     })),
   }
 })

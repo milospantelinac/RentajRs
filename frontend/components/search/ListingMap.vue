@@ -18,6 +18,7 @@ const props = defineProps({
   listings: { type: Array, default: () => [] },
 })
 const emit = defineEmits(['bounds-change', 'ready'])
+const { t } = useI18n()
 
 const mapEl = ref(null)
 // Dizajn 44: the frame is a skeleton until the first tileset is on screen,
@@ -111,18 +112,19 @@ function renderMarkers() {
 
   for (const listing of props.listings) {
     if (!listing.latitude || !listing.longitude) continue
-    const price = new Intl.NumberFormat('sr-RS').format(listing.price)
+    // T121: "Od 12.000 RSD" on defined slots, "Bez termina" with none ahead.
+    const price = formatListingPrice(listing, t) || t('listing.mapNoUpcomingSlots')
     // Dizajn 8 — the map shows the price itself rather than a generic pin, so
     // the marker is a styled label (divIcon) instead of Leaflet's image pin.
     const marker = L.marker([listing.latitude, listing.longitude], {
       icon: L.divIcon({
         className: 'listing-map-pin-wrap',
-        html: `<span class="listing-map-pin">${escapeHtml(price)} RSD</span>`,
+        html: `<span class="listing-map-pin">${escapeHtml(price)}</span>`,
         iconSize: null,
       }),
     })
     marker.bindPopup(
-      `<strong>${escapeHtml(listing.title)}</strong><br/>${price} RSD<br/><a href="/oglasi/${escapeHtml(listing.slug)}">Pogledaj oglas</a>`,
+      `<strong>${escapeHtml(listing.title)}</strong><br/>${escapeHtml(price)}<br/><a href="/oglasi/${escapeHtml(listing.slug)}">Pogledaj oglas</a>`,
     )
     marker.addTo(markersLayer)
     points.push([listing.latitude, listing.longitude])

@@ -62,5 +62,9 @@
   "CONVERSATION_ACCOUNT_REMOVED": "Ovaj nalog je uklonjen i više ne prima poruke",
   "REVIEW_ALREADY_EXISTS": "Već ste ostavili recenziju za ovu rezervaciju",
   "REVIEW_WINDOW_CLOSED": "Rok za recenziju ove rezervacije je istekao",
-  "REVIEW_EDIT_CLOSED": "Rok za izmenu ove recenzije je istekao"
+  "REVIEW_EDIT_CLOSED": "Rok za izmenu ove recenzije je istekao",
+  "PRICE_UNIT_NOT_ALLOWED": "Ova jedinica cene ne postoji za izabrani način rezervacije",
+  "SLOT_MODE_NOT_ALLOWED": "Sale za proslave se rezervišu samo po definisanim terminima",
+  "SLOT_MODE_LOCKED_BY_BOOKINGS": "Način kreiranja termina ne može da se promeni dok imate buduće rezervacije.",
+  "AVAILABILITY_MODE_NOT_SAVED": "Prvo sačuvajte korak „Cena i način rezervacije”, pa podesite dostupnost"
 }

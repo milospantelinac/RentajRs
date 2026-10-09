@@ -364,3 +364,204 @@ describe('ListingsService#getPublicBySlug (found in Dizajn 39)', () => {
     expect(plain.guestUnit).toBe('guests');
   });
 });
+
+describe('ListingsService#updateListing keeps one way of booking (T140, T126, T138)', () => {
+  const playroom = { id: 'c1', slug: 'igraonice', defaultBookingModel: 'PER_SLOT' };
+  const hall = { id: 'c-hall', slug: 'sale-za-proslave', defaultBookingModel: 'PER_SLOT' };
+  const ownRows = { where: { listingId: 'l1' } };
+
+  function setup(row: Record<string, any>, options: { category?: any; futureBookings?: number; lowestSlot?: bigint | null } = {}) {
+    const deleteMany = () => jest.fn(async () => ({ count: 0 }));
+    const prisma = {
+      listing: {
+        findUnique: jest.fn().mockResolvedValue(row),
+        update: jest.fn(async ({ data }: any) => ({ ...row, ...data })),
+      },
+      category: { findUniqueOrThrow: jest.fn().mockResolvedValue(options.category ?? playroom) },
+      booking: { count: jest.fn().mockResolvedValue(options.futureBookings ?? 0) },
+      definedSlot: {
+        aggregate: jest.fn().mockResolvedValue({ _min: { price: options.lowestSlot ?? null } }),
+        deleteMany: deleteMany(),
+      },
+      workingHours: { deleteMany: deleteMany() },
+      hourlyPriceRange: { deleteMany: deleteMany() },
+      slotPriceOverride: { deleteMany: deleteMany() },
+      datePriceOverride: { deleteMany: deleteMany() },
+      $transaction: jest.fn(async (writes: Promise<unknown>[]) => Promise.all(writes)),
+    };
+    return { prisma, service: makeService(prisma) };
+  }
+
+  const hoursRow = listingRow({
+    bookingModel: 'PER_SLOT',
+    slotSubmode: 'WORKING_HOURS',
+    priceUnit: 'HOUR',
+    price: 11100n,
+    weekendPrice: 15000n,
+    minDuration: 2,
+    maxDuration: 6,
+    gapAfterMinutes: 30,
+  });
+  const slotsRow = listingRow({ bookingModel: 'PER_SLOT', slotSubmode: 'DEFINED_SLOTS', priceUnit: 'SLOT', price: 6000000n });
+
+  it('moves a listing from working hours to slots: the hours and their prices go, its slots set the price', async () => {
+    const { prisma, service } = setup(hoursRow, { lowestSlot: 6000000n });
+
+    const saved = await service.updateListing('u1', 'l1', {
+      slotSubmode: 'DEFINED_SLOTS',
+      priceUnit: 'SLOT',
+      price: 111,
+      minDuration: 2,
+      maxDuration: 6,
+    } as any);
+
+    for (const table of ['workingHours', 'hourlyPriceRange', 'slotPriceOverride'] as const) {
+      expect(prisma[table].deleteMany).toHaveBeenCalledWith(ownRows);
+    }
+    expect(prisma.definedSlot.deleteMany).not.toHaveBeenCalled();
+    expect(prisma.datePriceOverride.deleteMany).not.toHaveBeenCalled();
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.listing.update.mock.calls[0][0].data).toMatchObject({
+      slotSubmode: 'DEFINED_SLOTS',
+      price: 6000000n,
+      weekendPrice: null,
+      minDuration: null,
+      maxDuration: null,
+      gapAfterMinutes: null,
+    });
+    expect(prisma.definedSlot.aggregate.mock.calls[0][0].where).toMatchObject({ listingId: 'l1', price: { not: null } });
+    expect(saved.price).toBe(60000);
+  });
+
+  it('moves a listing from slots to working hours: the slots go, the price is the one typed', async () => {
+    const { prisma, service } = setup(slotsRow);
+
+    await service.updateListing('u1', 'l1', { slotSubmode: 'WORKING_HOURS', priceUnit: 'HOUR', price: 2000 } as any);
+
+    expect(prisma.definedSlot.deleteMany).toHaveBeenCalledWith(ownRows);
+    expect(prisma.workingHours.deleteMany).not.toHaveBeenCalled();
+    expect(prisma.listing.update.mock.calls[0][0].data).toMatchObject({ slotSubmode: 'WORKING_HOURS', price: 200000n });
+  });
+
+  it('keeps the way while a booking is ahead and changes nothing', async () => {
+    const { prisma, service } = setup(hoursRow, { futureBookings: 1 });
+
+    await expect(service.updateListing('u1', 'l1', { slotSubmode: 'DEFINED_SLOTS' } as any)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(i18n.t).toHaveBeenCalledWith('errors.SLOT_MODE_LOCKED_BY_BOOKINGS');
+    expect(prisma.booking.count.mock.calls[0][0].where).toEqual({
+      listingId: 'l1',
+      status: { in: ['REQUESTED', 'AWAITING_PAYMENT', 'CONFIRMED'] },
+      endsAt: { gt: expect.any(Date) },
+    });
+    expect(prisma.listing.update).not.toHaveBeenCalled();
+    expect(prisma.workingHours.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('saves the first way without looking for bookings, and the same way without deleting anything', async () => {
+    const first = setup(listingRow({ bookingModel: 'PER_SLOT', slotSubmode: null, priceUnit: 'HOUR' }), { futureBookings: 1 });
+    await first.service.updateListing('u1', 'l1', { slotSubmode: 'WORKING_HOURS' } as any);
+    expect(first.prisma.booking.count).not.toHaveBeenCalled();
+    expect(first.prisma.listing.update).toHaveBeenCalled();
+
+    const same = setup(hoursRow, { futureBookings: 1 });
+    await same.service.updateListing('u1', 'l1', { slotSubmode: 'WORKING_HOURS', price: 1500 } as any);
+    expect(same.prisma.$transaction).not.toHaveBeenCalled();
+    expect(same.prisma.workingHours.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('keeps a party hall on its defined slots', async () => {
+    const { prisma, service } = setup(slotsRow, { category: hall });
+
+    await expect(service.updateListing('u1', 'l1', { slotSubmode: 'WORKING_HOURS' } as any)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(i18n.t).toHaveBeenCalledWith('errors.SLOT_MODE_NOT_ALLOWED');
+    expect(prisma.listing.update).not.toHaveBeenCalled();
+    await expect(service.updateListing('u1', 'l1', { slotSubmode: 'DEFINED_SLOTS', priceUnit: 'GUEST' } as any)).resolves.toBeDefined();
+  });
+
+  it('keeps a listing on slots at its cheapest slot ahead, whatever the hidden price field sends', async () => {
+    const { prisma, service } = setup(slotsRow, { lowestSlot: 450000n });
+
+    await service.updateListing('u1', 'l1', { description: 'Novi opis', price: 111, minDuration: 3 } as any);
+
+    expect(prisma.listing.update.mock.calls[0][0].data).toMatchObject({ price: 450000n, minDuration: null });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('refuses a stay by the hour, but lets a listing still on it save its other steps (T126)', async () => {
+    const row = listingRow({ bookingModel: 'PER_STAY', slotSubmode: null, priceUnit: 'HOUR', category: { slug: 'putnicka-vozila' } });
+    const { prisma, service } = setup(row);
+
+    await expect(service.updateListing('u1', 'l1', { priceUnit: 'HOUR' } as any)).rejects.toBeInstanceOf(BadRequestException);
+    expect(i18n.t).toHaveBeenCalledWith('errors.PRICE_UNIT_NOT_ALLOWED');
+    await expect(service.updateListing('u1', 'l1', { description: 'Novi opis' } as any)).resolves.toBeDefined();
+    await expect(service.updateListing('u1', 'l1', { priceUnit: 'DAY' } as any)).resolves.toBeDefined();
+    expect(prisma.listing.update).toHaveBeenCalledTimes(2);
+  });
+
+  it("drops a stay's date prices between nights and months, not between nights and days", async () => {
+    const night = listingRow({ bookingModel: 'PER_STAY', slotSubmode: null, priceUnit: 'NIGHT' });
+    const toMonth = setup(night);
+    await toMonth.service.updateListing('u1', 'l1', { priceUnit: 'MONTH' } as any);
+    expect(toMonth.prisma.datePriceOverride.deleteMany).toHaveBeenCalledWith(ownRows);
+    expect(toMonth.prisma.$transaction).toHaveBeenCalledTimes(1);
+
+    const toDay = setup(night);
+    await toDay.service.updateListing('u1', 'l1', { priceUnit: 'DAY' } as any);
+    expect(toDay.prisma.datePriceOverride.deleteMany).not.toHaveBeenCalled();
+
+    const fromMonth = setup(listingRow({ bookingModel: 'PER_STAY', slotSubmode: null, priceUnit: 'MONTH' }));
+    await fromMonth.service.updateListing('u1', 'l1', { priceUnit: 'NIGHT' } as any);
+    expect(fromMonth.prisma.datePriceOverride.deleteMany).toHaveBeenCalledWith(ownRows);
+  });
+
+  it('tells the wizard whether a booking is ahead', async () => {
+    const { prisma, service } = setup(hoursRow, { futureBookings: 2 });
+    await expect(service.getOwned('u1', 'l1')).resolves.toMatchObject({ hasFutureBookings: true, price: 111 });
+    prisma.booking.count.mockResolvedValue(0);
+    await expect(service.getOwned('u1', 'l1')).resolves.toMatchObject({ hasFutureBookings: false });
+  });
+
+  it('takes no stay by the hour from the proposal form either (T126)', async () => {
+    const prisma = {
+      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', restrictedUntil: null }) },
+      category: { findUniqueOrThrow: jest.fn() },
+      listing: { create: jest.fn() },
+    };
+    const service = makeService(prisma);
+    await expect(
+      service.createUncategorizedListing('u1', { title: 'Kombi', bookingModel: 'PER_STAY', priceUnit: 'HOUR' } as any),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.createUncategorizedListing('u1', { title: 'Sala', bookingModel: 'PER_SLOT', priceUnit: 'DAY' } as any),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.listing.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('ListingsService#sendPriceDropNotifications', () => {
+  it('tells about a lower price, not about a listing on slots with none ahead (T121)', async () => {
+    const favorite = (listingId: string, price: bigint) => ({
+      userId: 'g1',
+      listingId,
+      priceAtAdd: 4500000n,
+      listing: { id: listingId, price, status: 'ACTIVE', title: 'Sala', slug: listingId },
+    });
+    const prisma = {
+      favorite: {
+        findMany: jest.fn().mockResolvedValue([favorite('cheaper', 4000000n), favorite('no-slots', 0n), favorite('same', 4500000n)]),
+        update: jest.fn(),
+      },
+    };
+    const events = { emit: jest.fn() };
+    const service = new ListingsService(prisma as any, {} as any, {} as any, {} as any, {} as any, {} as any, i18n as any, events as any);
+
+    await service.sendPriceDropNotifications();
+
+    expect(events.emit.mock.calls).toEqual([['listing.favorite_price_dropped', { userId: 'g1', listingId: 'cheaper' }]]);
+    expect(prisma.favorite.update).toHaveBeenCalledTimes(1);
+  });
+});

@@ -121,6 +121,9 @@ export class UsersService {
             title: true,
             price: true,
             priceUnit: true,
+            // T121: "Od X RSD" for a listing on defined slots.
+            bookingModel: true,
+            slotSubmode: true,
             avgRating: true,
             reviewCount: true,
             photos: { where: { isCover: true }, take: 1, select: { url: true, altText: true } },

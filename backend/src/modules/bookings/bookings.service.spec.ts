@@ -182,7 +182,6 @@ describe('BookingsService price lines (Dizajn 34)', () => {
         { price: 120000n, kind: 'RANGE' },
         { price: 120000n, kind: 'RANGE' },
       ]),
-      resolveHourlyPrice: jest.fn(),
     };
     const result = await totals(availability, pricingListing(), 3);
     expect(result.priceLines).toEqual([
@@ -191,22 +190,21 @@ describe('BookingsService price lines (Dizajn 34)', () => {
     ]);
     expect(result.unitPriceTotal).toBe(660000n);
     expect(availability.getWorkingHoursPrices.mock.calls[0].slice(3)).toEqual([350000n, 420000n]);
-    expect(availability.resolveHourlyPrice).not.toHaveBeenCalled();
-  });
-
-  it('prices a per-guest working-hours booking once per guest, at the rate it starts at, without the weekend price', async () => {
-    const availability = { resolveHourlyPrice: jest.fn().mockResolvedValue({ price: 90000n, kind: 'RANGE' }), getWorkingHoursPrices: jest.fn() };
-    const result = await totals(availability, pricingListing({ priceUnit: 'GUEST', price: 80000n }), 30);
-    expect(result.priceLines).toEqual([{ count: 30, price: 90000n, kind: 'RANGE' }]);
-    expect(availability.resolveHourlyPrice.mock.calls[0][4]).toBeNull();
-    expect(availability.getWorkingHoursPrices).not.toHaveBeenCalled();
   });
 
   it('keeps a defined slot at its own price', async () => {
-    const availability = { resolveHourlyPrice: jest.fn() };
-    const result = await totals(availability, pricingListing(), 1, 700000n);
+    const availability = { getWorkingHoursPrices: jest.fn() };
+    const result = await totals(availability, pricingListing({ slotSubmode: 'DEFINED_SLOTS', priceUnit: 'SLOT' }), 1, 700000n);
     expect(result.priceLines).toEqual([{ count: 1, price: 700000n, kind: 'BASE' }]);
-    expect(availability.resolveHourlyPrice).not.toHaveBeenCalled();
+    expect(availability.getWorkingHoursPrices).not.toHaveBeenCalled();
+  });
+
+  it("charges a hall's slot priced per guest once per guest (T138)", async () => {
+    const availability = { getWorkingHoursPrices: jest.fn() };
+    const listing = pricingListing({ slotSubmode: 'DEFINED_SLOTS', priceUnit: 'GUEST', price: 250000n });
+    const result = await totals(availability, listing, 30, 250000n);
+    expect(result.priceLines).toEqual([{ count: 30, price: 250000n, kind: 'BASE' }]);
+    expect(result.unitPriceTotal).toBe(7500000n);
   });
 
   it('prices each month of a monthly stay on its own', async () => {
@@ -1138,5 +1136,32 @@ describe('BookingsService#createRequest (T127, T117)', () => {
     expect(availability.lockTerm).toHaveBeenCalled();
     expect(availability.applyGapAfter).not.toHaveBeenCalled();
     expect(availability.fitsWorkingHours).not.toHaveBeenCalled();
+  });
+});
+
+describe('BookingsService books a listing on defined slots by its slots only (T140)', () => {
+  const i18n = { t: jest.fn((key: string) => key) };
+  const listing = (slotSubmode: string) => ({
+    id: 'l1',
+    bookingModel: 'PER_SLOT',
+    slotSubmode,
+    priceUnit: slotSubmode === 'DEFINED_SLOTS' ? 'SLOT' : 'HOUR',
+    price: 0n,
+  });
+
+  it('asks for a slot on a listing on defined slots, and takes none on one booked another way', async () => {
+    const prisma = { listing: { findUniqueOrThrow: jest.fn() }, definedSlot: { findFirst: jest.fn() } };
+    const service = new BookingsService(prisma as any, {} as any, i18n as any, {} as any, {} as any);
+
+    prisma.listing.findUniqueOrThrow.mockResolvedValue(listing('DEFINED_SLOTS'));
+    await expect(
+      service.quotePrice('l1', { startsAt: '2026-10-16T12:00:00.000Z', endsAt: '2026-10-16T14:00:00.000Z' } as any),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(i18n.t).toHaveBeenCalledWith('bookings.SLOT_REQUIRED');
+
+    prisma.listing.findUniqueOrThrow.mockResolvedValue(listing('WORKING_HOURS'));
+    await expect(service.quotePrice('l1', { definedSlotId: 's1' } as any)).rejects.toBeInstanceOf(BadRequestException);
+    expect(i18n.t).toHaveBeenCalledWith('errors.TERM_NOT_AVAILABLE');
+    expect(prisma.definedSlot.findFirst).not.toHaveBeenCalled();
   });
 });

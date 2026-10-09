@@ -4,8 +4,18 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Logger } from '@nestjs/common';
 import { I18nContext, I18nService } from 'nestjs-i18n';
-import { IcalSource, OccupancySource } from '@prisma/client';
+import {
+  DatePriceOverride,
+  DefinedSlot,
+  HourlyPriceRange,
+  IcalSource,
+  Listing,
+  OccupancySource,
+  SlotPriceOverride,
+  WorkingHours,
+} from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { isDefinedSlotsSetup, isWorkingHoursSetup, lowestUpcomingSlotPrice } from '../../common/utils/booking-models';
 import { parseIcs, buildIcsCalendar, icalSourceName, isIcsCalendar, normalizeIcalUrl } from '../../common/utils/ics';
 import { ICAL_FAILURE_ALERT_THRESHOLD, getIcalAvailability } from '../../common/utils/ical-availability';
 import { NonPublicAddressError, fetchUserUrl } from '../../common/utils/outbound-fetch';
@@ -146,27 +156,49 @@ export class AvailabilityService {
 
   // -- Public / owner reads ---------------------------------------------
 
+  /**
+   * T140: only what the listing is booked by right now: working hours and
+   * their prices, or the defined slots, or a stay's date prices. Rows another
+   * mode left behind never reach the listing, the booking card, the request
+   * page or the wizard's editors. Blocked terms apply to every mode.
+   */
   async getAvailability(listingId: string, from: Date, to: Date) {
+    const listing = await this.prisma.listing.findUnique({
+      where: { id: listingId },
+      select: { bookingModel: true, slotSubmode: true },
+    });
+    const hours = !!listing && isWorkingHoursSetup(listing);
+    const slots = !!listing && isDefinedSlotsSetup(listing);
+    const stay = listing?.bookingModel === 'PER_STAY';
+    const none = <T>(): Promise<T[]> => Promise.resolve([]);
     const [blocked, workingHours, hourlyPriceRanges, definedSlots, datePriceOverrides, slotPriceOverrides] =
       await Promise.all([
         this.prisma.blockedTerm.findMany({
           where: { listingId, startsAt: { lt: to }, endsAt: { gt: from } },
           select: { id: true, startsAt: true, endsAt: true, source: true },
         }),
-        this.prisma.workingHours.findMany({ where: { listingId } }),
-        this.prisma.hourlyPriceRange.findMany({ where: { listingId }, orderBy: { startTime: 'asc' } }),
-        this.prisma.definedSlot.findMany({
-          where: { listingId, startsAt: { gte: from, lt: to } },
-          orderBy: { startsAt: 'asc' },
-        }),
-        this.prisma.datePriceOverride.findMany({
-          where: { listingId, date: { gte: from, lt: to } },
-          orderBy: { date: 'asc' },
-        }),
-        this.prisma.slotPriceOverride.findMany({
-          where: { listingId, date: { gte: from, lt: to } },
-          orderBy: [{ date: 'asc' }, { startTime: 'asc' }],
-        }),
+        hours ? this.prisma.workingHours.findMany({ where: { listingId } }) : none<WorkingHours>(),
+        hours
+          ? this.prisma.hourlyPriceRange.findMany({ where: { listingId }, orderBy: { startTime: 'asc' } })
+          : none<HourlyPriceRange>(),
+        slots
+          ? this.prisma.definedSlot.findMany({
+              where: { listingId, startsAt: { gte: from, lt: to } },
+              orderBy: { startsAt: 'asc' },
+            })
+          : none<DefinedSlot>(),
+        stay
+          ? this.prisma.datePriceOverride.findMany({
+              where: { listingId, date: { gte: from, lt: to } },
+              orderBy: { date: 'asc' },
+            })
+          : none<DatePriceOverride>(),
+        hours
+          ? this.prisma.slotPriceOverride.findMany({
+              where: { listingId, date: { gte: from, lt: to } },
+              orderBy: [{ date: 'asc' }, { startTime: 'asc' }],
+            })
+          : none<SlotPriceOverride>(),
       ]);
     return {
       blocked,
@@ -182,7 +214,7 @@ export class AvailabilityService {
 
   /** T84 — applies immediately regardless of listing status; edit moderation was removed. */
   async setWorkingHours(userId: string, listingId: string, dto: SetWorkingHoursDto) {
-    await this.assertOwnership(userId, listingId);
+    this.assertBookedBy(await this.assertOwnership(userId, listingId), 'WORKING_HOURS');
     await this.prisma.$transaction([
       this.prisma.workingHours.deleteMany({ where: { listingId } }),
       this.prisma.workingHours.createMany({
@@ -194,7 +226,7 @@ export class AvailabilityService {
 
   /** T84 — applies immediately regardless of listing status; edit moderation was removed. */
   async createDefinedSlot(userId: string, listingId: string, dto: CreateDefinedSlotDto) {
-    await this.assertOwnership(userId, listingId);
+    this.assertBookedBy(await this.assertOwnership(userId, listingId), 'DEFINED_SLOTS');
     const startsAt = new Date(dto.startsAt);
     const endsAt = new Date(dto.endsAt);
     // T105 — "Kopiraj termin" (manual multi-select or the weekly "Ponavljaj"
@@ -224,13 +256,48 @@ export class AvailabilityService {
         maxBookings: dto.maxBookings ?? 1,
       },
     });
+    await this.refreshSlotPrice(listingId);
     return { ...slot, price: paraToRsd(slot.price) };
   }
 
   async deleteDefinedSlot(userId: string, listingId: string, slotId: string) {
     await this.assertOwnership(userId, listingId);
     await this.prisma.definedSlot.deleteMany({ where: { id: slotId, listingId } });
+    await this.refreshSlotPrice(listingId);
     return { message: 'ok' };
+  }
+
+  /** T121: a slot added or removed can change the listing's "Od X RSD". */
+  private async refreshSlotPrice(listingId: string) {
+    const price = await lowestUpcomingSlotPrice(this.prisma, listingId);
+    await this.prisma.listing.updateMany({
+      where: { id: listingId, bookingModel: 'PER_SLOT', slotSubmode: 'DEFINED_SLOTS', price: { not: price } },
+      data: { price },
+    });
+  }
+
+  /**
+   * T121: slots also pass, and with them a listing's lowest price ahead, so
+   * every hour each listing on defined slots gets the price of its cheapest
+   * slot still to come (0 once none is left, "Trenutno nema termina").
+   */
+  @Cron(CronExpression.EVERY_HOUR)
+  async refreshDefinedSlotPrices() {
+    const listings = await this.prisma.listing.findMany({
+      where: { bookingModel: 'PER_SLOT', slotSubmode: 'DEFINED_SLOTS', status: { not: 'DELETED' } },
+      select: { id: true, price: true },
+    });
+    if (!listings.length) return;
+    const lowest = await this.prisma.definedSlot.groupBy({
+      by: ['listingId'],
+      where: { listingId: { in: listings.map((l) => l.id) }, startsAt: { gt: new Date() }, price: { not: null } },
+      _min: { price: true },
+    });
+    const lowestByListing = new Map(lowest.map((row) => [row.listingId, row._min.price ?? 0n]));
+    for (const listing of listings) {
+      const price = lowestByListing.get(listing.id) ?? 0n;
+      if (price !== listing.price) await this.prisma.listing.update({ where: { id: listing.id }, data: { price } });
+    }
   }
 
   async createManualBlock(userId: string, listingId: string, dto: CreateManualBlockDto) {
@@ -253,7 +320,7 @@ export class AvailabilityService {
    * price instead of erroring on the unique(listingId, date) constraint.
    */
   async setDatePrice(userId: string, listingId: string, dto: SetDatePriceDto) {
-    await this.assertOwnership(userId, listingId);
+    this.assertBookedBy(await this.assertOwnership(userId, listingId), 'STAY');
     const date = new Date(`${dto.date}T00:00:00.000Z`);
     const override = await this.prisma.datePriceOverride.upsert({
       where: { listingId_date: { listingId, date } },
@@ -296,7 +363,7 @@ export class AvailabilityService {
 
   /** "Različita cena po delu radnog vremena" — full replace, same pattern as setWorkingHours. */
   async setHourlyPriceRanges(userId: string, listingId: string, dto: SetHourlyPriceRangesDto) {
-    await this.assertOwnership(userId, listingId);
+    this.assertBookedBy(await this.assertOwnership(userId, listingId), 'WORKING_HOURS');
     await this.prisma.$transaction([
       this.prisma.hourlyPriceRange.deleteMany({ where: { listingId } }),
       this.prisma.hourlyPriceRange.createMany({
@@ -314,7 +381,7 @@ export class AvailabilityService {
 
   /** "Posebna cena za određeni datum/vremenski interval" exception. */
   async setSlotPriceOverride(userId: string, listingId: string, dto: SetSlotPriceOverrideDto) {
-    await this.assertOwnership(userId, listingId);
+    this.assertBookedBy(await this.assertOwnership(userId, listingId), 'WORKING_HOURS');
     const override = await this.prisma.slotPriceOverride.create({
       data: {
         listingId,
@@ -334,26 +401,6 @@ export class AvailabilityService {
   }
 
   /**
-   * Resolves the price one working-hours booking starts at (a booking priced
-   * per guest pays it per guest, T111). The rules are pickHourlyPrice's.
-   */
-  async resolveHourlyPrice(
-    listingId: string,
-    date: Date,
-    startTime: string,
-    basePrice: bigint,
-    weekendPrice: bigint | null = null,
-  ): Promise<PricedUnit> {
-    // T72 — raw UTC getters read a booking's calendar day back shifted by
-    // the Belgrade offset (e.g. a late-evening booking rolling into the next
-    // UTC day), missing a same-day SlotPriceOverride; SlotPriceOverride.date
-    // is itself a Belgrade calendar day, so both sides need the same zone.
-    const dateOnly = toBelgradeDateOnly(date);
-    const { overrides, ranges } = await this.loadHourlyPriceRules(listingId, dateOnly);
-    return pickHourlyPrice(overrides, ranges, toBelgradeISODayOfWeek(date), startTime, basePrice, weekendPrice);
-  }
-
-  /**
    * T127: the price of each hour of a working-hours booking, so a term that
    * runs from one part of the working hours into another pays each hour at
    * its own rate (it used to pay every hour at the start's). All hours count
@@ -367,6 +414,10 @@ export class AvailabilityService {
     basePrice: bigint,
     weekendPrice: bigint | null,
   ): Promise<PricedUnit[]> {
+    // T72: raw UTC getters read a booking's calendar day back shifted by
+    // the Belgrade offset (e.g. a late-evening booking rolling into the next
+    // UTC day), missing a same-day SlotPriceOverride; SlotPriceOverride.date
+    // is itself a Belgrade calendar day, so both sides need the same zone.
     const dateOnly = toBelgradeDateOnly(startsAt);
     const dayOfWeek = toBelgradeISODayOfWeek(startsAt);
     const { overrides, ranges } = await this.loadHourlyPriceRules(listingId, dateOnly);
@@ -423,35 +474,6 @@ export class AvailabilityService {
     for (let d = new Date(startsAt); d < endsAt; d.setUTCDate(d.getUTCDate() + 1)) {
       const isWeekend = d.getUTCDay() === 5 || d.getUTCDay() === 6; // Fri/Sat night
       prices.push(datePricedUnit(overrideByDate.get(d.toISOString().slice(0, 10)), isWeekend, basePrice, weekendPrice));
-    }
-    return prices;
-  }
-
-  /**
-   * Dizajn 21: per-hour price for a PER_STAY booking billed by the HOUR over
-   * [startsAt, endsAt). Each hour takes its date's override, else the weekend
-   * price on a Friday or Saturday, else the base price: the rule
-   * getNightlyPrices applies to a night, on the same UTC calendar dates.
-   */
-  async getHourlyStayPrices(
-    listingId: string,
-    startsAt: Date,
-    endsAt: Date,
-    basePrice: bigint,
-    weekendPrice: bigint | null,
-  ): Promise<PricedUnit[]> {
-    const firstDate = new Date(startsAt);
-    firstDate.setUTCHours(0, 0, 0, 0);
-    const overrides = await this.prisma.datePriceOverride.findMany({
-      where: { listingId, date: { gte: firstDate, lt: endsAt } },
-    });
-    const overrideByDate = new Map(overrides.map((o) => [o.date.toISOString().slice(0, 10), o.price]));
-
-    const prices: PricedUnit[] = [];
-    for (let time = startsAt.getTime(); time < endsAt.getTime(); time += 3600_000) {
-      const hour = new Date(time);
-      const isWeekend = hour.getUTCDay() === 5 || hour.getUTCDay() === 6;
-      prices.push(datePricedUnit(overrideByDate.get(hour.toISOString().slice(0, 10)), isWeekend, basePrice, weekendPrice));
     }
     return prices;
   }
@@ -671,6 +693,19 @@ export class AvailabilityService {
     if (!listing) throw new NotFoundException();
     if (listing.userId !== userId) throw new ForbiddenException();
     return listing;
+  }
+
+  /**
+   * T140: a mode's terms and prices are written only while the listing is
+   * saved with that mode, so nothing lands where the guest never looks (the
+   * wizard asks for step 2 to be saved first). Blocked dates fit every mode.
+   */
+  private assertBookedBy(listing: Listing, mode: 'WORKING_HOURS' | 'DEFINED_SLOTS' | 'STAY') {
+    const matches =
+      mode === 'STAY'
+        ? listing.bookingModel === 'PER_STAY'
+        : listing.bookingModel === 'PER_SLOT' && listing.slotSubmode === mode;
+    if (!matches) throw new BadRequestException(this.i18n.t('errors.AVAILABILITY_MODE_NOT_SAVED'));
   }
 }
 

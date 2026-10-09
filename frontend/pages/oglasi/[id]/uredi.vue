@@ -128,8 +128,15 @@
           </label>
         </div>
 
-        <!-- 249:300 -->
-        <div v-if="form.bookingModel === 'PER_SLOT'" class="pricing-choice" role="radiogroup" aria-labelledby="pricing-submode-label">
+        <!-- 249:300. T140: another way is taken only once the owner agrees to lose
+             the old one's terms, which go when this step is saved. -->
+        <div
+          v-if="form.bookingModel === 'PER_SLOT'"
+          :key="slotSubmodeRenderKey"
+          class="pricing-choice"
+          role="radiogroup"
+          aria-labelledby="pricing-submode-label"
+        >
           <p id="pricing-submode-label" class="pricing-label">{{ t('listing.slotCreationMethod') }} <span class="pricing-required">*</span></p>
           <label
             v-for="option in slotSubmodeOptions"
@@ -137,14 +144,26 @@
             class="pricing-option"
             :class="{ 'is-selected': form.slotSubmode === option.value }"
           >
-            <input v-model="form.slotSubmode" type="radio" name="pricing-submode" :value="option.value" class="visually-hidden" />
+            <input
+              type="radio"
+              name="pricing-submode"
+              :value="option.value"
+              :checked="form.slotSubmode === option.value"
+              class="visually-hidden"
+              @change="onSlotSubmodeChange(option.value)"
+            />
             <span class="pricing-radio" aria-hidden="true" />
             <span class="pricing-option-text">
               <span class="pricing-option-title">{{ option.title }}</span>
               <span class="pricing-option-desc">{{ option.description }}</span>
             </span>
           </label>
-          <p class="pricing-note">{{ t('listing.slotSubmodeNextStepNote', { step: t('listing.stepAvailability') }) }}</p>
+          <p v-if="slotSubmodeError" class="pricing-error"><img src="/images/icons/field-error.svg" alt="" />{{ slotSubmodeError }}</p>
+          <p v-if="slotSubmodePending" class="pricing-note">{{ t('listing.slotModeChangePending') }}</p>
+          <!-- T138: a party hall has the one way, so there is no choice to explain. -->
+          <p v-if="slotSubmodeOptions.length > 1" class="pricing-note">
+            {{ t('listing.slotSubmodeNextStepNote', { step: t('listing.stepAvailability') }) }}
+          </p>
         </div>
 
         <template v-if="showFlatPriceFields">
@@ -167,11 +186,14 @@
               <div class="pricing-unit">
                 <label for="pricing-unit" class="pricing-unit-label">{{ t('listing.priceUnit') }}</label>
                 <div class="pricing-select">
+                  <!-- T140: a night or a day and a month read a date's own price
+                       differently, so a switch between them asks first. -->
                   <select
                     id="pricing-unit"
-                    v-model="form.priceUnit"
+                    :value="form.priceUnit"
                     class="pricing-select-control"
                     :disabled="form.bookingModel === 'PER_SLOT' && !isPartyHallCategory"
+                    @change="onPriceUnitChange"
                   >
                     <option v-for="unit in allowedPriceUnitsForChoice" :key="unit" :value="unit">
                       {{ t(`listing.unit${unitLabel(unit)}`) }}
@@ -233,7 +255,15 @@
 
       <!-- Dostupnost / termini -->
       <div v-else-if="steps[currentStep].key === 'availability'">
-        <template v-if="form.bookingModel === 'PER_STAY'">
+        <!-- T140: this step edits the way of booking that is saved; one changed
+             in step 2 but not saved yet would put terms where no guest looks. -->
+        <div v-if="availabilityPending" class="availability-pending">
+          <p class="availability-pending-text">{{ t('listing.availabilityPendingPricing') }}</p>
+          <button type="button" class="btn btn-tertiary btn-sm" @click="goToStepKey('pricing')">
+            {{ t('listing.availabilityBackToPricing') }}
+          </button>
+        </div>
+        <template v-else-if="form.bookingModel === 'PER_STAY'">
           <label class="form-label">{{ t('listing.calendarTitle') }}</label>
           <p class="text-muted mb-2">{{ t('listing.calendarHint') }}</p>
           <AvailabilityCalendar
@@ -271,7 +301,7 @@
           />
         </template>
         <template v-else>
-          <DefinedSlotsEditor ref="definedSlotsEditorRef" :listing-id="listingId" />
+          <DefinedSlotsEditor ref="definedSlotsEditorRef" :listing-id="listingId" :price-unit="form.priceUnit" />
         </template>
       </div>
 
@@ -1334,8 +1364,12 @@ function goToStepKey(key) {
 const bookingChoice = ref('ONLINE')
 watch(bookingChoice, (val) => {
   form.bookingModel = val === 'ONLINE' ? listing.value?.category?.defaultBookingModel || 'PER_STAY' : 'NO_BOOKING'
-  if (form.bookingModel === 'PER_SLOT' && !form.slotSubmode) form.slotSubmode = 'WORKING_HOURS'
+  if (form.bookingModel === 'PER_SLOT' && !form.slotSubmode) form.slotSubmode = defaultSlotSubmode()
 })
+// T138: a party hall is booked by defined slots only; everything else starts on working hours.
+function defaultSlotSubmode() {
+  return usesDefinedSlotsOnly(listing.value) ? 'DEFINED_SLOTS' : 'WORKING_HOURS'
+}
 // Dizajn 21 (249:287, 249:300): both choices as option cards. The online card's
 // description is worded for the category's own booking model; T123 keeps the
 // title (also the Pregled row) to "Online rezervacije" for every model.
@@ -1350,10 +1384,76 @@ const bookingOptions = computed(() => {
     { value: 'NONE', title: t('listing.pricingBookingNone'), description: t('listing.pricingBookingNoneDesc') },
   ]
 })
-const slotSubmodeOptions = computed(() => [
-  { value: 'WORKING_HOURS', title: t('listing.slotSubmodeWorkingHours'), description: t('listing.slotSubmodeWorkingHoursDesc') },
-  { value: 'DEFINED_SLOTS', title: t('listing.slotSubmodeDefined'), description: t('listing.slotSubmodeDefinedDesc') },
-])
+const slotSubmodeOptions = computed(() => {
+  const definedSlots = { value: 'DEFINED_SLOTS', title: t('listing.slotSubmodeDefined'), description: t('listing.slotSubmodeDefinedDesc') }
+  // T138: a party hall keeps only "Definisani termini" (Tamara, 2026-10-09).
+  if (usesDefinedSlotsOnly(listing.value)) return [definedSlots]
+  return [
+    { value: 'WORKING_HOURS', title: t('listing.slotSubmodeWorkingHours'), description: t('listing.slotSubmodeWorkingHoursDesc') },
+    definedSlots,
+  ]
+})
+
+// T140: switching the way terms are created deletes the old way's terms and
+// prices when this step is saved, so the owner agrees to it first, and while
+// a booking is ahead the saved way stays (Tamara, 2026-10-09).
+const slotSubmodeError = ref('')
+// Recreates the radios after a refused switch, so the saved way is the checked one again.
+const slotSubmodeRenderKey = ref(0)
+const slotSubmodePending = computed(
+  () => !!listing.value?.slotSubmode && form.bookingModel === 'PER_SLOT' && form.slotSubmode !== listing.value.slotSubmode,
+)
+function onSlotSubmodeChange(value) {
+  slotSubmodeError.value = ''
+  const saved = listing.value?.slotSubmode
+  if (!saved || value === saved) {
+    form.slotSubmode = value
+    return
+  }
+  if (listing.value.hasFutureBookings) {
+    slotSubmodeError.value = t('listing.slotModeLocked')
+  } else if (window.confirm(t(value === 'DEFINED_SLOTS' ? 'listing.slotModeSwitchToSlotsConfirm' : 'listing.slotModeSwitchToHoursConfirm'))) {
+    form.slotSubmode = value
+    return
+  }
+  slotSubmodeRenderKey.value++
+}
+
+// T140, found checking the other models: a date's own price is a night's or
+// a day's, or a whole month's on the first, so a switch between the two drops
+// them on saving. Asked only when the listing has such prices ahead.
+async function onPriceUnitChange(event) {
+  const value = event.target.value
+  const saved = listing.value?.priceUnit
+  const monthly = (unit) => unit === 'MONTH'
+  const leavesSavedMeaning = saved && monthly(value) !== monthly(saved) && monthly(form.priceUnit) === monthly(saved)
+  if (leavesSavedMeaning && (await hasDatePricesAhead()) && !window.confirm(t('listing.datePricesResetConfirm'))) {
+    event.target.value = form.priceUnit
+    return
+  }
+  form.priceUnit = value
+}
+async function hasDatePricesAhead() {
+  if (listing.value?.bookingModel !== 'PER_STAY') return false
+  // From a month back, so this month's own price (kept on its first) counts too.
+  const day = 1000 * 60 * 60 * 24
+  const data = await api
+    .get(`/listings/${listingId}/availability`, {
+      query: { from: new Date(Date.now() - 31 * day).toISOString(), to: new Date(Date.now() + 730 * day).toISOString() },
+    })
+    .catch(() => null)
+  return !!data?.datePriceOverrides?.length
+}
+
+// T140: step 3 edits what is saved, so a booking model, a way of creating
+// terms or a night-or-month unit changed in step 2 has to be saved first.
+const availabilityPending = computed(() => {
+  const saved = listing.value
+  if (!saved) return false
+  if (form.bookingModel !== saved.bookingModel) return true
+  if (form.bookingModel === 'PER_SLOT') return form.slotSubmode !== saved.slotSubmode
+  return (form.priceUnit === 'MONTH') !== (saved.priceUnit === 'MONTH')
+})
 
 // PER_SLOT never shows a free price-unit choice (always HOUR for working
 // hours, SLOT for defined slots — each slot carries its own price instead) —
@@ -1405,8 +1505,9 @@ const allowedPriceUnitsForChoice = computed(() => {
   const units = listing.value?.category?.allowedPriceUnits || []
   // Dizajn 50: "po terminu" belongs to slot booking. Only Ostalo allows it next
   // to stay booking (its units cover whatever "Otključaj svoju kategoriju"
-  // sends), so an online Ostalo listing is priced by day, night, month or hour.
-  return form.bookingModel === 'PER_STAY' ? units.filter((unit) => unit !== 'SLOT') : units
+  // sends). T126: "Po satu" is gone, so an online stay is priced by the day,
+  // the night or the month; hours belong to "Po radnom vremenu".
+  return form.bookingModel === 'PER_STAY' ? units.filter(isStayPriceUnit) : units
 })
 // A listing without booking is never charged, so its weekend price stays hidden
 // (and kept) until online booking is back on.
@@ -2663,6 +2764,8 @@ function validateCurrentStep() {
   if (step === 'photos') {
     if (!photos.value.length) return t('listing.validationPhotosRequired')
   } else if (step === 'availability') {
+    // T140: nothing to save here until step 2's change is (the notice above says why).
+    if (availabilityPending.value) return t('listing.availabilityPendingShort')
     // T26 — the "*" on Cena (RSD) inside the defined-slots editor did
     // nothing on its own; the wizard let the owner reach step 4 with zero
     // slots defined, publishing a "bookable" listing with nothing to book.
@@ -2730,7 +2833,14 @@ async function loadListing() {
   // created PER_SLOT draft loads with slotSubmode still null (never set at
   // creation) and bookingChoice starting at its already-'ONLINE' default,
   // so nothing would otherwise pick WORKING_HOURS as the default submode.
-  if (form.bookingModel === 'PER_SLOT' && !form.slotSubmode) form.slotSubmode = 'WORKING_HOURS'
+  if (form.bookingModel === 'PER_SLOT' && !form.slotSubmode) form.slotSubmode = defaultSlotSubmode()
+  // T138: a party hall still saved on working hours moves to defined slots
+  // with its next save of step 2, which drops the hours (T140).
+  if (usesDefinedSlotsOnly(listing.value) && form.slotSubmode !== 'DEFINED_SLOTS') form.slotSubmode = 'DEFINED_SLOTS'
+  // T126: a stay still billed by the hour takes the category's own unit (the day for vehicles).
+  if (form.bookingModel === 'PER_STAY' && !isStayPriceUnit(form.priceUnit)) {
+    form.priceUnit = listing.value.category?.defaultPriceUnit || 'DAY'
+  }
   Object.assign(location, {
     regionId: listing.value.regionId || '',
     cityId: listing.value.cityId || '',
@@ -2972,7 +3082,7 @@ async function saveCurrentStep() {
       if (step === 'basics') payload.videoUrl = form.videoUrl.trim() || null
       // An emptied weekend price is null, which compact() drops too.
       if (step === 'pricing' && showWeekendPrice.value) payload.weekendPrice = form.weekendPrice ?? null
-      await api.patch(`/listings/${listingId}`, payload)
+      rememberSavedBooking(await api.patch(`/listings/${listingId}`, payload))
     }
 
     if (currentStep.value < steps.value.length - 1) {
@@ -2992,6 +3102,24 @@ async function saveCurrentStep() {
   } finally {
     saving.value = false
   }
+}
+
+// T140: what step 2 saved is what step 3 edits and what a later switch is
+// measured against. A listing on defined slots comes back with its slots'
+// lowest price and without the rules a slot has no use for (T121), and the
+// form takes those over so a later step doesn't send the old ones again.
+function rememberSavedBooking(saved) {
+  if (!saved || !listing.value) return
+  Object.assign(listing.value, {
+    bookingModel: saved.bookingModel,
+    slotSubmode: saved.slotSubmode,
+    priceUnit: saved.priceUnit,
+    price: saved.price,
+  })
+  if (isDefinedSlotsListing(saved)) {
+    Object.assign(form, { price: saved.price, weekendPrice: null, minDuration: null, maxDuration: null, gapAfterMinutes: null })
+  }
+  slotSubmodeError.value = ''
 }
 
 // T41 — this listing already has a package attached (subscriptionId set), so
@@ -5957,5 +6085,26 @@ $review-ok-ink: #1db82b;
 .ical-locked-icon {
   font-size: 18px;
   flex-shrink: 0;
+}
+
+// T140: no frame; step 3 waits for step 2's change, in the look of the iCal note above.
+.availability-pending {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  padding: 14px 16px;
+  border: 1px solid $color-border;
+  border-radius: $radius-input;
+  background: $color-background;
+}
+
+.availability-pending-text {
+  flex: 1 1 280px;
+  margin: 0;
+  font-size: 14px;
+  line-height: 20px;
+  color: $color-text;
 }
 </style>

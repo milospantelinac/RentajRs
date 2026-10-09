@@ -27,7 +27,7 @@
               <img v-if="l.photos?.[0]" :src="l.photos[0].url" :alt="l.photos[0].altText || ''" class="listing-tile-img" />
               <div class="card-body-sm">
                 <p class="text-body">{{ l.title }}</p>
-                <p class="text-muted">{{ new Intl.NumberFormat('sr-RS').format(l.price) }} RSD</p>
+                <p class="text-muted">{{ formatListingPrice(l, t) || t('listing.noUpcomingSlots') }}</p>
               </div>
             </NuxtLink>
           </div>

@@ -573,9 +573,10 @@ const bookingTermPairs = computed(() => chunkPairs(bookingTerms.value))
 const maxGuestCap = computed(() => getGuestCap(props.listing))
 
 // One row per weekday the owner actually opened, with several windows on the
-// same day joined rather than repeated as separate rows.
+// same day joined rather than repeated as separate rows. T140: only for a
+// listing booked by working hours, never hours another way left behind.
 const workingHoursRows = computed(() => {
-  const hours = availability.value?.workingHours ?? []
+  const hours = isWorkingHoursListing(props.listing) ? (availability.value?.workingHours ?? []) : []
   if (!hours.length) return []
   const byDay = new Map()
   for (const entry of hours) {

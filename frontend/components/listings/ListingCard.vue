@@ -60,9 +60,13 @@
       <div class="listing-card-divider" />
 
       <div class="listing-card-footer">
+        <!-- T121: "Od 12.000 RSD / terminu" on defined slots, and no "0 RSD" without one ahead. -->
         <p class="listing-card-price">
-          <span>{{ new Intl.NumberFormat('sr-RS').format(listing.price || 0) }} RSD</span>
-          <span class="listing-card-price-unit">{{ priceUnitSuffix }}</span>
+          <template v-if="priceText">
+            <span>{{ priceText }}</span>
+            <span class="listing-card-price-unit">{{ priceUnitSuffix }}</span>
+          </template>
+          <span v-else class="listing-card-price-unit">{{ t('listing.noUpcomingSlots') }}</span>
         </p>
         <span class="btn btn-circle-sm listing-card-details-btn" aria-hidden="true">
           <img src="/images/icons/arrow.svg" alt="" class="listing-card-details-arrow" />
@@ -114,6 +118,7 @@ const keyFacts = computed(() => getCardKeyFacts(props.listing))
 
 // Dizajn 3: "/ noć", "/ danu", "/ terminu", "/ satu", from utils/listingPrice.js.
 const priceUnitSuffix = computed(() => getCardPriceUnitSuffix(props.listing.priceUnit, t))
+const priceText = computed(() => formatListingPrice(props.listing, t))
 </script>
 
 <style lang="scss" scoped>

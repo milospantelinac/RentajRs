@@ -417,11 +417,6 @@ describe('AvailabilityService working hours (T127)', () => {
     expect(prices(late)).toEqual(['WEEKEND 6000', 'RANGE 7000', 'RANGE 7000', 'RANGE 7000', 'RANGE 7000']);
   });
 
-  it('prices a per-guest term once, at the rate it starts at', async () => {
-    const { service } = hoursService({ ranges: [{ dayOfWeek: null, startTime: '22:00', endTime: '02:00', price: rsd(900) }] });
-    await expect(service.resolveHourlyPrice('l1', at('2026-10-10T21:00:00Z'), '23:00', rsd(800))).resolves.toEqual({ price: rsd(900), kind: 'RANGE' });
-  });
-
   it('accepts a term only inside one window of the working hours', async () => {
     const { service } = hoursService({
       hours: [
@@ -437,5 +432,142 @@ describe('AvailabilityService working hours (T127)', () => {
     await expect(fits('2026-10-16T22:00:00Z', '2026-10-16T23:00:00Z')).resolves.toBe(true); // Sat 0 to 1, Friday's window
     await expect(fits('2026-10-16T23:00:00Z', '2026-10-17T01:00:00Z')).resolves.toBe(false); // Sat 1 to 3
     await expect(fits('2026-10-13T08:00:00Z', '2026-10-13T10:00:00Z')).resolves.toBe(false); // Tuesday is closed
+  });
+});
+
+describe('AvailabilityService keeps to the way a listing is booked (T140, T121)', () => {
+  const from = new Date('2026-10-10T00:00:00Z');
+  const to = new Date('2026-11-10T00:00:00Z');
+
+  function modeService(listing: Record<string, any> | null) {
+    const prisma = {
+      listing: {
+        findUnique: jest.fn().mockResolvedValue(listing),
+        updateMany: jest.fn(async () => ({ count: 1 })),
+        findMany: jest.fn(),
+        update: jest.fn(),
+      },
+      blockedTerm: { findMany: jest.fn().mockResolvedValue([{ id: 'b1', source: 'MANUAL' }]) },
+      workingHours: { findMany: jest.fn().mockResolvedValue([{ dayOfWeek: 5, startsAt: '15:00', endsAt: '00:00' }]) },
+      hourlyPriceRange: { findMany: jest.fn().mockResolvedValue([{ startTime: '15:00', endTime: '18:00', price: 11100n }]) },
+      slotPriceOverride: { findMany: jest.fn().mockResolvedValue([{ startTime: '15:00', endTime: '16:00', price: 30000n }]) },
+      definedSlot: {
+        findMany: jest.fn().mockResolvedValue([{ id: 's1', price: 6000000n }]),
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest.fn(async ({ data }: any) => ({ id: 's2', ...data })),
+        deleteMany: jest.fn(async () => ({ count: 1 })),
+        aggregate: jest.fn().mockResolvedValue({ _min: { price: 4500000n } }),
+        groupBy: jest.fn(),
+      },
+      datePriceOverride: {
+        findMany: jest.fn().mockResolvedValue([{ date: from, price: 800000n }]),
+        upsert: jest.fn(async ({ create }: any) => create),
+      },
+    };
+    return { prisma, service: new AvailabilityService(prisma as any, { emit: jest.fn() } as any, i18n as any, configWith(false) as any) };
+  }
+  const owned = (overrides: Record<string, any>) => ({ id: 'l1', userId: 'u1', price: 0n, ...overrides });
+  const kinds = (data: any) =>
+    Object.entries(data)
+      .filter(([, rows]) => (rows as unknown[]).length)
+      .map(([key]) => key);
+
+  it("shows a listing on working hours its hours and their prices only, never slots another way left behind", async () => {
+    const { prisma, service } = modeService(owned({ bookingModel: 'PER_SLOT', slotSubmode: 'WORKING_HOURS' }));
+    const data = await service.getAvailability('l1', from, to);
+    expect(kinds(data)).toEqual(['blocked', 'workingHours', 'hourlyPriceRanges', 'slotPriceOverrides']);
+    expect(prisma.definedSlot.findMany).not.toHaveBeenCalled();
+  });
+
+  it('shows a listing on defined slots its slots only', async () => {
+    const { prisma, service } = modeService(owned({ bookingModel: 'PER_SLOT', slotSubmode: 'DEFINED_SLOTS' }));
+    const data = await service.getAvailability('l1', from, to);
+    expect(kinds(data)).toEqual(['blocked', 'definedSlots']);
+    expect(data.definedSlots[0].price).toBe(60000);
+    expect(prisma.workingHours.findMany).not.toHaveBeenCalled();
+  });
+
+  it("shows a stay its date prices, and a listing without booking only what is blocked", async () => {
+    const stay = modeService(owned({ bookingModel: 'PER_STAY', slotSubmode: null }));
+    expect(kinds(await stay.service.getAvailability('l1', from, to))).toEqual(['blocked', 'datePriceOverrides']);
+
+    const contact = modeService(owned({ bookingModel: 'NO_BOOKING', slotSubmode: 'WORKING_HOURS' }));
+    expect(kinds(await contact.service.getAvailability('l1', from, to))).toEqual(['blocked']);
+  });
+
+  it('writes a way only while the listing is saved with it, blocked dates always', async () => {
+    const hours = modeService(owned({ bookingModel: 'PER_SLOT', slotSubmode: 'WORKING_HOURS' }));
+    const slot = { startsAt: '2026-10-16T12:00:00.000Z', endsAt: '2026-10-16T21:30:00.000Z', price: 60000 };
+    await expect(hours.service.createDefinedSlot('u1', 'l1', slot as any)).rejects.toBeInstanceOf(BadRequestException);
+    expect(i18n.t).toHaveBeenCalledWith('errors.AVAILABILITY_MODE_NOT_SAVED');
+    await expect(hours.service.setDatePrice('u1', 'l1', { date: '2026-10-16', price: 9000 } as any)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(hours.prisma.definedSlot.create).not.toHaveBeenCalled();
+    expect(hours.prisma.datePriceOverride.upsert).not.toHaveBeenCalled();
+
+    const slots = modeService(owned({ bookingModel: 'PER_SLOT', slotSubmode: 'DEFINED_SLOTS' }));
+    await expect(slots.service.setWorkingHours('u1', 'l1', { hours: [] } as any)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(slots.service.setHourlyPriceRanges('u1', 'l1', { ranges: [] } as any)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      slots.service.setSlotPriceOverride('u1', 'l1', { date: '2026-10-16', startTime: '15:00', endTime: '16:00', price: 300 } as any),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('moves the price shown as "Od X RSD" with every slot added or removed (T121)', async () => {
+    const { prisma, service } = modeService(owned({ bookingModel: 'PER_SLOT', slotSubmode: 'DEFINED_SLOTS' }));
+    const slot = { startsAt: '2026-10-16T12:00:00.000Z', endsAt: '2026-10-16T21:30:00.000Z', price: 45000 };
+
+    await service.createDefinedSlot('u1', 'l1', slot as any);
+    await service.deleteDefinedSlot('u1', 'l1', 's2');
+
+    expect(prisma.definedSlot.aggregate.mock.calls[0][0].where).toEqual({
+      listingId: 'l1',
+      startsAt: { gt: expect.any(Date) },
+      price: { not: null },
+    });
+    expect(prisma.listing.updateMany).toHaveBeenCalledTimes(2);
+    expect(prisma.listing.updateMany).toHaveBeenCalledWith({
+      where: { id: 'l1', bookingModel: 'PER_SLOT', slotSubmode: 'DEFINED_SLOTS', price: { not: 4500000n } },
+      data: { price: 4500000n },
+    });
+  });
+});
+
+describe('AvailabilityService#refreshDefinedSlotPrices (T121)', () => {
+  it('gives each listing on defined slots its cheapest slot ahead, 0 with none left, and writes only a change', async () => {
+    const prisma = {
+      listing: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'cheaper', price: 6000000n },
+          { id: 'same', price: 450000n },
+          { id: 'passed', price: 800000n },
+        ]),
+        update: jest.fn(),
+      },
+      definedSlot: {
+        groupBy: jest.fn().mockResolvedValue([
+          { listingId: 'cheaper', _min: { price: 5000000n } },
+          { listingId: 'same', _min: { price: 450000n } },
+        ]),
+      },
+    };
+    const service = new AvailabilityService(prisma as any, { emit: jest.fn() } as any, i18n as any, configWith(false) as any);
+
+    await service.refreshDefinedSlotPrices();
+
+    expect(prisma.listing.findMany.mock.calls[0][0].where).toEqual({
+      bookingModel: 'PER_SLOT',
+      slotSubmode: 'DEFINED_SLOTS',
+      status: { not: 'DELETED' },
+    });
+    expect(prisma.definedSlot.groupBy.mock.calls[0][0].where).toMatchObject({
+      listingId: { in: ['cheaper', 'same', 'passed'] },
+      price: { not: null },
+    });
+    expect(prisma.listing.update.mock.calls).toEqual([
+      [{ where: { id: 'cheaper' }, data: { price: 5000000n } }],
+      [{ where: { id: 'passed' }, data: { price: 0n } }],
+    ]);
   });
 });

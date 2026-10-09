@@ -27,6 +27,23 @@ export function isDefinedSlotsListing(listing) {
   return listing?.bookingModel === 'PER_SLOT' && listing?.slotSubmode === 'DEFINED_SLOTS'
 }
 
+// T140: the weekly hours only describe a listing booked by working hours.
+export function isWorkingHoursListing(listing) {
+  return listing?.bookingModel === 'PER_SLOT' && listing?.slotSubmode === 'WORKING_HOURS'
+}
+
+// T126: "Po satu" is gone, so a stay is priced by the night, the day or the month.
+export function isStayPriceUnit(unit) {
+  return ['NIGHT', 'DAY', 'MONTH'].includes(unit)
+}
+
+// T138: a party hall is booked by its own defined slots only (Tamara, 2026-10-09).
+const DEFINED_SLOTS_ONLY_CATEGORY_SLUGS = ['sale-za-proslave']
+
+export function usesDefinedSlotsOnly(listing) {
+  return DEFINED_SLOTS_ONLY_CATEGORY_SLUGS.includes(listing?.category?.slug)
+}
+
 // T117: a day booking (Po danu) has no gap after it, the pickup and return
 // times do that job (Tamara, 2026-10-09).
 export function isDayStay(listing) {

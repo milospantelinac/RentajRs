@@ -1,9 +1,13 @@
 <template>
   <div class="booking-panel">
     <div class="booking-panel-price">
+      <!-- T121: "Od 60.000 RSD / termin" on defined slots, no "0 RSD" without one ahead. -->
       <p class="booking-panel-price-main">
-        <span class="booking-panel-amount">{{ formatPrice(listing.price) }}</span>
-        <span class="booking-panel-unit">{{ unitSuffix }}</span>
+        <template v-if="headPrice">
+          <span class="booking-panel-amount">{{ headPrice }}</span>
+          <span class="booking-panel-unit">{{ unitSuffix }}</span>
+        </template>
+        <span v-else class="booking-panel-unit">{{ t('listing.noUpcomingSlots') }}</span>
       </p>
       <!-- T114: "Novo" until the first review. -->
       <span class="booking-panel-rating">
@@ -128,7 +132,11 @@
             @click="pickSlot(slot)"
           >
             <span>{{ formatDateTime(slot.startsAt) }} — {{ formatDateTime(slot.endsAt) }}</span>
-            <span class="booking-panel-slot-price">{{ formatPrice(slot.price ?? listing.price) }}</span>
+            <!-- T138: a hall priced per guest says so under every slot's price. -->
+            <span class="booking-panel-slot-price">
+              {{ formatPrice(slot.price ?? listing.price) }}
+              <span v-if="listing.priceUnit === 'GUEST'" class="booking-panel-slot-unit">{{ t('listing.pricePerGuestSuffix') }}</span>
+            </span>
           </button>
           <p v-if="!slots.length" class="booking-panel-hint">{{ t('booking.noSlots') }}</p>
         </div>
@@ -455,6 +463,7 @@ const unitSuffix = computed(() =>
     ? t('listing.pricePerGuestSuffix')
     : `/ ${t(`listing.unit${props.listing.priceUnit.charAt(0)}${props.listing.priceUnit.slice(1).toLowerCase()}`)}`,
 )
+const headPrice = computed(() => formatListingPrice(props.listing, t))
 
 // T127: "2 sata × 1.200 RSD (cena za deo radnog vremena)", the request page's lines.
 const priceRows = computed(() => buildCardPriceRows(t, props.listing, quote.value))
@@ -796,8 +805,18 @@ const requestLink = computed(() => {
 }
 
 .booking-panel-slot-price {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
   font-weight: 500;
   white-space: nowrap;
+}
+
+// T138: under the price, so the term keeps its one line.
+.booking-panel-slot-unit {
+  font-size: 12px;
+  font-weight: 400;
+  color: $color-text-muted;
 }
 
 .booking-panel-hint {

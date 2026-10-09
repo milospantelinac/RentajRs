@@ -62,5 +62,9 @@
   "CONVERSATION_ACCOUNT_REMOVED": "This account has been removed and no longer receives messages",
   "REVIEW_ALREADY_EXISTS": "You have already reviewed this booking",
   "REVIEW_WINDOW_CLOSED": "The time to review this booking has passed",
-  "REVIEW_EDIT_CLOSED": "The time to change this review has passed"
+  "REVIEW_EDIT_CLOSED": "The time to change this review has passed",
+  "PRICE_UNIT_NOT_ALLOWED": "This price unit does not exist for the chosen booking method",
+  "SLOT_MODE_NOT_ALLOWED": "Party halls are booked by defined time slots only",
+  "SLOT_MODE_LOCKED_BY_BOOKINGS": "The way time slots are created cannot change while you have upcoming bookings.",
+  "AVAILABILITY_MODE_NOT_SAVED": "Save the \"Price and booking method\" step first, then set the availability"
 }
