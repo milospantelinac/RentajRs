@@ -17,8 +17,8 @@ export class SearchController {
 
   @Public()
   @Get('filters')
-  getFilters(@Query('categorySlug') categorySlug: string) {
-    return this.searchService.getFilterableAttributes(categorySlug);
+  getFilters(@Query('categorySlug') categorySlug?: string) {
+    return this.searchService.getSearchFilters(categorySlug);
   }
 
   @Public()

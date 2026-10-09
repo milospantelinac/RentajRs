@@ -2082,16 +2082,15 @@ const detailsPreviewRows = computed(() => {
   return rows
 })
 
-// 545:686: the filters the search panel really has for this category, in its order:
-// ranges, single choices, switches, then the groups to check. The eight newer frames
-// start with the price.
+// 545:686: the filters the search page really has for this category. T115: in the
+// order /pretraga shows them (GET /search/filters, the bar and then "Više filtera"),
+// without Deo grada, which the address step decides. The eight newer frames start
+// with the price.
+const detailsSearchFilters = ref([])
 const detailsFilterChips = computed(() => {
-  const rank = (attr) =>
-    attr.filterType === 'RANGE' ? 0 : attr.filterType === 'TOGGLE' ? 2 : attr.type === 'CHECKBOX_GROUP' ? 3 : 1
-  const labels = (listing.value?.category?.attributes || [])
-    .filter((attr) => attr.isFilter && (attr.filterType === 'RANGE' || attr.filterType === 'TOGGLE' || attr.options?.length))
-    .sort((a, b) => rank(a) - rank(b))
-    .map((attr) => getFilterAttributeLabel(attr, t))
+  const labels = detailsSearchFilters.value
+    .filter((filter) => filter.control !== 'AREA')
+    .map((filter) => getSearchFilterLabel(filter, t))
   if (!labels.length || detailsPlayroomLook.value) return labels
   return [t('listing.price'), ...labels]
 })
@@ -2793,7 +2792,12 @@ async function loadListing() {
   // attributes — that's TaxonomyService's job); fetch the definitions
   // separately and merge in this listing's already-saved values by id.
   if (listing.value.category?.slug) {
-    const categoryDetail = await api.get(`/categories/${listing.value.category.slug}`)
+    const [categoryDetail, searchFilters] = await Promise.all([
+      api.get(`/categories/${listing.value.category.slug}`),
+      // T115: what guests can filter this category by, for step Detalji's chips.
+      api.get(`/search/filters?categorySlug=${listing.value.category.slug}`).catch(() => null),
+    ])
+    detailsSearchFilters.value = searchFilters?.filters || []
     const valueByAttributeId = new Map((listing.value.attributes || []).map((v) => [v.attributeId, v]))
     listing.value.category.name = categoryDetail.name
     listing.value.category.attributes = categoryDetail.attributes.map((attr) => ({

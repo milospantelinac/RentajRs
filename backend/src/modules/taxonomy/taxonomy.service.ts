@@ -33,6 +33,8 @@ export const LISTING_COUNTS_CACHE_KEY = 'taxonomy:listing-counts';
 // Short, so a count is never off for long: not after a missed delete, and not
 // when a read that started before a write stores the old number after it.
 const LISTING_COUNTS_TTL = 60;
+/** T115: SearchService.getSearchFilters, one key per category page; dropped with the tree. */
+export const SEARCH_FILTERS_CACHE_PREFIX = 'taxonomy:search-filters:v1:';
 const FUZZY_THRESHOLD = 0.35;
 export const FALLBACK_CATEGORY_SLUG = 'ostalo';
 
@@ -614,6 +616,7 @@ export class TaxonomyService {
     await this.cache.del(TREE_CACHE_KEY, LISTING_COUNTS_CACHE_KEY);
     await this.cache.delByPrefix('taxonomy:category:');
     await this.cache.delByPrefix('taxonomy:attributes:');
+    await this.cache.delByPrefix(SEARCH_FILTERS_CACHE_PREFIX);
   }
 }
 

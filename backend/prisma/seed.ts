@@ -5,6 +5,7 @@ import { DERIVED_KEY_PREFIXES, deleteByPrefix } from '../src/common/cache/derive
 import { emailTemplates } from './email-templates.seed-data';
 import { staticPages } from './static-pages.seed-data';
 import { faqs } from './faqs.seed-data';
+import { SEARCH_FILTERS } from './search-filters.seed-data';
 
 const prisma = new PrismaClient();
 
@@ -375,9 +376,11 @@ const AMENITIES_KUCE = opts([
   'Ozvučenje', 'Parking', 'Pegla', 'Peškiri', 'Posteljina', 'Privatni ulaz', 'Pušenje dozvoljeno', 'Roštilj',
   'Sauna', 'Slana soba', 'Terasa', 'Tuš kabina', 'TV', 'WiFi', 'Kućni ljubimci dozvoljeni',
 ]);
+// T115: rooms take pets too, for the "Ljubimci dozvoljeni" switch every
+// Nekretnine page has.
 const AMENITIES_SOBE = opts([
   'Bademantil', 'Fen za kosu', 'Kafe aparat', 'Kamin', 'Klima', 'Lift', 'Mašina za veš', 'Parking', 'Pegla',
-  'Peškiri', 'Posteljina', 'Privatni ulaz', 'Pušenje dozvoljeno', 'Terasa', 'TV', 'WiFi',
+  'Peškiri', 'Posteljina', 'Privatni ulaz', 'Pušenje dozvoljeno', 'Terasa', 'TV', 'WiFi', 'Kućni ljubimci dozvoljeni',
 ]);
 const VEHICLE_BRANDS = opts([
   'Volkswagen', 'Opel', 'Renault', 'Peugeot', 'Fiat', 'Škoda', 'Ford', 'BMW', 'Mercedes-Benz', 'Audi',
@@ -474,10 +477,22 @@ const CATEGORY_TREE: CategorySeed[] = [
     defaultPriceUnit: PriceUnit.SLOT,
     attributes: [
       { key: 'kapacitet_dece', name: 'Kapacitet dece', type: AttributeType.NUMBER, required: true, isFilter: true, filterType: FilterType.RANGE, showOnCard: true },
-      { key: 'uzrast_dece', name: 'Uzrast dece', type: AttributeType.CHECKBOX_GROUP, required: true, isFilter: true, filterType: FilterType.SELECT, showOnCard: true, options: opts(['1–3 godine', '4–6 godine', '7–10 godine', '10+ godina']) },
+      // T115: "4-6 godina" and "7-10 godina", and the last bracket starts at
+      // 11 so 10 sits in one only. The keys stay the old names' slugs, so the
+      // brackets owners ticked stay ticked.
+      {
+        key: 'uzrast_dece', name: 'Uzrast dece', type: AttributeType.CHECKBOX_GROUP, required: true, isFilter: true, filterType: FilterType.SELECT, showOnCard: true,
+        options: [
+          { key: '1-3-godine', name: '1-3 godine' },
+          { key: '4-6-godine', name: '4-6 godina' },
+          { key: '7-10-godine', name: '7-10 godina' },
+          { key: '10-godina', name: '11+ godina' },
+        ],
+      },
+      // T115: no "Pušenje dozvoljeno" here, it is not something a playroom has.
       {
         key: 'sadrzaji', name: 'Sadržaji', type: AttributeType.CHECKBOX_GROUP, isFilter: true, filterType: FilterType.SELECT,
-        options: opts(['Kafić / zona za roditelje', 'Klima', 'Parking', 'Privatni ulaz', 'Pušenje dozvoljeno', 'WiFi', 'Animator dostupan', 'Trambolina', 'Tobogan', 'Lavirint / poligon', 'Bazen sa lopticama', 'Video igre / konzole', 'Kreativni sadržaji']),
+        options: opts(['Kafić / zona za roditelje', 'Klima', 'Parking', 'Privatni ulaz', 'WiFi', 'Animator dostupan', 'Trambolina', 'Tobogan', 'Lavirint / poligon', 'Bazen sa lopticama', 'Video igre / konzole', 'Kreativni sadržaji']),
       },
     ],
   },
@@ -507,6 +522,8 @@ const CATEGORY_TREE: CategorySeed[] = [
           { key: 'gorivo', name: 'Gorivo', type: AttributeType.LIST, required: true, isFilter: true, filterType: FilterType.SELECT, showOnCard: true, options: opts(['Benzin', 'Dizel', 'Hibrid', 'Plug-in hibrid', 'Električno']) },
           { key: 'pogon', name: 'Pogon', type: AttributeType.LIST, isFilter: true, filterType: FilterType.SELECT, options: opts(['Prednji', 'Zadnji', '4x4']) },
           { key: 'oprema', name: 'Oprema', type: AttributeType.CHECKBOX_GROUP, isFilter: true, filterType: FilterType.SELECT, options: opts(['GPS / navigacija', 'Klima', 'Krovni nosač', 'Parking senzori', 'Tempomat', 'TV', 'WiFi']) },
+          // T115: new, a filter of its own in "Više filtera".
+          { key: 'dostava_na_adresu', name: 'Dostava na adresu', type: AttributeType.BOOLEAN, isFilter: true, filterType: FilterType.TOGGLE },
         ],
       },
       {
@@ -532,6 +549,7 @@ const CATEGORY_TREE: CategorySeed[] = [
           { key: 'gorivo', name: 'Gorivo', type: AttributeType.LIST, isFilter: true, filterType: FilterType.SELECT, options: opts(['Benzin', 'Dizel', 'Hibrid', 'Plug-in hibrid', 'Električno']) },
           { key: 'pogon', name: 'Pogon', type: AttributeType.LIST, isFilter: true, filterType: FilterType.SELECT, options: opts(['Prednji', 'Zadnji', '4x4']) },
           { key: 'oprema', name: 'Oprema', type: AttributeType.CHECKBOX_GROUP, isFilter: true, filterType: FilterType.SELECT, options: opts(['GPS / navigacija', 'Klima', 'Parking senzori', 'Tempomat']) },
+          { key: 'dostava_na_adresu', name: 'Dostava na adresu', type: AttributeType.BOOLEAN, isFilter: true, filterType: FilterType.TOGGLE },
         ],
       },
     ],
@@ -546,7 +564,8 @@ const CATEGORY_TREE: CategorySeed[] = [
     attributes: [
       // T66 — kept as wizard/detail fields (required, showOnCard) but
       // intentionally not a search filter — the document explicitly asked
-      // for these to be left out of the /pretraga panel for now.
+      // for these to be left out of the /pretraga panel for now. T115 puts
+      // Površina back in the bar ("od 20 m²" and up, SEARCH_FILTERS).
       // T40 — dropdown of preset values instead of free numeric input; the
       // option's own name carries the unit since LIST rendering never
       // appends `unit` the way NUMBER does.
@@ -719,6 +738,9 @@ async function seedCategoryNode(node: CategorySeed, parentId: string | null, ord
       where: { attributeId: attribute.id, key: { notIn: optionKeys.length ? optionKeys : ['__none__'] } },
     });
     for (const stale of staleOptions) {
+      // T115: a listing that ticked it would keep its id in valueOptionIds.
+      await prisma.$executeRaw`UPDATE "ListingAttribute" SET "valueOptionIds" = array_remove("valueOptionIds", ${stale.id}::uuid) WHERE "attributeId" = ${attribute.id}::uuid`;
+      await prisma.translation.deleteMany({ where: { entityType: 'OPTION', entityId: stale.id } });
       await prisma.attributeOption.delete({ where: { id: stale.id } });
     }
 
@@ -743,6 +765,28 @@ async function seedCategoryNode(node: CategorySeed, parentId: string | null, ord
   for (const stale of staleAttributes) {
     await prisma.listingAttribute.deleteMany({ where: { attributeId: stale.id } });
     await prisma.categoryAttribute.delete({ where: { id: stale.id } });
+  }
+
+  // T115: the category's /pretraga filters, kept in step with SEARCH_FILTERS
+  // the same way as the attributes above.
+  const filters = SEARCH_FILTERS[slug] ?? [];
+  await prisma.categoryFilter.deleteMany({
+    where: { categoryId: category.id, key: { notIn: filters.map((filter) => filter.key) } },
+  });
+  for (const [i, filter] of filters.entries()) {
+    const filterFields = {
+      attributeKey: filter.attributeKey === undefined ? filter.key : filter.attributeKey,
+      optionKey: filter.optionKey ?? null,
+      placement: filter.placement,
+      control: filter.control,
+      thresholds: filter.thresholds ?? [],
+      displayOrder: i,
+    };
+    await prisma.categoryFilter.upsert({
+      where: { categoryId_key: { categoryId: category.id, key: filter.key } },
+      update: filterFields,
+      create: { categoryId: category.id, key: filter.key, ...filterFields },
+    });
   }
 
   for (const [i, child] of (node.children ?? []).entries()) {

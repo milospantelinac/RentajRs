@@ -1,8 +1,10 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { PriceUnit } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
   IsArray,
   IsBoolean,
+  IsEnum,
   IsIn,
   IsInt,
   IsNumber,
@@ -95,6 +97,11 @@ export class SearchListingsDto {
   @IsNumber()
   @Min(0)
   priceMax?: number;
+
+  @ApiPropertyOptional({ enum: PriceUnit, description: 'T115: with priceMin/priceMax, only listings priced in this unit' })
+  @IsOptional()
+  @IsEnum(PriceUnit)
+  priceUnit?: PriceUnit;
 
   @ApiPropertyOptional({ description: 'ISO date — availability start' })
   @IsOptional()

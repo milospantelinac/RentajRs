@@ -66,8 +66,25 @@
           :value="priceLabel"
           :active="Boolean(query.priceMin || query.priceMax)"
           :panel-width="300"
+          @open="priceDraft.unit = query.priceUnit"
         >
           <template #default="{ close }">
+            <!-- T115 (Excel row 160): the prices are per night, per day, per
+                 month..., and a category that has several units picks one. -->
+            <p v-if="priceDraft.unit" class="filter-panel-heading">{{ t(`search.priceTitle.${priceDraft.unit}`) }}</p>
+            <div v-if="priceUnits.length > 1" class="filter-unit-chips" role="group" :aria-label="t('search.priceUnitLabel')">
+              <button
+                v-for="unit in priceUnits"
+                :key="unit"
+                type="button"
+                class="filter-unit-chip"
+                :class="{ 'filter-unit-chip-active': priceDraft.unit === unit }"
+                :aria-pressed="priceDraft.unit === unit"
+                @click="priceDraft.unit = unit"
+              >
+                {{ t(`search.priceUnitChip.${unit}`) }}
+              </button>
+            </div>
             <div class="filter-panel-row">
               <label class="filter-panel-field">
                 <span class="filter-panel-label">{{ t('search.priceFrom') }}</span>
@@ -109,86 +126,90 @@
           </template>
         </FilterPill>
 
-        <FilterPill
-          :label="t('search.filterCapacity')"
-          :value="capacityLabel"
-          :active="Boolean(query.guests)"
-          :panel-width="220"
-        >
-          <template #default="{ close }">
-            <ul class="filter-option-list">
-              <li v-for="option in capacityOptions" :key="option.value || 'any'">
-                <button
-                  type="button"
-                  class="filter-option"
-                  :class="{ 'filter-option-selected': String(option.value) === String(query.guests || '') }"
-                  @click="applyCapacity(option.value, close)"
-                >
-                  {{ option.label }}
-                </button>
-              </li>
-            </ul>
-          </template>
-        </FilterPill>
+        <!-- T115: the category's own pills, in the order of Tamara's table
+             (GET /search/filters). The rest of its filters are in the panel. -->
+        <template v-for="filter in barFilters" :key="filter.key">
+          <button
+            v-if="filter.control === 'TOGGLE' || filter.control === 'OPTION_TOGGLE'"
+            type="button"
+            class="filter-toggle-pill"
+            :class="{ 'filter-toggle-pill-active': isBarFilterSet(filter) }"
+            role="switch"
+            :aria-checked="isBarFilterSet(filter)"
+            @click="toggleBarFilter(filter)"
+          >
+            <span class="filter-toggle-label">{{ getSearchFilterLabel(filter, t) }}</span>
+            <span class="filter-switch" aria-hidden="true"><span class="filter-switch-knob" /></span>
+          </button>
 
-        <!-- Dizajn 10 — the bar also carries the chosen category's own
-             single-choice filters; ranges and multi-selects stay in the
-             panel, where they have room for their real controls. -->
-        <FilterPill
-          v-for="attr in barAttributes"
-          :key="attr.key"
-          :label="attr.name"
-          :value="attrPillValue(attr)"
-          :active="Boolean(attrSelectedOption(attr))"
-          :panel-width="240"
-        >
-          <template #default="{ close }">
-            <ul class="filter-option-list">
-              <li>
-                <button
-                  type="button"
-                  class="filter-option"
-                  :class="{ 'filter-option-selected': !attrSelectedOption(attr) }"
-                  @click="applyAttrOption(attr, null, close)"
-                >
-                  {{ t('search.anyValue') }}
-                </button>
-              </li>
-              <li v-for="opt in attr.options" :key="opt.id">
-                <button
-                  type="button"
-                  class="filter-option"
-                  :class="{ 'filter-option-selected': attrSelectedOption(attr) === opt.id }"
-                  @click="applyAttrOption(attr, opt.id, close)"
-                >
-                  {{ opt.name }}
-                </button>
-              </li>
-            </ul>
-          </template>
-        </FilterPill>
-        <FilterPill
-          :label="t('search.filterArea')"
-          :value="areaLabel"
-          :active="query.cityAreaIds.length > 0"
-          :panel-width="240"
-        >
-          <template #default="{ close }">
-            <p v-if="!query.cityId" class="filter-panel-hint">{{ t('search.allCities') }}</p>
-            <ul v-else class="filter-option-list">
-              <li v-for="option in areaOptions" :key="option.value || 'any'">
-                <button
-                  type="button"
-                  class="filter-option"
-                  :class="{ 'filter-option-selected': option.value ? query.cityAreaIds.includes(option.value) : !query.cityAreaIds.length }"
-                  @click="applyArea(option.value, close)"
-                >
-                  {{ option.label }}
-                </button>
-              </li>
-            </ul>
-          </template>
-        </FilterPill>
+          <!-- Only once a city is picked: "za Svi gradovi nema smisla". Several
+               parts of the city can be ticked at once. -->
+          <FilterPill
+            v-else-if="filter.control === 'AREA'"
+            v-show="query.cityId && cityAreas.length"
+            :label="t('search.filterArea')"
+            :value="areaLabel"
+            :active="query.cityAreaIds.length > 0"
+            :panel-width="260"
+            @open="areaDraft = [...query.cityAreaIds]"
+          >
+            <template #default="{ close }">
+              <ul class="filter-check-list">
+                <li v-for="area in cityAreas" :key="area.id">
+                  <label class="filter-check">
+                    <input
+                      type="checkbox"
+                      class="filter-check-input"
+                      :checked="areaDraft.includes(area.id)"
+                      @change="toggleAreaDraft(area.id)"
+                    />
+                    <span class="filter-check-box" aria-hidden="true">
+                      <img src="/images/icons/check-small.svg" alt="" width="12" height="12" />
+                    </span>
+                    <span class="filter-check-label">{{ area.name }}</span>
+                  </label>
+                </li>
+              </ul>
+              <div class="filter-panel-actions">
+                <button type="button" class="btn btn-text btn-sm" @click="applyAreas([], close)">{{ t('search.reset') }}</button>
+                <button type="button" class="btn btn-primary-flat btn-sm" @click="applyAreas(areaDraft, close)">{{ t('search.apply') }}</button>
+              </div>
+            </template>
+          </FilterPill>
+
+          <FilterPill
+            v-else
+            :label="getSearchFilterLabel(filter, t)"
+            :value="barPillValue(filter)"
+            :active="isBarFilterSet(filter)"
+            :panel-width="240"
+          >
+            <template #default="{ close }">
+              <ul class="filter-option-list">
+                <li>
+                  <button
+                    type="button"
+                    class="filter-option"
+                    :class="{ 'filter-option-selected': !isBarFilterSet(filter) }"
+                    @click="applyBarChoice(filter, null, close)"
+                  >
+                    {{ t('search.anyValue') }}
+                  </button>
+                </li>
+                <li v-for="choice in barChoices(filter)" :key="choice.value">
+                  <button
+                    type="button"
+                    class="filter-option"
+                    :class="{ 'filter-option-selected': barChoiceValue(filter) === choice.value }"
+                    @click="applyBarChoice(filter, choice.value, close)"
+                  >
+                    {{ choice.label }}
+                  </button>
+                </li>
+              </ul>
+            </template>
+          </FilterPill>
+        </template>
 
         <button
           type="button"
@@ -202,7 +223,8 @@
           <span class="filter-switch" aria-hidden="true"><span class="filter-switch-knob" /></span>
         </button>
 
-        <button type="button" class="filter-more-btn" @click="panelOpen = true">
+        <!-- Not where the panel would be empty (Svi oglasi, Mašine: "Nije potrebno"). -->
+        <button v-if="panelFilters.length" type="button" class="filter-more-btn" @click="panelOpen = true">
           <img src="/images/icons/sliders.svg" alt="" width="16" height="16" />
           {{ t('search.moreFilters') }}
           <span v-if="panelFilterCount" class="filter-more-count">{{ panelFilterCount }}</span>
@@ -324,10 +346,8 @@
 
     <FilterPanel
       :open="panelOpen"
-      :query="query"
-      :attribute-filters="attributeFilters"
-      :filterable-attributes="filterableAttributes"
-      :city-areas="cityAreas"
+      :filters="panelFilters"
+      :selections="selections"
       :total="total"
       @close="panelOpen = false"
       @apply="applyPanelFilters"
@@ -346,7 +366,6 @@ const categories = ref([])
 const cities = ref([])
 const cityAreas = ref([])
 const selectedCategory = ref(null)
-const filterableAttributes = ref([])
 const results = ref([])
 const total = ref(0)
 const loading = ref(false)
@@ -377,6 +396,7 @@ const query = reactive({
   cityAreaIds: route.query.cityAreaIds ? String(route.query.cityAreaIds).split(',').filter(Boolean) : [],
   priceMin: route.query.priceMin ? Number(route.query.priceMin) : null,
   priceMax: route.query.priceMax ? Number(route.query.priceMax) : null,
+  priceUnit: route.query.priceUnit || '',
   dateFrom: route.query.dateFrom || '',
   dateTo: route.query.dateTo || '',
   guests: route.query.guests ? Number(route.query.guests) : null,
@@ -386,28 +406,26 @@ const query = reactive({
   pageSize: 24,
 })
 
-const attributeFilters = reactive(new Map())
+// T115: the category page's filters from GET /search/filters (the units of
+// the Cena pill and the bar's and the panel's filters, in order), and what the
+// visitor picked in them, by filter key (utils/searchFilters.js).
+const searchFilters = ref({ priceUnits: [], filters: [] })
+const selections = reactive(new Map())
+const priceUnits = computed(() => searchFilters.value.priceUnits)
+const barFilters = computed(() => searchFilters.value.filters.filter((filter) => filter.placement === 'BAR'))
+const panelFilters = computed(() => searchFilters.value.filters.filter((filter) => filter.placement === 'PANEL'))
 
 // Drafts so a half-typed price/date range doesn't fire a search on every
 // keystroke — the popover applies them explicitly.
-const priceDraft = reactive({ min: query.priceMin, max: query.priceMax })
+const priceDraft = reactive({ min: query.priceMin, max: query.priceMax, unit: query.priceUnit })
 const dateDraft = reactive({ from: query.dateFrom, to: query.dateTo })
+const areaDraft = ref([])
 
 // -- Options -----------------------------------------------------------
 
 const cityOptions = computed(() => [
   { value: '', label: t('search.allCities') },
   ...cities.value.map((c) => ({ value: c.id, label: c.name })),
-])
-
-const areaOptions = computed(() => [
-  { value: '', label: t('search.anyValue') },
-  ...cityAreas.value.map((a) => ({ value: a.id, label: a.name })),
-])
-
-const capacityOptions = computed(() => [
-  { value: '', label: t('search.anyValue') },
-  ...[2, 4, 6, 8, 10, 20, 50].map((n) => ({ value: n, label: t('search.capacityOption', { count: n }) })),
 ])
 
 const sortOptions = computed(() => [
@@ -473,12 +491,18 @@ function selectSubcategoryPill(pill) {
 
 const numberFormat = computed(() => new Intl.NumberFormat(locale.value === 'en' ? 'en-US' : 'sr-RS'))
 
-const priceLabel = computed(() => {
+const priceAmountLabel = computed(() => {
   const { priceMin: min, priceMax: max } = query
   if (min && max) return `${numberFormat.value.format(min)} – ${numberFormat.value.format(max)} RSD`
   if (min) return `${numberFormat.value.format(min)}+ RSD`
   if (max) return `< ${numberFormat.value.format(max)} RSD`
   return ''
+})
+
+// T115: "/ noć", "/ mesečno" and so on once the category says what its prices are per.
+const priceLabel = computed(() => {
+  if (!priceAmountLabel.value || !query.priceUnit) return priceAmountLabel.value
+  return `${priceAmountLabel.value} ${getCardPriceUnitSuffix(query.priceUnit, t)}`
 })
 
 const dateLabel = computed(() => {
@@ -493,10 +517,6 @@ const dateLabel = computed(() => {
   return fmt(from || to, true)
 })
 
-const capacityLabel = computed(() =>
-  query.guests ? t('search.capacityOption', { count: query.guests }) : '',
-)
-
 const areaLabel = computed(() => {
   const ids = query.cityAreaIds
   if (!ids.length) return ''
@@ -504,20 +524,17 @@ const areaLabel = computed(() => {
   return t('search.areasSelected', { count: ids.length })
 })
 
-const attributeFilterCount = computed(() => {
-  let count = 0
-  for (const entry of attributeFilters.values()) {
-    if (entry.min != null || entry.max != null) count += 1
-    if (entry.boolean) count += 1
-    if (entry.optionIds?.length) count += entry.optionIds.length
-  }
-  return count
-})
+// What the category page's own filters carry, bar and panel (T115).
+function selectionCount(filters) {
+  return filters.reduce((sum, filter) => sum + countSelection(filter, selections.get(filter.key)), 0)
+}
 
-// The bar already surfaces price, date, capacity, area and online booking as
-// their own pills, so the badge on "Više filtera" counts only what lives
-// exclusively inside the panel — the category's own attributes.
-const panelFilterCount = attributeFilterCount
+const attributeFilterCount = computed(() => selectionCount(searchFilters.value.filters))
+
+// The bar surfaces price, date, guests, area and online booking as pills of
+// their own, so the badge on "Više filtera" counts what is set inside the
+// panel (Excel row 161).
+const panelFilterCount = computed(() => selectionCount(panelFilters.value))
 
 const hasAnyFilter = computed(
   () =>
@@ -583,6 +600,7 @@ const resultsSubtitle = computed(() => {
 function applyPrice(close) {
   query.priceMin = priceDraft.min || null
   query.priceMax = priceDraft.max || null
+  query.priceUnit = priceDraft.unit
   close()
   runSearch()
 }
@@ -606,74 +624,67 @@ function clearDates(close) {
   applyDates(close)
 }
 
-function applyCapacity(value, close) {
-  query.guests = value || null
+function toggleAreaDraft(id) {
+  areaDraft.value = areaDraft.value.includes(id) ? areaDraft.value.filter((areaId) => areaId !== id) : [...areaDraft.value, id]
+}
+
+// T115: the bar's pill ticks several parts of the city, which only the panel
+// could before; the panel no longer has them.
+function applyAreas(ids, close) {
+  query.cityAreaIds = [...ids]
   close()
   runSearch()
 }
 
-// The bar's pill is a single pick; the Dizajn 9 panel can tick several, and
-// both write into the same array.
-function applyArea(value, close) {
-  query.cityAreaIds = value ? [value] : []
+// -- The category's own pills (T115) ---------------------------------------
+
+function isBarFilterSet(filter) {
+  if (filter.control === 'GUESTS') return Boolean(query.guests)
+  return isSelectionSet(filter, selections.get(filter.key))
+}
+
+function barChoiceValue(filter) {
+  return filter.control === 'GUESTS' ? query.guests : selections.get(filter.key)
+}
+
+// A SELECT lists its options; GUESTS and MIN their "N+" steps.
+function barChoices(filter) {
+  if (filter.control === 'SELECT') return filter.options.map((option) => ({ value: option.key, label: option.name }))
+  return filter.choices.map((choice) => ({ value: choice.value, label: getSearchChoiceLabel(filter, choice.value, t) }))
+}
+
+function barPillValue(filter) {
+  const value = barChoiceValue(filter)
+  if (value === null || value === undefined || value === '') return ''
+  return barChoices(filter).find((choice) => choice.value === value)?.label ?? ''
+}
+
+function applyBarChoice(filter, value, close) {
+  if (filter.control === 'GUESTS') query.guests = value || null
+  else if (value === null) selections.delete(filter.key)
+  else selections.set(filter.key, value)
   close()
   runSearch()
 }
 
-// Only single-choice option lists fit a pill; RANGE and CHECKBOX_GROUP
-// attributes keep their fuller controls inside the filter panel.
-const barAttributes = computed(() =>
-  filterableAttributes.value.filter(
-    (a) =>
-      Array.isArray(a.options) &&
-      a.options.length &&
-      a.type !== 'CHECKBOX_GROUP' &&
-      a.filterType !== 'RANGE' &&
-      a.filterType !== 'TOGGLE',
-  ),
-)
-
-function attrSelectedOption(attr) {
-  return attributeFilters.get(attr.attributeIds.join(','))?.optionIds?.[0]?.[0] ?? null
-}
-
-function attrPillValue(attr) {
-  const selected = attrSelectedOption(attr)
-  return selected ? (attr.options.find((o) => o.id === selected)?.name ?? '') : ''
-}
-
-function applyAttrOption(attr, optionId, close) {
-  const key = attr.attributeIds.join(',')
-  if (optionId) attributeFilters.set(key, { attributeIds: attr.attributeIds, optionIds: [[optionId]] })
-  else attributeFilters.delete(key)
-  close()
+function toggleBarFilter(filter) {
+  if (selections.get(filter.key)) selections.delete(filter.key)
+  else selections.set(filter.key, true)
   runSearch()
 }
+
 function toggleOnlineOnly() {
   query.onlineBookingOnly = !query.onlineBookingOnly
   runSearch()
 }
 
 // Dizajn 9 — the panel edits its own draft and hands the whole set over at
-// once, so nothing re-searches until "Prikaži N oglasa" is pressed.
-function applyPanelFilters(payload) {
-  query.priceMin = payload.priceMin
-  query.priceMax = payload.priceMax
-  query.dateFrom = payload.dateFrom
-  query.dateTo = payload.dateTo
-  query.guests = payload.guests
-  query.cityAreaIds = payload.cityAreaIds
-  query.onlineBookingOnly = payload.onlineBookingOnly
-
-  attributeFilters.clear()
-  for (const [key, value] of payload.attributes) attributeFilters.set(key, value)
-
-  // Keep the bar's own popovers showing what the panel just set.
-  priceDraft.min = payload.priceMin
-  priceDraft.max = payload.priceMax
-  dateDraft.from = payload.dateFrom
-  dateDraft.to = payload.dateTo
-
+// once, so nothing re-searches until "Prikaži N oglasa" is pressed. Since T115
+// it holds only its own filters; price, date, guests, area and online booking
+// are the bar's alone.
+function applyPanelFilters(panelSelections) {
+  for (const filter of panelFilters.value) selections.delete(filter.key)
+  for (const [key, value] of panelSelections) selections.set(key, value)
   panelOpen.value = false
   runSearch()
 }
@@ -714,6 +725,7 @@ function syncUrlFromQuery() {
       cityAreaIds: query.cityAreaIds.length ? query.cityAreaIds.join(',') : undefined,
       priceMin: query.priceMin || undefined,
       priceMax: query.priceMax || undefined,
+      priceUnit: priceUnitInUse() || undefined,
       dateFrom: query.dateFrom || undefined,
       dateTo: query.dateTo || undefined,
       guests: query.guests || undefined,
@@ -723,15 +735,36 @@ function syncUrlFromQuery() {
   })
 }
 
-function clearCategory() {
+// T115: the page's filters. What was picked in the category's own filters
+// goes with the category, as before; the guests, the parts of the city and the
+// price unit stay as long as the new page offers them.
+async function loadSearchFilters(slug) {
+  try {
+    searchFilters.value = await api.get(slug ? `/search/filters?categorySlug=${slug}` : '/search/filters')
+  } catch {
+    searchFilters.value = { priceUnits: [], filters: [] }
+  }
+  selections.clear()
+  const guests = searchFilters.value.filters.find((filter) => filter.control === 'GUESTS')
+  if (!guests?.choices.some((choice) => choice.value === query.guests)) query.guests = null
+  if (!searchFilters.value.filters.some((filter) => filter.control === 'AREA')) query.cityAreaIds = []
+  if (!priceUnits.value.includes(query.priceUnit)) query.priceUnit = priceUnits.value[0] || ''
+  priceDraft.unit = query.priceUnit
+}
+
+// The unit only narrows a price range that is set.
+function priceUnitInUse() {
+  return (query.priceMin || query.priceMax) && query.priceUnit ? query.priceUnit : ''
+}
+
+async function clearCategory() {
   selectedCategory.value = null
   query.categorySlug = ''
-  attributeFilters.clear()
-  filterableAttributes.value = []
+  await loadSearchFilters('')
   runSearch()
 }
 
-function clearAllFilters() {
+async function clearAllFilters() {
   query.q = ''
   query.cityId = ''
   query.cityAreaIds = []
@@ -748,27 +781,14 @@ function clearAllFilters() {
   dateDraft.from = ''
   dateDraft.to = ''
   cityAreas.value = []
-  attributeFilters.clear()
-  filterableAttributes.value = []
+  await loadSearchFilters('')
   runSearch()
-}
-
-function setAttrFilter(attributeIds, key, value) {
-  const mapKey = attributeIds.join(',')
-  const current = attributeFilters.get(mapKey) || { attributeIds }
-  if (value === '' || value === null || (Array.isArray(value) && value.length === 0)) {
-    delete current[key]
-  } else {
-    current[key] = key === 'min' || key === 'max' ? Number(value) : value
-  }
-  attributeFilters.set(mapKey, current)
 }
 
 async function selectCategory(cat) {
   selectedCategory.value = cat
   query.categorySlug = cat.slug
-  attributeFilters.clear()
-  filterableAttributes.value = await api.get(`/search/filters?categorySlug=${cat.slug}`)
+  await loadSearchFilters(cat.slug)
   runSearch()
 }
 
@@ -778,8 +798,7 @@ async function selectCategory(cat) {
 // nothing, since several parents carry no attributes of their own).
 async function selectSubcategory(child) {
   query.categorySlug = child.slug
-  attributeFilters.clear()
-  filterableAttributes.value = await api.get(`/search/filters?categorySlug=${child.slug}`)
+  await loadSearchFilters(child.slug)
   runSearch()
 }
 
@@ -815,10 +834,12 @@ async function loadMore() {
 // nothing defaults it. Shared so relaxed search can't drift from what a
 // normal search already sends correctly.
 function buildSearchBody() {
+  const attributeFilters = buildAttributeFilters(searchFilters.value.filters, selections)
   return {
     ...query,
     priceMin: query.priceMin || undefined,
     priceMax: query.priceMax || undefined,
+    priceUnit: priceUnitInUse() || undefined,
     guests: query.guests || undefined,
     cityId: query.cityId || undefined,
     cityAreaId: undefined,
@@ -826,7 +847,7 @@ function buildSearchBody() {
     categorySlug: query.categorySlug || undefined,
     dateFrom: query.dateFrom || undefined,
     dateTo: query.dateTo || undefined,
-    attributes: attributeFilters.size ? Array.from(attributeFilters.values()) : undefined,
+    attributes: attributeFilters.length ? attributeFilters : undefined,
   }
 }
 
@@ -900,10 +921,8 @@ onMounted(async () => {
     selectedCategory.value =
       categories.value.find((c) => c.slug === query.categorySlug) ||
       categories.value.find((c) => c.children?.some((ch) => ch.slug === query.categorySlug))
-    if (selectedCategory.value) {
-      filterableAttributes.value = await api.get(`/search/filters?categorySlug=${query.categorySlug}`)
-    }
   }
+  await loadSearchFilters(selectedCategory.value ? query.categorySlug : '')
   if (query.cityId) await loadCityAreas()
   await runSearch()
 })
@@ -1240,6 +1259,107 @@ useSeoMeta({ title: t('common.search') })
   margin: 0;
   font-size: $font-size-muted;
   color: $color-text-muted;
+}
+
+// T115: "Cena po noći" over the price fields, and the units to pick from.
+.filter-panel-heading {
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 500;
+  color: $color-text;
+}
+
+.filter-unit-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+// The chips of "Više filtera" (FilterPanel's .fp-chip), a size smaller.
+.filter-unit-chip {
+  padding: 7px 12px;
+  border: 1px solid $color-border;
+  border-radius: $radius-pill;
+  background: $color-surface;
+  font-family: $font-family-base;
+  font-size: 13px;
+  color: $color-text;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.filter-unit-chip-active {
+  background: $color-accent-tint;
+  border: 1.5px solid $color-primary;
+  padding: 6.5px 11.5px;
+  font-weight: 500;
+  color: $color-primary;
+}
+
+// T115: Deo grada ticks several parts of the city, with the panel's checkbox.
+.filter-check-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.filter-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.filter-check-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.filter-check-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  border: 1.5px solid $color-border;
+  border-radius: 5px;
+  background: $color-surface;
+}
+
+.filter-check-box img {
+  display: block;
+  opacity: 0;
+}
+
+.filter-check-input:checked ~ .filter-check-box {
+  background: $color-primary;
+  border-color: $color-primary;
+}
+
+.filter-check-input:checked ~ .filter-check-box img {
+  opacity: 1;
+}
+
+.filter-check-input:focus-visible ~ .filter-check-box {
+  outline: 2px solid $color-primary;
+  outline-offset: 2px;
+}
+
+.filter-check-label {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  color: $color-text;
 }
 
 .filter-panel-actions {

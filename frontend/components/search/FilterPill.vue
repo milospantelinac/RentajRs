@@ -39,6 +39,9 @@ const props = defineProps({
   active: { type: Boolean, default: false },
   panelWidth: { type: Number, default: 280 },
 })
+// T115: lets a popover with a draft (Deo grada, the price unit) start from
+// what is applied every time it opens.
+const emit = defineEmits(['open'])
 
 const uid = useId()
 const triggerId = `filter-${uid}-trigger`
@@ -65,6 +68,7 @@ function positionPanel() {
 function toggle() {
   if (open.value) close()
   else {
+    emit('open')
     positionPanel()
     open.value = true
   }

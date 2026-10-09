@@ -14,205 +14,111 @@
             </button>
           </header>
 
+          <!-- T115: the category's "Više filtera", in the order of Tamara's
+               table. Price, date and online booking live in the bar only. -->
           <div class="filter-panel-body">
-            <!-- Cena -->
-            <section class="fp-section">
-              <div class="fp-section-head">
-                <span class="fp-section-title">{{ t('search.pricePerNight') }}</span>
-                <span v-if="priceSummary" class="fp-section-note">{{ priceSummary }}</span>
-              </div>
-              <div class="fp-range">
-                <span class="fp-range-track" />
-                <span class="fp-range-fill" :style="rangeFillStyle" />
-                <input
-                  v-model.number="sliderMin"
-                  type="range"
-                  class="fp-range-input"
-                  :min="0"
-                  :max="priceCeiling"
-                  :step="priceStep"
-                  :aria-label="t('search.priceFrom')"
-                />
-                <input
-                  v-model.number="sliderMax"
-                  type="range"
-                  class="fp-range-input"
-                  :min="0"
-                  :max="priceCeiling"
-                  :step="priceStep"
-                  :aria-label="t('search.priceTo')"
-                />
-              </div>
-              <div class="fp-field-row">
-                <input v-model.number="draft.priceMin" type="number" min="0" class="fp-field" :placeholder="t('search.priceFrom')" />
-                <input v-model.number="draft.priceMax" type="number" min="0" class="fp-field" :placeholder="t('search.priceTo')" />
-              </div>
-            </section>
+            <section v-for="filter in sections" :key="filter.key" class="fp-section">
+              <!-- Od / do -->
+              <template v-if="filter.control === 'RANGE'">
+                <div class="fp-section-head">
+                  <span class="fp-section-title">{{ getSearchFilterLabel(filter, t) }}</span>
+                  <span v-if="filter.unit" class="fp-section-note">{{ filter.unit }}</span>
+                </div>
+                <div class="fp-field-row">
+                  <input
+                    type="number"
+                    class="fp-field"
+                    :placeholder="t('search.priceFrom')"
+                    :value="rangeValue(filter, 'min')"
+                    @input="setRange(filter, 'min', $event.target.value)"
+                  />
+                  <input
+                    type="number"
+                    class="fp-field"
+                    :placeholder="t('search.priceTo')"
+                    :value="rangeValue(filter, 'max')"
+                    @input="setRange(filter, 'max', $event.target.value)"
+                  />
+                </div>
+              </template>
 
-            <!-- Datum -->
-            <section class="fp-section">
-              <div class="fp-section-head">
-                <span class="fp-section-title">{{ t('search.availabilityDate') }}</span>
-              </div>
-              <div class="fp-field-row">
-                <input v-model="draft.dateFrom" type="date" class="fp-field" :aria-label="t('search.dateFrom')" />
-                <input v-model="draft.dateTo" type="date" class="fp-field" :aria-label="t('search.dateTo')" />
-              </div>
-            </section>
-
-            <!-- Kapacitet -->
-            <section class="fp-section">
-              <div class="fp-section-head">
-                <span class="fp-section-title">{{ t('search.filterCapacity') }}</span>
-              </div>
-              <div class="fp-chips">
-                <button
-                  v-for="option in capacityChips"
-                  :key="option.value || 'any'"
-                  type="button"
-                  class="fp-chip"
-                  :class="{ 'fp-chip-active': String(option.value) === String(draft.guests || '') }"
-                  @click="draft.guests = option.value || null"
-                >
-                  {{ option.label }}
-                </button>
-              </div>
-            </section>
-
-            <!-- The sections below come from whatever the chosen category
-                 exposes as filterable, so no category loses a filter it had.
-                 Numeric attributes keep their od/do pair, single-choice lists
-                 render as pills, and multi-choice ones as a checkbox list. -->
-            <section v-for="attr in rangeAttributes" :key="attr.key" class="fp-section">
-              <div class="fp-section-head">
-                <span class="fp-section-title">{{ attr.name }}</span>
-                <span v-if="attr.unit" class="fp-section-note">{{ attr.unit }}</span>
-              </div>
-              <div class="fp-field-row">
-                <input
-                  type="number"
-                  class="fp-field"
-                  :placeholder="t('search.priceFrom')"
-                  :value="attrRangeValue(attr, 'min')"
-                  @input="setAttrRange(attr, 'min', $event.target.value)"
-                />
-                <input
-                  type="number"
-                  class="fp-field"
-                  :placeholder="t('search.priceTo')"
-                  :value="attrRangeValue(attr, 'max')"
-                  @input="setAttrRange(attr, 'max', $event.target.value)"
-                />
-              </div>
-            </section>
-
-            <section v-for="attr in chipAttributes" :key="attr.key" class="fp-section">
-              <div class="fp-section-head">
-                <span class="fp-section-title">{{ attr.name }}</span>
-              </div>
-              <div class="fp-chips">
-                <button
-                  type="button"
-                  class="fp-chip"
-                  :class="{ 'fp-chip-active': !attrOptionSelected(attr) }"
-                  @click="setAttrOption(attr, null)"
-                >
-                  {{ t('search.anyValue') }}
-                </button>
-                <button
-                  v-for="opt in attr.options"
-                  :key="opt.id"
-                  type="button"
-                  class="fp-chip"
-                  :class="{ 'fp-chip-active': attrOptionSelected(attr) === opt.id }"
-                  @click="setAttrOption(attr, opt.id)"
-                >
-                  {{ opt.name }}
-                </button>
-              </div>
-            </section>
-
-            <section v-for="attr in toggleAttributes" :key="attr.key" class="fp-section">
-              <label class="fp-switch-row">
-                <span class="fp-switch-label">{{ attr.name }}</span>
+              <!-- A yes/no attribute, or one option of a list as a switch of its own (Ljubimci dozvoljeni). -->
+              <label v-else-if="filter.control === 'TOGGLE' || filter.control === 'OPTION_TOGGLE'" class="fp-switch-row">
+                <span class="fp-switch-label">{{ getSearchFilterLabel(filter, t) }}</span>
                 <input
                   type="checkbox"
                   class="fp-option-input"
-                  :checked="attrBooleanValue(attr)"
-                  @change="setAttrBoolean(attr, $event.target.checked)"
+                  :checked="Boolean(draft.get(filter.key))"
+                  @change="setValue(filter, $event.target.checked || null)"
                 />
                 <span class="fp-switch" aria-hidden="true"><span class="fp-switch-knob" /></span>
               </label>
-            </section>
 
-            <!-- Deo grada -->
-            <section v-if="cityAreas.length" class="fp-section">
-              <div class="fp-section-head">
-                <span class="fp-section-title">{{ t('search.filterArea') }}</span>
-              </div>
-              <ul class="fp-list">
-                <li v-for="area in visibleAreas" :key="area.id">
-                  <label class="fp-option">
-                    <input
-                      type="checkbox"
-                      class="fp-option-input"
-                      :checked="draft.cityAreaIds.includes(area.id)"
-                      @change="toggleArea(area.id)"
-                    />
-                    <span class="fp-checkbox" aria-hidden="true">
-                      <img src="/images/icons/check-small.svg" alt="" width="12" height="12" />
-                    </span>
-                    <span class="fp-option-label">{{ area.name }}</span>
-                  </label>
-                </li>
-              </ul>
-              <button v-if="cityAreas.length > areaLimit" type="button" class="fp-more" @click="areaLimit = cityAreas.length">
-                {{ t('search.showMoreCount', { count: cityAreas.length - areaLimit }) }}
-              </button>
-            </section>
+              <!-- One of a short list. -->
+              <template v-else-if="filter.control === 'SELECT' || filter.control === 'MIN'">
+                <div class="fp-section-head">
+                  <span class="fp-section-title">{{ getSearchFilterLabel(filter, t) }}</span>
+                </div>
+                <div class="fp-chips">
+                  <button
+                    type="button"
+                    class="fp-chip"
+                    :class="{ 'fp-chip-active': !draft.has(filter.key) }"
+                    @click="setValue(filter, null)"
+                  >
+                    {{ t('search.anyValue') }}
+                  </button>
+                  <button
+                    v-for="choice in chipChoices(filter)"
+                    :key="choice.value"
+                    type="button"
+                    class="fp-chip"
+                    :class="{ 'fp-chip-active': draft.get(filter.key) === choice.value }"
+                    @click="setValue(filter, choice.value)"
+                  >
+                    {{ choice.label }}
+                  </button>
+                </div>
+              </template>
 
-            <!-- Opremljenost i ostali višestruki izbori -->
-            <section v-for="attr in listAttributes" :key="attr.key" class="fp-section">
-              <div class="fp-section-head">
-                <span class="fp-section-title">{{ attributeLabel(attr) }}</span>
-                <span class="fp-section-note">{{ t('search.allSelectedNote') }}</span>
-              </div>
-              <ul class="fp-list">
-                <li v-for="opt in visibleOptions(attr)" :key="opt.id">
-                  <label class="fp-option">
-                    <input
-                      type="checkbox"
-                      class="fp-option-input"
-                      :checked="isOptionChecked(attr, opt.id)"
-                      @change="toggleAttrOption(attr, opt.id)"
-                    />
-                    <span class="fp-checkbox" aria-hidden="true">
-                      <img src="/images/icons/check-small.svg" alt="" width="12" height="12" />
-                    </span>
-                    <span class="fp-option-label">{{ opt.name }}</span>
-                  </label>
-                </li>
-              </ul>
-              <button
-                v-if="attr.options.length > (optionLimits[attr.key] || DEFAULT_OPTION_LIMIT)"
-                type="button"
-                class="fp-more"
-                @click="optionLimits[attr.key] = attr.options.length"
-              >
-                {{ t('search.showMoreCount', { count: attr.options.length - (optionLimits[attr.key] || DEFAULT_OPTION_LIMIT) }) }}
-              </button>
-            </section>
-
-            <!-- Online rezervacija -->
-            <section class="fp-section">
-              <div class="fp-section-head">
-                <span class="fp-section-title">{{ t('search.onlineBookingTitle') }}</span>
-              </div>
-              <label class="fp-switch-row">
-                <span class="fp-switch-label">{{ t('search.onlineBookingOnly') }}</span>
-                <input v-model="draft.onlineBookingOnly" type="checkbox" class="fp-option-input" />
-                <span class="fp-switch" aria-hidden="true"><span class="fp-switch-knob" /></span>
-              </label>
+              <!-- Several of a list: any of them (Marka vozila) or all of them
+                   (Opremljenost). The most common first, the rest on request. -->
+              <template v-else>
+                <div class="fp-section-head">
+                  <span class="fp-section-title">{{ getSearchFilterLabel(filter, t) }}</span>
+                  <span v-if="filter.control === 'ALL_OF'" class="fp-section-note">{{ t('search.allSelectedNote') }}</span>
+                </div>
+                <input
+                  v-if="filter.options.length > LIST_SEARCH_FROM"
+                  v-model="searchTexts[filter.key]"
+                  type="search"
+                  class="fp-field fp-search"
+                  :placeholder="t('search.searchOptions')"
+                  :aria-label="t('search.searchOptions')"
+                />
+                <ul class="fp-list">
+                  <li v-for="opt in visibleOptions(filter)" :key="opt.key">
+                    <label class="fp-option">
+                      <input
+                        type="checkbox"
+                        class="fp-option-input"
+                        :checked="isChecked(filter, opt.key)"
+                        @change="toggleOption(filter, opt.key)"
+                      />
+                      <span class="fp-checkbox" aria-hidden="true">
+                        <img src="/images/icons/check-small.svg" alt="" width="12" height="12" />
+                      </span>
+                      <span class="fp-option-label">{{ opt.name }}</span>
+                    </label>
+                  </li>
+                </ul>
+                <p v-if="searchTexts[filter.key]?.trim() && !visibleOptions(filter).length" class="fp-empty">
+                  {{ t('search.noOptionMatch') }}
+                </p>
+                <button v-if="hiddenCount(filter)" type="button" class="fp-more" @click="expanded[filter.key] = true">
+                  {{ t('search.showMoreCount', { count: hiddenCount(filter) }) }}
+                </button>
+              </template>
             </section>
           </div>
 
@@ -233,14 +139,14 @@
  * Dizajn 9 — the "Više filtera" panel. It floats over the results instead of
  * pushing them aside (the ticket is explicit: narrowing the map would defeat
  * the point), and edits a local draft so nothing re-searches until "Prikaži N
- * oglasa" is pressed.
+ * oglasa" is pressed. T115: it shows the category's own panel filters from
+ * GET /search/filters and hands back what is picked in them, by filter key
+ * (utils/searchFilters.js).
  */
 const props = defineProps({
   open: { type: Boolean, default: false },
-  query: { type: Object, required: true },
-  attributeFilters: { type: Object, required: true },
-  filterableAttributes: { type: Array, default: () => [] },
-  cityAreas: { type: Array, default: () => [] },
+  filters: { type: Array, default: () => [] },
+  selections: { type: Object, required: true },
   total: { type: Number, default: 0 },
 })
 
@@ -248,209 +154,86 @@ const emit = defineEmits(['close', 'apply', 'clear'])
 
 const { t } = useI18n()
 
-const DEFAULT_OPTION_LIMIT = 5
-const priceCeiling = 100000
-const priceStep = 500
+const draft = reactive(new Map())
+const expanded = reactive({})
+const searchTexts = reactive({})
 
-const areaLimit = ref(DEFAULT_OPTION_LIMIT)
-const optionLimits = reactive({})
+// GUESTS and AREA are the bar's pills; they never sit in the panel.
+const sections = computed(() => props.filters.filter((filter) => filter.control !== 'GUESTS' && filter.control !== 'AREA'))
 
-const draft = reactive({
-  priceMin: null,
-  priceMax: null,
-  dateFrom: '',
-  dateTo: '',
-  guests: null,
-  cityAreaIds: [],
-  onlineBookingOnly: false,
-  attributes: new Map(),
-})
-
-// Re-seed from the live query every time the panel opens, so a cancelled
+// Re-seed from what is applied every time the panel opens, so a cancelled
 // edit never leaks into the next one.
 watch(
   () => props.open,
   (isOpen) => {
     if (!isOpen) return
-    draft.priceMin = props.query.priceMin ?? null
-    draft.priceMax = props.query.priceMax ?? null
-    draft.dateFrom = props.query.dateFrom || ''
-    draft.dateTo = props.query.dateTo || ''
-    draft.guests = props.query.guests ?? null
-    draft.cityAreaIds = [...(props.query.cityAreaIds || [])]
-    draft.onlineBookingOnly = Boolean(props.query.onlineBookingOnly)
-    draft.attributes = new Map(
-      Array.from(props.attributeFilters.entries()).map(([key, value]) => [key, { ...value, optionIds: value.optionIds ? [...value.optionIds] : undefined }]),
-    )
-    areaLimit.value = DEFAULT_OPTION_LIMIT
-    for (const key of Object.keys(optionLimits)) delete optionLimits[key]
+    draft.clear()
+    for (const filter of props.filters) {
+      const value = props.selections.get(filter.key)
+      if (value === undefined) continue
+      draft.set(filter.key, Array.isArray(value) ? [...value] : typeof value === 'object' && value ? { ...value } : value)
+    }
+    for (const key of Object.keys(expanded)) delete expanded[key]
+    for (const key of Object.keys(searchTexts)) delete searchTexts[key]
   },
   { immediate: true },
 )
 
-const capacityChips = computed(() => [
-  { value: '', label: t('search.anyValue') },
-  ...[2, 4, 6, 8, 10].map((n) => ({ value: n, label: `${n}+` })),
-])
-
-const withOptions = computed(() =>
-  props.filterableAttributes.filter((a) => Array.isArray(a.options) && a.options.length),
-)
-
-const rangeAttributes = computed(() => props.filterableAttributes.filter((a) => a.filterType === 'RANGE'))
-const toggleAttributes = computed(() => props.filterableAttributes.filter((a) => a.filterType === 'TOGGLE'))
-// T62 — CHECKBOX_GROUP is the multi-select kind, combined with AND on the
-// backend; every other option list stays a single choice.
-const listAttributes = computed(() => withOptions.value.filter((a) => a.type === 'CHECKBOX_GROUP'))
-const chipAttributes = computed(() =>
-  withOptions.value.filter((a) => a.type !== 'CHECKBOX_GROUP' && a.filterType !== 'RANGE' && a.filterType !== 'TOGGLE'),
-)
-
-const visibleAreas = computed(() => props.cityAreas.slice(0, areaLimit.value))
-
-function visibleOptions(attr) {
-  return attr.options.slice(0, optionLimits[attr.key] || DEFAULT_OPTION_LIMIT)
+function setValue(filter, value) {
+  if (value === null || value === undefined) draft.delete(filter.key)
+  else draft.set(filter.key, value)
 }
 
-// T61: shared with the wizard's step Detalji, which lists the same filters.
-function attributeLabel(attr) {
-  return getFilterAttributeLabel(attr, t)
+function chipChoices(filter) {
+  if (filter.control === 'SELECT') return filter.options.map((option) => ({ value: option.key, label: option.name }))
+  return filter.choices.map((choice) => ({ value: choice.value, label: getSearchChoiceLabel(filter, choice.value, t) }))
 }
 
-const priceSummary = computed(() => {
-  const { priceMin: min, priceMax: max } = draft
-  if (!min && !max) return ''
-  const fmt = (n) => new Intl.NumberFormat('sr-RS').format(n)
-  if (min && max) return `${fmt(min)} – ${fmt(max)} RSD`
-  return min ? `${fmt(min)}+ RSD` : `< ${fmt(max)} RSD`
-})
-
-const rangeFillStyle = computed(() => {
-  const min = draft.priceMin || 0
-  const max = draft.priceMax || priceCeiling
-  return {
-    left: `${(min / priceCeiling) * 100}%`,
-    right: `${100 - (max / priceCeiling) * 100}%`,
-  }
-})
-
-// The two range inputs need real numbers even when nothing is set yet, so an
-// untouched slider shows the full span rather than parking both thumbs at 0.
-const sliderMin = computed({
-  get: () => draft.priceMin ?? 0,
-  set: (value) => {
-    draft.priceMin = Number(value)
-    clampRange('min')
-  },
-})
-
-const sliderMax = computed({
-  get: () => draft.priceMax ?? priceCeiling,
-  set: (value) => {
-    draft.priceMax = Number(value)
-    clampRange('max')
-  },
-})
-
-function clampRange(edge) {
-  if (draft.priceMin != null && draft.priceMax != null && draft.priceMin > draft.priceMax) {
-    if (edge === 'min') draft.priceMax = draft.priceMin
-    else draft.priceMin = draft.priceMax
-  }
+function rangeValue(filter, edge) {
+  return draft.get(filter.key)?.[edge] ?? ''
 }
 
-function toggleArea(id) {
-  const index = draft.cityAreaIds.indexOf(id)
-  if (index === -1) draft.cityAreaIds.push(id)
-  else draft.cityAreaIds.splice(index, 1)
+function setRange(filter, edge, raw) {
+  const range = { min: null, max: null, ...(draft.get(filter.key) || {}) }
+  range[edge] = raw === '' || raw === null ? null : Number(raw)
+  if (range.min == null && range.max == null) draft.delete(filter.key)
+  else draft.set(filter.key, range)
 }
 
-function attrKey(attr) {
-  return attr.attributeIds.join(',')
+function isChecked(filter, key) {
+  return Boolean(draft.get(filter.key)?.includes(key))
 }
 
-/** Single-choice attributes (the chip rows) hold one option group. */
-function attrOptionSelected(attr) {
-  const entry = draft.attributes.get(attrKey(attr))
-  return entry?.optionIds?.[0]?.[0] ?? null
+function toggleOption(filter, key) {
+  const picked = draft.get(filter.key) || []
+  const next = picked.includes(key) ? picked.filter((candidate) => candidate !== key) : [...picked, key]
+  setValue(filter, next.length ? next : null)
 }
 
-function setAttrOption(attr, optionId) {
-  const key = attrKey(attr)
-  if (!optionId) {
-    draft.attributes.delete(key)
-  } else {
-    draft.attributes.set(key, { attributeIds: attr.attributeIds, optionIds: [[optionId]] })
-  }
-  draft.attributes = new Map(draft.attributes)
+// The 8 options most listings have (Excel rows 25 and 74), and whatever is
+// ticked further down; everything once "Prikaži još" is pressed, and every
+// match while the search field has text.
+function visibleOptions(filter) {
+  const sorted = sortOptionsByUse(filter.options)
+  const text = foldSearchText(searchTexts[filter.key] || '').trim()
+  if (text) return sorted.filter((option) => foldSearchText(option.name).includes(text))
+  if (expanded[filter.key]) return sorted
+  const picked = draft.get(filter.key) || []
+  return sorted.filter((option, index) => index < LIST_PREVIEW_COUNT || picked.includes(option.key))
 }
 
-function attrRangeValue(attr, edge) {
-  const value = draft.attributes.get(attrKey(attr))?.[edge]
-  return value ?? ''
-}
-
-function setAttrRange(attr, edge, raw) {
-  const key = attrKey(attr)
-  const entry = { attributeIds: attr.attributeIds, ...(draft.attributes.get(key) || {}) }
-  if (raw === '' || raw === null) delete entry[edge]
-  else entry[edge] = Number(raw)
-  if (entry.min == null && entry.max == null) draft.attributes.delete(key)
-  else draft.attributes.set(key, entry)
-  draft.attributes = new Map(draft.attributes)
-}
-
-function attrBooleanValue(attr) {
-  return Boolean(draft.attributes.get(attrKey(attr))?.boolean)
-}
-
-function setAttrBoolean(attr, checked) {
-  const key = attrKey(attr)
-  if (checked) draft.attributes.set(key, { attributeIds: attr.attributeIds, boolean: true })
-  else draft.attributes.delete(key)
-  draft.attributes = new Map(draft.attributes)
-}
-
-function isOptionChecked(attr, optionId) {
-  const entry = draft.attributes.get(attrKey(attr))
-  return Boolean(entry?.optionIds?.some((group) => group.includes(optionId)))
-}
-
-// Multi-select amenities: every picked option is its own group, and the
-// backend requires a listing to match all of them (T62's AND semantics).
-function toggleAttrOption(attr, optionId) {
-  const key = attrKey(attr)
-  const entry = draft.attributes.get(key) || { attributeIds: attr.attributeIds, optionIds: [] }
-  const groups = (entry.optionIds || []).filter((group) => !group.includes(optionId))
-  if (groups.length === (entry.optionIds || []).length) groups.push([optionId])
-  if (groups.length) draft.attributes.set(key, { ...entry, optionIds: groups })
-  else draft.attributes.delete(key)
-  draft.attributes = new Map(draft.attributes)
+function hiddenCount(filter) {
+  if (expanded[filter.key] || (searchTexts[filter.key] || '').trim()) return 0
+  return filter.options.length - visibleOptions(filter).length
 }
 
 function clearAll() {
-  draft.priceMin = null
-  draft.priceMax = null
-  draft.dateFrom = ''
-  draft.dateTo = ''
-  draft.guests = null
-  draft.cityAreaIds = []
-  draft.onlineBookingOnly = false
-  draft.attributes = new Map()
+  draft.clear()
   emit('clear')
 }
 
 function apply() {
-  emit('apply', {
-    priceMin: draft.priceMin || null,
-    priceMax: draft.priceMax || null,
-    dateFrom: draft.dateFrom || '',
-    dateTo: draft.dateTo || '',
-    guests: draft.guests || null,
-    cityAreaIds: [...draft.cityAreaIds],
-    onlineBookingOnly: draft.onlineBookingOnly,
-    attributes: new Map(draft.attributes),
-  })
+  emit('apply', new Map(draft))
 }
 
 function onKeydown(event) {
@@ -549,15 +332,16 @@ $header-height: 104px;
   gap: 12px;
 }
 
+// On a phone the Opremljenost note goes under its title instead of over it.
 .fp-section-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 4px 12px;
 }
 
 .fp-section-title {
-  flex: 1;
-  min-width: 0;
+  flex: 1 0 auto;
   font-size: 15px;
   font-weight: 500;
   color: $color-text;
@@ -567,63 +351,6 @@ $header-height: 104px;
   flex-shrink: 0;
   font-size: 13px;
   color: $color-text-muted;
-}
-
-// Range slider — two native inputs stacked over a shared track so keyboard
-// and screen readers get real controls (Figma 682:1443).
-.fp-range {
-  position: relative;
-  height: 20px;
-}
-
-.fp-range-track,
-.fp-range-fill {
-  position: absolute;
-  top: 8px;
-  height: 4px;
-  border-radius: 2px;
-}
-
-.fp-range-track {
-  left: 0;
-  right: 0;
-  background: $color-border;
-}
-
-.fp-range-fill {
-  background: $color-primary;
-}
-
-.fp-range-input {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  margin: 0;
-  background: none;
-  pointer-events: none;
-  appearance: none;
-}
-
-.fp-range-input::-webkit-slider-thumb {
-  appearance: none;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: $color-surface;
-  border: 2px solid $color-primary;
-  box-shadow: 0 1px 4px rgba(6, 27, 49, 0.2);
-  pointer-events: auto;
-  cursor: pointer;
-}
-
-.fp-range-input::-moz-range-thumb {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: $color-surface;
-  border: 2px solid $color-primary;
-  pointer-events: auto;
-  cursor: pointer;
 }
 
 .fp-field-row {
@@ -646,6 +373,19 @@ $header-height: 104px;
 .fp-field:focus {
   outline: none;
   border-color: $color-primary;
+}
+
+// T115: the search over a long Opremljenost list, the od/do fields' look.
+.fp-search {
+  flex: none;
+  width: 100%;
+  padding: 11px 16px;
+}
+
+.fp-empty {
+  margin: 0;
+  font-size: 14px;
+  color: $color-text-muted;
 }
 
 .fp-chips {
@@ -764,7 +504,8 @@ $header-height: 104px;
 .fp-switch-label {
   flex: 1;
   min-width: 0;
-  font-size: 14px;
+  font-size: 15px;
+  font-weight: 500;
   color: $color-text;
 }
 

@@ -1,16 +1,36 @@
-import { Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { CategoryFilter, FilterControl, FilterPlacement, PriceUnit, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CacheService } from '../../common/cache/cache.service';
-import { TaxonomyService } from '../taxonomy/taxonomy.service';
+import { SEARCH_FILTERS_CACHE_PREFIX, TaxonomyService } from '../taxonomy/taxonomy.service';
 import { rsdToPara } from '../../common/utils/money';
 import { GUEST_CAPACITY_ATTRIBUTE_KEYS } from '../../common/utils/guest-capacity';
 import { LISTING_CARD_INCLUDE, loadListingCardNames, serializeListingCard } from '../../common/utils/listing-card';
+import {
+  SearchFilter,
+  SearchFilterChoice,
+  SearchFilterOption,
+  mergeFilterOptions,
+  minFilterChoices,
+  optionUnit,
+  searchPriceUnits,
+} from '../../common/utils/search-filters';
 import { SearchListingsDto } from './dto/search-listings.dto';
 
 const RELEVANCE_CANDIDATE_POOL = 200;
 const DEFAULT_PAGE_SIZE = 20;
 const RANKING_WEIGHTS_CACHE_KEY = 'settings:ranking_weights';
+// Short: the option counts behind Opremljenost's order move with the listings.
+const SEARCH_FILTERS_TTL = 300;
+
+type FilterRow = Pick<CategoryFilter, 'key' | 'attributeKey' | 'optionKey' | 'placement' | 'control' | 'thresholds'>;
+type ResolvedAttribute = Awaited<ReturnType<TaxonomyService['resolveAttributesForCategory']>>[number];
+
+// T115: "Svi oglasi" has only the always-there filters and "Deo grada" once a
+// city is picked; a category without rows of its own gets the same.
+const DEFAULT_FILTER_ROWS: FilterRow[] = [
+  { key: 'area', attributeKey: null, optionKey: null, placement: FilterPlacement.BAR, control: FilterControl.AREA, thresholds: [] },
+];
 
 @Injectable()
 export class SearchService {
@@ -20,87 +40,125 @@ export class SearchService {
     private taxonomy: TaxonomyService,
   ) {}
 
-  /** R47 — only attributes flagged as filters, for the given category (used to render the left panel). */
-  async getFilterableAttributes(categorySlug: string) {
-    const category = await this.prisma.category.findUniqueOrThrow({ where: { slug: categorySlug } });
-    const ownAttributes = (await this.taxonomy.resolveAttributesForCategory(category.id)).filter((a) => a.isFilter);
+  /**
+   * T115: what /pretraga offers for a category, 1:1 with Tamara's table: the
+   * units of the Cena pill, then the CategoryFilter rows in order (the bar's
+   * pills, then the "Više filtera" sections), each with the attributes and
+   * options it reads. Price, date and online booking are on every page.
+   * "Svi oglasi" (no slug) and a category without rows get the area pill.
+   */
+  async getSearchFilters(categorySlug?: string) {
+    const slug = categorySlug?.trim() || '';
+    return this.cache.getOrSet(`${SEARCH_FILTERS_CACHE_PREFIX}${slug || '-'}`, SEARCH_FILTERS_TTL, () =>
+      this.loadSearchFilters(slug),
+    );
+  }
 
-    const children = await this.prisma.category.findMany({ where: { parentId: category.id, status: 'ACTIVE' } });
-    if (!children.length) {
-      return ownAttributes.map((a) => ({
-        ...a,
-        attributeIds: [a.id],
-        options: a.options.map((o) => ({ ...o, ids: [o.id] })),
-      }));
+  private async loadSearchFilters(slug: string) {
+    if (!slug) return { priceUnits: [] as PriceUnit[], filters: await this.describeFilters(DEFAULT_FILTER_ROWS, []) };
+
+    const category = await this.prisma.category.findUnique({
+      where: { slug },
+      include: { filters: { orderBy: { displayOrder: 'asc' } } },
+    });
+    if (!category) throw new NotFoundException();
+    const children = await this.prisma.category.findMany({
+      where: { parentId: category.id, status: 'ACTIVE', published: true },
+    });
+
+    // T64: a parent's page ("Sve nekretnine") reads its subcategories'
+    // attributes too, since a parent like Nekretnine has none of its own.
+    // resolveAttributesForCategory brings the ancestors' along, so Sale za
+    // proslave reads the attributes it inherits from Prostori za proslave.
+    const attributes: ResolvedAttribute[] = [];
+    const seen = new Set<string>();
+    for (const id of [category.id, ...children.map((child) => child.id)]) {
+      for (const attribute of await this.taxonomy.resolveAttributesForCategory(id)) {
+        if (seen.has(attribute.id)) continue;
+        seen.add(attribute.id);
+        attributes.push(attribute);
+      }
     }
 
-    // T64 — a parent category (e.g. "Nekretnine") can carry none of its own
-    // attributes, with every real field defined once per child subcategory
-    // instead (unlike "Prostori za proslave", which puts shared fields on the
-    // parent itself). Merge same-key filterable attributes across the DIRECT
-    // children so picking the parent chip still surfaces a working filter
-    // panel, without touching how each child's own attributes/options are
-    // modeled or stored.
-    type MergedOption = { id: string; key: string; name: string; ids: string[] };
-    type MergedFilter = {
-      key: string;
-      name: string;
-      type: string;
-      filterType: string | null;
-      unit: string | null;
-      attributeIds: string[];
-      options: Map<string, MergedOption>;
+    const rows = category.filters.length ? category.filters : DEFAULT_FILTER_ROWS;
+    return {
+      priceUnits: searchPriceUnits(category.defaultPriceUnit, children.length ? children : [category]),
+      filters: await this.describeFilters(rows, attributes),
     };
-    const merged = new Map<string, MergedFilter>();
-    const excluded = new Set<string>(); // keys whose type/filterType conflicts across sources — can't render as one control
+  }
 
-    const consider = (attr: (typeof ownAttributes)[number]) => {
-      if (excluded.has(attr.key)) return;
-      const existing = merged.get(attr.key);
-      if (!existing) {
-        merged.set(attr.key, {
-          key: attr.key,
-          name: attr.name,
-          type: attr.type,
-          filterType: attr.filterType,
-          unit: attr.unit,
-          attributeIds: [attr.id],
-          // Every subcategory's own AttributeOption row has its own id even
-          // for the "same" amenity (e.g. "Klima" under Stanovi vs Kuće) — kept
-          // here as `ids` so a search filter can match on any of them.
-          options: new Map(attr.options.map((o) => [o.key, { ...o, ids: [o.id] }])),
-        });
-        return;
-      }
-      if (existing.type !== attr.type || existing.filterType !== attr.filterType) {
-        merged.delete(attr.key);
-        excluded.add(attr.key);
-        return;
-      }
-      existing.attributeIds.push(attr.id);
-      for (const o of attr.options) {
-        const existingOption = existing.options.get(o.key);
-        if (existingOption) existingOption.ids.push(o.id);
-        else existing.options.set(o.key, { ...o, ids: [o.id] });
-      }
+  private async describeFilters(rows: FilterRow[], attributes: ResolvedAttribute[]) {
+    // One control can't mix a list with a number (Broj soba is both, T64), so
+    // a key reads only the attributes of its first one's type.
+    const attributesOf = (key: string | null) => {
+      const matches = attributes.filter((attribute) => attribute.key === key);
+      return matches.filter((attribute) => attribute.type === matches[0]?.type);
     };
+    // Opremljenost leaves out the option a switch of its own already offers.
+    const switched = new Set(
+      rows.filter((row) => row.control === FilterControl.OPTION_TOGGLE).map((row) => `${row.attributeKey}/${row.optionKey}`),
+    );
+    const counted = rows
+      .filter((row) => row.control === FilterControl.ALL_OF || row.control === FilterControl.MULTI_SELECT)
+      .flatMap((row) => attributesOf(row.attributeKey).map((attribute) => attribute.id));
+    const counts = await this.countOptionListings(counted);
 
-    for (const attr of ownAttributes) consider(attr);
-    for (const child of children) {
-      const childAttributes = (await this.taxonomy.resolveAttributesForCategory(child.id)).filter((a) => a.isFilter);
-      for (const attr of childAttributes) consider(attr);
+    const filters: SearchFilter[] = [];
+    for (const row of rows) {
+      const matched = attributesOf(row.attributeKey);
+      const base = {
+        key: row.key,
+        control: row.control,
+        placement: row.placement,
+        attributeKey: row.attributeKey,
+        name: matched[0]?.name ?? null,
+        unit: matched[0]?.unit ?? null,
+        attributeIds: matched.map((attribute) => attribute.id),
+        options: [] as SearchFilterOption[],
+        choices: [] as SearchFilterChoice[],
+        optionIds: [] as string[],
+      };
+      if (row.control === FilterControl.AREA) {
+        filters.push(base);
+        continue;
+      }
+      if (row.control === FilterControl.GUESTS) {
+        filters.push({ ...base, choices: row.thresholds.map((value) => ({ value, optionIds: [] })) });
+        continue;
+      }
+      // An attribute the category no longer has leaves no empty control behind.
+      if (!matched.length) continue;
+
+      const options = mergeFilterOptions(matched, counts);
+      if (row.control === FilterControl.OPTION_TOGGLE) {
+        const option = options.find((candidate) => candidate.key === row.optionKey);
+        if (option) filters.push({ ...base, name: option.name, optionIds: option.ids });
+      } else if (row.control === FilterControl.MIN) {
+        const choices = minFilterChoices(matched[0].type, options, row.thresholds);
+        // A list of preset sizes carries its unit in the names ("20 m²").
+        const unit = base.unit ?? (options[0] ? optionUnit(options[0].name) : null);
+        if (choices.length) filters.push({ ...base, unit, choices });
+      } else if (row.control === FilterControl.RANGE || row.control === FilterControl.TOGGLE) {
+        filters.push(base);
+      } else {
+        const listed = options.filter((option) => !switched.has(`${row.attributeKey}/${option.key}`));
+        if (listed.length) filters.push({ ...base, options: listed });
+      }
     }
+    return filters;
+  }
 
-    return Array.from(merged.values()).map((m) => ({
-      id: m.attributeIds[0],
-      attributeIds: m.attributeIds,
-      key: m.key,
-      name: m.name,
-      type: m.type,
-      filterType: m.filterType,
-      unit: m.unit,
-      options: Array.from(m.options.values()),
-    }));
+  /** Live listings per option of the given attributes (the "Prikaži još" order in Opremljenost). */
+  private async countOptionListings(attributeIds: string[]): Promise<Map<string, number>> {
+    if (!attributeIds.length) return new Map();
+    const rows = await this.prisma.$queryRaw<Array<{ optionId: string; count: number }>>`
+      SELECT o."optionId", COUNT(DISTINCT la."listingId")::int AS "count"
+      FROM "ListingAttribute" la
+      JOIN "Listing" l ON l."id" = la."listingId"
+      CROSS JOIN LATERAL unnest(la."valueOptionIds") AS o("optionId")
+      WHERE la."attributeId" = ANY(${attributeIds}::uuid[]) AND l."status" = 'ACTIVE' AND l."available" = true
+      GROUP BY o."optionId"`;
+    return new Map(rows.map((row) => [row.optionId, row.count]));
   }
 
   async search(dto: SearchListingsDto) {
@@ -313,6 +371,9 @@ export class SearchService {
         ...(dto.priceMin !== undefined ? { gte: rsdToPara(dto.priceMin) } : {}),
         ...(dto.priceMax !== undefined ? { lte: rsdToPara(dto.priceMax) } : {}),
       };
+      // T115: "Cena po noći" between two numbers means the listings priced by
+      // the night; a month's rent is not a night's price.
+      if (dto.priceUnit) where.priceUnit = dto.priceUnit;
     }
 
     if (dto.guests) {

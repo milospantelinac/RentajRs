@@ -97,6 +97,34 @@ enum FilterType {
   TOGGLE
 }
 
+/// T115: where a search filter sits, the bar above the results or the
+/// "Više filtera" panel.
+enum FilterPlacement {
+  BAR
+  PANEL
+}
+
+/// T115: how a search filter is chosen. GUESTS is the "Broj gostiju" / "Broj
+/// dece" pill and AREA the "Deo grada" one; the rest read an attribute.
+enum FilterControl {
+  GUESTS
+  AREA
+  /// One option, or any option for a group (Uzrast dece).
+  SELECT
+  /// Any of the ticked options (Marka vozila).
+  MULTI_SELECT
+  /// Every ticked option (Opremljenost).
+  ALL_OF
+  /// "N+": a number at least N, or for a list the options from N up.
+  MIN
+  /// Od / do.
+  RANGE
+  /// A yes/no attribute that is yes.
+  TOGGLE
+  /// One option of a group that is ticked (Ljubimci dozvoljeni).
+  OPTION_TOGGLE
+}
+
 enum TranslatableEntity {
   CATEGORY
   ATTRIBUTE
@@ -433,6 +461,7 @@ model Category {
   mergedFrom       Category[]          @relation("CategoryMerge")
   proposedByUser   User?               @relation("CategoryProposedBy", fields: [proposedByUserId], references: [id])
   attributes       CategoryAttribute[]
+  filters          CategoryFilter[]
   listings         Listing[]
   featuredWaitlist FeaturedWaitlist[]
   emptySearches    EmptySearch[]
@@ -469,6 +498,33 @@ model CategoryAttribute {
   category      Category           @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   options       AttributeOption[]
   listingValues ListingAttribute[]
+
+  @@unique([categoryId, key])
+}
+
+/// T115: the filters /pretraga offers for one category, in order: the pills
+/// of the bar and the sections of "Više filtera". Price, date and online
+/// booking are on every page and have no rows. A parent category has rows of
+/// its own for its "Sve" view, and those read its subcategories' attributes
+/// too. CategoryAttribute.isFilter and filterType are no longer read by search.
+model CategoryFilter {
+  id           String          @id @default(uuid()) @db.Uuid
+  categoryId   String          @db.Uuid
+  /// Unique in the category: usually the attribute key, "guests", "area", or
+  /// a name of its own for an OPTION_TOGGLE ("ljubimci").
+  key          String
+  /// The attribute the filter reads; for GUESTS the capacity attribute that
+  /// names the pill (kapacitet_dece makes it "Broj dece"); null for AREA.
+  attributeKey String?
+  /// OPTION_TOGGLE: the option that has to be ticked.
+  optionKey    String?
+  placement    FilterPlacement
+  control      FilterControl
+  /// MIN and GUESTS: the choices offered, "2+", "20+ m²" and so on.
+  thresholds   Int[]
+  displayOrder Int             @default(0)
+
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
   @@unique([categoryId, key])
 }
