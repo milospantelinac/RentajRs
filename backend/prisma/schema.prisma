@@ -614,7 +614,7 @@ model Listing {
   googlePlaceId           String?
   videoUrl                String?
   viewCount               Int            @default(0)
-  avgRating               Decimal?       @db.Decimal(2, 1) // shown only after 3 reviews (R102)
+  avgRating               Decimal?       @db.Decimal(2, 1) // shown from the first review (T114 dropped R102)
   reviewCount             Int            @default(0)
   icalExportToken         String?        @unique
   publishedAt             DateTime?      @db.Timestamptz // subscription clock starts here (R28)

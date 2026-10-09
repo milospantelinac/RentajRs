@@ -760,6 +760,7 @@
     "showAllPhotosOne": "Show {count} photo",
     "showAllPhotosFew": "Show all {count} photos",
     "showAllPhotosMany": "Show all {count} photos",
+    "ratingNew": "New",
     "reviewsCountOne": "{count} review",
     "reviewsCountFew": "{count} reviews",
     "reviewsCountMany": "{count} reviews",

@@ -43,9 +43,10 @@
     <div class="listing-card-body">
       <div class="listing-card-title-row">
         <p class="listing-card-title">{{ listing.title }}</p>
-        <span v-if="listing.avgRating" class="listing-card-rating">
+        <!-- T114: "Novo" until the first review. -->
+        <span class="listing-card-rating">
           <img src="/images/icons/star.svg" alt="" class="listing-card-star" />
-          {{ Number(listing.avgRating).toFixed(1) }}
+          {{ hasRating(listing) ? formatRating(listing.avgRating) : t('listing.ratingNew') }}
         </span>
       </div>
 

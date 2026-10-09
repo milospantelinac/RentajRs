@@ -42,17 +42,17 @@
 
         <h1 class="listing-title">{{ listing.title }}</h1>
 
-        <p v-if="showRating || listing.reviewCount > 0 || locationLabel" class="listing-meta">
-          <template v-if="showRating">
-            <img src="/images/icons/star-solid.svg" alt="" class="listing-meta-star" />
-            <span class="listing-meta-rating">{{ Number(listing.avgRating).toFixed(2) }}</span>
-            <span v-if="listing.reviewCount > 0 || locationLabel" class="listing-meta-sep" aria-hidden="true">·</span>
-          </template>
-          <template v-if="listing.reviewCount > 0">
+        <!-- T114: the rating from the first review on, "Novo" before it. -->
+        <p class="listing-meta">
+          <img src="/images/icons/star-solid.svg" alt="" class="listing-meta-star" />
+          <template v-if="rated">
+            <span class="listing-meta-rating">{{ formatRating(listing.avgRating) }}</span>
+            <span class="listing-meta-sep" aria-hidden="true">·</span>
             <span>{{ reviewCountLabel }}</span>
-            <span v-if="locationLabel" class="listing-meta-sep" aria-hidden="true">·</span>
           </template>
+          <span v-else class="listing-meta-rating">{{ t('listing.ratingNew') }}</span>
           <template v-if="locationLabel">
+            <span class="listing-meta-sep" aria-hidden="true">·</span>
             <img src="/images/icons/pin-muted.svg" alt="" class="listing-meta-pin" />
             <span>{{ locationLabel }}</span>
           </template>
@@ -217,9 +217,9 @@
           <section class="listing-section">
             <h2 class="listing-section-title">{{ t('listing.reviewsHeading') }}</h2>
 
-            <div v-if="showRating" class="listing-review-score">
+            <div v-if="rated" class="listing-review-score">
               <img src="/images/icons/star-solid.svg" alt="" class="listing-review-score-star" />
-              <span class="listing-review-score-value">{{ Number(listing.avgRating).toFixed(2) }}</span>
+              <span class="listing-review-score-value">{{ formatRating(listing.avgRating) }}</span>
               <span class="listing-meta-sep" aria-hidden="true">·</span>
               <span class="listing-review-score-count">{{ reviewCountLabel }}</span>
             </div>
@@ -235,12 +235,20 @@
 
             <div v-else class="listing-review-list">
               <article v-for="review in visibleReviews" :key="review.id" class="listing-review">
-                <div class="listing-review-author">
-                  <img v-if="review.author?.avatarUrl" :src="review.author.avatarUrl" alt="" class="listing-review-avatar" />
-                  <span v-else class="listing-review-avatar listing-avatar-initials">{{ initialsOf(review.author) }}</span>
-                  <span class="listing-review-author-text">
-                    <span class="listing-review-author-name">{{ shortName(review.author) }}</span>
-                    <span class="listing-review-date">{{ formatMonthYear(review.publishedAt || review.createdAt) }}</span>
+                <!-- T114: the guest's own rating at the right of the name and
+                     date, under them when the row has no room. -->
+                <div class="listing-review-head">
+                  <div class="listing-review-author">
+                    <img v-if="review.author?.avatarUrl" :src="review.author.avatarUrl" alt="" class="listing-review-avatar" />
+                    <span v-else class="listing-review-avatar listing-avatar-initials">{{ initialsOf(review.author) }}</span>
+                    <span class="listing-review-author-text">
+                      <span class="listing-review-author-name">{{ shortName(review.author) }}</span>
+                      <span class="listing-review-date">{{ formatMonthYear(review.publishedAt || review.createdAt) }}</span>
+                    </span>
+                  </div>
+                  <span v-if="review.rating" class="listing-review-rating">
+                    <RatingStars :rating="review.rating" :size="14" />
+                    <span class="listing-review-rating-value">{{ formatRating(review.rating) }}</span>
                   </span>
                 </div>
                 <p v-if="review.comment" class="listing-review-text">{{ review.comment }}</p>
@@ -354,8 +362,7 @@ const favoritesStore = useFavoritesStore()
 
 // -- Header ---------------------------------------------------------------
 
-// R102 — an average only means something from three reviews on.
-const showRating = computed(() => Number(props.listing.reviewCount) >= 3 && props.listing.avgRating != null)
+const rated = computed(() => hasRating(props.listing))
 
 const reviewCountLabel = computed(() =>
   t(`listing.reviewsCount${srPluralCategory(props.listing.reviewCount)}`, { count: props.listing.reviewCount }),
@@ -1140,10 +1147,32 @@ onBeforeUnmount(() => window.removeEventListener('resize', measureDescription))
   background: $color-surface;
 }
 
+.listing-review-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
 .listing-review-author {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
+}
+
+.listing-review-rating {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+// The date's type, a step bolder.
+.listing-review-rating-value {
+  font-size: 13px;
+  font-weight: 500;
+  color: $color-text;
 }
 
 .listing-review-avatar {

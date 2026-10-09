@@ -115,7 +115,7 @@ export class ReviewsService {
       where: { listingId, hiddenByAdmin: false },
       select: { rating: true },
     });
-    // R102 — average shown only from 3 reviews onward; below that just the count is exposed (handled client-side).
+    // T114: shown from the first review on (R102's three-review rule is gone).
     const avg = visible.length ? visible.reduce((sum, r) => sum + r.rating, 0) / visible.length : null;
     await this.prisma.listing.update({
       where: { id: listingId },

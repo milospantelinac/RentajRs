@@ -2030,6 +2030,7 @@ const cardPreviewListing = computed(() => ({
   city: locationCity.value || listing.value?.city || null,
   cityArea: locationArea.value || listing.value?.cityArea || null,
   avgRating: listing.value?.avgRating ?? null,
+  reviewCount: listing.value?.reviewCount ?? 0,
   price: form.price,
   priceUnit: form.priceUnit,
   attributes: detailsPreviewAttributes.value.map(flattenListingAttribute),

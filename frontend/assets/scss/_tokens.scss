@@ -20,6 +20,8 @@ $color-success: #12b76a; // no exact hex given in the spec — kept as-is (P15)
 $color-warning: #b88208; // rating and warning ink, sits on $color-warning-bg
 $color-warning-bg: #fff4d9;
 $color-error: #d1293d;
+$color-rating: #f5a623; // T114: the listing card's star (star.svg), a review's filled stars
+$color-rating-empty: #d6dee7; // T114: a review's empty stars (star-empty-22.svg)
 
 // R149: the blue gradient is reserved for marketing surfaces (Home Page
 // hero/CTAs) — never the dashboard or admin panel, which use flat

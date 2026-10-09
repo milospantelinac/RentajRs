@@ -143,13 +143,18 @@ export class UsersService {
     });
     if (!user) throw new NotFoundException();
 
-    const ratings = user.reviewsReceived.map((r) => r.rating);
-    const avgRating = ratings.length >= 3 ? ratings.reduce((a, b) => a + b, 0) / ratings.length : null;
+    // T114: the average counts from the first review (R102's three-review
+    // rule is gone), over every visible review and not only the 20 shown.
+    const { _avg, _count } = await this.prisma.review.aggregate({
+      where: { recipientId: user.id, hiddenByAdmin: false },
+      _avg: { rating: true },
+      _count: true,
+    });
 
     return {
       ...user,
-      avgRating,
-      reviewCount: ratings.length,
+      avgRating: _avg.rating,
+      reviewCount: _count,
       listings: user.listings.map((l) => ({ ...l, price: paraToRsd(l.price) })),
     };
   }

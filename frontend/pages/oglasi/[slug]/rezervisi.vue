@@ -604,12 +604,12 @@ const listingMeta = computed(() => {
   const place = [listing.value.city?.name, listing.value.cityArea?.name].filter(Boolean).join(', ')
   return [listing.value.category?.name, place].filter(Boolean).join(' · ')
 })
-// 369:414: "★ 4.8 · 26 recenzija"; R102: the average only from three reviews on.
+// 369:414: "★ 4.8 · 26 recenzija", from the first review on (T114).
 const ratingLine = computed(() => {
   const count = Number(listing.value.reviewCount) || 0
   if (!count) return ''
   const reviews = t(`listing.reviewsCount${srPluralCategory(count)}`, { count })
-  return count >= 3 && listing.value.avgRating != null ? `★ ${Number(listing.value.avgRating).toFixed(1)} · ${reviews}` : reviews
+  return hasRating(listing.value) ? `★ ${formatRating(listing.value.avgRating)} · ${reviews}` : reviews
 })
 const coverUrl = computed(() => {
   const photos = (listing.value.photos || []).filter((photo) => !photo.pendingRemoval)

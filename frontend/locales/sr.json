@@ -760,6 +760,7 @@
     "showAllPhotosOne": "Prikaži {count} sliku",
     "showAllPhotosFew": "Prikaži sve {count} slike",
     "showAllPhotosMany": "Prikaži svih {count} slika",
+    "ratingNew": "Novo",
     "reviewsCountOne": "{count} recenzija",
     "reviewsCountFew": "{count} recenzije",
     "reviewsCountMany": "{count} recenzija",

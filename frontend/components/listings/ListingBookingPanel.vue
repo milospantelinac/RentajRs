@@ -5,9 +5,10 @@
         <span class="booking-panel-amount">{{ formatPrice(listing.price) }}</span>
         <span class="booking-panel-unit">{{ unitSuffix }}</span>
       </p>
-      <span v-if="showRating" class="booking-panel-rating">
+      <!-- T114: "Novo" until the first review. -->
+      <span class="booking-panel-rating">
         <img src="/images/icons/star-solid.svg" alt="" class="booking-panel-star" />
-        {{ Number(listing.avgRating).toFixed(2) }}
+        {{ hasRating(listing) ? formatRating(listing.avgRating) : t('listing.ratingNew') }}
       </span>
     </div>
 
@@ -218,8 +219,6 @@ const { t } = useI18n()
 const api = useApi()
 
 const bookable = computed(() => props.listing.bookingModel !== 'NO_BOOKING' && props.listing.canBook)
-// R102 — an average is only meaningful (and only shown) from three reviews on.
-const showRating = computed(() => Number(props.listing.reviewCount) >= 3 && props.listing.avgRating != null)
 const isDefinedSlots = computed(
   () => props.listing.bookingModel === 'PER_SLOT' && props.listing.slotSubmode === 'DEFINED_SLOTS',
 )
