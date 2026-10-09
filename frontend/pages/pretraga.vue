@@ -323,7 +323,12 @@
 
         <aside class="search-map-col" :class="{ 'mobile-hidden': !mapOpenMobile }">
           <div class="search-map-frame" :class="{ 'search-map-frame-expanded': mapExpanded }">
-            <ListingMap :listings="results" @bounds-change="onBoundsChange" @ready="mapReady = true" />
+            <ListingMap
+              :listings="results"
+              @bounds-change="onBoundsChange"
+              @ready="mapReady = true"
+              @card-change="mapCardOffset = $event.offset"
+            />
 
             <!-- These three sit on top of the map, so they wait for it too. -->
             <label v-if="mapReady" class="map-live-toggle">
@@ -335,7 +340,14 @@
               {{ t('search.searchThisArea') }}
             </button>
 
-            <button v-if="mapReady" type="button" class="map-expand-btn" @click="mapExpanded = !mapExpanded">
+            <!-- T113: on a phone it moves up over the listing card docked at the bottom. -->
+            <button
+              v-if="mapReady"
+              type="button"
+              class="map-expand-btn"
+              :style="mapCardOffset ? { bottom: `${mapCardOffset + MAP_CARD_GAP}px` } : null"
+              @click="mapExpanded = !mapExpanded"
+            >
               {{ mapExpanded ? t('common.close') : t('search.expandMap') }}
             </button>
           </div>
@@ -388,6 +400,9 @@ const searchAsIMove = ref(false)
 const notifyEmail = ref('')
 const notifySent = ref(false)
 const mapMovedManually = ref(false)
+// T113: how far up the docked listing card reaches on a phone (0 without one).
+const mapCardOffset = ref(0)
+const MAP_CARD_GAP = 12
 
 const query = reactive({
   q: route.query.q || '',

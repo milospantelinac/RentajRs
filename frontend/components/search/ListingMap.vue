@@ -1,5 +1,9 @@
 <template>
-  <div class="listing-map" :class="{ 'listing-map-loading': !mapReady }">
+  <div
+    class="listing-map"
+    :class="{ 'listing-map-loading': !mapReady, 'listing-map-has-dock': selectedListing && docked }"
+    :style="dockedOffset ? { '--map-card-offset': `${dockedOffset}px` } : null"
+  >
     <!-- Nothing dynamic may be bound on the element below: Leaflet writes its
          own classes on its container, and Vue's class patch would wipe them. -->
     <div ref="mapEl" class="listing-map-canvas"></div>
@@ -8,6 +12,26 @@
          dynamic import and then a network round trip after the cards, so the
          frame holds the same grey block until the first tileset is painted. -->
     <SkeletonBox v-if="!mapReady" class="listing-map-skeleton" height="100%" radius="14px" />
+
+    <!-- T113: the small card of the pill that was clicked, above it (or under
+         it near the top of the map) on a desktop, along the bottom on a phone. -->
+    <div
+      v-if="selectedListing"
+      ref="cardWrap"
+      class="listing-map-card"
+      :class="`listing-map-card-${cardPlacement}`"
+      :style="cardStyle"
+    >
+      <MapListingCard
+        :listing="selectedListing"
+        :index="selectedIndex"
+        :count="selectedGroup.listings.length"
+        :placement="cardPlacement"
+        :arrow-x="cardArrowX"
+        @close="closeCard"
+        @step="stepCard"
+      />
+    </div>
   </div>
 </template>
 
@@ -17,7 +41,9 @@
 const props = defineProps({
   listings: { type: Array, default: () => [] },
 })
-const emit = defineEmits(['bounds-change', 'ready'])
+// T113: card-change tells the page where the docked card ends, so "Uvećaj
+// mapu" can sit above it on a phone.
+const emit = defineEmits(['bounds-change', 'ready', 'card-change'])
 const { t } = useI18n()
 
 const mapEl = ref(null)
@@ -35,6 +61,143 @@ let resizeObserver = null
 // that event would trigger another search, whose new results would call
 // fitBounds again, forever. Only a real user-driven move should emit.
 let suppressNextMoveEnd = false
+
+// -- T113: one pill per point, the card of the clicked one ------------------
+
+// Figma 1716:3290: a 300px card 13px above its pill (the 8px caret laps 1px
+// over the card, then 6px of air), its close button 10px out of the top
+// right corner; the card, button included, keeps 8px from the map's edges.
+// A phone docks it 16px from the bottom and the sides (1716:3356).
+const CARD_WIDTH = 300
+const CARD_GAP = 13
+const CARD_CLOSE_OUT = 10
+const CARD_EDGE = 8
+// The caret stays on the card's straight edge, clear of its 16px corners.
+const CARET_MIN = 24
+const DOCK_EDGE = 16
+const PHONE_QUERY = '(max-width: 767.98px)'
+
+const markersByKey = new Map()
+const selectedKey = ref('')
+const selectedIndex = ref(0)
+const cardWrap = ref(null)
+const cardPlacement = ref('above')
+const cardStyle = ref({})
+const cardArrowX = ref(CARD_WIDTH / 2)
+const docked = ref(false)
+const dockedOffset = ref(0)
+let phoneQuery = null
+
+// Listings that share a point (two flats in one building, or addresses
+// geocoded to the same spot) are one pill: its lowest price and "+N", and the
+// card steps through them, cheapest first (T113 point 8, agreed 2026-10-09).
+const groups = computed(() => {
+  const byPoint = new Map()
+  for (const listing of props.listings) {
+    if (!listing.latitude || !listing.longitude) continue
+    const lat = Number(listing.latitude)
+    const lng = Number(listing.longitude)
+    const key = `${lat.toFixed(5)},${lng.toFixed(5)}`
+    if (!byPoint.has(key)) byPoint.set(key, { key, lat, lng, listings: [] })
+    byPoint.get(key).listings.push(listing)
+  }
+  for (const group of byPoint.values()) {
+    // One with no slot ahead has no price to show and goes last.
+    const rank = (listing) =>
+      formatListingPrice(listing, t) ? Number(listing.price) || 0 : Infinity
+    group.listings.sort((a, b) => rank(a) - rank(b))
+  }
+  return [...byPoint.values()]
+})
+
+const selectedGroup = computed(
+  () => groups.value.find((group) => group.key === selectedKey.value) || null,
+)
+const selectedListing = computed(() => selectedGroup.value?.listings[selectedIndex.value] || null)
+
+function pinHtml(group) {
+  // T121: "Od 12.000 RSD" on defined slots, "Bez termina" with none ahead.
+  const price = formatListingPrice(group.listings[0], t) || t('listing.mapNoUpcomingSlots')
+  const more =
+    group.listings.length > 1
+      ? `<span class="listing-map-pin-more">+${group.listings.length - 1}</span>`
+      : ''
+  return `<span class="listing-map-pin">${escapeHtml(price)}${more}</span>`
+}
+
+function setPinActive(key, active) {
+  const marker = markersByKey.get(key)
+  if (!marker) return
+  marker.getElement()?.classList.toggle('listing-map-pin-active', active)
+  marker.setZIndexOffset(active ? 1000 : 0)
+}
+
+function selectGroup(key) {
+  if (selectedKey.value && selectedKey.value !== key) setPinActive(selectedKey.value, false)
+  if (selectedKey.value !== key) selectedIndex.value = 0
+  selectedKey.value = key
+  setPinActive(key, true)
+  placeCard()
+}
+
+function closeCard() {
+  if (!selectedKey.value) return
+  setPinActive(selectedKey.value, false)
+  selectedKey.value = ''
+  selectedIndex.value = 0
+}
+
+function stepCard(direction) {
+  const count = selectedGroup.value?.listings.length || 0
+  if (count < 2) return
+  selectedIndex.value = (selectedIndex.value + direction + count) % count
+  placeCard()
+}
+
+// Above the pill, centred on it and kept inside the map; under it when the
+// pill is too near the top for the card to fit above. The caret keeps
+// pointing at the pill when the card is pushed in from an edge.
+async function placeCard() {
+  docked.value = Boolean(phoneQuery?.matches)
+  await nextTick()
+  const group = selectedGroup.value
+  const card = cardWrap.value
+  if (!map || !group || !card) return
+  if (docked.value) {
+    cardPlacement.value = 'docked'
+    cardStyle.value = { left: `${DOCK_EDGE}px`, right: `${DOCK_EDGE}px`, bottom: `${DOCK_EDGE}px` }
+    await nextTick()
+    dockedOffset.value = DOCK_EDGE + card.offsetHeight
+    return
+  }
+  dockedOffset.value = 0
+  const size = map.getSize()
+  const point = map.latLngToContainerPoint([group.lat, group.lng])
+  const pin = markersByKey.get(group.key)?.getElement()?.querySelector('.listing-map-pin')
+  const pinHalf = pin ? pin.offsetHeight / 2 : 15
+  const height = card.offsetHeight
+  const above = point.y - pinHalf - CARD_GAP - height
+  cardPlacement.value = above - CARD_CLOSE_OUT >= CARD_EDGE ? 'above' : 'below'
+  const left = Math.min(
+    Math.max(point.x - CARD_WIDTH / 2, CARD_EDGE),
+    size.x - CARD_WIDTH - CARD_CLOSE_OUT - CARD_EDGE,
+  )
+  cardArrowX.value = Math.min(Math.max(point.x - left, CARET_MIN), CARD_WIDTH - CARET_MIN)
+  cardStyle.value = {
+    left: `${left}px`,
+    top: `${cardPlacement.value === 'above' ? above : point.y + pinHalf + CARD_GAP}px`,
+    width: `${CARD_WIDTH}px`,
+  }
+}
+
+watch(dockedOffset, (offset) => emit('card-change', { docked: docked.value && offset > 0, offset }))
+watch(selectedKey, (key) => {
+  if (!key) dockedOffset.value = 0
+})
+
+function onKeydown(event) {
+  if (event.key === 'Escape') closeCard()
+}
 
 function markReady() {
   if (mapReady.value) return
@@ -83,8 +246,16 @@ async function initMap() {
   resizeObserver = new ResizeObserver(() => {
     map?.invalidateSize()
     startReadyFallback()
+    if (selectedKey.value) placeCard()
   })
   resizeObserver.observe(mapEl.value)
+
+  // T113: a click on the map itself closes the card; the pills and the card
+  // keep their clicks to themselves. The card follows its pill as the map moves.
+  map.on('click', closeCard)
+  map.on('move zoomend', () => {
+    if (selectedKey.value && !docked.value) placeCard()
+  })
 
   map.on('moveend', () => {
     if (suppressNextMoveEnd) {
@@ -108,40 +279,56 @@ function escapeHtml(value) {
 function renderMarkers() {
   if (!markersLayer) return
   markersLayer.clearLayers()
+  markersByKey.clear()
   const points = []
 
-  for (const listing of props.listings) {
-    if (!listing.latitude || !listing.longitude) continue
-    // T121: "Od 12.000 RSD" on defined slots, "Bez termina" with none ahead.
-    const price = formatListingPrice(listing, t) || t('listing.mapNoUpcomingSlots')
+  for (const group of groups.value) {
     // Dizajn 8 — the map shows the price itself rather than a generic pin, so
     // the marker is a styled label (divIcon) instead of Leaflet's image pin.
-    const marker = L.marker([listing.latitude, listing.longitude], {
-      icon: L.divIcon({
-        className: 'listing-map-pin-wrap',
-        html: `<span class="listing-map-pin">${escapeHtml(price)}</span>`,
-        iconSize: null,
-      }),
+    const marker = L.marker([group.lat, group.lng], {
+      icon: L.divIcon({ className: 'listing-map-pin-wrap', html: pinHtml(group), iconSize: null }),
+      keyboard: true,
     })
-    marker.bindPopup(
-      `<strong>${escapeHtml(listing.title)}</strong><br/>${escapeHtml(price)}<br/><a href="/oglasi/${escapeHtml(listing.slug)}">Pogledaj oglas</a>`,
-    )
+    marker.on('click', () => selectGroup(group.key))
     marker.addTo(markersLayer)
-    points.push([listing.latitude, listing.longitude])
+    markersByKey.set(group.key, marker)
+    points.push([group.lat, group.lng])
+  }
+
+  // A new search keeps the card while its listing is still among the results.
+  if (selectedKey.value) {
+    const group = selectedGroup.value
+    if (!group) closeCard()
+    else {
+      if (selectedIndex.value >= group.listings.length) selectedIndex.value = 0
+      setPinActive(group.key, true)
+    }
   }
 
   if (points.length && map) {
     suppressNextMoveEnd = true
     map.fitBounds(points, { maxZoom: 14, padding: [24, 24] })
   }
+  if (selectedKey.value) placeCard()
 }
 
 watch(() => props.listings, renderMarkers)
 
-onMounted(initMap)
+function onPhoneChange() {
+  if (selectedKey.value) placeCard()
+}
+
+onMounted(() => {
+  phoneQuery = window.matchMedia(PHONE_QUERY)
+  phoneQuery.addEventListener('change', onPhoneChange)
+  window.addEventListener('keydown', onKeydown)
+  initMap()
+})
 onBeforeUnmount(() => {
   clearTimeout(readyTimer)
   resizeObserver?.disconnect()
+  phoneQuery?.removeEventListener('change', onPhoneChange)
+  window.removeEventListener('keydown', onKeydown)
   map?.remove()
 })
 </script>
@@ -175,6 +362,17 @@ onBeforeUnmount(() => {
   left: 0;
 }
 
+// T113: above Leaflet's panes and controls (up to 1000).
+.listing-map-card {
+  position: absolute;
+  z-index: 1001;
+}
+
+// On a phone the docked card covers the bottom; Leaflet's zoom moves above it.
+.listing-map-has-dock :deep(.leaflet-bottom) {
+  bottom: var(--map-card-offset, 0);
+}
+
 // Figma 624:532 — the price label sits on the point, so the wrapper is
 // unstyled and the label centres itself over the coordinate. Not scoped with
 // :deep alone because Leaflet builds these nodes outside the component tree.
@@ -187,7 +385,9 @@ onBeforeUnmount(() => {
 }
 
 .listing-map :deep(.listing-map-pin) {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   transform: translate(-50%, -50%);
   padding: 7px 12px;
   border: 1px solid $color-border;
@@ -200,11 +400,24 @@ onBeforeUnmount(() => {
   line-height: 1.2;
   white-space: nowrap;
   box-shadow: 0 2px 6px rgba(6, 27, 49, 0.12);
+  cursor: pointer;
 }
 
-.listing-map :deep(.leaflet-marker-icon:hover .listing-map-pin) {
+.listing-map :deep(.listing-map-pin-more) {
+  font-weight: 400;
+  color: $color-text-muted;
+}
+
+// T113: a hovered pill and the one whose card is open are blue.
+.listing-map :deep(.leaflet-marker-icon:hover .listing-map-pin),
+.listing-map :deep(.listing-map-pin-active .listing-map-pin) {
   background: $color-primary;
   border-color: $color-primary;
+  color: $color-surface;
+}
+
+.listing-map :deep(.leaflet-marker-icon:hover .listing-map-pin-more),
+.listing-map :deep(.listing-map-pin-active .listing-map-pin-more) {
   color: $color-surface;
 }
 </style>

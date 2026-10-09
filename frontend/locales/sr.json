@@ -1041,6 +1041,8 @@
     "noOptionMatch": "Nema opcije sa tim nazivom.",
     "showNListings": "Prikaži {count} oglasa",
     "mapStaysNote": "Mapa ostaje na ekranu dok skrolujete rezultate.",
+    "mapCardPrevious": "Prethodni oglas",
+    "mapCardNext": "Sledeći oglas",
     "areasSelected": "{count} izabrano",
     "allInCategory": "Sve — {category}",
     "categoryInCity": "{category} u {city}",

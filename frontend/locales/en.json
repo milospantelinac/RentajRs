@@ -1041,6 +1041,8 @@
     "noOptionMatch": "No option by that name.",
     "showNListings": "Show {count} listings",
     "mapStaysNote": "The map stays on screen while you scroll the results.",
+    "mapCardPrevious": "Previous listing",
+    "mapCardNext": "Next listing",
     "areasSelected": "{count} selected",
     "allInCategory": "All — {category}",
     "categoryInCity": "{category} in {city}",
