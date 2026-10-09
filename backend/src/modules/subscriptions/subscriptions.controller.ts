@@ -3,7 +3,6 @@ import { ApiTags } from '@nestjs/swagger';
 import { SubscriptionsService } from './subscriptions.service';
 import {
   PurchaseSubscriptionDto,
-  PurchaseFeaturedDto,
   AdjustPriceDto,
   InitCheckoutDto,
   AssignFreeFeaturedDto,
@@ -76,11 +75,6 @@ export class SubscriptionsController {
   @Post('subscriptions/nestpay/callback/fail')
   async nestpayFail(@Body() body: Record<string, string>) {
     return { url: await this.subscriptionsService.handleNestPayFail(body), statusCode: 303 };
-  }
-
-  @Post('featured/purchase')
-  purchaseFeatured(@CurrentUser('id') userId: string, @Body() dto: PurchaseFeaturedDto) {
-    return this.subscriptionsService.purchaseFeatured(userId, dto);
   }
 
   @Public()

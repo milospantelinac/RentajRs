@@ -97,3 +97,60 @@ describe('SubscriptionsService#getMySubscriptions (Dizajn 35)', () => {
     expect(cancelled.bankedDays).toEqual([]);
   });
 });
+
+describe('SubscriptionsService featured listings and the direct package purchase', () => {
+  const i18n = { t: jest.fn((key: string) => key) };
+  const taxonomy = {
+    getCategoryNames: jest.fn(async () => new Map([['c1', 'Sobe']])),
+    getOptionNames: jest.fn(async () => new Map()),
+  };
+
+  function makeService(prisma: any) {
+    return new SubscriptionsService(prisma, {} as any, {} as any, taxonomy as any, {} as any, {} as any, i18n as any, {} as any, {} as any);
+  }
+
+  it('gives the public a live listing card, never the whole row', async () => {
+    const row = {
+      id: 'l1',
+      slug: 'soba',
+      title: 'Soba',
+      price: 500_000n,
+      priceUnit: 'NIGHT',
+      avgRating: null,
+      reviewCount: 0,
+      bookingModel: 'PER_STAY',
+      city: null,
+      cityArea: null,
+      category: { id: 'c1', slug: 'sobe', icon: 'bed' },
+      photos: [],
+      latitude: null,
+      longitude: null,
+      attributes: [],
+      address: 'Tajna 7',
+      icalExportToken: 'secret',
+      userId: 'owner-1',
+    };
+    const prisma = { featuredListing: { findMany: jest.fn().mockResolvedValue([{ id: 'f1', listing: row }]) } };
+
+    const cards = await makeService(prisma).getRotatedFeatured('c1');
+    expect(prisma.featuredListing.findMany.mock.calls[0][0].where.listing).toEqual({ categoryId: 'c1', status: 'ACTIVE' });
+    expect(cards).toHaveLength(1);
+    expect(cards[0]).toMatchObject({ slug: 'soba', price: 5000, category: { name: 'Sobe' } });
+    expect(JSON.stringify(cards)).not.toMatch(/Tajna 7|secret|owner-1/);
+  });
+
+  it('refuses a person a new package outside the card checkout', async () => {
+    const prisma = {
+      listing: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'l1', userId: 'u1', status: 'DRAFT', bookingModel: 'NO_BOOKING' }) },
+      package: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'p1', key: 'PRO', hasBookings: true }) },
+      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', buyerType: 'PERSON' }) },
+      subscription: { create: jest.fn() },
+    };
+
+    await expect(
+      makeService(prisma).purchaseForListing('u1', { listingId: 'l1', packageId: 'p1', billingCycle: 'YEARLY' } as any),
+    ).rejects.toThrow(BadRequestException);
+    expect(i18n.t).toHaveBeenCalledWith('errors.PACKAGE_CHECKOUT_REQUIRED');
+    expect(prisma.subscription.create).not.toHaveBeenCalled();
+  });
+});

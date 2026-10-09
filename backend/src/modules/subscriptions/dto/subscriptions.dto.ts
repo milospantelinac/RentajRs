@@ -23,16 +23,6 @@ export class PurchaseSubscriptionDto {
   existingSubscriptionId?: string;
 }
 
-export class PurchaseFeaturedDto {
-  @ApiProperty()
-  @IsUUID('4')
-  listingId: string;
-
-  @ApiProperty({ enum: [7, 15, 30] })
-  @IsIn([7, 15, 30])
-  durationDays: 7 | 15 | 30;
-}
-
 /** ZADATAK 1 — checkout page → POST /subscriptions/checkout/init. */
 export class InitCheckoutDto {
   @ApiProperty()

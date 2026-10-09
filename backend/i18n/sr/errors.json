@@ -56,6 +56,7 @@
   "SUBSCRIPTION_RENEWAL_SAME_PACKAGE": "Obnova zadržava isti paket; za prelazak na Pro koristite „Nadogradi na Pro”",
   "SUBSCRIPTION_UPGRADE_PRO_ONLY": "Objavljen oglas ovde može da pređe samo na Pro paket; trenutni paket se produžava obnovom",
   "LISTING_PACKAGE_PURCHASE_NOT_ALLOWED": "Za ovaj oglas trenutno ne može da se kupi paket",
+  "PACKAGE_CHECKOUT_REQUIRED": "Paket se plaća karticom kroz naplatu na stranici oglasa",
   "CONVERSATION_ACCOUNT_REMOVED": "Ovaj nalog je uklonjen i više ne prima poruke",
   "REVIEW_ALREADY_EXISTS": "Već ste ostavili recenziju za ovu rezervaciju",
   "REVIEW_WINDOW_CLOSED": "Rok za recenziju ove rezervacije je istekao",
