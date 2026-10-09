@@ -159,7 +159,7 @@ export class BookingsService {
     }
     // Dizajn 23: a defined slot has its own length, so the gap doesn't follow it.
     if (listing.gapAfterMinutes && !isDefinedSlots(listing)) {
-      await this.availability.applyGapAfter(listingId, endsAt, listing.gapAfterMinutes);
+      await this.availability.applyGapAfter(listingId, booking.id, endsAt, listing.gapAfterMinutes);
     }
 
     await this.recordHistory(booking.id, null, 'REQUESTED', guestId, false);

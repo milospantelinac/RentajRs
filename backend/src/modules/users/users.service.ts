@@ -286,6 +286,8 @@ export class UsersService {
           where: { id: booking.id },
           data: { status: 'CANCELLED', cancellationReason: 'Account deleted' },
         });
+        // The term and its gap go free like on any other cancellation.
+        await tx.blockedTerm.deleteMany({ where: { bookingId: booking.id } });
       }
       await tx.listing.updateMany({ where: { userId }, data: { status: 'DELETED', deletedAt: new Date() } });
       await tx.subscription.updateMany({

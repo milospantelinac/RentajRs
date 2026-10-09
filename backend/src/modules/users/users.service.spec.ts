@@ -162,4 +162,23 @@ describe('UsersService#executeDeletion', () => {
     expect(cache.del).toHaveBeenCalledWith(LISTING_COUNTS_CACHE_KEY);
     expect(steps).toEqual(['listings deleted', 'committed', 'counts dropped']);
   });
+
+  it('frees the terms of the bookings it cancels', async () => {
+    const tx = {
+      booking: { update: jest.fn() },
+      blockedTerm: { deleteMany: jest.fn() },
+      listing: { updateMany: jest.fn() },
+      subscription: { updateMany: jest.fn() },
+      session: { updateMany: jest.fn() },
+      user: { update: jest.fn() },
+    };
+    const prisma = {
+      booking: { findMany: jest.fn().mockResolvedValue([{ id: 'b1' }, { id: 'b2' }]) },
+      $transaction: jest.fn(async (run: (client: typeof tx) => Promise<void>) => run(tx)),
+    };
+    const service = new UsersService(prisma as any, {} as any, i18n as any, { emit: jest.fn() } as any, taxonomy as any, { del: jest.fn() } as any);
+
+    await service.executeDeletion('u1');
+    expect(tx.blockedTerm.deleteMany.mock.calls).toEqual([[{ where: { bookingId: 'b1' } }], [{ where: { bookingId: 'b2' } }]]);
+  });
 });

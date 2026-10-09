@@ -126,13 +126,17 @@ export class AvailabilityService {
     await this.prisma.blockedTerm.deleteMany({ where: { bookingId } });
   }
 
-  /** Applies R70 — an obligatory gap immediately after a booking's own term. */
-  async applyGapAfter(listingId: string, bookingEnd: Date, gapMinutes: number) {
+  /**
+   * Applies R70 — an obligatory gap immediately after a booking's own term.
+   * The gap carries the booking's id, so releaseTermsForBooking() frees it
+   * with the term when the booking is rejected, cancelled or expires.
+   */
+  async applyGapAfter(listingId: string, bookingId: string, bookingEnd: Date, gapMinutes: number) {
     if (gapMinutes <= 0) return;
     const gapEnd = new Date(bookingEnd.getTime() + gapMinutes * 60000);
     try {
       await this.prisma.blockedTerm.create({
-        data: { listingId, startsAt: bookingEnd, endsAt: gapEnd, source: 'GAP' },
+        data: { listingId, bookingId, startsAt: bookingEnd, endsAt: gapEnd, source: 'GAP' },
       });
     } catch (err) {
       // A gap colliding with something else is a soft problem, not fatal to the booking itself.
