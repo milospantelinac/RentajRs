@@ -124,24 +124,25 @@ onUnmounted(() => {
   background: $color-border;
 }
 
-// Dizajn 5 — "zvonce sa crvenim brojačem", not just a dot.
+// Dizajn 5: "zvonce sa crvenim brojačem", not just a dot. T120: the number
+// (and the "+" of "9+") grew to the phone tab bar's counter, 18px with an 11px
+// Medium figure in the design's badge red (357:462), its white ring a shadow
+// so the box itself keeps the full 18px.
 .notif-bell-badge {
   position: absolute;
-  top: 2px;
-  right: 2px;
-  min-width: 16px;
-  height: 16px;
-  padding: 0 3px;
+  top: 0;
+  left: calc(50% + 3px);
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
   border-radius: $radius-pill;
-  background: $color-error;
-  border: 2px solid $color-surface;
+  background: #f43f5e;
+  box-shadow: 0 0 0 2px $color-surface;
   color: $color-surface;
-  font-size: 9px;
-  font-weight: 700;
-  line-height: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 18px;
+  text-align: center;
 }
 
 .notif-dropdown {
