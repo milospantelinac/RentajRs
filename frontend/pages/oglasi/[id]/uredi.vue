@@ -2674,6 +2674,12 @@ function validateCurrentStep() {
 
 async function loadListing() {
   listing.value = await api.get(`/listings/${listingId}`)
+  // T133: a proposal waiting for its category is edited on its own form, not
+  // in the Ostalo wizard (the preview's "back to editing" and old links land here).
+  if (listing.value.pendingCategoryAssignment && listing.value.status === 'DRAFT') {
+    await navigateTo(`/oglasi/novi?predlog=${listingId}`, { replace: true })
+    return
+  }
 
   // /listings/:id returns the raw category row (no resolved/inherited
   // attributes — that's TaxonomyService's job); fetch the definitions

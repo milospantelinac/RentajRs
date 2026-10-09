@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { OnEvent } from '@nestjs/event-emitter';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { EmailService } from '../../../common/email/email.service';
+import { escapeHtml } from '../../../common/utils/escape-html';
 
 @Injectable()
 export class AdminEmailListener {
@@ -66,6 +67,35 @@ export class AdminEmailListener {
       'admin_proposed_category',
       { kategorija: name?.value ?? category.slug },
       `${this.frontendUrl}/admin/kategorije`,
+    );
+  }
+
+  /**
+   * T133: "Otključaj svoju kategoriju" used to reach only the admins' list
+   * (Admin > Kategorije). The email names the listing and the owner, and
+   * lists everything the owner filled in on the form.
+   */
+  @OnEvent('listing.category_proposed')
+  async onListingCategoryProposed({ listingId }: { listingId: string }) {
+    const listing = await this.prisma.listing.findUnique({
+      where: { id: listingId },
+      include: { user: { select: { firstName: true, lastName: true, email: true } } },
+    });
+    if (!listing) return;
+    const owner = `${listing.user.firstName} ${listing.user.lastName}`;
+    const admins = await this.getAdmins('manage_categories');
+    await Promise.all(
+      admins.map((admin) =>
+        this.email.send({
+          key: 'admin_category_proposal',
+          to: admin.email,
+          language: admin.language,
+          userId: admin.id,
+          context: { oglas: listing.title, korisnik: owner },
+          buttonUrl: `${this.frontendUrl}/admin/kategorije`,
+          extraMjml: proposalDetailsMjml(listing, admin.language === 'EN'),
+        }),
+      ),
     );
   }
 
@@ -149,4 +179,41 @@ export class AdminEmailListener {
       booking.ownerId,
     );
   }
+}
+
+const PROPOSAL_BOOKING: Record<string, [string, string]> = {
+  PER_STAY: ['Po boravku', 'Per stay'],
+  PER_SLOT: ['Po terminu', 'Per time slot'],
+  NO_BOOKING: ['Bez rezervacije, samo kontakt', 'No booking, contact only'],
+};
+const PROPOSAL_UNIT: Record<string, [string, string]> = {
+  DAY: ['dan', 'day'],
+  NIGHT: ['noć', 'night'],
+  MONTH: ['mesec', 'month'],
+  HOUR: ['sat', 'hour'],
+  SLOT: ['termin', 'time slot'],
+};
+
+/** The proposal form's answers as rows under the email's text, escaped since they are the owner's own words. */
+function proposalDetailsMjml(
+  listing: {
+    title: string;
+    description: string;
+    bookingModel: string;
+    priceUnit: string;
+    user: { firstName: string; lastName: string; email: string };
+  },
+  isEn: boolean,
+): string {
+  const pick = (pair?: [string, string]) => (pair ? pair[isEn ? 1 : 0] : '');
+  const rows: Array<[string, string]> = [
+    [isEn ? 'What they rent out' : 'Šta izdaje', listing.title],
+    [isEn ? 'Booking' : 'Način rezervacije', pick(PROPOSAL_BOOKING[listing.bookingModel])],
+  ];
+  if (listing.bookingModel !== 'NO_BOOKING') rows.push([isEn ? 'Price unit' : 'Jedinica cene', pick(PROPOSAL_UNIT[listing.priceUnit])]);
+  rows.push([isEn ? 'Short description' : 'Kratak opis', listing.description.trim() || '-']);
+  rows.push([isEn ? 'Owner' : 'Korisnik', `${listing.user.firstName} ${listing.user.lastName}, ${listing.user.email}`]);
+  return rows
+    .map(([label, value]) => `<mj-text padding-bottom="6px"><strong>${label}:</strong> ${escapeHtml(value).replace(/\n/g, '<br />')}</mj-text>`)
+    .join('');
 }

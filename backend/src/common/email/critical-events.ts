@@ -38,6 +38,7 @@ export const CRITICAL_EMAIL_EVENTS = new Set<string>([
   // Admin operational — not a personal preference
   'admin_new_listing_to_review',
   'admin_proposed_category',
+  'admin_category_proposal',
   'admin_listing_reported',
   'admin_listing_report_priority',
   'admin_payment_disputed',

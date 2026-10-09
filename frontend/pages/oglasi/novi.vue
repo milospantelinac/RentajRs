@@ -167,8 +167,8 @@
       <div v-else-if="step === 'submitted'" class="propose">
         <header class="propose-head">
           <p class="propose-eyebrow">{{ t('listing.proposeCategoryEyebrow') }}</p>
-          <h1 class="propose-title">{{ t('listing.proposeCategorySubmittedTitle') }}</h1>
-          <p class="propose-subtitle">{{ t('listing.proposeCategorySubmittedMessage') }}</p>
+          <h1 class="propose-title">{{ t(proposalId ? 'listing.proposeCategoryUpdatedTitle' : 'listing.proposeCategorySubmittedTitle') }}</h1>
+          <p class="propose-subtitle">{{ t(proposalId ? 'listing.proposeCategoryUpdatedMessage' : 'listing.proposeCategorySubmittedMessage') }}</p>
         </header>
         <div class="propose-actions">
           <NuxtLink to="/kontrolna-tabla" class="propose-submit">{{ t('nav.dashboard') }}</NuxtLink>
@@ -228,12 +228,36 @@ const iconMarkup = (slug, parentSlug) => getCategoryIconMarkup(slug) || getWizar
 
 // 651:1085 — "dan" is the unit the frame shows for Po boravku.
 const uncategorized = reactive({ title: '', bookingModel: 'PER_STAY', priceUnit: 'DAY', description: '' })
+const PROPOSAL_UNITS = { PER_STAY: ['DAY', 'NIGHT', 'MONTH'], PER_SLOT: ['HOUR', 'SLOT'], NO_BOOKING: [] }
+// A unit the new booking choice offers stays, so a saved proposal opens with its own.
 watch(
   () => uncategorized.bookingModel,
   (val) => {
-    uncategorized.priceUnit = val === 'PER_STAY' ? 'DAY' : val === 'PER_SLOT' ? 'HOUR' : ''
+    const units = PROPOSAL_UNITS[val] || []
+    if (!units.includes(uncategorized.priceUnit)) uncategorized.priceUnit = units[0] || ''
   },
 )
+
+// T133: "Izmeni" in Moji oglasi opens a proposal here (?predlog=<id>), filled
+// in, while it waits for an admin. Once its category is assigned it is an
+// ordinary draft, and the wizard takes it.
+const proposalId = computed(() => (typeof route.query.predlog === 'string' ? route.query.predlog : ''))
+if (proposalId.value) {
+  const proposal = await api.get(`/listings/${proposalId.value}`).catch(() => null)
+  if (proposal?.pendingCategoryAssignment && proposal.status === 'DRAFT') {
+    Object.assign(uncategorized, {
+      title: proposal.title || '',
+      bookingModel: proposal.bookingModel,
+      priceUnit: proposal.bookingModel === 'NO_BOOKING' ? '' : proposal.priceUnit,
+      description: proposal.description || '',
+    })
+    step.value = 'propose'
+  } else if (proposal) {
+    await navigateTo(`/oglasi/${proposal.id}/uredi`, { replace: true })
+  } else {
+    await navigateTo('/kontrolna-tabla/oglasi', { replace: true })
+  }
+}
 
 // 651:1062
 const bookingOptions = computed(() => [
@@ -278,6 +302,10 @@ function cancel() {
 // failed submit's message along.
 function leavePropose() {
   error.value = ''
+  if (proposalId.value) {
+    router.push('/kontrolna-tabla/oglasi')
+    return
+  }
   step.value = 'top'
 }
 
@@ -310,12 +338,14 @@ async function submitUncategorized() {
   error.value = ''
   submitting.value = true
   try {
-    await api.post('/listings/uncategorized', {
+    const body = {
       title: uncategorized.title,
       bookingModel: uncategorized.bookingModel,
       priceUnit: uncategorized.bookingModel !== 'NO_BOOKING' ? uncategorized.priceUnit : undefined,
       description: uncategorized.description || undefined,
-    })
+    }
+    if (proposalId.value) await api.patch(`/listings/${proposalId.value}/proposal`, body)
+    else await api.post('/listings/uncategorized', body)
     // T60 — this used to drop the owner straight into the wizard under
     // "Ostalo", which isn't a real selectable category and let a listing
     // publish/get paid for under it. The listing this creates is parked

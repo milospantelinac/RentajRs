@@ -756,6 +756,22 @@ export const emailTemplates: EmailTemplateSeed[] = [
       buttonLabel: 'Review proposal',
     },
   },
+  // T133: "Otključaj svoju kategoriju", with what the owner wrote listed below the text.
+  {
+    key: 'admin_category_proposal',
+    sr: {
+      subject: 'Predlog nove kategorije: {oglas}',
+      heading: 'Stigao je predlog nove kategorije',
+      bodyText: 'Korisnik {korisnik} je kroz "Otključaj svoju kategoriju" opisao šta izdaje. Oglas čeka kao nacrt dok mu ne dodelite kategoriju.',
+      buttonLabel: 'Otvori predloge',
+    },
+    en: {
+      subject: 'New category proposal: {oglas}',
+      heading: 'A new category proposal arrived',
+      bodyText: '{korisnik} described what they rent out through "Unlock your category". The listing waits as a draft until you assign it a category.',
+      buttonLabel: 'Open proposals',
+    },
+  },
   {
     key: 'admin_listing_reported',
     sr: {

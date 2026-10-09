@@ -73,6 +73,8 @@ function lowerFirst(text) {
 // What follows the category on the second line: where a live listing is, how far
 // a draft got, when it went to review, or why it came back.
 function getDetail(t, listing) {
+  // T133: a proposal is not filled in through the wizard's steps.
+  if (listing.status === 'DRAFT' && listing.pendingCategoryAssignment) return ''
   if (listing.status === 'DRAFT') {
     const total = getWizardSteps(listing.bookingModel).length
     return t('myListings.draftStep', { current: Math.min(listing.wizardStep || 0, total - 1) + 1, total })
@@ -120,6 +122,9 @@ function getBookingsCell(t, bookings = {}) {
 export function buildMyListingRow(t, listing, now = Date.now()) {
   const published = PUBLISHED_STATUSES.includes(listing.status)
   const category = listing.pendingCategoryAssignment ? t('myListings.noCategory') : listing.categoryName
+  // T133: an "Otključaj svoju kategoriju" proposal still waiting for an admin
+  // says so, and opens on its own form rather than the wizard.
+  const proposal = listing.pendingCategoryAssignment && listing.status === 'DRAFT'
   return {
     id: listing.id,
     status: listing.status,
@@ -128,10 +133,10 @@ export function buildMyListingRow(t, listing, now = Date.now()) {
     title: listing.title || t('myListings.untitled'),
     cover: listing.coverPhotoUrl,
     meta: [category, getDetail(t, listing)].filter(Boolean).join(' · '),
-    statusText: t(STATUS_LABELS[listing.status] || STATUS_LABELS.DRAFT),
+    statusText: proposal ? t('myListings.proposalSent') : t(STATUS_LABELS[listing.status] || STATUS_LABELS.DRAFT),
     package: published ? getPackageCell(t, listing, now) : { name: '-', text: t('myListings.notPublished') },
     bookings: published ? getBookingsCell(t, listing.bookings) : null,
-    editUrl: `/oglasi/${listing.id}/uredi`,
+    editUrl: proposal ? `/oglasi/novi?predlog=${listing.id}` : `/oglasi/${listing.id}/uredi`,
     viewUrl: listing.status === 'ACTIVE' ? `/oglasi/${listing.slug}` : `/oglasi/${listing.id}/pregled`,
     // Dizajn 29: the rejected pill opens the page with the reason.
     rejectedUrl: listing.status === 'REJECTED' ? `/oglasi/${listing.id}/odbijeno` : null,

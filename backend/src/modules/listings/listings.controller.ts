@@ -65,6 +65,11 @@ export class ListingsController {
     return this.listingsService.updateLocation(userId, id, dto);
   }
 
+  @Patch('listings/:id/proposal')
+  updateProposal(@CurrentUser('id') userId: string, @Param('id') id: string, @Body() dto: CreateUncategorizedListingDto) {
+    return this.listingsService.updateCategoryProposal(userId, id, dto);
+  }
+
   @Patch('listings/:id/category')
   changeCategory(@CurrentUser('id') userId: string, @Param('id') id: string, @Body() dto: ChangeListingCategoryDto) {
     return this.listingsService.changeCategory(userId, id, dto.categoryId);

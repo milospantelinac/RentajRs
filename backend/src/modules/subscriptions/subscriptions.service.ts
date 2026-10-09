@@ -70,6 +70,7 @@ export class SubscriptionsService {
   async purchaseForListing(userId: string, dto: PurchaseSubscriptionDto) {
     const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: dto.listingId } });
     if (listing.userId !== userId) throw new ForbiddenException();
+    assertCategoryAssigned(listing, this.i18n);
 
     const wasActive = listing.status === 'ACTIVE';
     const eligibleStatuses = dto.existingSubscriptionId ? ['DRAFT', 'REJECTED', 'ACTIVE'] : ['DRAFT', 'REJECTED'];
@@ -198,6 +199,7 @@ export class SubscriptionsService {
   async initCheckout(userId: string, dto: InitCheckoutDto) {
     const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: dto.listingId } });
     if (listing.userId !== userId) throw new ForbiddenException();
+    assertCategoryAssigned(listing, this.i18n);
     // A renewal pays for the next period of a package the listing is already on;
     // everything else is a first package or a move to Pro.
     const renewed = dto.renewSubscriptionId ? await this.assertRenewable(userId, dto) : null;
@@ -1019,6 +1021,17 @@ export class SubscriptionsService {
           }
         : {}),
     };
+  }
+}
+
+/**
+ * T133: an "Otključaj svoju kategoriju" proposal stays a draft that takes no
+ * package until an admin opens its category, so neither the card checkout
+ * nor the company pro-forma path starts for it.
+ */
+function assertCategoryAssigned(listing: { pendingCategoryAssignment: boolean }, i18n: I18nService) {
+  if (listing.pendingCategoryAssignment) {
+    throw new BadRequestException(i18n.t('errors.LISTING_CATEGORY_PENDING'));
   }
 }
 

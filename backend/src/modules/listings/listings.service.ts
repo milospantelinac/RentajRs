@@ -120,7 +120,32 @@ export class ListingsService {
         pendingCategoryAssignment: true,
       },
     });
+    // T133: the proposal reaches the admins by email too, not only their list.
+    this.events.emit('listing.category_proposed', { listingId: listing.id });
     return this.serialize(listing);
+  }
+
+  /**
+   * T133: "Izmeni" on a proposal opens the same form, and what it sends
+   * replaces the proposal while it still waits for an admin. Once a category
+   * is assigned the draft is an ordinary one, edited in the wizard.
+   */
+  async updateCategoryProposal(userId: string, listingId: string, dto: CreateUncategorizedListingDto) {
+    const listing = await this.assertOwnership(userId, listingId);
+    if (!listing.pendingCategoryAssignment || listing.status !== ListingStatus.DRAFT) {
+      throw new BadRequestException(this.i18n.t('errors.LISTING_PROPOSAL_CLOSED'));
+    }
+    const fallback = await this.prisma.category.findUniqueOrThrow({ where: { slug: FALLBACK_CATEGORY_SLUG } });
+    const updated = await this.prisma.listing.update({
+      where: { id: listingId },
+      data: {
+        title: dto.title,
+        description: dto.description ?? '',
+        bookingModel: dto.bookingModel,
+        priceUnit: dto.priceUnit ?? fallback.defaultPriceUnit,
+      },
+    });
+    return this.serialize(updated);
   }
 
   /**

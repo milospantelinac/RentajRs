@@ -187,8 +187,11 @@ const notice = computed(() => getPaymentNotice(route.query))
 // DRAFT/REJECTED (the only statuses /oglasi/:id/paket accepts). So "Buy a new
 // package" has to resolve to a real listing, not a generic page: point it at
 // the first one actually awaiting a package, or at "new listing" if none is.
+// T133: a proposal still waiting for its category takes no package yet.
 const buyPackageLink = computed(() => {
-  const waiting = listings.value.find((listing) => ['DRAFT', 'REJECTED'].includes(listing.status))
+  const waiting = listings.value.find(
+    (listing) => ['DRAFT', 'REJECTED'].includes(listing.status) && !listing.pendingCategoryAssignment,
+  )
   return waiting ? `/oglasi/${waiting.id}/paket` : '/oglasi/novi'
 })
 
