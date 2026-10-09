@@ -18,6 +18,7 @@ import { containsContactInfo } from '../../common/utils/contact-detector';
 import { getIcalAvailability } from '../../common/utils/ical-availability';
 import { getGuestUnits } from '../../common/utils/guest-capacity';
 import { rsdToPara, paraToRsd } from '../../common/utils/money';
+import { normalizeBankAccount } from '../../common/utils/ips-qr';
 import { DAY_MS } from '../../common/utils/subscription-renewal';
 import { CreateListingDto } from './dto/create-listing.dto';
 import { UpdateListingDto } from './dto/update-listing.dto';
@@ -551,7 +552,8 @@ export class ListingsService {
       hasLocation: !!listing.cityId,
       hasPrice: hasDefinedSlotPrice,
       hasPaymentMethod: !!listing.paymentMethod,
-      hasBankAccountIfNeeded: listing.paymentMethod === 'CASH' || !!owner.bankAccount,
+      // T142: an account banks would refuse counts as missing.
+      hasBankAccountIfNeeded: listing.paymentMethod === 'CASH' || !!normalizeBankAccount(owner.bankAccount),
       hasPhone: !!owner.phone,
       requiredAttributesFilled: missingAttributes.length === 0,
     };

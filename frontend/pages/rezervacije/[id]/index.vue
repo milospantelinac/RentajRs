@@ -78,7 +78,8 @@ const { data, error, refresh } = await useAsyncData(`booking-${bookingId}`, asyn
   }
   const asGuest = booking.guestId === auth.user?.id
   const [qr, reviewStatus] = await Promise.all([
-    asGuest && booking.status === 'AWAITING_PAYMENT' ? api.get(`/bookings/${bookingId}/qr`) : null,
+    // T142: no code for an account banks would refuse; the details stay as text.
+    asGuest && booking.status === 'AWAITING_PAYMENT' ? api.get(`/bookings/${bookingId}/qr`).catch(() => null) : null,
     // Dizajn 43: only the guest reviews.
     asGuest && booking.status === 'COMPLETED' ? api.get(`/bookings/${bookingId}/reviews`) : null,
   ])

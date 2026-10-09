@@ -1135,7 +1135,7 @@
     "disputeExplanationPlaceholder": "Describe why you believe this mark is incorrect...",
     "disputeSubmit": "Submit dispute",
     "successDisputeNoShow": "Your dispute has been submitted. An admin will review it.",
-    "scanQr": "Scan the IPS QR code in your banking app",
+    "scanQr": "Scan the NBS IPS QR code in your banking app",
     "approve": "Approve",
     "reject": "Reject",
     "confirmPayment": "Confirm payment received",
@@ -2383,7 +2383,7 @@
     "notePayment": "The time is held for you until the payment deadline. If you do not pay by then, the booking expires and the time is released.",
     "deadline": "Payment deadline",
     "deadlineValue": "{date} at {time}",
-    "qrAlt": "IPS QR code for the payment",
+    "qrAlt": "NBS IPS QR code for the payment",
     "steps": {
       "answerTitle": "The owner approves or declines the request",
       "answerText": "You will be notified as soon as they answer.",

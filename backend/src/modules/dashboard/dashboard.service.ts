@@ -9,6 +9,7 @@ import { ICAL_FAILURE_ALERT_THRESHOLD } from '../../common/utils/ical-availabili
 import { PACKAGE_ENDING_WITHOUT_RENEWAL } from '../../common/utils/subscription-renewal';
 import { getGuestUnits } from '../../common/utils/guest-capacity';
 import { shortName } from '../../common/utils/short-name';
+import { normalizeBankAccount } from '../../common/utils/ips-qr';
 import { OPEN_PAYMENT_REPORT } from '../../common/utils/payment-report';
 
 interface AttentionItem {
@@ -261,7 +262,7 @@ export class DashboardService {
     if (noListing || icalCapable.length) {
       steps.push({ key: 'ical', done: icalCount > 0, actionUrl: icalUrl(icalCapable) });
     }
-    steps.push({ key: 'bankAccount', done: !!user.bankAccount, actionUrl: '/kontrolna-tabla/podesavanja' });
+    steps.push({ key: 'bankAccount', done: !!normalizeBankAccount(user.bankAccount), actionUrl: '/kontrolna-tabla/podesavanja' });
 
     return { steps, allDone: steps.every((step) => step.done) };
   }

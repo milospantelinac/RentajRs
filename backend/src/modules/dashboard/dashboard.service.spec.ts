@@ -40,14 +40,14 @@ describe('DashboardService#getOnboarding (R106 new-owner checklist)', () => {
   });
 
   it('reports allDone: true once every step of a stay owner is satisfied', async () => {
-    const service = makeService({ listings: [stay], workingHoursCount: 1, icalCount: 1, bankAccount: '160-1234-56' });
+    const service = makeService({ listings: [stay], workingHoursCount: 1, icalCount: 1, bankAccount: '160-1234-60' });
     const onboarding = await (service as any).getOnboarding('user1');
     expect(onboarding.steps.map((s: any) => s.key)).toEqual(['listing', 'availability', 'ical', 'bankAccount']);
     expect(onboarding.allDone).toBe(true);
   });
 
   it('leaves iCal out for listings booked by slot, so a playroom owner can finish', async () => {
-    const service = makeService({ listings: [playroom], definedSlotCount: 3, bankAccount: '160-1234-56' });
+    const service = makeService({ listings: [playroom], definedSlotCount: 3, bankAccount: '160-1234-60' });
     const onboarding = await (service as any).getOnboarding('user1');
     expect(onboarding.steps.map((s: any) => s.key)).toEqual(['listing', 'availability', 'bankAccount']);
     expect(onboarding.allDone).toBe(true);
@@ -72,7 +72,7 @@ describe('DashboardService#getOnboarding (R106 new-owner checklist)', () => {
 
   it('treats availability as satisfied by working hours, defined slots or a calendar block', async () => {
     for (const counts of [{ workingHoursCount: 1 }, { definedSlotCount: 2 }, { blockedTermCount: 2 }]) {
-      const service = makeService({ listings: [stay], ...counts, bankAccount: '160-1234-56' });
+      const service = makeService({ listings: [stay], ...counts, bankAccount: '160-1234-60' });
       const onboarding = await (service as any).getOnboarding('user1');
       expect(onboarding.steps.find((s: any) => s.key === 'availability').done).toBe(true);
       expect(onboarding.allDone).toBe(false); // still missing iCal
@@ -87,6 +87,12 @@ describe('DashboardService#getOnboarding (R106 new-owner checklist)', () => {
 
     const two = await (makeService({ listings: [stay, { ...stay, id: 'stay2' }], bankAccount: null }) as any).getOnboarding('user1');
     expect(two.steps.find((s: any) => s.key === 'ical').actionUrl).toBe('/kontrolna-tabla/oglasi');
+  });
+
+  it('does not count an account banks would refuse (T142)', async () => {
+    const service = makeService({ listings: [stay], workingHoursCount: 1, icalCount: 1, bankAccount: '160-1234-56' });
+    const onboarding = await (service as any).getOnboarding('user1');
+    expect(onboarding.steps.find((s: any) => s.key === 'bankAccount').done).toBe(false);
   });
 
   it('is not fooled by a single missing item (stays not-done)', async () => {

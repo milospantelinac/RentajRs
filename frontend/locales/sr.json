@@ -1135,7 +1135,7 @@
     "disputeExplanationPlaceholder": "Opišite zašto smatrate da oznaka nije tačna...",
     "disputeSubmit": "Pošalji prigovor",
     "successDisputeNoShow": "Prigovor je poslat. Administrator će ga pregledati.",
-    "scanQr": "Skenirajte IPS QR kod u svojoj bankarskoj aplikaciji",
+    "scanQr": "Skenirajte NBS IPS QR kod u svojoj bankarskoj aplikaciji",
     "approve": "Odobri",
     "reject": "Odbij",
     "confirmPayment": "Potvrdi prijem uplate",
@@ -2383,7 +2383,7 @@
     "notePayment": "Termin je privremeno blokiran za vas do roka za uplatu. Ako ne uplatite do roka, rezervacija ističe i termin se oslobađa.",
     "deadline": "Rok za uplatu",
     "deadlineValue": "{date} u {time}",
-    "qrAlt": "IPS QR kod za uplatu",
+    "qrAlt": "NBS IPS QR kod za uplatu",
     "steps": {
       "answerTitle": "Vlasnik odobrava ili odbija zahtev",
       "answerText": "Dobićete obaveštenje čim odgovori.",

@@ -7,7 +7,7 @@ import * as QRCode from 'qrcode';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AvailabilityService, PriceKind, PricedUnit } from '../availability/availability.service';
 import { TaxonomyService } from '../taxonomy/taxonomy.service';
-import { buildIpsQrPayload } from '../../common/utils/ips-qr';
+import { IPS_QR_IMAGE_OPTIONS, bookingBankTransfer } from '../../common/utils/ips-qr';
 import { paraToRsd, rsdToPara } from '../../common/utils/money';
 import { toBelgradeHHMM } from '../../common/utils/timezone';
 import { GUEST_CAPACITY_ATTRIBUTE_KEYS, getGuestUnits } from '../../common/utils/guest-capacity';
@@ -49,6 +49,16 @@ interface StoredFees {
 // waiting for payment, then confirmed stays, each soonest first; everything
 // else follows, the latest term first.
 const OPEN_STATUS_ORDER: BookingStatus[] = ['REQUESTED', 'AWAITING_PAYMENT', 'CONFIRMED'];
+
+/** T142: the owner fields a bank transfer is made out from (see bookingBankTransfer). */
+const PAYEE_SELECT = {
+  firstName: true,
+  lastName: true,
+  buyerType: true,
+  companyName: true,
+  billingAddress: true,
+  bankAccount: true,
+} as const;
 
 /** R59: the hours a guest has to pay when the listing sets none. */
 const DEFAULT_PAYMENT_DEADLINE_HOURS = 48;
@@ -439,13 +449,10 @@ export class BookingsService {
     const deadlineHours = listing.paymentDeadlineHours ?? DEFAULT_PAYMENT_DEADLINE_HOURS;
     const paymentDeadline = new Date(Date.now() + deadlineHours * 3600_000);
 
-    const qrPayload = buildIpsQrPayload({
-      recipientAccount: owner.bankAccount,
-      recipientName: `${owner.firstName} ${owner.lastName}`,
-      amountRsd: paraToRsd(booking.amountDue) ?? 0,
-      purpose: listing.title,
-      referenceNumber: booking.id.replace(/-/g, '').slice(0, 20),
-    });
+    // T142: an account that cannot make a valid code leaves the QR out
+    // rather than fail a booking that is already saved; the guest still gets
+    // the details as text. Accounts are checked when they are saved.
+    const { qrPayload } = bookingBankTransfer(booking, { ...owner, bankAccount: owner.bankAccount }, listing.title);
 
     const updated = await this.changeStatus(booking, 'AWAITING_PAYMENT', null, { paymentDeadline, ipsQrData: qrPayload }, true);
     if (!updated) throw new BadRequestException(this.i18n.t('bookings.STATE_CHANGED'));
@@ -453,11 +460,22 @@ export class BookingsService {
     return this.serialize(updated);
   }
 
+  /**
+   * T142: drawn from the booking as it stands, like bankTransferDetails, so a
+   * code stored before the fix (or before the owner corrected the account)
+   * is never the one a guest scans.
+   */
   async getIpsQrImage(userId: string, bookingId: string): Promise<string> {
-    const booking = await this.prisma.booking.findUniqueOrThrow({ where: { id: bookingId } });
+    const booking = await this.prisma.booking.findUniqueOrThrow({
+      where: { id: bookingId },
+      include: { listing: { select: { title: true } }, owner: { select: PAYEE_SELECT } },
+    });
     if (booking.guestId !== userId && booking.ownerId !== userId) throw new ForbiddenException();
-    if (!booking.ipsQrData) throw new NotFoundException();
-    return QRCode.toDataURL(booking.ipsQrData, { width: 320, margin: 1 });
+    const { bankAccount } = booking.owner;
+    if (booking.status !== 'AWAITING_PAYMENT' || booking.paymentMethod === 'CASH' || !bankAccount) throw new NotFoundException();
+    const { qrPayload } = bookingBankTransfer(booking, { ...booking.owner, bankAccount }, booking.listing.title);
+    if (!qrPayload) throw new NotFoundException();
+    return QRCode.toDataURL(qrPayload, IPS_QR_IMAGE_OPTIONS);
   }
 
   async rejectRequest(ownerId: string, bookingId: string, dto: RejectBookingDto) {
@@ -641,7 +659,7 @@ export class BookingsService {
           },
         },
         guest: { select: { firstName: true, lastName: true, phone: true } },
-        owner: { select: { firstName: true, lastName: true, phone: true, bankAccount: true, anonymizedAt: true } },
+        owner: { select: { ...PAYEE_SELECT, phone: true, anonymizedAt: true } },
       },
     });
     if (!booking) throw new NotFoundException();
@@ -678,14 +696,9 @@ export class BookingsService {
     let bankTransferDetails: { recipientName: string; recipientAccount: string; amountRsd: number | null; purpose: string; referenceNumber: string } | null = null;
     let awaitingPaymentSince: Date | null = null;
     if (booking.status === 'AWAITING_PAYMENT') {
-      if (booking.paymentMethod !== 'CASH' && booking.owner.bankAccount) {
-        bankTransferDetails = {
-          recipientName: `${booking.owner.firstName} ${booking.owner.lastName}`,
-          recipientAccount: booking.owner.bankAccount,
-          amountRsd: paraToRsd(booking.amountDue),
-          purpose: booking.listing?.title ?? '',
-          referenceNumber: booking.id.replace(/-/g, '').slice(0, 20),
-        };
+      const { bankAccount } = booking.owner;
+      if (booking.paymentMethod !== 'CASH' && bankAccount) {
+        bankTransferDetails = bookingBankTransfer(booking, { ...booking.owner, bankAccount }, booking.listing?.title ?? '').details;
       }
       awaitingPaymentSince = statusEntry?.changedAt ?? null;
     }

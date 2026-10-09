@@ -2,6 +2,7 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsEnum, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
 import { BuyerType, Language } from '@prisma/client';
 import { undefinedIfBlank } from '../../../common/validators/undefined-if-blank.transform';
+import { IsBankAccount } from '../../../common/validators/bank-account.validator';
 
 export class UpdateProfileDto {
   @ApiPropertyOptional()
@@ -31,7 +32,7 @@ export class UpdateProfileDto {
   @IsOptional()
   @undefinedIfBlank
   @IsString()
-  @Matches(/^\d{3}-\d{1,13}-\d{2}$/, { message: 'validation.BANK_ACCOUNT_INVALID' })
+  @IsBankAccount({ message: 'validation.BANK_ACCOUNT_INVALID' })
   bankAccount?: string;
 
   @ApiPropertyOptional({ enum: BuyerType })
