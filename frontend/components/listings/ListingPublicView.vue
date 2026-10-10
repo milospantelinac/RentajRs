@@ -69,7 +69,7 @@
             <template v-for="(fact, i) in keyFacts" :key="fact.key">
               <span v-if="i > 0" class="listing-facts-sep" aria-hidden="true" />
               <span class="listing-fact">
-                <AttributeIcon :name="fact.key" :size="22" class="listing-fact-icon" />
+                <AttributeIcon :name="fact.icon" :size="22" class="listing-fact-icon" />
                 <span class="listing-fact-value">{{ fact.value }}</span>
                 <span class="listing-fact-label">{{ fact.label }}</span>
               </span>
@@ -125,7 +125,7 @@
             <h2 class="listing-section-title">{{ t('listing.amenities') }}</h2>
             <ul class="listing-amenities">
               <li v-for="item in visibleAmenities" :key="item.name" class="listing-amenity">
-                <AttributeIcon :name="item.key" :size="22" class="listing-amenity-icon" />
+                <AttributeIcon :name="item.icon" :size="22" class="listing-amenity-icon" />
                 <span>{{ item.name }}</span>
               </li>
             </ul>

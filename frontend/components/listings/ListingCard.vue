@@ -52,7 +52,7 @@
 
       <div v-if="keyFacts.length" class="listing-card-facts">
         <span v-for="fact in keyFacts" :key="fact.key" class="listing-card-fact">
-          <AttributeIcon :name="fact.key" :size="15" class="listing-card-fact-icon" />
+          <AttributeIcon :name="fact.icon" :size="15" class="listing-card-fact-icon" />
           <span class="listing-card-fact-text">{{ fact.text }}</span>
         </span>
       </div>

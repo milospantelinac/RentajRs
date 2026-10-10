@@ -2857,10 +2857,17 @@ async function loadListing() {
     detailsSearchFilters.value = searchFilters?.filters || []
     const valueByAttributeId = new Map((listing.value.attributes || []).map((v) => [v.attributeId, v]))
     listing.value.category.name = categoryDetail.name
-    listing.value.category.attributes = categoryDetail.attributes.map((attr) => ({
-      ...attr,
-      value: valueByAttributeId.get(attr.id) || null,
-    }))
+    // T129: the card preview's key facts, the parent's when the category has none.
+    listing.value.category.cardFactKeys = categoryDetail.cardFactKeys
+    listing.value.category.listingFactKeys = categoryDetail.listingFactKeys
+    // T129: a field or item the admin hid is offered only to a listing that already has it.
+    listing.value.category.attributes = categoryDetail.attributes
+      .filter((attr) => !attr.hidden || valueByAttributeId.has(attr.id))
+      .map((attr) => {
+        const value = valueByAttributeId.get(attr.id) || null
+        const options = (attr.options || []).filter((option) => !option.hidden || value?.valueOptionIds?.includes(option.id))
+        return { ...attr, options, value }
+      })
   }
 
   Object.assign(form, {

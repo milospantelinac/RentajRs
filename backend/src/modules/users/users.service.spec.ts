@@ -33,13 +33,13 @@ function listingRow(overrides: Record<string, any> = {}) {
     googlePlaceId: 'place-1',
     latitude: '44.8430000',
     longitude: '20.4010000',
-    category: { id: 'c1', slug: 'kuce-i-vikendice', icon: 'house' },
+    category: { id: 'c1', slug: 'kuce-i-vikendice', icon: 'house', cardFactKeys: [], parent: { cardFactKeys: ['kapacitet_ljudi'] } },
     city: { id: 'city-1', name: 'Beograd', slug: 'beograd' },
     cityArea: { id: 'area-1', name: 'Zemun', slug: 'zemun' },
     photos: [{ id: 'p1', url: 'cover.jpg', altText: null, isCover: true }],
     attributes: [
-      { attribute: { key: 'kapacitet_ljudi', unit: null, type: 'NUMBER' }, valueNumber: '8', valueText: null, valueBoolean: null, valueOptionIds: [] },
-      { attribute: { key: 'sadrzaji', unit: null, type: 'CHECKBOX_GROUP' }, valueNumber: null, valueText: null, valueBoolean: null, valueOptionIds: ['o1'] },
+      { attribute: { key: 'kapacitet_ljudi', unit: null, type: 'NUMBER', icon: null }, valueNumber: '8', valueText: null, valueBoolean: null, valueOptionIds: [] },
+      { attribute: { key: 'sadrzaji', unit: null, type: 'CHECKBOX_GROUP', icon: 'bazen' }, valueNumber: null, valueText: null, valueBoolean: null, valueOptionIds: ['o1'] },
     ],
     ...overrides,
   };
@@ -82,13 +82,14 @@ describe('UsersService#listFavorites (Dizajn 36)', () => {
         bookingModel: 'PER_STAY',
         city: { id: 'city-1', name: 'Beograd', slug: 'beograd' },
         cityArea: { id: 'area-1', name: 'Zemun', slug: 'zemun' },
-        category: { id: 'c1', slug: 'kuce-i-vikendice', icon: 'house', name: 'Kuće i vikendice' },
+        // T129: the parent's key facts for a category without its own.
+        category: { id: 'c1', slug: 'kuce-i-vikendice', icon: 'house', name: 'Kuće i vikendice', cardFactKeys: ['kapacitet_ljudi'] },
         coverPhoto: { id: 'p1', url: 'cover.jpg', altText: null, isCover: true },
         latitude: '44.8430000',
         longitude: '20.4010000',
         attributes: [
-          { key: 'kapacitet_ljudi', type: 'NUMBER', unit: null, valueNumber: 8, valueText: null, valueBoolean: null, optionNames: [] },
-          { key: 'sadrzaji', type: 'CHECKBOX_GROUP', unit: null, valueNumber: null, valueText: null, valueBoolean: null, optionNames: ['Bazen'] },
+          { key: 'kapacitet_ljudi', type: 'NUMBER', unit: null, icon: null, valueNumber: 8, valueText: null, valueBoolean: null, optionNames: [] },
+          { key: 'sadrzaji', type: 'CHECKBOX_GROUP', unit: null, icon: 'bazen', valueNumber: null, valueText: null, valueBoolean: null, optionNames: ['Bazen'] },
         ],
       },
     });

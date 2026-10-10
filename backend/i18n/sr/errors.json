@@ -79,5 +79,18 @@
   "CATEGORY_SLUG_INVALID": "Naziv u URL-u sme da sadrži samo mala slova bez kvačica, brojeve i crticu (npr. spa-centri)",
   "CATEGORY_SLUG_TAKEN": "Taj naziv u URL-u već koristi druga kategorija",
   "CATEGORY_PARENT_INVALID": "Kategorija ne može da se premesti ispod sebe ili svoje podkategorije",
-  "CATEGORY_REORDER_INVALID": "Redosled ne odgovara kategorijama na tom nivou. Osvežite stranu i pokušajte ponovo."
+  "CATEGORY_REORDER_INVALID": "Redosled ne odgovara kategorijama na tom nivou. Osvežite stranu i pokušajte ponovo.",
+  "ATTRIBUTE_SYSTEM": "Ovo polje koristi sistem (broj gostiju, uzrast dece), pa ne može da se obriše, sakrije niti da mu se promeni tip. Naziv i redosled možete da menjate.",
+  "ATTRIBUTE_IN_USE": "Polje je u upotrebi (broj oglasa: {count}), pa ne može da se obriše. Sakrijte ga: ostaje na postojećim oglasima, a ne nudi se za nove.",
+  "ATTRIBUTE_TYPE_LOCKED": "Tip polja ne može da se promeni dok ga oglasi koriste (broj oglasa: {count}).",
+  "ATTRIBUTE_HAS_DEPENDENTS": "Od ovog polja zavise druga polja (ukupno: {count}). Prvo njima uklonite uslov.",
+  "ATTRIBUTE_DEPENDS_INVALID": "Uslov mora da bude stavka polja sa izborom jedne stavke iz ove ili nadređene kategorije.",
+  "ATTRIBUTE_TYPE_NO_OPTIONS": "Ovo polje nema stavke za izbor.",
+  "OPTION_IN_USE": "Stavka je u upotrebi (broj oglasa: {count}), pa ne može da se obriše. Sakrijte je: ostaje na postojećim oglasima, a ne nudi se za nove.",
+  "OPTION_HAS_DEPENDENTS": "Od ove stavke zavise druga polja (ukupno: {count}). Prvo njima uklonite uslov.",
+  "REORDER_INVALID": "Redosled ne odgovara stavkama. Osvežite stranu i pokušajte ponovo.",
+  "FILTER_INVALID": "Ova vrsta filtera ne može za izabrano polje ili mesto.",
+  "FILTER_DUPLICATE": "Ovaj filter već postoji u kategoriji.",
+  "FILTER_THRESHOLDS_REQUIRED": "Unesite vrednosti za izbor (npr. 1, 2, 3).",
+  "FACTS_INVALID": "Ključne činjenice: najviše 3 na kartici i 6 na oglasu, svako polje jednom i samo polja ove kategorije."
 }

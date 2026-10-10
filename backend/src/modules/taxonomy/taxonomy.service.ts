@@ -12,7 +12,6 @@ import {
   RejectCategoryDto,
   ReorderCategoriesDto,
   UpdateCategoryDto,
-  UpsertAttributeDto,
 } from './dto/admin-category.dto';
 
 const CACHE_TTL = 60 * 30; // 30 min — categories/attributes change rarely and are admin-invalidated below
@@ -37,6 +36,8 @@ export const LISTING_COUNTS_CACHE_KEY = 'taxonomy:listing-counts';
 const LISTING_COUNTS_TTL = 60;
 /** T115: SearchService.getSearchFilters, one key per category page; dropped with the tree. */
 export const SEARCH_FILTERS_CACHE_PREFIX = 'taxonomy:search-filters:v1:';
+/** T129: getFactKeys, one key per category; dropped with the tree. */
+const FACT_KEYS_CACHE_PREFIX = 'taxonomy:facts:v1:';
 const FUZZY_THRESHOLD = 0.35;
 export const FALLBACK_CATEGORY_SLUG = 'ostalo';
 /** T129: lowercase ASCII words joined by single hyphens, as uniqueSlug makes them. */
@@ -144,8 +145,9 @@ export class TaxonomyService {
   async getCategoryBySlug(slug: string) {
     // v2 (Dizajn 25): attribute options come in their displayOrder now, and the new key
     // keeps Redis from serving the old order after a deploy. v3 (Dizajn 50): the
-    // category carries `published`, which its public page checks.
-    return this.cache.getOrSet(`taxonomy:category:v3:${slug}`, CACHE_TTL, () => this.loadCategoryBySlug(slug));
+    // category carries `published`, which its public page checks. v4 (T129): the
+    // attributes carry hidden, showOnListing and icon, the category its key facts.
+    return this.cache.getOrSet(`taxonomy:category:v4:${slug}`, CACHE_TTL, () => this.loadCategoryBySlug(slug));
   }
 
   private async loadCategoryBySlug(slug: string) {
@@ -170,7 +172,36 @@ export class TaxonomyService {
     const childNames = await this.getTranslationMap('CATEGORY', childCategories.map((c) => c.id));
     const children = childCategories.map((c) => ({ id: c.id, slug: c.slug, name: childNames.get(c.id) ?? c.slug }));
 
-    return { ...category, name: name ?? category.slug, description, attributes, children };
+    // T129: the key facts the category's cards and listing pages show, its parent's when it has none.
+    const facts = await this.getFactKeys(category.id);
+    return { ...category, ...facts, name: name ?? category.slug, description, attributes, children };
+  }
+
+  /**
+   * T129: the attribute keys of a category's key facts, set in the panel: up
+   * to 3 on the card, up to 6 in the listing page's strip. A category without
+   * its own takes the nearest ancestor's.
+   */
+  async getFactKeys(categoryId: string): Promise<{ cardFactKeys: string[]; listingFactKeys: string[] }> {
+    return this.cache.getOrSet(`${FACT_KEYS_CACHE_PREFIX}${categoryId}`, CACHE_TTL, async () => {
+      let cardFactKeys: string[] = [];
+      let listingFactKeys: string[] = [];
+      let current = await this.prisma.category.findUnique({
+        where: { id: categoryId },
+        select: { parentId: true, cardFactKeys: true, listingFactKeys: true },
+      });
+      while (current && (!cardFactKeys.length || !listingFactKeys.length)) {
+        if (!cardFactKeys.length) cardFactKeys = current.cardFactKeys;
+        if (!listingFactKeys.length) listingFactKeys = current.listingFactKeys;
+        current = current.parentId
+          ? await this.prisma.category.findUnique({
+              where: { id: current.parentId },
+              select: { parentId: true, cardFactKeys: true, listingFactKeys: true },
+            })
+          : null;
+      }
+      return { cardFactKeys, listingFactKeys };
+    });
   }
 
   /**
@@ -181,8 +212,8 @@ export class TaxonomyService {
    * instantly without a data migration.
    */
   async resolveAttributesForCategory(categoryId: string) {
-    // v2 (Dizajn 25), like the category key above.
-    return this.cache.getOrSet(`taxonomy:attributes:v2:${categoryId}`, CACHE_TTL, async () => {
+    // v2 (Dizajn 25), like the category key above. v3 (T129): hidden, showOnListing, icon.
+    return this.cache.getOrSet(`taxonomy:attributes:v3:${categoryId}`, CACHE_TTL, async () => {
       const chain: string[] = [];
       let current: { id: string; parentId: string | null } | null =
         await this.prisma.category.findUnique({ where: { id: categoryId }, select: { id: true, parentId: true } });
@@ -227,7 +258,18 @@ export class TaxonomyService {
         dependsOnOptionKey: attr.dependsOnOptionKey,
         minValue: attr.minValue,
         maxValue: attr.maxValue,
-        options: attr.options.map((o) => ({ id: o.id, key: o.key, name: optionNames.get(o.id) ?? o.key })),
+        // T129: a hidden attribute or option is offered for no new input
+        // (wizard, search filters) and stays on the listings that have it.
+        hidden: attr.hidden,
+        showOnListing: attr.showOnListing,
+        icon: attr.icon,
+        options: attr.options.map((o) => ({
+          id: o.id,
+          key: o.key,
+          name: optionNames.get(o.id) ?? o.key,
+          hidden: o.hidden,
+          icon: o.icon,
+        })),
       }));
     });
   }
@@ -409,10 +451,8 @@ export class TaxonomyService {
   async adminCreateCategory(adminId: string, dto: CreateCategoryDto) {
     const parentId = dto.parentId ?? null;
     const level = parentId ? await this.levelUnder(parentId) : 1;
-    if (dto.copyFromId) {
-      const source = await this.prisma.category.findUnique({ where: { id: dto.copyFromId } });
-      if (!source) throw new NotFoundException();
-    }
+    const source = dto.copyFromId ? await this.prisma.category.findUnique({ where: { id: dto.copyFromId } }) : null;
+    if (dto.copyFromId && !source) throw new NotFoundException();
     const slug = dto.slug ? await this.assertSlugFree(dto.slug) : await this.uniqueSlug(dto.name);
     const lastSibling = await this.prisma.category.findFirst({
       where: { parentId },
@@ -431,6 +471,8 @@ export class TaxonomyService {
         defaultPriceUnit: dto.defaultPriceUnit,
         displayOrder: dto.displayOrder ?? (lastSibling ? lastSibling.displayOrder + 1 : 0),
         published: dto.published ?? false,
+        cardFactKeys: source?.cardFactKeys ?? [],
+        listingFactKeys: source?.listingFactKeys ?? [],
       },
     });
     await this.setTranslation('CATEGORY', category.id, 'name', dto.name);
@@ -555,8 +597,8 @@ export class TaxonomyService {
 
   /**
    * T129: the change history of one category: its own rows, the order of
-   * its level, and its attributes (deleted ones included, found by the
-   * categoryId the row kept).
+   * its level, and its attributes, their options and its search filters
+   * (deleted ones included, found by the categoryId the row kept).
    */
   async adminCategoryHistory(id: string) {
     const category = await this.prisma.category.findUnique({ where: { id }, select: { parentId: true } });
@@ -567,7 +609,7 @@ export class TaxonomyService {
           { entityType: 'Category', entityId: id },
           { action: 'category.reorder', entityId: category.parentId ?? 'root' },
           {
-            entityType: 'CategoryAttribute',
+            entityType: { in: ['CategoryAttribute', 'AttributeOption', 'CategoryFilter'] },
             OR: [
               { oldValue: { path: ['categoryId'], equals: id } },
               { newValue: { path: ['categoryId'], equals: id } },
@@ -716,74 +758,6 @@ export class TaxonomyService {
     return { message: this.i18n.t('common.SUCCESS') };
   }
 
-  // -- Admin: attributes -----------------------------------------------
-
-  async adminUpsertAttribute(adminId: string, categoryId: string, dto: UpsertAttributeDto) {
-    const category = await this.prisma.category.findUnique({ where: { id: categoryId } });
-    if (!category) throw new NotFoundException();
-    const before = await this.prisma.categoryAttribute.findUnique({
-      where: { categoryId_key: { categoryId, key: dto.key } },
-    });
-
-    const attribute = await this.prisma.categoryAttribute.upsert({
-      where: { categoryId_key: { categoryId, key: dto.key } },
-      update: {
-        type: dto.type,
-        required: dto.required ?? false,
-        unit: dto.unit,
-        isFilter: dto.isFilter ?? false,
-        filterType: dto.filterType,
-        displayOrder: dto.displayOrder ?? 0,
-      },
-      create: {
-        categoryId,
-        key: dto.key,
-        type: dto.type,
-        required: dto.required ?? false,
-        unit: dto.unit,
-        isFilter: dto.isFilter ?? false,
-        filterType: dto.filterType,
-        displayOrder: dto.displayOrder ?? 0,
-      },
-    });
-    await this.setTranslation('ATTRIBUTE', attribute.id, 'name', dto.name);
-
-    if (dto.options?.length) {
-      for (const [i, opt] of dto.options.entries()) {
-        const option = await this.prisma.attributeOption.upsert({
-          where: { attributeId_key: { attributeId: attribute.id, key: opt.key } },
-          update: { displayOrder: i },
-          create: { attributeId: attribute.id, key: opt.key, displayOrder: i },
-        });
-        await this.setTranslation('OPTION', option.id, 'name', opt.name);
-      }
-    }
-
-    await this.logChange(
-      adminId,
-      before ? 'attribute.update' : 'attribute.create',
-      'CategoryAttribute',
-      attribute.id,
-      before ?? undefined,
-      { ...attribute, name: dto.name, options: dto.options },
-    );
-    await this.invalidateTreeCache(categoryId);
-    return attribute;
-  }
-
-  async adminDeleteAttribute(adminId: string, attributeId: string) {
-    const usageCount = await this.prisma.listingAttribute.count({ where: { attributeId } });
-    if (usageCount > 0) {
-      throw new BadRequestException(
-        `${usageCount} listing(s) use this attribute — remove it from the category form instead of deleting`,
-      );
-    }
-    const attribute = await this.prisma.categoryAttribute.delete({ where: { id: attributeId } });
-    await this.logChange(adminId, 'attribute.delete', 'CategoryAttribute', attributeId, attribute);
-    await this.invalidateTreeCache(attribute.categoryId);
-    return { message: this.i18n.t('common.SUCCESS') };
-  }
-
   // -- Internal helpers ------------------------------------------------
 
   /** T129: an empty string clears a text; undefined leaves it alone. */
@@ -880,13 +854,12 @@ export class TaxonomyService {
     }
   }
 
-
   /**
    * T129: the panel's change history. The same AdminLog rows the admin
    * module writes (AdminService.logAction), so Administracija shows one
    * history for every admin action.
    */
-  private async logChange(
+  async logChange(
     adminId: string,
     action: string,
     entityType: string,
@@ -926,7 +899,7 @@ export class TaxonomyService {
     return row?.value ?? null;
   }
 
-  private async getTranslationMap(
+  async getTranslationMap(
     entityType: 'CATEGORY' | 'ATTRIBUTE' | 'OPTION' | 'PAGE',
     entityIds: string[],
     field = 'name',
@@ -939,7 +912,7 @@ export class TaxonomyService {
     return new Map(rows.map((r) => [r.entityId, r.value]));
   }
 
-  private async setTranslation(
+  async setTranslation(
     entityType: 'CATEGORY' | 'ATTRIBUTE' | 'OPTION' | 'PAGE',
     entityId: string,
     field: string,
@@ -964,16 +937,17 @@ export class TaxonomyService {
     return candidate;
   }
 
-  private async invalidateTreeCache(categoryId?: string) {
+  async invalidateTreeCache(categoryId?: string) {
     // The counts go too: a merge or a rejection moves listings to another category.
     await this.cache.del(TREE_CACHE_KEY, LISTING_COUNTS_CACHE_KEY);
     await this.cache.delByPrefix('taxonomy:category:');
     await this.cache.delByPrefix('taxonomy:attributes:');
     await this.cache.delByPrefix(SEARCH_FILTERS_CACHE_PREFIX);
+    await this.cache.delByPrefix(FACT_KEYS_CACHE_PREFIX);
   }
 }
 
-function slugify(input: string): string {
+export function slugify(input: string): string {
   const map: Record<string, string> = {
     č: 'c',
     ć: 'c',

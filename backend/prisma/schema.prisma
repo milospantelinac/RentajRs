@@ -440,6 +440,10 @@ model Category {
   icon                String?
   /// T129: the category picture an admin uploads in Administracija > Kategorije.
   imageUrl            String?
+  /// T129: the attribute keys of the card's key facts (up to 3) and of the
+  /// listing page's strip (up to 6), in order. Empty: the parent's apply.
+  cardFactKeys        String[]       @default([])
+  listingFactKeys     String[]       @default([])
   status              CategoryStatus @default(ACTIVE)
   defaultBookingModel BookingModel
   allowedPriceUnits   PriceUnit[]
@@ -481,10 +485,17 @@ model CategoryAttribute {
   unit         String?
   isFilter     Boolean       @default(false)
   filterType   FilterType?
-  /// Kategorije spec's CARD column — shown on the search-result card, not
-  /// just the full listing detail page (DETAIL, which every attribute gets
-  /// implicitly by having a value at all — no separate flag needed for that).
+  /// Kategorije spec's CARD column. Unused: T129 picks the card's key facts per
+  /// category (Category.cardFactKeys).
   showOnCard   Boolean       @default(false)
+  /// T129: off keeps the value off the public listing page (Detalji, Opremljenost).
+  showOnListing Boolean      @default(true)
+  /// T129: hidden is not offered for new input (wizard, search filters) and
+  /// stays on the listings that already have a value.
+  hidden       Boolean       @default(false)
+  /// T129: an icon of the attribute icon library (frontend
+  /// assets/icons/attributes) picked in the panel; null: the key decides.
+  icon         String?
   minValue     Decimal?      @db.Decimal(12, 2)
   maxValue     Decimal?      @db.Decimal(12, 2)
   displayOrder Int           @default(0)
@@ -532,10 +543,14 @@ model CategoryFilter {
 }
 
 model AttributeOption {
-  id           String @id @default(uuid()) @db.Uuid
-  attributeId  String @db.Uuid
+  id           String  @id @default(uuid()) @db.Uuid
+  attributeId  String  @db.Uuid
   key          String
-  displayOrder Int    @default(0)
+  displayOrder Int     @default(0)
+  /// T129: as CategoryAttribute.hidden, for one item of a list.
+  hidden       Boolean @default(false)
+  /// T129: as CategoryAttribute.icon.
+  icon         String?
 
   attribute CategoryAttribute @relation(fields: [attributeId], references: [id], onDelete: Cascade)
 

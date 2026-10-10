@@ -300,6 +300,7 @@ describe('ListingsService#getPublicBySlug (found in Dizajn 39)', () => {
   const taxonomy = {
     resolveAttributesForCategory: jest.fn().mockResolvedValue([]),
     getCategoryNames: jest.fn().mockResolvedValue(new Map([['c1', 'Igraonice']])),
+    getFactKeys: jest.fn().mockResolvedValue({ cardFactKeys: ['kapacitet_dece'], listingFactKeys: ['kapacitet_dece'] }),
     getCategoryTree: jest.fn().mockResolvedValue([{ id: 'c1', slug: 'igraonice', children: [] }]),
   };
 
@@ -605,5 +606,58 @@ describe('ListingsService#sendPriceDropNotifications', () => {
 
     expect(events.emit.mock.calls).toEqual([['listing.favorite_price_dropped', { userId: 'g1', listingId: 'cheaper' }]]);
     expect(prisma.favorite.update).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('ListingsService#upsertAttributes, hidden fields and items (T129)', () => {
+  const attributes = [
+    { id: 'a-sobe', key: 'broj_soba', type: 'NUMBER', hidden: true, options: [] },
+    { id: 'a-novo', key: 'parking', type: 'BOOLEAN', hidden: true, options: [] },
+    {
+      id: 'a-sadrzaji',
+      key: 'sadrzaji',
+      type: 'CHECKBOX_GROUP',
+      hidden: false,
+      options: [
+        { id: 'o-wifi', key: 'wifi', hidden: false },
+        { id: 'o-bazen', key: 'bazen', hidden: true },
+        { id: 'o-sauna', key: 'sauna', hidden: true },
+      ],
+    },
+  ];
+
+  function setup(stored: Array<{ attributeId: string; valueOptionIds: string[] }>) {
+    const prisma = {
+      listing: { findUnique: jest.fn().mockResolvedValue(listingRow({ userId: 'u1' })) },
+      listingAttribute: {
+        findMany: jest.fn().mockResolvedValue(stored),
+        upsert: jest.fn((args) => args),
+        deleteMany: jest.fn((args) => args),
+      },
+      $transaction: jest.fn(async (ops) => ops),
+    };
+    const service = makeService(prisma, { resolveAttributesForCategory: jest.fn().mockResolvedValue(attributes) });
+    return { prisma, service };
+  }
+
+  it('keeps a hidden field the listing has, takes it from no other and drops hidden or foreign items', async () => {
+    const { prisma, service } = setup([
+      { attributeId: 'a-sobe', valueOptionIds: [] },
+      { attributeId: 'a-sadrzaji', valueOptionIds: ['o-bazen'] },
+    ]);
+    await service.upsertAttributes('u1', 'l1', {
+      values: [
+        { attributeId: 'a-sobe', valueNumber: 3 },
+        { attributeId: 'a-novo', valueBoolean: true },
+        { attributeId: 'a-sadrzaji', valueOptionIds: ['o-wifi', 'o-bazen', 'o-sauna', 'o-tudji'] },
+      ],
+    });
+
+    const written = prisma.listingAttribute.upsert.mock.calls.map(([args]) => [args.where.listingId_attributeId.attributeId, args.update]);
+    expect(written).toEqual([
+      ['a-sobe', expect.objectContaining({ valueNumber: 3 })],
+      // Bazen stays (the listing had it), Sauna is hidden and new, o-tudji is not this field's.
+      ['a-sadrzaji', expect.objectContaining({ valueOptionIds: ['o-wifi', 'o-bazen'] })],
+    ]);
   });
 });

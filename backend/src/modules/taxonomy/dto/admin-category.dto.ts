@@ -1,5 +1,4 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
@@ -11,7 +10,6 @@ import {
   IsUUID,
   MaxLength,
   ValidateIf,
-  ValidateNested,
 } from 'class-validator';
 import { BookingModel, PriceUnit } from '@prisma/client';
 
@@ -164,64 +162,4 @@ export class MergeCategoryDto {
   @ApiProperty({ description: 'Target category id that listings/URL get merged into' })
   @IsUUID('4')
   targetCategoryId: string;
-}
-
-class AttributeOptionInput {
-  @ApiProperty()
-  @IsString()
-  @IsNotEmpty()
-  key: string;
-
-  @ApiProperty()
-  @IsString()
-  @IsNotEmpty()
-  name: string;
-}
-
-export class UpsertAttributeDto {
-  @ApiProperty({ description: 'Machine key, e.g. "kvadratura" — immutable once set' })
-  @IsString()
-  @IsNotEmpty()
-  key: string;
-
-  @ApiProperty()
-  @IsString()
-  @IsNotEmpty()
-  name: string;
-
-  @ApiProperty({ enum: ['NUMBER', 'TEXT', 'LIST', 'MULTISELECT', 'BOOLEAN'] })
-  @IsEnum(['NUMBER', 'TEXT', 'LIST', 'MULTISELECT', 'BOOLEAN'])
-  type: 'NUMBER' | 'TEXT' | 'LIST' | 'MULTISELECT' | 'BOOLEAN';
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsBoolean()
-  required?: boolean;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  unit?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsBoolean()
-  isFilter?: boolean;
-
-  @ApiPropertyOptional({ enum: ['RANGE', 'SELECT', 'TOGGLE'] })
-  @IsOptional()
-  @IsEnum(['RANGE', 'SELECT', 'TOGGLE'])
-  filterType?: 'RANGE' | 'SELECT' | 'TOGGLE';
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  displayOrder?: number;
-
-  @ApiPropertyOptional({ type: [AttributeOptionInput], description: 'Required when type is LIST/MULTISELECT' })
-  @IsOptional()
-  @IsArray()
-  @ArrayMaxSize(100)
-  @ValidateNested({ each: true })
-  @Type(() => AttributeOptionInput)
-  options?: AttributeOptionInput[];
 }

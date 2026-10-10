@@ -1,24 +1,14 @@
-// Dizajn 4 — which 3 attribute values show on a listing card's "traka
-// ključnih činjenica", and in what order, per category. Reads real
-// attribute values (the backend's serializeListingCard in
-// common/utils/listing-card.ts already resolves LIST/CHECKBOX_GROUP option ids
-// to names); this module only picks and formats, it never invents a value.
+// Dizajn 4: which 3 attribute values show on a listing card's "traka
+// ključnih činjenica", and in what order. Reads real attribute values (the
+// backend's serializeListingCard in common/utils/listing-card.ts already
+// resolves LIST/CHECKBOX_GROUP option ids to names); this module only picks
+// and formats, it never invents a value.
 //
-// Keyed by the listing's actual (leaf) category slug — Prostori za proslave's
-// two bookable leaves share their parent's attribute set (T64), so both list
-// the same three keys.
-const PRIORITY_BY_CATEGORY = {
-  stanovi: ['kapacitet_ljudi', 'broj_soba', 'kvadratura'],
-  'kuce-i-vikendice': ['kapacitet_ljudi', 'broj_soba', 'kvadratura'],
-  sobe: ['kapacitet_ljudi', 'broj_soba', 'kvadratura'],
-  'sale-za-proslave': ['kapacitet_ljudi', 'tip_prostora', 'ketering'],
-  'konferencijske-sale': ['kapacitet_ljudi', 'tip_prostora', 'ketering'],
-  igraonice: ['kapacitet_dece', 'uzrast_dece', 'kvadratura'],
-  'putnicka-vozila': ['broj_sedista', 'menjac', 'godina_proizvodnje'],
-  'dostavna-vozila': ['nosivost', 'zapremina_tovarnog_prostora', 'godina_proizvodnje'],
-  'magacini-i-skladista': ['povrsina', 'visina_prostora', 'tip_prostora'],
-  'gradjevinske-masine': ['tip_masine', 'snaga_motora', 'tezina_masine'],
-}
+// T129: the keys and their order are the category's own, set in
+// Administracija > Kategorije (category.cardFactKeys, and listingFactKeys for
+// the listing page's strip, a subcategory without its own taking its
+// parent's). They used to be fixed here per category slug; migration
+// 20261010170000_attribute_admin moved those lists into the data unchanged.
 
 // Serbian count-noun declension (1 / 2–4 / 5+) for the handful of NUMBER-type
 // key facts that need a word appended to the raw count — mirrors the
@@ -32,22 +22,6 @@ const COUNT_NOUNS = {
   // 3-fact card strip never asked for.
   broj_kreveta: { One: 'krevet', Few: 'kreveta', Many: 'kreveta' },
   broj_kupatila: { One: 'kupatilo', Few: 'kupatila', Many: 'kupatila' },
-}
-
-// Dizajn 11 — the listing page's strip is longer than the card's three facts
-// and puts area last, so it gets its own order per category; anything without
-// an entry here falls back to the card's priority list.
-const DETAIL_PRIORITY_BY_CATEGORY = {
-  stanovi: ['kapacitet_ljudi', 'broj_soba', 'broj_kreveta', 'sprat', 'kvadratura'],
-  'kuce-i-vikendice': ['kapacitet_ljudi', 'broj_soba', 'broj_kreveta', 'broj_kupatila', 'kvadratura'],
-  sobe: ['kapacitet_ljudi', 'broj_kreveta', 'kupatilo', 'kvadratura'],
-  'sale-za-proslave': ['kapacitet_ljudi', 'tip_prostora', 'ketering'],
-  'konferencijske-sale': ['kapacitet_ljudi', 'tip_prostora', 'ketering'],
-  igraonice: ['kapacitet_dece', 'uzrast_dece'],
-  'putnicka-vozila': ['broj_sedista', 'menjac', 'gorivo', 'godina_proizvodnje'],
-  'dostavna-vozila': ['nosivost', 'zapremina_tovarnog_prostora', 'menjac', 'godina_proizvodnje'],
-  'magacini-i-skladista': ['povrsina', 'visina_prostora', 'tip_prostora'],
-  'gradjevinske-masine': ['tip_masine', 'snaga_motora', 'tezina_masine', 'godina_proizvodnje'],
 }
 
 function formatNumber(attr) {
@@ -90,10 +64,9 @@ function formatKeyFact(attr) {
   return ''
 }
 
-/** Returns up to 3 { key, text } key facts for a listing card, in priority order. */
+/** Returns up to 3 { key, icon, text } key facts for a listing card, in the category's order. */
 export function getCardKeyFacts(listing) {
-  const order = PRIORITY_BY_CATEGORY[listing.category?.slug]
-  if (!order) return []
+  const order = listing.category?.cardFactKeys || []
   const byKey = new Map((listing.attributes || []).map((a) => [a.key, a]))
   const facts = []
   for (const key of order) {
@@ -101,7 +74,8 @@ export function getCardKeyFacts(listing) {
     const attr = byKey.get(key)
     if (!attr) continue
     const text = formatKeyFact(attr)
-    if (text) facts.push({ key, text })
+    // T129: an icon the admin picked, else the one named after the key.
+    if (text) facts.push({ key, icon: attr.icon || key, text })
   }
   return facts
 }
@@ -118,6 +92,7 @@ export function flattenListingAttribute(attr) {
     key: attr.key,
     type: attr.type,
     unit: attr.unit,
+    icon: attr.icon,
     valueNumber: v.valueNumber !== null && v.valueNumber !== undefined ? Number(v.valueNumber) : null,
     valueText: v.valueText ?? null,
     valueBoolean: v.valueBoolean ?? null,
@@ -132,36 +107,37 @@ function lowercaseFirst(value) {
 }
 
 /**
- * Dizajn 11 — the listing page's "traka ključnih činjenica": up to 6
- * { key, value, label } facts in the category's own display order. An
- * attribute the owner never filled in produces nothing at all (no empty
- * cell, no dash), per the ticket's display rule.
+ * Dizajn 11: the listing page's "traka ključnih činjenica": up to 6
+ * { key, icon, value, label } facts in the category's own order
+ * (category.listingFactKeys, T129). An attribute the owner never filled in
+ * produces nothing at all (no empty cell, no dash), per the ticket's display rule.
  */
 export function getListingKeyFacts(listing) {
-  const order = DETAIL_PRIORITY_BY_CATEGORY[listing.category?.slug] ?? PRIORITY_BY_CATEGORY[listing.category?.slug]
-  if (!order) return []
+  const order = listing.category?.listingFactKeys || []
   const byKey = new Map((listing.attributes || []).map((a) => [a.key, a]))
   const facts = []
   for (const key of order) {
     if (facts.length >= 6) break
     const attr = byKey.get(key)
-    if (!attr) continue
+    // T129: a field the admin keeps off the listing page stays out of its strip too.
+    if (!attr || attr.showOnListing === false) continue
     const flat = flattenListingAttribute(attr)
+    const icon = attr.icon || key
     const noun = COUNT_NOUNS[key]
     if (noun && flat.valueNumber !== null) {
-      facts.push({ key, value: String(flat.valueNumber), label: noun[srPluralCategory(flat.valueNumber)] })
+      facts.push({ key, icon, value: String(flat.valueNumber), label: noun[srPluralCategory(flat.valueNumber)] })
       continue
     }
-    // Stanovi's broj_soba is a LIST, not a NUMBER — a plain count option
+    // Stanovi's broj_soba is a LIST, not a NUMBER: a plain count option
     // ("3", "4.5") still declines its noun; "Garsonjera" doesn't.
     if (noun && flat.optionNames.length && /^\d+(\.\d+)?\+?$/.test(flat.optionNames[0])) {
       const option = flat.optionNames[0]
-      facts.push({ key, value: option, label: noun[srPluralCategory(Number(option.replace('+', '')))] })
+      facts.push({ key, icon, value: option, label: noun[srPluralCategory(Number(option.replace('+', '')))] })
       continue
     }
     const text = formatKeyFact(flat)
     if (!text) continue
-    facts.push({ key, value: text, label: lowercaseFirst(attr.name) })
+    facts.push({ key, icon, value: text, label: lowercaseFirst(attr.name) })
   }
   return facts
 }

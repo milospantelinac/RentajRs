@@ -138,14 +138,17 @@ describe('TaxonomyService#getCategoryTree', () => {
 describe('TaxonomyService#getCategoryBySlug', () => {
   it('reads through getOrSet, so it still answers when Redis does not', async () => {
     const prisma = {
-      category: { findUnique: jest.fn().mockResolvedValue(category('c-nek', 'nekretnine')), findMany: jest.fn().mockResolvedValue([]) },
+      category: {
+        findUnique: jest.fn().mockResolvedValue({ ...category('c-nek', 'nekretnine'), cardFactKeys: [], listingFactKeys: [] }),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
       translation: { findUnique: jest.fn().mockResolvedValue({ value: 'Nekretnine' }), findMany: jest.fn().mockResolvedValue([]) },
     };
     const { service, cache } = makeService(prisma);
     jest.spyOn(service, 'resolveAttributesForCategory').mockResolvedValue([]);
 
     await expect(service.getCategoryBySlug('nekretnine')).resolves.toMatchObject({ slug: 'nekretnine', name: 'Nekretnine', children: [] });
-    expect(cache.getOrSet).toHaveBeenCalledWith('taxonomy:category:v3:nekretnine', 1800, expect.any(Function));
+    expect(cache.getOrSet).toHaveBeenCalledWith('taxonomy:category:v4:nekretnine', 1800, expect.any(Function));
   });
 
   it('still answers 404 for an archived category', async () => {

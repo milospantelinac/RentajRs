@@ -13,13 +13,14 @@ import { paraToRsd } from './money';
  */
 export const LISTING_CARD_INCLUDE = {
   photos: { where: { isCover: true, pendingRemoval: false, versionId: null }, take: 1 },
-  category: true,
+  // T129: the parent's key facts stand in for a category without its own.
+  category: { include: { parent: { select: { cardFactKeys: true } } } },
   city: true,
   cityArea: true,
-  // Dizajn 3/4: the card's key-facts strip reads real attribute values; which
-  // three keys show and in what order is decided client-side per category
-  // (utils/keyFacts.js).
-  attributes: { include: { attribute: { select: { key: true, unit: true, type: true } } } },
+  // Dizajn 3/4: the card's key-facts strip reads real attribute values; the
+  // category's cardFactKeys say which three and in what order (T129, set in
+  // the panel), utils/keyFacts.js formats them.
+  attributes: { include: { attribute: { select: { key: true, unit: true, type: true, icon: true } } } },
 } satisfies Prisma.ListingInclude;
 
 export type ListingCardRow = Prisma.ListingGetPayload<{ include: typeof LISTING_CARD_INCLUDE }>;
@@ -62,6 +63,9 @@ export function serializeListingCard(
       slug: listing.category.slug,
       icon: listing.category.icon,
       name: categoryNames.get(listing.category.id) ?? listing.category.slug,
+      cardFactKeys: listing.category.cardFactKeys.length
+        ? listing.category.cardFactKeys
+        : (listing.category.parent?.cardFactKeys ?? []),
     },
     coverPhoto: listing.photos[0] ?? null,
     latitude: listing.latitude,
@@ -72,6 +76,7 @@ export function serializeListingCard(
       key: a.attribute.key,
       type: a.attribute.type,
       unit: a.attribute.unit,
+      icon: a.attribute.icon,
       valueNumber: a.valueNumber !== null ? Number(a.valueNumber) : null,
       valueText: a.valueText,
       valueBoolean: a.valueBoolean,

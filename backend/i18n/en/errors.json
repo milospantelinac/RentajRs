@@ -79,5 +79,18 @@
   "CATEGORY_SLUG_INVALID": "The URL name may only contain lowercase letters without diacritics, digits and hyphens (e.g. spa-centri)",
   "CATEGORY_SLUG_TAKEN": "Another category already uses that URL name",
   "CATEGORY_PARENT_INVALID": "A category cannot be moved under itself or one of its subcategories",
-  "CATEGORY_REORDER_INVALID": "The order does not match the categories on that level. Refresh the page and try again."
+  "CATEGORY_REORDER_INVALID": "The order does not match the categories on that level. Refresh the page and try again.",
+  "ATTRIBUTE_SYSTEM": "The system uses this field (guest count, children age), so it cannot be deleted, hidden or given another type. You can rename and reorder it.",
+  "ATTRIBUTE_IN_USE": "The field is in use (listings: {count}), so it cannot be deleted. Hide it: it stays on existing listings and is not offered for new ones.",
+  "ATTRIBUTE_TYPE_LOCKED": "The field type cannot change while listings use it (listings: {count}).",
+  "ATTRIBUTE_HAS_DEPENDENTS": "Other fields depend on this field ({count}). Remove their condition first.",
+  "ATTRIBUTE_DEPENDS_INVALID": "A condition has to be an item of a single-choice field of this or a parent category.",
+  "ATTRIBUTE_TYPE_NO_OPTIONS": "This field has no items to choose from.",
+  "OPTION_IN_USE": "The item is in use (listings: {count}), so it cannot be deleted. Hide it: it stays on existing listings and is not offered for new ones.",
+  "OPTION_HAS_DEPENDENTS": "Other fields depend on this item ({count}). Remove their condition first.",
+  "REORDER_INVALID": "The order does not match the items. Refresh the page and try again.",
+  "FILTER_INVALID": "This kind of filter does not work for the chosen field or place.",
+  "FILTER_DUPLICATE": "This filter already exists in the category.",
+  "FILTER_THRESHOLDS_REQUIRED": "Enter the values to choose from (e.g. 1, 2, 3).",
+  "FACTS_INVALID": "Key facts: at most 3 on the card and 6 on the listing, each field once and only fields of this category."
 }

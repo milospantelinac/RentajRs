@@ -473,8 +473,24 @@ export class ListingsService {
     const listing = await this.assertOwnership(userId, listingId);
     const allowedAttributes = await this.taxonomy.resolveAttributesForCategory(listing.categoryId);
     const attributesById = new Map(allowedAttributes.map((a) => [a.id, a]));
+    // T129: a field or item the admin hid is kept by a listing that has it and
+    // taken from no other; an id of another field's options is never stored.
+    const stored = new Map(
+      (await this.prisma.listingAttribute.findMany({ where: { listingId: listing.id } })).map((row) => [row.attributeId, row]),
+    );
+    const offered = (v: (typeof dto.values)[number]) => {
+      const attribute = attributesById.get(v.attributeId);
+      if (!attribute) return null;
+      if (attribute.hidden && !stored.has(attribute.id)) return null;
+      if (!v.valueOptionIds) return v;
+      const kept = new Set(stored.get(attribute.id)?.valueOptionIds ?? []);
+      const valueOptionIds = v.valueOptionIds.filter((id) =>
+        attribute.options.some((option) => option.id === id && (!option.hidden || kept.has(id))),
+      );
+      return { ...v, valueOptionIds };
+    };
 
-    const submitted = dto.values.filter((v) => attributesById.has(v.attributeId));
+    const submitted = dto.values.map(offered).filter((v): v is NonNullable<typeof v> => v !== null);
     // RNT-023 — the wizard sends one entry per attribute regardless of
     // whether the owner actually filled it in, so a naive upsert would
     // create a "value" row for an untouched required field and the review
@@ -637,7 +653,8 @@ export class ListingsService {
   async getReadiness(userId: string, listingId: string) {
     const listing = await this.assertOwnership(userId, listingId);
     const allAttributes = await this.taxonomy.resolveAttributesForCategory(listing.categoryId);
-    const requiredAttributes = allAttributes.filter((a) => a.required);
+    // T129: a hidden field is offered to no listing, so none has to fill it.
+    const requiredAttributes = allAttributes.filter((a) => a.required && !a.hidden);
     const setValues = await this.prisma.listingAttribute.findMany({ where: { listingId: listing.id } });
     const setIds = new Set(setValues.map((v) => v.attributeId));
     const photoCount = await this.prisma.listingPhoto.count({ where: { listingId: listing.id, pendingRemoval: false } });
@@ -854,6 +871,8 @@ export class ListingsService {
     // search results the same way) — the raw `category: true` include below
     // only carries slug/id, so the breadcrumb rendered blank without this.
     const categoryNames = await this.taxonomy.getCategoryNames([listing.categoryId]);
+    // T129: the key facts set in the panel, the parent's when the category has none.
+    const factKeys = await this.taxonomy.getFactKeys(listing.categoryId);
     // Dizajn 40: the request form asks for "Broj dece" or "Broj gostiju" by the
     // same rule the booking rows follow (Dizajn 31/34/39).
     const guestUnits = await getGuestUnits(this.taxonomy, [listing.categoryId]);
@@ -892,7 +911,7 @@ export class ListingsService {
       photos: listing.photos,
       faqs: listing.faqs,
       extraServices: listing.extraServices.map((s: any) => ({ ...s, price: paraToRsd(s.price) })),
-      category: { ...listing.category, name: categoryNames.get(listing.categoryId) ?? listing.category.slug },
+      category: { ...listing.category, ...factKeys, name: categoryNames.get(listing.categoryId) ?? listing.category.slug },
       region: listing.region,
       city: listing.city,
       cityArea: listing.cityArea,
@@ -1213,7 +1232,9 @@ export class ListingsService {
   private async runAutomaticChecks(listingId: string): Promise<Record<string, 'OK' | 'WARNING'>> {
     const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: listingId } });
     const photoCount = await this.prisma.listingPhoto.count({ where: { listingId, pendingRemoval: false } });
-    const requiredAttrs = (await this.taxonomy.resolveAttributesForCategory(listing.categoryId)).filter((a) => a.required);
+    const requiredAttrs = (await this.taxonomy.resolveAttributesForCategory(listing.categoryId)).filter(
+      (a) => a.required && !a.hidden,
+    );
     const setValues = await this.prisma.listingAttribute.findMany({ where: { listingId } });
     const setIds = new Set(setValues.map((v) => v.attributeId));
     const priorRejections = await this.prisma.listingModeration.count({

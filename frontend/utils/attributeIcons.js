@@ -66,6 +66,9 @@ const REGISTRY = Object.fromEntries(
   Object.entries(rawIcons).map(([path, content]) => [path.match(/([^/]+)\.svg$/)[1], content]),
 )
 
+/** T129: every icon of the library, by file name, for the picker in Administracija > Kategorije. */
+export const ATTRIBUTE_ICON_NAMES = Object.keys(REGISTRY).sort()
+
 export function resolveAttributeIconSlug(key) {
   if (!key) return DEFAULT_SLUG
   if (REGISTRY[key]) return key

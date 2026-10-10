@@ -668,6 +668,22 @@ async function setTranslationIfMissing(
   });
 }
 
+// T129: the key facts of the cards (up to 3) and of the listing page strip (up
+// to 6), by category slug. The admin panel edits them afterwards; migration
+// 20261010170000_attribute_admin wrote the same lists into existing databases.
+const SEED_FACT_KEYS: Record<string, { card: string[]; listing: string[] }> = {
+  stanovi: { card: ['kapacitet_ljudi', 'broj_soba', 'kvadratura'], listing: ['kapacitet_ljudi', 'broj_soba', 'broj_kreveta', 'sprat', 'kvadratura'] },
+  'kuce-i-vikendice': { card: ['kapacitet_ljudi', 'broj_soba', 'kvadratura'], listing: ['kapacitet_ljudi', 'broj_soba', 'broj_kreveta', 'broj_kupatila', 'kvadratura'] },
+  sobe: { card: ['kapacitet_ljudi', 'broj_soba', 'kvadratura'], listing: ['kapacitet_ljudi', 'broj_kreveta', 'kupatilo', 'kvadratura'] },
+  'sale-za-proslave': { card: ['kapacitet_ljudi', 'tip_prostora', 'ketering'], listing: ['kapacitet_ljudi', 'tip_prostora', 'ketering'] },
+  'konferencijske-sale': { card: ['kapacitet_ljudi', 'tip_prostora', 'ketering'], listing: ['kapacitet_ljudi', 'tip_prostora', 'ketering'] },
+  igraonice: { card: ['kapacitet_dece', 'uzrast_dece', 'kvadratura'], listing: ['kapacitet_dece', 'uzrast_dece'] },
+  'putnicka-vozila': { card: ['broj_sedista', 'menjac', 'godina_proizvodnje'], listing: ['broj_sedista', 'menjac', 'gorivo', 'godina_proizvodnje'] },
+  'dostavna-vozila': { card: ['nosivost', 'zapremina_tovarnog_prostora', 'godina_proizvodnje'], listing: ['nosivost', 'zapremina_tovarnog_prostora', 'menjac', 'godina_proizvodnje'] },
+  'magacini-i-skladista': { card: ['povrsina', 'visina_prostora', 'tip_prostora'], listing: ['povrsina', 'visina_prostora', 'tip_prostora'] },
+  'gradjevinske-masine': { card: ['tip_masine', 'snaga_motora', 'tezina_masine'], listing: ['tip_masine', 'snaga_motora', 'tezina_masine', 'godina_proizvodnje'] },
+};
+
 async function seedCategoryNode(node: CategorySeed, parentId: string | null, order: number) {
   const slug = slugify(node.name);
   const category = await prisma.category.upsert({
@@ -684,6 +700,8 @@ async function seedCategoryNode(node: CategorySeed, parentId: string | null, ord
       // Dizajn 46: counted from 0, so Ostalo (Dizajn 50) is 6, the seventh and last.
       displayOrder: order,
       published: node.published ?? true,
+      cardFactKeys: SEED_FACT_KEYS[slug]?.card ?? [],
+      listingFactKeys: SEED_FACT_KEYS[slug]?.listing ?? [],
     },
   });
 

@@ -121,7 +121,7 @@ describe('SubscriptionsService featured listings and the direct package purchase
       bookingModel: 'PER_STAY',
       city: null,
       cityArea: null,
-      category: { id: 'c1', slug: 'sobe', icon: 'bed' },
+      category: { id: 'c1', slug: 'sobe', icon: 'bed', cardFactKeys: ['kapacitet_ljudi'], parent: null },
       photos: [],
       latitude: null,
       longitude: null,

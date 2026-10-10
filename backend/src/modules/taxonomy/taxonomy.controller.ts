@@ -9,7 +9,6 @@ import {
   RejectCategoryDto,
   ReorderCategoriesDto,
   UpdateCategoryDto,
-  UpsertAttributeDto,
 } from './dto/admin-category.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -158,17 +157,5 @@ export class TaxonomyController {
   @Delete('admin/categories/:id')
   adminDeleteCategory(@CurrentUser('id') adminId: string, @Param('id') id: string) {
     return this.taxonomyService.adminDeleteCategory(adminId, id);
-  }
-
-  @RequirePermissions('manage_categories')
-  @Post('admin/categories/:id/attributes')
-  adminUpsertAttribute(@CurrentUser('id') adminId: string, @Param('id') id: string, @Body() dto: UpsertAttributeDto) {
-    return this.taxonomyService.adminUpsertAttribute(adminId, id, dto);
-  }
-
-  @RequirePermissions('manage_categories')
-  @Delete('admin/attributes/:attributeId')
-  adminDeleteAttribute(@CurrentUser('id') adminId: string, @Param('attributeId') attributeId: string) {
-    return this.taxonomyService.adminDeleteAttribute(adminId, attributeId);
   }
 }

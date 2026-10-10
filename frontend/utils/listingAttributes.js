@@ -31,20 +31,29 @@ export function formatAttributeValue(attr, t) {
   return v.valueText || ''
 }
 
+// T129: a field the admin set not to show on the listing page.
+const shownOnListing = (attr) => attr.showOnListing !== false
+
 // The Detalji rows, in the category's order. An attribute the owner left empty has none.
 export function getDetailAttributes(attributes, t) {
-  return (attributes || []).filter((attr) => !isAmenityAttribute(attr) && attr.value && formatAttributeValue(attr, t))
+  return (attributes || []).filter(
+    (attr) => shownOnListing(attr) && !isAmenityAttribute(attr) && attr.value && formatAttributeValue(attr, t),
+  )
 }
 
 // The Opremljenost items, merged across the groups and deduplicated by name. Each keeps
-// its option's key so the Dizajn 2 icon library can be addressed by it.
+// its option's key so the Dizajn 2 icon library can be addressed by it, or the
+// icon the admin picked for it (T129).
 export function getAmenityItems(attributes) {
   const seen = new Map()
   for (const attr of attributes || []) {
-    if (!isAmenityAttribute(attr) || !attr.value?.valueOptionIds?.length) continue
+    if (!shownOnListing(attr) || !isAmenityAttribute(attr) || !attr.value?.valueOptionIds?.length) continue
     for (const id of attr.value.valueOptionIds) {
       const option = attr.options?.find((o) => o.id === id)
-      if (option?.name && !seen.has(option.name)) seen.set(option.name, { key: option.key || option.name, name: option.name })
+      if (option?.name && !seen.has(option.name)) {
+        const key = option.key || option.name
+        seen.set(option.name, { key, icon: option.icon || key, name: option.name })
+      }
     }
   }
   return Array.from(seen.values())

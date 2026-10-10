@@ -70,13 +70,14 @@ export class SearchService {
     // attributes too, since a parent like Nekretnine has none of its own.
     // resolveAttributesForCategory brings the ancestors' along, so Sale za
     // proslave reads the attributes it inherits from Prostori za proslave.
+    // T129: a field or item the admin hid is no filter and no choice of one.
     const attributes: ResolvedAttribute[] = [];
     const seen = new Set<string>();
     for (const id of [category.id, ...children.map((child) => child.id)]) {
       for (const attribute of await this.taxonomy.resolveAttributesForCategory(id)) {
-        if (seen.has(attribute.id)) continue;
+        if (seen.has(attribute.id) || attribute.hidden) continue;
         seen.add(attribute.id);
-        attributes.push(attribute);
+        attributes.push({ ...attribute, options: attribute.options.filter((option) => !option.hidden) });
       }
     }
 

@@ -155,90 +155,11 @@
         </div>
       </form>
 
-      <!-- Atributi: the editor the list page had. T129 part 2 replaces it. -->
-      <div v-else-if="tab === 'attributes'" class="admin-card admin-card-table">
-        <StateBlock
-          v-if="!attributes.length"
-          icon="categories"
-          :title="t('admin.empty.attributes.title')"
-          :text="t('admin.empty.attributes.text')"
-        />
-        <table v-else class="admin-table">
-          <thead>
-            <tr>
-              <th>{{ t('listing.title') }}</th>
-              <th>{{ t('admin.ownAttribute') }}</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="a in attributes" :key="a.id">
-              <td :data-label="t('listing.title')">
-                <div class="admin-cell-pair">
-                  <span class="admin-cell-name">{{ a.name }}</span>
-                  <span class="admin-cell-sub">{{ a.key }}, {{ a.type }}</span>
-                </div>
-              </td>
-              <td :data-label="t('admin.ownAttribute')">
-                <span class="admin-pill" :class="a.categoryId === category.id ? 'admin-pill-success' : 'admin-pill-neutral'">
-                  {{ a.categoryId === category.id ? t('common.yes') : t('admin.inherited') }}
-                </span>
-              </td>
-              <td class="admin-cell-actions">
-                <div class="admin-actions">
-                  <button
-                    v-if="a.categoryId === category.id"
-                    class="admin-action admin-action-danger"
-                    @click="deleteAttribute(a.id)"
-                  >{{ t('common.delete') }}</button>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <!-- Polja i opremljenost, with the key facts (T129 part 2). -->
+      <CategoryAttributesEditor v-else-if="tab === 'attributes'" :category-id="category.id" @changed="loadAttributes" />
 
-        <div class="admin-card-body cat-form cat-attr-form">
-          <p class="admin-card-title">{{ t('admin.addAttribute') }}</p>
-          <div class="cat-grid cat-grid-4">
-            <div class="form-group">
-              <label class="form-label" for="attr-key">{{ t('admin.attrKey') }}</label>
-              <input id="attr-key" v-model="attrForm.key" type="text" class="form-control" />
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="attr-name">{{ t('admin.categoryName') }}</label>
-              <input id="attr-name" v-model="attrForm.name" type="text" class="form-control" />
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="attr-type">{{ t('admin.attrType') }}</label>
-              <select id="attr-type" v-model="attrForm.type" class="form-control form-select">
-                <option v-for="ty in ['NUMBER', 'TEXT', 'LIST', 'MULTISELECT', 'BOOLEAN']" :key="ty" :value="ty">{{ ty }}</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="attr-unit">{{ t('admin.attrUnit') }}</label>
-              <input id="attr-unit" v-model="attrForm.unit" type="text" class="form-control" />
-            </div>
-          </div>
-          <div v-if="['LIST', 'MULTISELECT'].includes(attrForm.type)" class="form-group">
-            <label class="form-label" for="attr-options">{{ t('admin.attrOptions') }}</label>
-            <input id="attr-options" v-model="attrForm.optionsRaw" type="text" class="form-control" placeholder="wifi:Wi-Fi, parking:Parking" />
-          </div>
-          <div class="cat-row-actions">
-            <label class="admin-check-row">
-              <input v-model="attrForm.required" type="checkbox" class="admin-check" /> {{ t('admin.attrRequired') }}
-            </label>
-            <label class="admin-check-row">
-              <input v-model="attrForm.isFilter" type="checkbox" class="admin-check" /> {{ t('admin.attrIsFilter') }}
-            </label>
-          </div>
-          <p v-if="attrError" class="form-error">{{ attrError }}</p>
-          <div class="cat-row-actions">
-            <button class="btn btn-primary-flat btn-sm" :disabled="!attrForm.key || !attrForm.name" @click="upsertAttribute">
-              {{ t('common.save') }}
-            </button>
-          </div>
-        </div>
-      </div>
+      <!-- Filteri: what /pretraga offers for this category. -->
+      <CategoryFiltersEditor v-else-if="tab === 'filters'" :category-id="category.id" />
 
       <!-- Probni prikaz: the owner's card, rendered by the wizard's own component. -->
       <div v-else-if="tab === 'preview'" class="admin-card cat-card">
@@ -249,16 +170,15 @@
             <CategoryPickCard tag="div" :category="previewCategory" :parent="parent" :sub="Boolean(parent)" />
           </div>
           <p class="admin-card-title">{{ t('admin.cat.previewFields') }}</p>
-          <p v-if="!attributes.length" class="admin-card-note">{{ t('admin.cat.previewNoFields') }}</p>
+          <p v-if="!previewAttributes.length" class="admin-card-note">{{ t('admin.cat.previewNoFields') }}</p>
           <ul v-else class="cat-fields">
-            <li v-for="a in attributes" :key="a.id" class="cat-field">
+            <li v-for="a in previewAttributes" :key="a.id" class="cat-field">
               <span class="admin-cell-name">{{ a.name }}<template v-if="a.unit"> ({{ a.unit }})</template></span>
               <span class="admin-cell-sub">
-                {{ a.type }}<template v-if="a.options?.length">: {{ a.options.map((o) => o.name).join(', ') }}</template>
+                {{ t(`admin.attr.types.${a.type}`) }}<template v-if="a.options?.length">: {{ a.options.map((o) => o.name).join(', ') }}</template>
               </span>
               <span class="admin-pills">
                 <span v-if="a.required" class="admin-pill admin-pill-info">{{ t('admin.cat.previewRequired') }}</span>
-                <span v-if="a.isFilter" class="admin-pill admin-pill-neutral">{{ t('admin.cat.previewFilter') }}</span>
                 <span v-if="a.categoryId !== category.id" class="admin-pill admin-pill-neutral">{{ t('admin.cat.previewInherited') }}</span>
               </span>
             </li>
@@ -343,7 +263,7 @@ const { t } = useI18n()
 const api = useApi()
 const route = useRoute()
 
-const TABS = ['basics', 'attributes', 'preview', 'history', 'advanced']
+const TABS = ['basics', 'attributes', 'filters', 'preview', 'history', 'advanced']
 const BOOKING_MODELS = ['PER_STAY', 'PER_SLOT', 'NO_BOOKING']
 const PRICE_UNITS = ['NIGHT', 'DAY', 'HOUR', 'SLOT', 'MONTH', 'YEAR', 'GUEST']
 
@@ -491,44 +411,12 @@ const previewCategory = computed(() => ({
   icon: form.icon || category.value.icon,
 }))
 
-const attrForm = reactive({ key: '', name: '', type: 'TEXT', unit: '', required: false, isFilter: false, optionsRaw: '' })
-const attrError = ref('')
-
-async function upsertAttribute() {
-  const options =
-    ['LIST', 'MULTISELECT'].includes(attrForm.type) && attrForm.optionsRaw
-      ? attrForm.optionsRaw.split(',').map((pair) => {
-          const [key, name] = pair.split(':').map((s) => s.trim())
-          return { key, name: name || key }
-        })
-      : undefined
-  attrError.value = ''
-  try {
-    await api.post(`/admin/categories/${category.value.id}/attributes`, {
-      key: attrForm.key,
-      name: attrForm.name,
-      type: attrForm.type,
-      unit: attrForm.unit || undefined,
-      required: attrForm.required,
-      isFilter: attrForm.isFilter,
-      options,
-    })
-    Object.assign(attrForm, { key: '', name: '', type: 'TEXT', unit: '', required: false, isFilter: false, optionsRaw: '' })
-    await loadAttributes()
-  } catch (e) {
-    attrError.value = extractErrorMessage(e, t('auth.genericError'))
-  }
-}
-
-async function deleteAttribute(id) {
-  if (!confirm(t('common.delete') + '?')) return
-  try {
-    await api.delete(`/admin/attributes/${id}`)
-    await loadAttributes()
-  } catch (e) {
-    alert(extractErrorMessage(e, t('auth.genericError')))
-  }
-}
+// T129: what a new listing is offered, as the wizard filters it: no hidden fields or items.
+const previewAttributes = computed(() =>
+  attributes.value
+    .filter((attribute) => !attribute.hidden)
+    .map((attribute) => ({ ...attribute, options: (attribute.options || []).filter((option) => !option.hidden) })),
+)
 
 // -- Istorija izmena ------------------------------------------------------
 
@@ -551,14 +439,28 @@ function actionLabel(row) {
 const HISTORY_FIELDS = [
   'name', 'slug', 'shortDescription', 'description', 'parentId', 'icon', 'imageUrl', 'published', 'status',
   'displayOrder', 'defaultBookingModel', 'allowedPriceUnits', 'defaultPriceUnit', 'type', 'required', 'unit',
-  'isFilter', 'options', 'reason', 'mergedIntoId',
+  'options', 'reason', 'mergedIntoId', 'key', 'hidden', 'showOnListing', 'dependsOnAttrKey', 'dependsOnOptionKey',
+  'cardFactKeys', 'listingFactKeys', 'attributeKey', 'optionKey', 'control', 'placement', 'thresholds', 'order',
 ]
 const categoryName = (id) => (tree.value || []).find((c) => c.id === id)?.name
+
+// Key facts and orders are kept as keys; they read better as the fields' and items' names.
+const KEY_LIST_FIELDS = ['cardFactKeys', 'listingFactKeys', 'order']
+function keyName(key) {
+  const attribute = attributes.value.find((a) => a.key === key)
+  if (attribute) return attribute.name
+  for (const a of attributes.value) {
+    const option = a.options?.find((o) => o.key === key)
+    if (option) return option.name
+  }
+  return key
+}
 
 function show(field, value) {
   if (value === undefined || value === null || value === '') return t('admin.cat.empty')
   if (typeof value === 'boolean') return value ? t('admin.cat.yes') : t('admin.cat.no')
   if ((field === 'parentId' || field === 'mergedIntoId') && categoryName(value)) return categoryName(value)
+  if (KEY_LIST_FIELDS.includes(field) && Array.isArray(value)) return value.map(keyName).join(', ') || t('admin.cat.empty')
   if (Array.isArray(value)) return value.map((item) => (typeof item === 'object' ? item.name || item.key : item)).join(', ') || t('admin.cat.empty')
   return String(value)
 }
@@ -666,12 +568,6 @@ useSeoMeta({ title: () => category.value?.name || t('admin.categories') })
   }
 }
 
-@include respond-above(lg) {
-  .cat-grid-4 {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-}
-
 .cat-fieldset {
   display: flex;
   flex-direction: column;
@@ -756,10 +652,6 @@ useSeoMeta({ title: () => category.value?.name || t('admin.categories') })
 .cat-saved {
   font-size: 14px;
   color: $color-success;
-}
-
-.cat-attr-form {
-  border-top: 1px solid $color-border;
 }
 
 .cat-warning {
