@@ -23,10 +23,6 @@
   min-width: 0;
 }
 
-.avail-section-tight {
-  gap: 10px;
-}
-
 // 252:289: Medium 14, the asterisk blue after a space.
 .avail-label {
   display: flex;
@@ -156,30 +152,6 @@
   height: 16px;
 }
 
-// 252:327: two columns 16 apart, each label 6 above its field.
-.avail-hours {
-  display: flex;
-  gap: 16px;
-}
-
-.avail-hours-field {
-  display: flex;
-  flex: 1 1 0;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-}
-
-// 252:329: Medium 12.
-.avail-sublabel {
-  display: block;
-  margin: 0;
-  font-size: 12px;
-  font-weight: 500;
-  line-height: normal;
-  color: $color-text-muted;
-}
-
 // 252:340: 14/18 padding, the toggle 12 before the text.
 .avail-toggle-row {
   display: flex;
@@ -282,31 +254,90 @@
   color: $color-text;
 }
 
-// 252:354: a white card, the rows 12/20 in with a 1px line between them.
-.avail-ranges {
+// T141, 1700:3964 / 1701:3922: one row per period or slot, straight on the
+// form, 12 apart like the rest of the section.
+.avail-periods {
   display: flex;
   flex-direction: column;
-  border-radius: $radius-input;
-  background: $color-surface;
-  box-shadow: inset 0 0 0 1px $color-border;
+  gap: 12px;
 }
 
-// 252:355: 12 between the parts.
-.avail-range {
+// 68 tall: the fields 12/20 in, 12 between the parts.
+.avail-period {
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 12px 20px;
 }
 
-// 252:370: the line sits inside the row's 68.
-.avail-range + .avail-range {
-  padding-top: 11px;
-  border-top: 1px solid $color-border;
+.avail-period-time {
+  flex: 0 0 104px;
 }
 
-.avail-range-time {
-  flex: 0 0 104px;
+// 1700:3994 "+ Dodaj period", 1701:3967 "+ Dodaj termin u danu".
+.avail-add-link {
+  align-self: flex-start;
+}
+
+// 1700:4007: 14 between its parts; 1700:4008 puts a Light 12 caption 10 after the title.
+.avail-section-exceptions {
+  gap: 14px;
+}
+
+.avail-section-exceptions .avail-label {
+  gap: 10px;
+}
+
+.avail-section-exceptions .avail-label-note {
+  font-size: 12px;
+}
+
+// 1700:4013: two tabs on a grey track, 4 around and between them.
+.avail-tabs {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 4px;
+  border-radius: $radius-input;
+  background: #f1f4f9; // 1700:4013's track, a grey of its own
+}
+
+// 1700:4014: Regular 13 muted, 9/18 in; 1700:4016 the picked one white with a line, Medium.
+.avail-tab {
+  margin: 0;
+  padding: 9px 18px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: $color-text-muted;
+  font-family: $font-family-base;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: normal;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.avail-tab.is-active {
+  border: 1px solid $color-border;
+  background: $color-surface;
+  color: $color-text;
+  font-weight: 500;
+  cursor: default;
+}
+
+.avail-tab:focus-visible {
+  outline: 2px solid rgba($color-primary, 0.35);
+  outline-offset: 2px;
+}
+
+// 1701:3970: the two dates and "Napravi termine", 16 apart, bottom aligned.
+.avail-range-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 16px;
 }
 
 // 252:360: as wide as the frame's dash.
@@ -685,6 +716,15 @@
   font-weight: 500;
 }
 
+// 1704:3269 and 1701:3339: "Izmeni" (and T105's "Kopiraj") with the delete
+// icon at the row's end, 16 apart like the rest of the row.
+.avail-slot-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 16px;
+}
+
 .avail-slot .avail-icon-btn img {
   width: 16px;
   height: 16px;
@@ -729,6 +769,17 @@
 
 .avail-copy .avail-copy-count {
   width: 90px;
+}
+
+// T141 "Izmeni" uses the copy panel's place under its slot.
+.avail-copy-time {
+  flex: 0 0 120px;
+}
+
+.avail-copy .avail-copy-price {
+  flex: 1 1 140px;
+  width: auto;
+  min-width: 0;
 }
 
 .avail-copy-select {
@@ -868,8 +919,8 @@
 }
 
 @include respond-below(sm) {
-  .avail-hours,
-  .avail-add {
+  .avail-add,
+  .avail-range-row {
     flex-direction: column;
     align-items: stretch;
   }
@@ -880,17 +931,26 @@
     flex-basis: auto;
   }
 
-  .avail-range {
-    flex-wrap: wrap;
-    padding: 12px 14px;
+  .avail-range-row .avail-btn-outline {
+    align-self: stretch;
   }
 
-  .avail-range-time {
+  // No phone frame: the times on one line, the price and its remove button under them.
+  .avail-period {
+    flex-wrap: wrap;
+    padding: 8px 0;
+  }
+
+  .avail-period-time {
     flex: 1 1 90px;
   }
 
   .avail-price {
     flex-basis: calc(100% - 30px);
+  }
+
+  .avail-copy-time {
+    flex: 1 1 100px;
   }
 
   .avail-exception-date,
@@ -913,12 +973,14 @@
     flex-basis: auto;
   }
 
+  // The date, time and price on one line, "Izmeni", "Kopiraj" and delete under them.
   .avail-slot-price {
-    flex-basis: 100%;
-    order: 3;
+    flex: 1 1 auto;
+    text-align: right;
   }
 
-  .avail-slot .avail-link {
-    margin-left: auto;
+  .avail-slot-actions {
+    flex-basis: 100%;
+    justify-content: flex-end;
   }
 }

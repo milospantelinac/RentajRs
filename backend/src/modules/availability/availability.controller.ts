@@ -1,9 +1,12 @@
-import { Body, Controller, Delete, Get, Header, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Header, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { AvailabilityService } from './availability.service';
 import {
   SetWorkingHoursDto,
+  SetWorkingScheduleDto,
   CreateDefinedSlotDto,
+  GenerateDefinedSlotsDto,
+  UpdateDefinedSlotDto,
   CreateManualBlockDto,
   SetDatePriceDto,
   SetHourlyPriceRangesDto,
@@ -32,9 +35,32 @@ export class AvailabilityController {
     return this.availabilityService.setWorkingHours(userId, id, dto);
   }
 
+  // T141: working hours and their prices in one write.
+  @Post('working-schedule')
+  setWorkingSchedule(@CurrentUser('id') userId: string, @Param('id') id: string, @Body() dto: SetWorkingScheduleDto) {
+    return this.availabilityService.setWorkingSchedule(userId, id, dto);
+  }
+
   @Post('slots')
   createSlot(@CurrentUser('id') userId: string, @Param('id') id: string, @Body() dto: CreateDefinedSlotDto) {
     return this.availabilityService.createDefinedSlot(userId, id, dto);
+  }
+
+  // T141 "Napravi termine".
+  @Post('slots/generate')
+  generateSlots(@CurrentUser('id') userId: string, @Param('id') id: string, @Body() dto: GenerateDefinedSlotsDto) {
+    return this.availabilityService.generateDefinedSlots(userId, id, dto);
+  }
+
+  // T141 "Izmeni" on one slot.
+  @Patch('slots/:slotId')
+  updateSlot(
+    @CurrentUser('id') userId: string,
+    @Param('id') id: string,
+    @Param('slotId') slotId: string,
+    @Body() dto: UpdateDefinedSlotDto,
+  ) {
+    return this.availabilityService.updateDefinedSlot(userId, id, slotId, dto);
   }
 
   @Delete('slots/:slotId')

@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { ListingsService } from './listings.service';
 import { LISTING_COUNTS_CACHE_KEY } from '../taxonomy/taxonomy.service';
 
@@ -470,14 +471,18 @@ describe('ListingsService#updateListing keeps one way of booking (T140, T126, T1
     expect(saved.price).toBe(60000);
   });
 
-  it('moves a listing from slots to working hours: the slots go, the price is the one typed', async () => {
+  it('moves a listing from slots to working hours: the slots and their template go, the price is the one typed', async () => {
     const { prisma, service } = setup(slotsRow);
 
     await service.updateListing('u1', 'l1', { slotSubmode: 'WORKING_HOURS', priceUnit: 'HOUR', price: 2000 } as any);
 
     expect(prisma.definedSlot.deleteMany).toHaveBeenCalledWith(ownRows);
     expect(prisma.workingHours.deleteMany).not.toHaveBeenCalled();
-    expect(prisma.listing.update.mock.calls[0][0].data).toMatchObject({ slotSubmode: 'WORKING_HOURS', price: 200000n });
+    expect(prisma.listing.update.mock.calls[0][0].data).toMatchObject({
+      slotSubmode: 'WORKING_HOURS',
+      price: 200000n,
+      slotTemplate: Prisma.DbNull,
+    });
   });
 
   it('keeps the way while a booking is ahead and changes nothing', async () => {

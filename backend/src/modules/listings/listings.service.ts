@@ -418,6 +418,9 @@ export class ListingsService {
       }
     }
 
+    // T141: the slots go with the way they were made, and the template with them.
+    if (slotModeChanged && next.slotSubmode === 'WORKING_HOURS') data.slotTemplate = Prisma.DbNull;
+
     const update = this.prisma.listing.update({ where: { id: listing.id }, data });
     const updated = cleanup.length ? (await this.prisma.$transaction([update, ...cleanup]))[0] as Listing : await update;
     // "Trenutno nedostupno" (R34) takes a live listing out of search, or back in.
@@ -1278,6 +1281,7 @@ const PRIVATE_LISTING_FIELDS = [
   'pendingCategoryAssignment',
   'deletedAt',
   'viewCount',
+  'slotTemplate',
 ];
 
 /** A package that is waiting for its first approval or still running can carry a resubmission. */

@@ -626,6 +626,10 @@ model Listing {
   keywords                String[]
   bookingModel            BookingModel
   slotSubmode             SlotSubmode?
+  /// T141: the template defined slots were last made from in step 3 ("Napravi
+  /// termine"): { days: ISO weekdays, slots: [{ startTime, endTime, price }],
+  /// from, to } with Belgrade wall-clock times and RSD prices, shown again there.
+  slotTemplate            Json?
   priceUnit               PriceUnit
   price                   BigInt // in para (RSD x 100), P4
   weekendPrice            BigInt?

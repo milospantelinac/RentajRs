@@ -21,9 +21,13 @@ import { ICAL_FAILURE_ALERT_THRESHOLD, getIcalAvailability } from '../../common/
 import { NonPublicAddressError, fetchUserUrl } from '../../common/utils/outbound-fetch';
 import { paraToRsd, rsdToPara } from '../../common/utils/money';
 import { belgradeWallClock, toBelgradeDateOnly, toBelgradeHHMM, toBelgradeISODayOfWeek } from '../../common/utils/timezone';
+import { DAY_MS } from '../../common/utils/subscription-renewal';
 import {
   SetWorkingHoursDto,
+  SetWorkingScheduleDto,
   CreateDefinedSlotDto,
+  GenerateDefinedSlotsDto,
+  UpdateDefinedSlotDto,
   CreateManualBlockDto,
   SetDatePriceDto,
   SetHourlyPriceRangesDto,
@@ -224,6 +228,161 @@ export class AvailabilityService {
     return { message: 'ok' };
   }
 
+  /**
+   * T141: step 3's one block of working hours and their prices, saved
+   * together so a listing never has new hours with the old prices. The wizard
+   * turns its periods into each day's windows and the periods' own prices.
+   */
+  async setWorkingSchedule(userId: string, listingId: string, dto: SetWorkingScheduleDto) {
+    this.assertBookedBy(await this.assertOwnership(userId, listingId), 'WORKING_HOURS');
+    for (let day = 1; day <= 7; day++) {
+      const windows = dto.hours
+        .filter((row) => row.dayOfWeek === day)
+        .map((row) => ({ startTime: row.startsAt, endTime: row.endsAt }));
+      if (hasOverlap(windows)) throw new BadRequestException(this.i18n.t('errors.WORKING_HOURS_OVERLAP'));
+    }
+    await this.prisma.$transaction([
+      this.prisma.workingHours.deleteMany({ where: { listingId } }),
+      this.prisma.workingHours.createMany({
+        data: dto.hours.map((h) => ({ listingId, dayOfWeek: h.dayOfWeek, startsAt: h.startsAt, endsAt: h.endsAt })),
+      }),
+      this.prisma.hourlyPriceRange.deleteMany({ where: { listingId } }),
+      this.prisma.hourlyPriceRange.createMany({
+        data: dto.ranges.map((r) => ({
+          listingId,
+          dayOfWeek: r.dayOfWeek ?? null,
+          startTime: r.startTime,
+          endTime: r.endTime,
+          price: rsdToPara(r.price),
+        })),
+      }),
+    ]);
+    return { message: 'ok' };
+  }
+
+  /**
+   * T141 "Napravi termine": the template's slots on every chosen weekday from
+   * `from` to `to`, in Belgrade time. It only adds (agreed 2026-10-09): a slot
+   * that would overlap one the listing already has is skipped and counted,
+   * one already past is left out. The template stays on the listing, so step
+   * 3 shows it again and the next period only needs new dates.
+   */
+  async generateDefinedSlots(userId: string, listingId: string, dto: GenerateDefinedSlotsDto) {
+    this.assertBookedBy(await this.assertOwnership(userId, listingId), 'DEFINED_SLOTS');
+    const first = calendarDay(dto.from);
+    const dayCount = Math.round((calendarDay(dto.to).getTime() - first.getTime()) / DAY_MS) + 1;
+    if (!(dayCount >= 1)) throw new BadRequestException(this.i18n.t('errors.SLOT_RANGE_INVALID'));
+    if (dayCount > MAX_SLOT_RANGE_DAYS) throw new BadRequestException(this.i18n.t('errors.SLOT_RANGE_TOO_LONG'));
+    this.assertSlotTimes(dto.slots);
+
+    const now = Date.now();
+    const candidates: Array<{ startsAt: Date; endsAt: Date; price: bigint }> = [];
+    for (let offset = 0; offset < dayCount; offset++) {
+      const day = new Date(first.getTime() + offset * DAY_MS);
+      if (!dto.days.includes(((day.getUTCDay() + 6) % 7) + 1)) continue;
+      for (const row of dto.slots) {
+        const startsAt = belgradeWallClock(day, row.startTime);
+        if (startsAt.getTime() <= now) continue;
+        const endDay = row.endTime <= row.startTime ? new Date(day.getTime() + DAY_MS) : day;
+        candidates.push({ startsAt, endsAt: belgradeWallClock(endDay, row.endTime), price: rsdToPara(row.price) });
+      }
+    }
+
+    const existing = candidates.length
+      ? await this.prisma.definedSlot.findMany({
+          where: {
+            listingId,
+            startsAt: { lt: new Date(Math.max(...candidates.map((slot) => slot.endsAt.getTime()))) },
+            endsAt: { gt: new Date(Math.min(...candidates.map((slot) => slot.startsAt.getTime()))) },
+          },
+          select: { startsAt: true, endsAt: true },
+        })
+      : [];
+    const fresh = candidates.filter(
+      (slot) => !existing.some((taken) => taken.startsAt < slot.endsAt && taken.endsAt > slot.startsAt),
+    );
+    const template = {
+      days: [...dto.days].sort((a, b) => a - b),
+      slots: dto.slots.map(({ startTime, endTime, price }) => ({ startTime, endTime, price })),
+      from: dto.from,
+      to: dto.to,
+    };
+    await this.prisma.$transaction([
+      this.prisma.definedSlot.createMany({ data: fresh.map((slot) => ({ listingId, ...slot, maxBookings: 1 })) }),
+      this.prisma.listing.update({ where: { id: listingId }, data: { slotTemplate: template } }),
+    ]);
+    await this.refreshSlotPrice(listingId);
+    return { created: fresh.length, skipped: candidates.length - fresh.length, template };
+  }
+
+  /**
+   * T141 "Izmeni": one slot's day, times and price, nothing else. A slot a
+   * request or booking holds keeps its time (the booking stays where it is);
+   * its price can still change, the booking keeps the one it was made at.
+   */
+  async updateDefinedSlot(userId: string, listingId: string, slotId: string, dto: UpdateDefinedSlotDto) {
+    this.assertBookedBy(await this.assertOwnership(userId, listingId), 'DEFINED_SLOTS');
+    const slot = await this.prisma.definedSlot.findFirst({ where: { id: slotId, listingId } });
+    if (!slot) throw new NotFoundException(this.i18n.t('errors.DEFINED_SLOT_NOT_FOUND'));
+    this.assertSlotTimes([dto]);
+    const day = calendarDay(dto.date);
+    const startsAt = belgradeWallClock(day, dto.startTime);
+    const endDay = dto.endTime <= dto.startTime ? new Date(day.getTime() + DAY_MS) : day;
+    const endsAt = belgradeWallClock(endDay, dto.endTime);
+    if (startsAt.getTime() !== slot.startsAt.getTime() || endsAt.getTime() !== slot.endsAt.getTime()) {
+      if (startsAt.getTime() <= Date.now()) throw new BadRequestException(this.i18n.t('errors.DEFINED_SLOT_IN_PAST'));
+      const booked = await this.prisma.blockedTerm.findFirst({
+        where: { listingId, source: 'BOOKING', startsAt: { lt: slot.endsAt }, endsAt: { gt: slot.startsAt } },
+        select: { id: true },
+      });
+      if (booked) throw new ConflictException(this.i18n.t('errors.DEFINED_SLOT_BOOKED'));
+      const duplicate = await this.prisma.definedSlot.findFirst({
+        where: { listingId, startsAt, endsAt, id: { not: slotId } },
+        select: { id: true },
+      });
+      if (duplicate) throw this.duplicateSlotError(startsAt, endsAt);
+    }
+    const updated = await this.prisma.definedSlot.update({
+      where: { id: slotId },
+      data: { startsAt, endsAt, price: rsdToPara(dto.price) },
+    });
+    await this.refreshSlotPrice(listingId);
+    return { ...updated, price: paraToRsd(updated.price) };
+  }
+
+  /** T141: a template's slots of one day may not overlap, and each one has to last. */
+  private assertSlotTimes(rows: Array<{ startTime: string; endTime: string }>) {
+    if (rows.some((row) => row.startTime === row.endTime)) {
+      throw new BadRequestException(this.i18n.t('errors.SLOT_TIMES_EQUAL'));
+    }
+    for (let i = 0; i < rows.length; i++) {
+      for (let j = i + 1; j < rows.length; j++) {
+        if (!windowsOverlap(rows[i], rows[j])) continue;
+        throw new BadRequestException(
+          this.i18n.t('errors.SLOT_TEMPLATE_OVERLAP', {
+            args: {
+              first: `${rows[i].startTime}-${rows[i].endTime}`,
+              second: `${rows[j].startTime}-${rows[j].endTime}`,
+            },
+          }),
+        );
+      }
+    }
+  }
+
+  private duplicateSlotError(startsAt: Date, endsAt: Date) {
+    const isEn = I18nContext.current()?.lang === 'en';
+    return new ConflictException(
+      this.i18n.t('errors.DEFINED_SLOT_DUPLICATE', {
+        args: {
+          date: startsAt.toLocaleDateString(isEn ? 'en-US' : 'sr-RS', { timeZone: 'Europe/Belgrade' }),
+          startTime: toBelgradeHHMM(startsAt),
+          endTime: toBelgradeHHMM(endsAt),
+        },
+      }),
+    );
+  }
+
   /** T84 — applies immediately regardless of listing status; edit moderation was removed. */
   async createDefinedSlot(userId: string, listingId: string, dto: CreateDefinedSlotDto) {
     this.assertBookedBy(await this.assertOwnership(userId, listingId), 'DEFINED_SLOTS');
@@ -235,18 +394,7 @@ export class AvailabilityService {
     // that collides; the owner needs to know which date, not just that
     // "something" failed.
     const duplicate = await this.prisma.definedSlot.findFirst({ where: { listingId, startsAt, endsAt } });
-    if (duplicate) {
-      const isEn = I18nContext.current()?.lang === 'en';
-      throw new ConflictException(
-        this.i18n.t('errors.DEFINED_SLOT_DUPLICATE', {
-          args: {
-            date: startsAt.toLocaleDateString(isEn ? 'en-US' : 'sr-RS', { timeZone: 'Europe/Belgrade' }),
-            startTime: toBelgradeHHMM(startsAt),
-            endTime: toBelgradeHHMM(endsAt),
-          },
-        }),
-      );
-    }
+    if (duplicate) throw this.duplicateSlotError(startsAt, endsAt);
     const slot = await this.prisma.definedSlot.create({
       data: {
         listingId,
@@ -707,6 +855,35 @@ export class AvailabilityService {
         : listing.bookingModel === 'PER_SLOT' && listing.slotSubmode === mode;
     if (!matches) throw new BadRequestException(this.i18n.t('errors.AVAILABILITY_MODE_NOT_SAVED'));
   }
+}
+
+/** T141: "Napravi termine" makes up to a year of slots at a time. */
+const MAX_SLOT_RANGE_DAYS = 366;
+
+/** UTC midnight of a YYYY-MM-DD calendar day, the day belgradeWallClock takes. */
+function calendarDay(value: string): Date {
+  return new Date(`${value}T00:00:00.000Z`);
+}
+
+function minutesOfDay(time: string): number {
+  const [hours, minutes] = time.split(':').map(Number);
+  return hours * 60 + minutes;
+}
+
+/** How long an HH:MM window lasts; one that ends at or before its start runs past midnight. */
+function windowLength(window: { startTime: string; endTime: string }): number {
+  return (minutesOfDay(window.endTime) - minutesOfDay(window.startTime) + 1440) % 1440 || 1440;
+}
+
+/** T141: whether two windows of one day overlap, either of them running past midnight. */
+function windowsOverlap(a: { startTime: string; endTime: string }, b: { startTime: string; endTime: string }): boolean {
+  const bAfterA = (minutesOfDay(b.startTime) - minutesOfDay(a.startTime) + 1440) % 1440;
+  const aAfterB = (minutesOfDay(a.startTime) - minutesOfDay(b.startTime) + 1440) % 1440;
+  return bAfterA < windowLength(a) || aAfterB < windowLength(b);
+}
+
+function hasOverlap(windows: Array<{ startTime: string; endTime: string }>): boolean {
+  return windows.some((window, i) => windows.slice(i + 1).some((other) => windowsOverlap(window, other)));
 }
 
 /**

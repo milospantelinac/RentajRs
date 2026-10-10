@@ -301,7 +301,13 @@
           />
         </template>
         <template v-else>
-          <DefinedSlotsEditor ref="definedSlotsEditorRef" :listing-id="listingId" :price-unit="form.priceUnit" />
+          <DefinedSlotsEditor
+            ref="definedSlotsEditorRef"
+            :listing-id="listingId"
+            :price-unit="form.priceUnit"
+            :template="listing?.slotTemplate"
+            @template-saved="onSlotTemplateSaved"
+          />
         </template>
       </div>
 
@@ -309,37 +315,51 @@
            shows when its rules apply to this booking method and category. -->
       <div v-else-if="steps[currentStep].key === 'rules'" class="rules">
         <section v-for="section in rulesSections" :key="section.key" class="rules-section">
-          <p class="rules-title">{{ section.title }}</p>
-          <div class="rules-row">
-            <div v-for="field in section.fields" :key="field.key" class="rules-field">
-              <label :for="`rules-${field.key}`" class="rules-field-label">{{ field.label }}</label>
-              <AvailabilityTimeSelect
-                v-if="field.time"
-                :id="`rules-${field.key}`"
-                v-model="form[field.key]"
-                variant="field"
-                :placeholder="t('listing.rulesTimePlaceholder')"
-              />
-              <!-- 258:293: the unit sits inside the field, at its right edge. -->
-              <div v-else class="rules-input" :class="{ 'is-invalid': field.invalid }">
-                <input
+          <!-- T141 point 5: the gap waits under "Napredno" until the owner opens it. -->
+          <button
+            v-if="section.advanced"
+            type="button"
+            class="rules-advanced-toggle"
+            :aria-expanded="rulesAdvancedOpen"
+            :aria-controls="`rules-${section.key}-body`"
+            @click="rulesAdvancedToggled = !rulesAdvancedOpen"
+          >
+            {{ t('listing.rulesAdvanced') }}
+            <img src="/images/icons/chevron-down.svg" alt="" class="rules-advanced-chevron" :class="{ 'is-open': rulesAdvancedOpen }" />
+          </button>
+          <div v-if="!section.advanced || rulesAdvancedOpen" :id="`rules-${section.key}-body`" class="rules-section-body">
+            <p class="rules-title">{{ section.title }}</p>
+            <div class="rules-row">
+              <div v-for="field in section.fields" :key="field.key" class="rules-field">
+                <label :for="`rules-${field.key}`" class="rules-field-label">{{ field.label }}</label>
+                <AvailabilityTimeSelect
+                  v-if="field.time"
                   :id="`rules-${field.key}`"
-                  type="text"
-                  inputmode="numeric"
-                  autocomplete="off"
-                  class="rules-input-control"
-                  :value="form[field.key] ?? ''"
-                  @input="onRulesInput($event, field.key)"
+                  v-model="form[field.key]"
+                  variant="field"
+                  :placeholder="t('listing.rulesTimePlaceholder')"
                 />
-                <span class="rules-input-unit">{{ field.unit }}</span>
+                <!-- 258:293: the unit sits inside the field, at its right edge. -->
+                <div v-else class="rules-input" :class="{ 'is-invalid': field.invalid }">
+                  <input
+                    :id="`rules-${field.key}`"
+                    type="text"
+                    inputmode="numeric"
+                    autocomplete="off"
+                    class="rules-input-control"
+                    :value="form[field.key] ?? ''"
+                    @input="onRulesInput($event, field.key)"
+                  />
+                  <span class="rules-input-unit">{{ field.unit }}</span>
+                </div>
+                <p v-if="field.error" class="rules-error"><img src="/images/icons/field-error.svg" alt="" />{{ field.error }}</p>
+                <p v-else-if="field.hint" class="rules-hint">{{ field.hint }}</p>
               </div>
-              <p v-if="field.error" class="rules-error"><img src="/images/icons/field-error.svg" alt="" />{{ field.error }}</p>
-              <p v-else-if="field.hint" class="rules-hint">{{ field.hint }}</p>
             </div>
+            <p v-if="section.error" class="rules-error"><img src="/images/icons/field-error.svg" alt="" />{{ section.error }}</p>
+            <p v-else-if="section.hint" class="rules-row-hint">{{ section.hint }}</p>
+            <p v-if="section.note" class="rules-note">{{ section.note }}</p>
           </div>
-          <p v-if="section.error" class="rules-error"><img src="/images/icons/field-error.svg" alt="" />{{ section.error }}</p>
-          <p v-else-if="section.hint" class="rules-row-hint">{{ section.hint }}</p>
-          <p v-if="section.note" class="rules-note">{{ section.note }}</p>
         </section>
       </div>
 
@@ -1255,6 +1275,10 @@ const workingHoursEditorRef = ref(null)
 // T26 — lets validateCurrentStep() check whether at least one defined slot
 // exists before letting the owner leave the availability step.
 const definedSlotsEditorRef = ref(null)
+// T141: the step opens again with the template slots were last made from.
+function onSlotTemplateSaved(template) {
+  if (listing.value) listing.value.slotTemplate = template
+}
 const photos = ref([])
 const regions = ref([])
 const cities = ref([])
@@ -1690,6 +1714,8 @@ const rulesSections = computed(() => {
       key: 'gap',
       title: t('listing.rulesGapTitle'),
       fields: [field('gapAfterMinutes', t('listing.gapAfterMinutes'), t('listing.rulesUnitMinutes'), hint)],
+      // T141 point 5: a playroom readies the room between bookings, so its gap stays in view.
+      advanced: rulesCategoryKind.value !== 'playroom',
     })
   }
   if (showVehicleTimes.value) {
@@ -1704,6 +1730,10 @@ const rulesSections = computed(() => {
   }
   return sections
 })
+
+// T141 point 5: "Napredno" starts open while the gap has a value, so a set gap is never hidden.
+const rulesAdvancedToggled = ref(null)
+const rulesAdvancedOpen = computed(() => rulesAdvancedToggled.value ?? Number(form.gapAfterMinutes) > 0)
 
 function termCount(key, count) {
   return t(`listing.${key}${srPluralCategory(count)}`, { count })
@@ -4505,6 +4535,46 @@ $field-danger-border: #f43f5e;
   font-weight: 500;
   line-height: normal;
   color: $color-text;
+}
+
+.rules-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+// T141 point 5 has no frame: "Napredno" reads like a section title, its chevron turns when open.
+.rules-advanced-toggle {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: $color-primary;
+  font-family: $font-family-base;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: normal;
+  cursor: pointer;
+}
+
+.rules-advanced-toggle:focus-visible {
+  outline: 2px solid rgba($color-primary, 0.35);
+  outline-offset: 2px;
+}
+
+.rules-advanced-chevron {
+  width: 16px;
+  height: 16px;
+  transition: transform 0.15s ease;
+}
+
+.rules-advanced-chevron.is-open {
+  transform: rotate(180deg);
 }
 
 // 258:290: two 372 columns, 16 apart. A single field keeps the left one (258:346).

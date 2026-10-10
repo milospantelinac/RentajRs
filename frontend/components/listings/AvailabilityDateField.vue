@@ -10,21 +10,26 @@
       :class="{ 'is-empty': !modelValue }"
       :aria-expanded="open"
       :aria-label="ariaLabel"
-      @click="open = !open"
+      @click="toggle"
     >
       <span class="date-field-value">{{ modelValue ? formatDate(modelValue) : placeholder }}</span>
       <img src="/images/icons/chevron-down.svg" alt="" class="date-field-chevron" />
     </button>
-    <div v-if="open" class="date-field-popover">
-      <BookingDateRangePicker
-        :listing-id="listingId"
-        :show-pricing="false"
-        :single-date="true"
-        :month-count="1"
-        :initial-start="modelValue"
-        @update:range="onPick"
-      />
-    </div>
+    <!-- T141 point 6: the calendar is drawn over the page, so no list or card
+         it opens from can cut it off; it opens upward when there is no room
+         below and follows its field as the page scrolls. -->
+    <Teleport to="body">
+      <div v-if="open" ref="popover" class="date-field-popover" :style="popoverStyle">
+        <BookingDateRangePicker
+          :listing-id="listingId"
+          :show-pricing="false"
+          :single-date="true"
+          :month-count="1"
+          :initial-start="modelValue"
+          @update:range="onPick"
+        />
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -40,15 +45,66 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue'])
 
+const POPOVER_WIDTH = 340
+const POPOVER_GAP = 6
+const VIEWPORT_EDGE = 16
+
 const open = ref(false)
 const root = ref(null)
+const popover = ref(null)
+const popoverStyle = ref({})
 
 // 532:830 reads "26. 9. 2026.".
-const dateFormatter = new Intl.DateTimeFormat('sr-Latn-RS', { day: 'numeric', month: 'numeric', year: 'numeric' })
+const dateFormatter = new Intl.DateTimeFormat('sr-Latn-RS', {
+  day: 'numeric',
+  month: 'numeric',
+  year: 'numeric',
+})
 function formatDate(value) {
   const [year, month, day] = value.split('-').map(Number)
   return dateFormatter.format(new Date(year, month - 1, day))
 }
+
+// Under the field, inside the window's sides; above it when the calendar
+// would run past the bottom and fits on top; where neither fits (a short
+// phone screen), as low as it can go while all of it shows.
+function place() {
+  if (!open.value || !root.value) return
+  const field = root.value.getBoundingClientRect()
+  const width = Math.min(POPOVER_WIDTH, window.innerWidth - 2 * VIEWPORT_EDGE)
+  const left = Math.min(
+    Math.max(field.left, VIEWPORT_EDGE),
+    window.innerWidth - width - VIEWPORT_EDGE,
+  )
+  const height = popover.value?.offsetHeight || 0
+  const below = field.bottom + POPOVER_GAP
+  const above = field.top - POPOVER_GAP - height
+  let top = below
+  if (below + height > window.innerHeight) {
+    top = above >= 0 ? above : Math.max(VIEWPORT_EDGE, window.innerHeight - height - VIEWPORT_EDGE)
+  }
+  popoverStyle.value = { top: `${top}px`, left: `${left}px`, width: `${width}px` }
+}
+
+// The calendar grows once its month has loaded, so its place is worked out again then.
+let popoverObserver = null
+async function toggle() {
+  open.value = !open.value
+  if (!open.value) return
+  place()
+  await nextTick()
+  place()
+  if (popover.value && typeof ResizeObserver !== 'undefined') {
+    popoverObserver = new ResizeObserver(place)
+    popoverObserver.observe(popover.value)
+  }
+}
+
+watch(open, (isOpen) => {
+  if (isOpen) return
+  popoverObserver?.disconnect()
+  popoverObserver = null
+})
 
 // The picker reports its initial date as soon as it mounts; only a new pick closes it.
 function onPick(range) {
@@ -58,7 +114,9 @@ function onPick(range) {
 }
 
 function onPointerDown(event) {
-  if (open.value && root.value && !root.value.contains(event.target)) open.value = false
+  if (!open.value) return
+  if (root.value?.contains(event.target) || popover.value?.contains(event.target)) return
+  open.value = false
 }
 function onKeydown(event) {
   if (open.value && event.key === 'Escape') open.value = false
@@ -67,10 +125,15 @@ function onKeydown(event) {
 onMounted(() => {
   document.addEventListener('pointerdown', onPointerDown)
   document.addEventListener('keydown', onKeydown)
+  window.addEventListener('scroll', place, { capture: true, passive: true })
+  window.addEventListener('resize', place)
 })
 onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', onPointerDown)
   document.removeEventListener('keydown', onKeydown)
+  window.removeEventListener('scroll', place, { capture: true })
+  window.removeEventListener('resize', place)
+  popoverObserver?.disconnect()
 })
 </script>
 
@@ -147,12 +210,8 @@ onBeforeUnmount(() => {
 }
 
 .date-field-popover {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  z-index: 20;
-  width: 340px;
-  max-width: calc(100vw - 32px);
+  position: fixed;
+  z-index: $z-dropdown;
   border-radius: 14px;
   background: $color-surface;
   box-shadow: 0 12px 32px rgba(6, 27, 49, 0.14);

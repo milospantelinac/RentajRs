@@ -571,3 +571,238 @@ describe('AvailabilityService#refreshDefinedSlotPrices (T121)', () => {
     ]);
   });
 });
+
+describe('AvailabilityService step 3 made simpler (T141)', () => {
+  const owner = { id: 'l1', userId: 'u1', price: 0n, bookingModel: 'PER_SLOT', slotSubmode: 'DEFINED_SLOTS' };
+
+  function stepService(
+    options: { listing?: Record<string, any>; existing?: any[]; slot?: any; booked?: boolean; duplicate?: boolean } = {},
+  ) {
+    const prisma: any = {
+      listing: {
+        findUnique: jest.fn().mockResolvedValue({ ...owner, ...options.listing }),
+        update: jest.fn(async ({ data }: any) => ({ ...owner, ...data })),
+        updateMany: jest.fn(async () => ({ count: 1 })),
+      },
+      definedSlot: {
+        findMany: jest.fn().mockResolvedValue(options.existing ?? []),
+        createMany: jest.fn(async ({ data }: any) => ({ count: data.length })),
+        findFirst: jest.fn(async ({ where }: any) => {
+          if (where.id === 's1') return options.slot ?? null;
+          return options.duplicate ? { id: 's9' } : null;
+        }),
+        update: jest.fn(async ({ data }: any) => ({ id: 's1', listingId: 'l1', ...data })),
+        aggregate: jest.fn().mockResolvedValue({ _min: { price: 1200000n } }),
+      },
+      blockedTerm: { findFirst: jest.fn().mockResolvedValue(options.booked ? { id: 'b1' } : null) },
+      workingHours: { deleteMany: jest.fn(async () => ({})), createMany: jest.fn(async () => ({})) },
+      hourlyPriceRange: { deleteMany: jest.fn(async () => ({})), createMany: jest.fn(async () => ({})) },
+    };
+    prisma.$transaction = jest.fn((ops: Promise<unknown>[]) => Promise.all(ops));
+    const service = new AvailabilityService(prisma as any, { emit: jest.fn() } as any, i18n as any, configWith(false) as any);
+    return { prisma, service };
+  }
+  const weekend = [
+    { startTime: '10:00', endTime: '12:00', price: 12000 },
+    { startTime: '12:30', endTime: '14:30', price: 12000 },
+    { startTime: '15:00', endTime: '17:00', price: 15000 },
+  ];
+  const made = (prisma: any) => prisma.definedSlot.createMany.mock.calls[0][0].data;
+  const iso = (slot: any) => `${slot.startsAt.toISOString()} ${slot.endsAt.toISOString()}`;
+  const slotOne = () => ({
+    id: 's1',
+    listingId: 'l1',
+    startsAt: new Date('2026-10-10T08:00:00Z'),
+    endsAt: new Date('2026-10-10T10:00:00Z'),
+  });
+
+  beforeEach(() => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
+    jest.setSystemTime(new Date('2026-10-01T10:00:00Z'));
+  });
+  afterEach(() => jest.useRealTimers());
+
+  it('makes the template slots on every chosen weekday, in Belgrade time across the clock change', async () => {
+    const { prisma, service } = stepService();
+    // 3./4. to 24./25. 10. are four weekends; Belgrade moves to UTC+1 on 25. 10.
+    const result = await service.generateDefinedSlots('u1', 'l1', {
+      days: [7, 6],
+      slots: weekend,
+      from: '2026-10-03',
+      to: '2026-10-25',
+    });
+
+    expect(result).toMatchObject({ created: 24, skipped: 0 });
+    const slots = made(prisma);
+    expect(slots).toHaveLength(24);
+    expect(iso(slots[0])).toBe('2026-10-03T08:00:00.000Z 2026-10-03T10:00:00.000Z');
+    expect(slots[0]).toMatchObject({ listingId: 'l1', price: 1200000n, maxBookings: 1 });
+    expect(iso(slots[slots.length - 3])).toBe('2026-10-25T09:00:00.000Z 2026-10-25T11:00:00.000Z');
+    expect(slots[slots.length - 1].price).toBe(1500000n);
+    expect(prisma.listing.update).toHaveBeenCalledWith({
+      where: { id: 'l1' },
+      data: { slotTemplate: { days: [6, 7], slots: weekend, from: '2026-10-03', to: '2026-10-25' } },
+    });
+    expect(prisma.listing.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: { price: 1200000n } }));
+  });
+
+  it('only adds: skips what would overlap a slot already there and leaves out what has passed', async () => {
+    jest.setSystemTime(new Date('2026-10-03T09:00:00Z')); // Saturday 11:00 in Belgrade
+    const { prisma, service } = stepService({
+      // Sunday 12:30 to 13:30
+      existing: [{ startsAt: new Date('2026-10-04T10:30:00Z'), endsAt: new Date('2026-10-04T11:30:00Z') }],
+    });
+    const result = await service.generateDefinedSlots('u1', 'l1', {
+      days: [6, 7],
+      slots: weekend,
+      from: '2026-10-03',
+      to: '2026-10-04',
+    });
+
+    expect(result).toMatchObject({ created: 4, skipped: 1 });
+    expect(made(prisma).map(iso)).toEqual([
+      '2026-10-03T10:30:00.000Z 2026-10-03T12:30:00.000Z',
+      '2026-10-03T13:00:00.000Z 2026-10-03T15:00:00.000Z',
+      '2026-10-04T08:00:00.000Z 2026-10-04T10:00:00.000Z',
+      '2026-10-04T13:00:00.000Z 2026-10-04T15:00:00.000Z',
+    ]);
+  });
+
+  it('ends a slot that runs past midnight on the next day', async () => {
+    const { prisma, service } = stepService();
+    await service.generateDefinedSlots('u1', 'l1', {
+      days: [6],
+      slots: [{ startTime: '22:00', endTime: '02:00', price: 30000 }],
+      from: '2026-10-03',
+      to: '2026-10-03',
+    });
+    expect(made(prisma).map(iso)).toEqual(['2026-10-03T20:00:00.000Z 2026-10-04T00:00:00.000Z']);
+  });
+
+  it('refuses slots of a day that overlap, a slot without length and a range backwards or over a year', async () => {
+    const { prisma, service } = stepService();
+    const generate = (dto: Record<string, any>) =>
+      service.generateDefinedSlots('u1', 'l1', {
+        days: [6],
+        slots: weekend,
+        from: '2026-10-03',
+        to: '2026-10-10',
+        ...dto,
+      } as any);
+    const row = (startTime: string, endTime: string) => ({ startTime, endTime, price: 1 });
+
+    await expect(generate({ slots: [row('10:00', '12:00'), row('11:00', '13:00')] })).rejects.toThrow(
+      'errors.SLOT_TEMPLATE_OVERLAP',
+    );
+    await expect(generate({ slots: [row('22:00', '02:00'), row('01:00', '03:00')] })).rejects.toThrow(
+      'errors.SLOT_TEMPLATE_OVERLAP',
+    );
+    await expect(generate({ slots: [row('10:00', '10:00')] })).rejects.toThrow('errors.SLOT_TIMES_EQUAL');
+    await expect(generate({ to: '2026-10-02' })).rejects.toThrow('errors.SLOT_RANGE_INVALID');
+    await expect(generate({ to: '2027-11-03' })).rejects.toThrow('errors.SLOT_RANGE_TOO_LONG');
+    expect(prisma.definedSlot.createMany).not.toHaveBeenCalled();
+    expect(prisma.listing.update).not.toHaveBeenCalled();
+  });
+
+  it('changes one slot, its day, times and price, and nothing else', async () => {
+    const { prisma, service } = stepService({ slot: slotOne() });
+    const updated = await service.updateDefinedSlot('u1', 'l1', 's1', {
+      date: '2026-10-11',
+      startTime: '11:00',
+      endTime: '13:00',
+      price: 9000,
+    });
+
+    expect(prisma.definedSlot.update).toHaveBeenCalledWith({
+      where: { id: 's1' },
+      data: { startsAt: new Date('2026-10-11T09:00:00Z'), endsAt: new Date('2026-10-11T11:00:00Z'), price: 900000n },
+    });
+    expect(updated.price).toBe(9000);
+    expect(prisma.definedSlot.createMany).not.toHaveBeenCalled();
+    expect(prisma.listing.update).not.toHaveBeenCalled();
+    expect(prisma.listing.updateMany).toHaveBeenCalled();
+  });
+
+  it('keeps the time of a slot a booking holds but lets its price change', async () => {
+    const booked = stepService({ slot: slotOne(), booked: true });
+    await expect(
+      booked.service.updateDefinedSlot('u1', 'l1', 's1', {
+        date: '2026-10-10',
+        startTime: '11:00',
+        endTime: '13:00',
+        price: 9000,
+      }),
+    ).rejects.toThrow('errors.DEFINED_SLOT_BOOKED');
+    expect(booked.prisma.blockedTerm.findFirst).toHaveBeenCalledWith({
+      where: {
+        listingId: 'l1',
+        source: 'BOOKING',
+        startsAt: { lt: new Date('2026-10-10T10:00:00Z') },
+        endsAt: { gt: new Date('2026-10-10T08:00:00Z') },
+      },
+      select: { id: true },
+    });
+
+    const priced = stepService({ slot: slotOne(), booked: true });
+    await priced.service.updateDefinedSlot('u1', 'l1', 's1', {
+      date: '2026-10-10',
+      startTime: '10:00',
+      endTime: '12:00',
+      price: 9000,
+    });
+    expect(priced.prisma.blockedTerm.findFirst).not.toHaveBeenCalled();
+    expect(priced.prisma.definedSlot.update.mock.calls[0][0].data.price).toBe(900000n);
+  });
+
+  it('refuses moving a slot onto another one, into the past, or a slot it cannot find', async () => {
+    const elsewhere = { startTime: '10:00', endTime: '12:00', price: 9000 };
+    const twin = stepService({ slot: slotOne(), duplicate: true });
+    await expect(twin.service.updateDefinedSlot('u1', 'l1', 's1', { date: '2026-10-11', ...elsewhere })).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    expect(i18n.t).toHaveBeenCalledWith('errors.DEFINED_SLOT_DUPLICATE', expect.anything());
+
+    const past = stepService({ slot: slotOne() });
+    await expect(past.service.updateDefinedSlot('u1', 'l1', 's1', { date: '2026-09-30', ...elsewhere })).rejects.toThrow(
+      'errors.DEFINED_SLOT_IN_PAST',
+    );
+
+    const missing = stepService();
+    await expect(
+      missing.service.updateDefinedSlot('u1', 'l1', 's1', { date: '2026-10-11', ...elsewhere }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('saves working hours and their prices in one write, touching periods allowed, overlapping ones refused', async () => {
+    const { prisma, service } = stepService({ listing: { slotSubmode: 'WORKING_HOURS' } });
+    await service.setWorkingSchedule('u1', 'l1', {
+      hours: [
+        { dayOfWeek: 1, startsAt: '10:00', endsAt: '14:00' },
+        { dayOfWeek: 1, startsAt: '14:00', endsAt: '22:00' },
+        { dayOfWeek: 5, startsAt: '18:00', endsAt: '02:00' },
+      ],
+      ranges: [{ startTime: '14:00', endTime: '22:00', price: 4200 }],
+    } as any);
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.workingHours.createMany.mock.calls[0][0].data).toHaveLength(3);
+    expect(prisma.hourlyPriceRange.createMany.mock.calls[0][0].data).toEqual([
+      { listingId: 'l1', dayOfWeek: null, startTime: '14:00', endTime: '22:00', price: 420000n },
+    ]);
+
+    await expect(
+      service.setWorkingSchedule('u1', 'l1', {
+        hours: [
+          { dayOfWeek: 5, startsAt: '18:00', endsAt: '02:00' },
+          { dayOfWeek: 5, startsAt: '01:00', endsAt: '03:00' },
+        ],
+        ranges: [],
+      } as any),
+    ).rejects.toThrow('errors.WORKING_HOURS_OVERLAP');
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+
+    const slots = stepService();
+    await expect(slots.service.setWorkingSchedule('u1', 'l1', { hours: [], ranges: [] } as any)).rejects.toThrow(
+      'errors.AVAILABILITY_MODE_NOT_SAVED',
+    );
+  });
+});
