@@ -116,20 +116,19 @@
           <fieldset class="cat-fieldset">
             <legend class="form-label">{{ t('admin.cat.bookingSection') }}</legend>
             <p class="admin-card-note cat-hint">{{ t('admin.cat.bookingSectionHint') }}</p>
-            <div class="cat-grid">
-              <div class="form-group">
-                <label class="form-label" for="cat-model">{{ t('admin.bookingModel') }}</label>
-                <select id="cat-model" v-model="form.defaultBookingModel" class="form-control form-select">
-                  <option v-for="m in BOOKING_MODELS" :key="m" :value="m">{{ m }}</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label class="form-label" for="cat-unit">{{ t('listing.priceUnit') }}</label>
-                <select id="cat-unit" v-model="form.defaultPriceUnit" class="form-control form-select">
-                  <option v-for="u in form.allowedPriceUnits" :key="u" :value="u">{{ u }}</option>
-                </select>
-              </div>
+            <!-- T129 part 4: the models it offers, as in Administracija > Rezervacioni modeli. -->
+            <div class="cat-models">
+              <label v-for="model in category.bookingModelOptions" :key="model.key" class="admin-check-row">
+                <input
+                  type="checkbox"
+                  class="admin-check"
+                  :checked="form.modelKeys.includes(model.key)"
+                  @change="toggleModel(model.key)"
+                />
+                {{ model.name }}<span v-if="!model.enabled" class="admin-card-note">&nbsp;({{ t('admin.models.off') }})</span>
+              </label>
             </div>
+            <p class="form-label">{{ t('admin.cat.allowedUnits') }}</p>
             <div class="admin-switch">
               <button
                 v-for="u in PRICE_UNITS"
@@ -138,7 +137,13 @@
                 class="admin-switch-btn"
                 :class="{ 'is-active': form.allowedPriceUnits.includes(u) }"
                 @click="toggleUnit(u)"
-              >{{ u }}</button>
+              >{{ unitName(u) }}</button>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="cat-unit">{{ t('admin.models.defaultUnit') }}</label>
+              <select id="cat-unit" v-model="form.defaultPriceUnit" class="form-control form-select">
+                <option v-for="u in form.allowedPriceUnits" :key="u" :value="u">{{ unitName(u) }}</option>
+              </select>
             </div>
           </fieldset>
 
@@ -264,8 +269,9 @@ const api = useApi()
 const route = useRoute()
 
 const TABS = ['basics', 'attributes', 'filters', 'preview', 'history', 'advanced']
-const BOOKING_MODELS = ['PER_STAY', 'PER_SLOT', 'NO_BOOKING']
 const PRICE_UNITS = ['NIGHT', 'DAY', 'HOUR', 'SLOT', 'MONTH', 'YEAR', 'GUEST']
+const UNIT_LABELS = { NIGHT: 'Night', DAY: 'Day', HOUR: 'Hour', SLOT: 'Slot', MONTH: 'Month', YEAR: 'Year', GUEST: 'Guest' }
+const unitName = (unit) => t(`listing.unit${UNIT_LABELS[unit]}`)
 
 const tab = ref(TABS.includes(route.query.tab) ? route.query.tab : 'basics')
 watch(tab, (value) => navigateTo({ query: { ...route.query, tab: value } }, { replace: true }))
@@ -295,7 +301,7 @@ const form = reactive({
   description: '',
   parentId: null,
   icon: '',
-  defaultBookingModel: 'PER_STAY',
+  modelKeys: [],
   defaultPriceUnit: 'NIGHT',
   allowedPriceUnits: [],
   published: false,
@@ -311,7 +317,7 @@ function fillForm(c) {
     parentId: c.parentId || null,
     // Only an icon from the library counts as picked; the seed's old names fall back to the slug.
     icon: CATEGORY_ICON_KEYS.includes(c.icon) ? c.icon : '',
-    defaultBookingModel: c.defaultBookingModel,
+    modelKeys: [...(c.modelKeys || [])],
     defaultPriceUnit: c.defaultPriceUnit,
     allowedPriceUnits: [...c.allowedPriceUnits],
     published: c.published,
@@ -321,6 +327,12 @@ watch(category, fillForm, { immediate: true })
 
 function iconPreview(key) {
   return getCategoryIconMarkup(key) || getSearchCategoryIconMarkup(key)
+}
+
+function toggleModel(key) {
+  const i = form.modelKeys.indexOf(key)
+  if (i === -1) form.modelKeys.push(key)
+  else if (form.modelKeys.length > 1) form.modelKeys.splice(i, 1)
 }
 
 function toggleUnit(u) {
@@ -349,10 +361,14 @@ async function saveBasics() {
       parentId: form.parentId,
       // An empty pick clears the icon, so the category's own slug decides again.
       icon: form.icon || '',
-      defaultBookingModel: form.defaultBookingModel,
-      defaultPriceUnit: form.defaultPriceUnit,
-      allowedPriceUnits: form.allowedPriceUnits,
       ...(category.value.status === 'ACTIVE' ? { published: form.published } : {}),
+    })
+    // T129 part 4: the models, the units and the default one go together; a
+    // model brings a unit along when the category allows none of its own.
+    await api.put(`/admin/categories/${category.value.id}/booking-models`, {
+      modelKeys: form.modelKeys,
+      allowedPriceUnits: form.allowedPriceUnits,
+      defaultPriceUnit: form.defaultPriceUnit,
     })
     await Promise.all([refresh(), refreshTree(), loadAttributes()])
     formSaved.value = true
@@ -438,15 +454,20 @@ function actionLabel(row) {
 // Only the fields a person would read; ids, timestamps and counters are noise.
 const HISTORY_FIELDS = [
   'name', 'slug', 'shortDescription', 'description', 'parentId', 'icon', 'imageUrl', 'published', 'status',
-  'displayOrder', 'defaultBookingModel', 'allowedPriceUnits', 'defaultPriceUnit', 'type', 'required', 'unit',
+  'displayOrder', 'allowedPriceUnits', 'defaultPriceUnit', 'type', 'required', 'unit',
   'options', 'reason', 'mergedIntoId', 'key', 'hidden', 'showOnListing', 'dependsOnAttrKey', 'dependsOnOptionKey',
   'cardFactKeys', 'listingFactKeys', 'attributeKey', 'optionKey', 'control', 'placement', 'thresholds', 'order',
+  'modelKeys',
 ]
 const categoryName = (id) => (tree.value || []).find((c) => c.id === id)?.name
 
 // Key facts and orders are kept as keys; they read better as the fields' and items' names.
-const KEY_LIST_FIELDS = ['cardFactKeys', 'listingFactKeys', 'order']
-function keyName(key) {
+const KEY_LIST_FIELDS = ['cardFactKeys', 'listingFactKeys', 'order', 'modelKeys', 'allowedPriceUnits']
+function keyName(key, field) {
+  // A unit and a model can share a key (DAY), so the field decides which it is.
+  if (field === 'allowedPriceUnits') return UNIT_LABELS[key] ? unitName(key) : key
+  const model = field === 'modelKeys' && category.value?.bookingModelOptions?.find((m) => m.key === key)
+  if (model) return model.name
   const attribute = attributes.value.find((a) => a.key === key)
   if (attribute) return attribute.name
   for (const a of attributes.value) {
@@ -460,10 +481,14 @@ function show(field, value) {
   if (value === undefined || value === null || value === '') return t('admin.cat.empty')
   if (typeof value === 'boolean') return value ? t('admin.cat.yes') : t('admin.cat.no')
   if ((field === 'parentId' || field === 'mergedIntoId') && categoryName(value)) return categoryName(value)
-  if (KEY_LIST_FIELDS.includes(field) && Array.isArray(value)) return value.map(keyName).join(', ') || t('admin.cat.empty')
+  if (KEY_LIST_FIELDS.includes(field) && Array.isArray(value)) return value.map((key) => keyName(key, field)).join(', ') || t('admin.cat.empty')
+  if (field === 'defaultPriceUnit' && UNIT_LABELS[value]) return unitName(value)
   if (Array.isArray(value)) return value.map((item) => (typeof item === 'object' ? item.name || item.key : item)).join(', ') || t('admin.cat.empty')
   return String(value)
 }
+
+// An empty text or list and none read the same (a saved form sends the icon as '').
+const emptyAsNull = (value) => (value === undefined || value === '' || (Array.isArray(value) && !value.length) ? null : value)
 
 function changesOf(row) {
   // A reorder keeps the id lists; it reads as the order changing, nothing per field.
@@ -471,7 +496,7 @@ function changesOf(row) {
   const before = row.oldValue || {}
   const after = row.newValue || {}
   return HISTORY_FIELDS.filter((field) => field in before || field in after)
-    .filter((field) => JSON.stringify(before[field] ?? null) !== JSON.stringify(after[field] ?? null))
+    .filter((field) => JSON.stringify(emptyAsNull(before[field])) !== JSON.stringify(emptyAsNull(after[field])))
     .map((field) => ({
       field,
       label: t(`admin.cat.fields.${field}`),
@@ -576,6 +601,12 @@ useSeoMeta({ title: () => category.value?.name || t('admin.categories') })
   margin: 0;
   padding: 0;
   border: 0;
+}
+
+.cat-models {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 22px;
 }
 
 .cat-icons {

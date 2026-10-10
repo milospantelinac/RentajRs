@@ -468,6 +468,7 @@ model Category {
   proposedByUser   User?               @relation("CategoryProposedBy", fields: [proposedByUserId], references: [id])
   attributes       CategoryAttribute[]
   filters          CategoryFilter[]
+  bookingModels    CategoryBookingModel[]
   listings         Listing[]
   featuredWaitlist FeaturedWaitlist[]
   emptySearches    EmptySearch[]
@@ -555,6 +556,34 @@ model AttributeOption {
   attribute CategoryAttribute @relation(fields: [attributeId], references: [id], onDelete: Cascade)
 
   @@unique([attributeId, key])
+}
+
+/// T129 part 3: a booking model as the admin panel shows it: the name and
+/// description the owner sees in the wizard, on or off, the price units it
+/// takes (only "Po terminu" has a choice, per slot and/or per guest) and its
+/// order. What the model does stays in code, by key
+/// (common/utils/booking-models.ts BOOKING_MODEL_SETUPS).
+model BookingModelSetting {
+  key          String                 @id
+  name         String
+  description  String
+  enabled      Boolean                @default(true)
+  priceUnits   PriceUnit[]
+  displayOrder Int                    @default(0)
+  updatedAt    DateTime               @default(now()) @updatedAt @db.Timestamptz
+  categories   CategoryBookingModel[]
+}
+
+/// T129 part 4: the models a category offers in the wizard. Taking one away
+/// leaves the listings already on it as they are.
+model CategoryBookingModel {
+  categoryId String @db.Uuid
+  modelKey   String
+
+  category Category            @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  model    BookingModelSetting @relation(fields: [modelKey], references: [key], onDelete: Cascade)
+
+  @@id([categoryId, modelKey])
 }
 
 /// Generic translation store (R137). Listing title/description are the deliberate

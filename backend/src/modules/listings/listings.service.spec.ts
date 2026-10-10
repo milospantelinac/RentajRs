@@ -404,10 +404,32 @@ describe('ListingsService#revealOwnerPhone (T134)', () => {
   });
 });
 
-describe('ListingsService#updateListing keeps one way of booking (T140, T126, T138)', () => {
+describe('ListingsService#updateListing keeps one way of booking (T140, T126, T138, T129)', () => {
   const playroom = { id: 'c1', slug: 'igraonice', defaultBookingModel: 'PER_SLOT' };
   const hall = { id: 'c-hall', slug: 'sale-za-proslave', defaultBookingModel: 'PER_SLOT' };
   const ownRows = { where: { listingId: 'l1' } };
+  // T129: what each category offers, as migration 20261010190000 sets it.
+  const OFFERED: Record<string, Array<{ key: string; priceUnits: string[] }>> = {
+    igraonice: [
+      { key: 'DEFINED_SLOTS', priceUnits: ['SLOT'] },
+      { key: 'WORKING_HOURS', priceUnits: ['HOUR'] },
+      { key: 'CONTACT', priceUnits: [] },
+    ],
+    'sale-za-proslave': [
+      { key: 'DEFINED_SLOTS', priceUnits: ['SLOT', 'GUEST'] },
+      { key: 'CONTACT', priceUnits: [] },
+    ],
+    ostalo: [
+      { key: 'DAY', priceUnits: ['DAY'] },
+      { key: 'NIGHT', priceUnits: ['NIGHT'] },
+      { key: 'MONTH', priceUnits: ['MONTH'] },
+      { key: 'CONTACT', priceUnits: [] },
+    ],
+    'putnicka-vozila': [
+      { key: 'DAY', priceUnits: ['DAY'] },
+      { key: 'CONTACT', priceUnits: [] },
+    ],
+  };
 
   function setup(row: Record<string, any>, options: { category?: any; futureBookings?: number; lowestSlot?: bigint | null } = {}) {
     const deleteMany = () => jest.fn(async () => ({ count: 0 }));
@@ -428,7 +450,9 @@ describe('ListingsService#updateListing keeps one way of booking (T140, T126, T1
       datePriceOverride: { deleteMany: deleteMany() },
       $transaction: jest.fn(async (writes: Promise<unknown>[]) => Promise.all(writes)),
     };
-    return { prisma, service: makeService(prisma) };
+    const slug = options.category?.slug ?? row.category?.slug ?? playroom.slug;
+    const taxonomy = { getOfferedBookingModels: jest.fn().mockResolvedValue(OFFERED[slug] ?? []) };
+    return { prisma, service: makeService(prisma, taxonomy) };
   }
 
   const hoursRow = listingRow({
@@ -489,7 +513,7 @@ describe('ListingsService#updateListing keeps one way of booking (T140, T126, T1
   it('keeps the way while a booking is ahead and changes nothing', async () => {
     const { prisma, service } = setup(hoursRow, { futureBookings: 1 });
 
-    await expect(service.updateListing('u1', 'l1', { slotSubmode: 'DEFINED_SLOTS' } as any)).rejects.toBeInstanceOf(
+    await expect(service.updateListing('u1', 'l1', { slotSubmode: 'DEFINED_SLOTS', priceUnit: 'SLOT' } as any)).rejects.toBeInstanceOf(
       BadRequestException,
     );
     expect(i18n.t).toHaveBeenCalledWith('errors.SLOT_MODE_LOCKED_BY_BOOKINGS');
@@ -514,13 +538,13 @@ describe('ListingsService#updateListing keeps one way of booking (T140, T126, T1
     expect(same.prisma.workingHours.deleteMany).not.toHaveBeenCalled();
   });
 
-  it('keeps a party hall on its defined slots', async () => {
+  it('keeps a party hall on its defined slots, the only model it is offered', async () => {
     const { prisma, service } = setup(slotsRow, { category: hall });
 
     await expect(service.updateListing('u1', 'l1', { slotSubmode: 'WORKING_HOURS' } as any)).rejects.toBeInstanceOf(
       BadRequestException,
     );
-    expect(i18n.t).toHaveBeenCalledWith('errors.SLOT_MODE_NOT_ALLOWED');
+    expect(i18n.t).toHaveBeenCalledWith('errors.BOOKING_MODEL_NOT_OFFERED');
     expect(prisma.listing.update).not.toHaveBeenCalled();
     await expect(service.updateListing('u1', 'l1', { slotSubmode: 'DEFINED_SLOTS', priceUnit: 'GUEST' } as any)).resolves.toBeDefined();
   });
@@ -534,19 +558,27 @@ describe('ListingsService#updateListing keeps one way of booking (T140, T126, T1
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
-  it('refuses a stay by the hour, but lets a listing still on it save its other steps (T126)', async () => {
+  it('moves a listing only to a model its category offers, and lets one keep its own (T126, T129)', async () => {
+    // A stay by the hour stands for no model; the listing still on it saves as it is.
     const row = listingRow({ bookingModel: 'PER_STAY', slotSubmode: null, priceUnit: 'HOUR', category: { slug: 'putnicka-vozila' } });
     const { prisma, service } = setup(row);
 
-    await expect(service.updateListing('u1', 'l1', { priceUnit: 'HOUR' } as any)).rejects.toBeInstanceOf(BadRequestException);
-    expect(i18n.t).toHaveBeenCalledWith('errors.PRICE_UNIT_NOT_ALLOWED');
-    await expect(service.updateListing('u1', 'l1', { description: 'Novi opis' } as any)).resolves.toBeDefined();
+    await expect(service.updateListing('u1', 'l1', { priceUnit: 'NIGHT' } as any)).rejects.toBeInstanceOf(BadRequestException);
+    expect(i18n.t).toHaveBeenCalledWith('errors.BOOKING_MODEL_NOT_OFFERED');
+    await expect(service.updateListing('u1', 'l1', { description: 'Novi opis', priceUnit: 'HOUR' } as any)).resolves.toBeDefined();
     await expect(service.updateListing('u1', 'l1', { priceUnit: 'DAY' } as any)).resolves.toBeDefined();
-    expect(prisma.listing.update).toHaveBeenCalledTimes(2);
+    await expect(service.updateListing('u1', 'l1', { bookingModel: 'NO_BOOKING' } as any)).resolves.toBeDefined();
+    expect(prisma.listing.update).toHaveBeenCalledTimes(3);
+  });
+
+  it('lets a listing keep a model taken away from its category (T129)', async () => {
+    const { prisma, service } = setup(hoursRow, { category: hall });
+    await expect(service.updateListing('u1', 'l1', { slotSubmode: 'WORKING_HOURS', price: 1500 } as any)).resolves.toBeDefined();
+    expect(prisma.listing.update).toHaveBeenCalled();
   });
 
   it("drops a stay's date prices between nights and months, not between nights and days", async () => {
-    const night = listingRow({ bookingModel: 'PER_STAY', slotSubmode: null, priceUnit: 'NIGHT' });
+    const night = listingRow({ bookingModel: 'PER_STAY', slotSubmode: null, priceUnit: 'NIGHT', category: { slug: 'ostalo' } });
     const toMonth = setup(night);
     await toMonth.service.updateListing('u1', 'l1', { priceUnit: 'MONTH' } as any);
     expect(toMonth.prisma.datePriceOverride.deleteMany).toHaveBeenCalledWith(ownRows);
@@ -556,7 +588,7 @@ describe('ListingsService#updateListing keeps one way of booking (T140, T126, T1
     await toDay.service.updateListing('u1', 'l1', { priceUnit: 'DAY' } as any);
     expect(toDay.prisma.datePriceOverride.deleteMany).not.toHaveBeenCalled();
 
-    const fromMonth = setup(listingRow({ bookingModel: 'PER_STAY', slotSubmode: null, priceUnit: 'MONTH' }));
+    const fromMonth = setup(listingRow({ bookingModel: 'PER_STAY', slotSubmode: null, priceUnit: 'MONTH', category: { slug: 'ostalo' } }));
     await fromMonth.service.updateListing('u1', 'l1', { priceUnit: 'NIGHT' } as any);
     expect(fromMonth.prisma.datePriceOverride.deleteMany).toHaveBeenCalledWith(ownRows);
   });

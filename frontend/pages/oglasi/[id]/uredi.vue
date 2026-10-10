@@ -129,28 +129,29 @@
         </div>
 
         <!-- 249:300. T140: another way is taken only once the owner agrees to lose
-             the old one's terms, which go when this step is saved. -->
+             the old one's terms, which go when this step is saved. T129: the
+             ways are the models the category offers, named in the panel. -->
         <div
-          v-if="form.bookingModel === 'PER_SLOT'"
+          v-if="showSetupChoice"
           :key="slotSubmodeRenderKey"
           class="pricing-choice"
           role="radiogroup"
           aria-labelledby="pricing-submode-label"
         >
-          <p id="pricing-submode-label" class="pricing-label">{{ t('listing.slotCreationMethod') }} <span class="pricing-required">*</span></p>
+          <p id="pricing-submode-label" class="pricing-label">{{ setupChoiceLabel }} <span class="pricing-required">*</span></p>
           <label
-            v-for="option in slotSubmodeOptions"
+            v-for="option in bookingSetups"
             :key="option.value"
             class="pricing-option"
-            :class="{ 'is-selected': form.slotSubmode === option.value }"
+            :class="{ 'is-selected': currentSetup?.value === option.value }"
           >
             <input
               type="radio"
               name="pricing-submode"
               :value="option.value"
-              :checked="form.slotSubmode === option.value"
+              :checked="currentSetup?.value === option.value"
               class="visually-hidden"
-              @change="onSlotSubmodeChange(option.value)"
+              @change="onSetupChange(option)"
             />
             <span class="pricing-radio" aria-hidden="true" />
             <span class="pricing-option-text">
@@ -161,7 +162,7 @@
           <p v-if="slotSubmodeError" class="pricing-error"><img src="/images/icons/field-error.svg" alt="" />{{ slotSubmodeError }}</p>
           <p v-if="slotSubmodePending" class="pricing-note">{{ t('listing.slotModeChangePending') }}</p>
           <!-- T138: a party hall has the one way, so there is no choice to explain. -->
-          <p v-if="slotSubmodeOptions.length > 1" class="pricing-note">
+          <p v-if="bookingSetups.length > 1" class="pricing-note">
             {{ t('listing.slotSubmodeNextStepNote', { step: t('listing.stepAvailability') }) }}
           </p>
         </div>
@@ -192,7 +193,7 @@
                     id="pricing-unit"
                     :value="form.priceUnit"
                     class="pricing-select-control"
-                    :disabled="form.bookingModel === 'PER_SLOT' && !isPartyHallCategory"
+                    :disabled="form.bookingModel === 'PER_SLOT' && allowedPriceUnitsForChoice.length < 2"
                     @change="onPriceUnitChange"
                   >
                     <option v-for="unit in allowedPriceUnitsForChoice" :key="unit" :value="unit">
@@ -238,7 +239,7 @@
                step), but the unit choice lives here since it changes how
                EVERY slot's price is interpreted, not just a field on this
                step. -->
-          <div v-if="isPartyHallCategory" class="pricing-field">
+          <div v-if="allowedPriceUnitsForChoice.length > 1" class="pricing-field">
             <label for="pricing-unit" class="pricing-label">{{ t('listing.priceUnit') }}</label>
             <div class="pricing-select pricing-select-alone">
               <select id="pricing-unit" v-model="form.priceUnit" class="pricing-select-control">
@@ -1381,42 +1382,92 @@ function goToStepKey(key) {
   if (index >= 0) currentStep.value = index
 }
 
-// "Način rezervacije" (Dodavanje Oglasa spec §0/§2) — the owner never picks
-// PER_STAY vs PER_SLOT directly; that always comes from the category. This
-// binary choice is all that's actually theirs: online (whichever model the
-// category has) or no booking system at all.
+// "Način rezervacije" (Dodavanje Oglasa spec §0/§2): online (one of the
+// models the category offers) or none at all.
+//
+// T129 parts 3 and 4: the models are the category's own, set in
+// Administracija > Rezervacioni modeli, with the name and description the
+// admin gave them (category.bookingModels, from GET /categories/:slug). A
+// "setup" is how a listing is booked: a stay, working hours or defined slots.
+// Models that differ only in their unit (Po noći and Po mesecu, Po radnom
+// vremenu po satu and po gostu) share one, and the unit select picks between
+// them. Before T129 the category's defaultBookingModel and slug lists decided
+// this (T111, T126, T138).
+const offeredModels = computed(() => listing.value?.category?.bookingModels || [])
+const contactModel = computed(() => offeredModels.value.find((model) => model.key === 'CONTACT'))
+const bookingSetups = computed(() => {
+  const setups = []
+  for (const model of offeredModels.value) {
+    if (model.key === 'CONTACT') continue
+    const value = `${model.bookingModel}:${model.slotSubmode || ''}`
+    const setup = setups.find((candidate) => candidate.value === value)
+    if (setup) {
+      setup.models.push(model)
+      for (const unit of model.priceUnits) if (!setup.units.includes(unit)) setup.units.push(unit)
+    } else {
+      setups.push({ value, bookingModel: model.bookingModel, slotSubmode: model.slotSubmode, models: [model], units: [...model.priceUnits] })
+    }
+  }
+  return setups.map((setup) => ({
+    ...setup,
+    title: setup.models.map((model) => model.name).join(' / '),
+    description: setup.models[0].description,
+  }))
+})
+// A stay has no way of creating terms, so only a slot listing compares it.
+const currentSetup = computed(() =>
+  bookingSetups.value.find(
+    (setup) =>
+      setup.bookingModel === form.bookingModel &&
+      (form.bookingModel !== 'PER_SLOT' || setup.slotSubmode === form.slotSubmode),
+  ),
+)
+// The one a new listing starts on: the one of the category's default unit.
+const preferredSetup = computed(
+  () => bookingSetups.value.find((setup) => setup.units.includes(listing.value?.category?.defaultPriceUnit)) || bookingSetups.value[0],
+)
+function applySetup(setup) {
+  if (!setup) return
+  form.bookingModel = setup.bookingModel
+  if (setup.slotSubmode) form.slotSubmode = setup.slotSubmode
+  if (!setup.units.includes(form.priceUnit)) {
+    const fallback = listing.value?.category?.defaultPriceUnit
+    form.priceUnit = setup.units.includes(fallback) ? fallback : setup.units[0]
+  }
+}
+
 const bookingChoice = ref('ONLINE')
 watch(bookingChoice, (val) => {
-  form.bookingModel = val === 'ONLINE' ? listing.value?.category?.defaultBookingModel || 'PER_STAY' : 'NO_BOOKING'
-  if (form.bookingModel === 'PER_SLOT' && !form.slotSubmode) form.slotSubmode = defaultSlotSubmode()
+  if (val === 'NONE') {
+    form.bookingModel = 'NO_BOOKING'
+    return
+  }
+  if (form.bookingModel === 'NO_BOOKING' || !currentSetup.value) applySetup(preferredSetup.value)
 })
-// T138: a party hall is booked by defined slots only; everything else starts on working hours.
-function defaultSlotSubmode() {
-  return usesDefinedSlotsOnly(listing.value) ? 'DEFINED_SLOTS' : 'WORKING_HOURS'
-}
 // Dizajn 21 (249:287, 249:300): both choices as option cards. The online card's
 // description is worded for the category's own booking model; T123 keeps the
-// title (also the Pregled row) to "Online rezervacije" for every model.
+// title (also the Pregled row) to "Online rezervacije" for every model. T129:
+// "Samo kontakt" is a model like the others, named in the panel.
 const bookingOptions = computed(() => {
-  const perSlot = listing.value?.category?.defaultBookingModel === 'PER_SLOT'
-  return [
-    {
+  const options = []
+  if (bookingSetups.value.length) {
+    const perSlot = preferredSetup.value?.bookingModel === 'PER_SLOT'
+    options.push({
       value: 'ONLINE',
       title: t('listing.pricingBookingOnline'),
       description: t(perSlot ? 'listing.pricingBookingOnlineSlotDesc' : 'listing.pricingBookingOnlineStayDesc'),
-    },
-    { value: 'NONE', title: t('listing.pricingBookingNone'), description: t('listing.pricingBookingNoneDesc') },
-  ]
+    })
+  }
+  if (contactModel.value) options.push({ value: 'NONE', title: contactModel.value.name, description: contactModel.value.description })
+  return options
 })
-const slotSubmodeOptions = computed(() => {
-  const definedSlots = { value: 'DEFINED_SLOTS', title: t('listing.slotSubmodeDefined'), description: t('listing.slotSubmodeDefinedDesc') }
-  // T138: a party hall keeps only "Definisani termini" (Tamara, 2026-10-09).
-  if (usesDefinedSlotsOnly(listing.value)) return [definedSlots]
-  return [
-    { value: 'WORKING_HOURS', title: t('listing.slotSubmodeWorkingHours'), description: t('listing.slotSubmodeWorkingHoursDesc') },
-    definedSlots,
-  ]
-})
+// Slot listings always name their way (249:300), a stay only when the category offers another kind.
+const showSetupChoice = computed(
+  () => form.bookingModel !== 'NO_BOOKING' && (bookingSetups.value.length > 1 || form.bookingModel === 'PER_SLOT'),
+)
+const setupChoiceLabel = computed(() =>
+  bookingSetups.value.every((setup) => setup.bookingModel === 'PER_SLOT') ? t('listing.slotCreationMethod') : t('listing.bookingModelChoice'),
+)
 
 // T140: switching the way terms are created deletes the old way's terms and
 // prices when this step is saved, so the owner agrees to it first, and while
@@ -1427,17 +1478,25 @@ const slotSubmodeRenderKey = ref(0)
 const slotSubmodePending = computed(
   () => !!listing.value?.slotSubmode && form.bookingModel === 'PER_SLOT' && form.slotSubmode !== listing.value.slotSubmode,
 )
-function onSlotSubmodeChange(value) {
+function onSetupChange(setup) {
   slotSubmodeError.value = ''
-  const saved = listing.value?.slotSubmode
-  if (!saved || value === saved) {
-    form.slotSubmode = value
+  const saved = listing.value
+  // T129: a stay and a slot listing are booked from different calendars, so
+  // that switch waits for the bookings ahead too.
+  const switchesKind = saved?.bookingModel !== 'NO_BOOKING' && setup.bookingModel !== saved?.bookingModel
+  const switchesSlots =
+    setup.bookingModel === 'PER_SLOT' && saved?.bookingModel === 'PER_SLOT' && !!saved.slotSubmode && setup.slotSubmode !== saved.slotSubmode
+  if (!switchesKind && !switchesSlots) {
+    applySetup(setup)
     return
   }
-  if (listing.value.hasFutureBookings) {
+  if (saved.hasFutureBookings) {
     slotSubmodeError.value = t('listing.slotModeLocked')
-  } else if (window.confirm(t(value === 'DEFINED_SLOTS' ? 'listing.slotModeSwitchToSlotsConfirm' : 'listing.slotModeSwitchToHoursConfirm'))) {
-    form.slotSubmode = value
+  } else if (
+    !switchesSlots ||
+    window.confirm(t(setup.slotSubmode === 'DEFINED_SLOTS' ? 'listing.slotModeSwitchToSlotsConfirm' : 'listing.slotModeSwitchToHoursConfirm'))
+  ) {
+    applySetup(setup)
     return
   }
   slotSubmodeRenderKey.value++
@@ -1479,21 +1538,17 @@ const availabilityPending = computed(() => {
   return (form.priceUnit === 'MONTH') !== (saved.priceUnit === 'MONTH')
 })
 
-// PER_SLOT never shows a free price-unit choice (always HOUR for working
-// hours, SLOT for defined slots — each slot carries its own price instead) —
-// T111's exception: Sale za proslave may opt into GUEST instead, and that
-// choice should survive switching between the two submodes, not get
-// silently reset back to HOUR/SLOT by this same watcher.
+// T129: the unit is one of the chosen model's (per slot or per guest for
+// "Po terminu" where the category allows both); one it can't take becomes the
+// category's default, or the model's first. Dizajn 50: an Ostalo listing priced
+// per slot without booking, switched to online booking, takes a stay unit.
 watch(
   () => [form.bookingModel, form.slotSubmode],
   () => {
-    if (form.bookingModel === 'PER_SLOT' && form.priceUnit !== 'GUEST') {
-      form.priceUnit = form.slotSubmode === 'DEFINED_SLOTS' ? 'SLOT' : 'HOUR'
-    } else if (form.bookingModel === 'PER_STAY' && form.priceUnit === 'SLOT') {
-      // Dizajn 50: an Ostalo listing priced per slot without booking, switched
-      // to online booking, takes the category's default unit instead.
-      form.priceUnit = listing.value?.category?.defaultPriceUnit || 'DAY'
-    }
+    const units = allowedPriceUnitsForChoice.value
+    if (form.bookingModel === 'NO_BOOKING' || !units.length || units.includes(form.priceUnit)) return
+    const fallback = listing.value?.category?.defaultPriceUnit
+    form.priceUnit = units.includes(fallback) ? fallback : units[0]
   },
 )
 
@@ -1518,20 +1573,12 @@ const showGapAfter = computed(
 // actually show for a real listing. T117: machines are picked up and
 // returned too.
 const showVehicleTimes = computed(() => usesPickupAndReturn(listing.value))
-// T111 — the only category allowed to charge "po gostu" instead of the
-// submode's usual per-hour/per-term rate.
-const isPartyHallCategory = computed(() => listing.value?.category?.slug === 'sale-za-proslave')
-const autoSlotPriceUnit = computed(() => (form.slotSubmode === 'DEFINED_SLOTS' ? 'SLOT' : 'HOUR'))
+// T129: the units of the chosen model (T111's per guest is a unit of "Po
+// terminu" the panel gives the categories that allow it). Without booking the
+// unit only labels the price, so any the category allows will do.
 const allowedPriceUnitsForChoice = computed(() => {
-  if (form.bookingModel === 'PER_SLOT') {
-    return isPartyHallCategory.value ? [autoSlotPriceUnit.value, 'GUEST'] : [autoSlotPriceUnit.value]
-  }
-  const units = listing.value?.category?.allowedPriceUnits || []
-  // Dizajn 50: "po terminu" belongs to slot booking. Only Ostalo allows it next
-  // to stay booking (its units cover whatever "Otključaj svoju kategoriju"
-  // sends). T126: "Po satu" is gone, so an online stay is priced by the day,
-  // the night or the month; hours belong to "Po radnom vremenu".
-  return form.bookingModel === 'PER_STAY' ? units.filter(isStayPriceUnit) : units
+  if (form.bookingModel === 'NO_BOOKING') return listing.value?.category?.allowedPriceUnits || []
+  return currentSetup.value?.units || []
 })
 // A listing without booking is never charged, so its weekend price stays hidden
 // (and kept) until online booking is back on.
@@ -2492,11 +2539,11 @@ const reviewSections = computed(() => {
       value: bookingOptions.value.find((option) => option.value === bookingChoice.value)?.title || '',
     },
   ]
-  if (form.bookingModel === 'PER_SLOT') {
+  if (showSetupChoice.value) {
     pricingRows.push({
       key: 'submode',
-      label: t('listing.slotCreationMethod'),
-      value: slotSubmodeOptions.value.find((option) => option.value === form.slotSubmode)?.title || t('listing.reviewNotSelected'),
+      label: setupChoiceLabel.value,
+      value: currentSetup.value?.title || t('listing.reviewNotSelected'),
     })
   }
   if (showFlatPriceFields.value) {
@@ -2591,7 +2638,7 @@ const citiesInRegion = computed(() => cities.value.filter((c) => c.regionId === 
 // time slots. Stay listings keep the general wording on those three steps.
 const stepSubtitle = computed(() => {
   const step = steps.value[currentStep.value]
-  if (step.key === 'pricing' && listing.value?.category?.defaultBookingModel === 'PER_SLOT') {
+  if (step.key === 'pricing' && preferredSetup.value?.bookingModel === 'PER_SLOT') {
     return t('listing.stepPricingDescSlot')
   }
   if (step.key === 'availability' && form.bookingModel === 'PER_SLOT') {
@@ -2860,6 +2907,8 @@ async function loadListing() {
     // T129: the card preview's key facts, the parent's when the category has none.
     listing.value.category.cardFactKeys = categoryDetail.cardFactKeys
     listing.value.category.listingFactKeys = categoryDetail.listingFactKeys
+    // T129: the booking models the category offers, as the panel set them.
+    listing.value.category.bookingModels = categoryDetail.bookingModels || []
     // T129: a field or item the admin hid is offered only to a listing that already has it.
     listing.value.category.attributes = categoryDetail.attributes
       .filter((attr) => !attr.hidden || valueByAttributeId.has(attr.id))
@@ -2896,19 +2945,16 @@ async function loadListing() {
     cancellationPolicyType: listing.value.cancellationPolicyType || null,
     cancellationThreshold: listing.value.cancellationThreshold,
   })
-  bookingChoice.value = listing.value.bookingModel === 'NO_BOOKING' ? 'NONE' : 'ONLINE'
-  // The bookingChoice watcher only fires on an actual toggle — a freshly
-  // created PER_SLOT draft loads with slotSubmode still null (never set at
-  // creation) and bookingChoice starting at its already-'ONLINE' default,
-  // so nothing would otherwise pick WORKING_HOURS as the default submode.
-  if (form.bookingModel === 'PER_SLOT' && !form.slotSubmode) form.slotSubmode = defaultSlotSubmode()
-  // T138: a party hall still saved on working hours moves to defined slots
-  // with its next save of step 2, which drops the hours (T140).
-  if (usesDefinedSlotsOnly(listing.value) && form.slotSubmode !== 'DEFINED_SLOTS') form.slotSubmode = 'DEFINED_SLOTS'
-  // T126: a stay still billed by the hour takes the category's own unit (the day for vehicles).
-  if (form.bookingModel === 'PER_STAY' && !isStayPriceUnit(form.priceUnit)) {
-    form.priceUnit = listing.value.category?.defaultPriceUnit || 'DAY'
-  }
+  // T129: "Samo kontakt" the category no longer offers leaves online booking as the choice.
+  const contactOffered = !!contactModel.value || !bookingSetups.value.length
+  bookingChoice.value = listing.value.bookingModel === 'NO_BOOKING' && contactOffered ? 'NONE' : 'ONLINE'
+  // The bookingChoice watcher only fires on an actual toggle, and a freshly
+  // created PER_SLOT draft loads with slotSubmode still null. T129 (T138 and
+  // T126 before it): a listing on a model its category no longer offers, or
+  // on a unit the model doesn't take, moves to an offered one with its next
+  // save of step 2 (T140 drops the old way's terms then); until then its
+  // other steps save as they are.
+  if (form.bookingModel !== 'NO_BOOKING' || !contactOffered) applySetup(currentSetup.value || preferredSetup.value)
   Object.assign(location, {
     regionId: listing.value.regionId || '',
     cityId: listing.value.cityId || '',

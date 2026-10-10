@@ -1025,7 +1025,8 @@
     "reviewCancellationFree": "Free up to {value} before the start",
     "reviewSubmit": "Submit for approval",
     "resubmitForApproval": "Send for approval again",
-    "renewPackage": "Renew package"
+    "renewPackage": "Renew package",
+    "bookingModelChoice": "Booking model"
   },
   "search": {
     "sortRelevance": "Recommended",
@@ -1647,7 +1648,6 @@
     "create": "Create",
     "parentCategory": "Parent category",
     "bookingModel": "Booking model",
-    "allowedPriceUnits": "Allowed price units",
     "listingCount": "Listings",
     "categoryOnSite": "On the site",
     "categoryVisibility": {
@@ -1752,7 +1752,8 @@
       "disputes": "Disputes and listing reports waiting for a decision.",
       "emailTemplates": "The text of the messages the platform sends, in Serbian and English.",
       "content": "Static pages, the FAQ and the homepage video.",
-      "settings": "System values that change how the platform behaves."
+      "settings": "System values that change how the platform behaves.",
+      "bookingModels": "The ways of booking owners pick in the wizard, and which categories offer them."
     },
     "empty": {
       "queue": {
@@ -1875,7 +1876,7 @@
       "imageRemoveConfirm": "Remove the category image?",
       "noParent": "None (main category)",
       "bookingSection": "Booking and price",
-      "bookingSectionHint": "The default booking model and price units for new listings. Assigning models to categories in detail comes with the Booking models section.",
+      "bookingSectionHint": "The booking models the category offers in the wizard, and its price units. Listings already on a model keep it.",
       "published": "Shown on the site",
       "publishedHint": "Off: the category is a draft or hidden. Existing listings stay; owners are not offered it for new ones.",
       "saved": "Changes saved.",
@@ -1914,7 +1915,8 @@
         "filter_update": "Filter edited",
         "filter_delete": "Filter removed",
         "filter_reorder": "Filter order changed",
-        "category_facts": "Key facts changed"
+        "category_facts": "Key facts changed",
+        "category_models": "Booking models changed"
       },
       "fields": {
         "name": "name",
@@ -1950,14 +1952,16 @@
         "listingFactKeys": "on the listing",
         "order": "order",
         "dependsOnAttrKey": "condition (field)",
-        "dependsOnOptionKey": "condition (item)"
+        "dependsOnOptionKey": "condition (item)",
+        "modelKeys": "booking models"
       },
       "yes": "yes",
       "no": "no",
       "empty": "empty",
       "mergeHint": "Every listing moves to the chosen category and the old address leads to the new one. This cannot be undone.",
       "archiveHint": "Listings move to \"Ostalo\" and the category leaves the site until you restore it.",
-      "deleteHint": "Only a category without listings and subcategories can be deleted."
+      "deleteHint": "Only a category without listings and subcategories can be deleted.",
+      "allowedUnits": "Price units the category allows"
     },
     "attr": {
       "fieldsTitle": "Fields",
@@ -2066,6 +2070,28 @@
         "TOGGLE": "Yes / No switch",
         "OPTION_TOGGLE": "Switch for one item"
       }
+    },
+    "bookingModels": "Booking models",
+    "models": {
+      "listTitle": "Models",
+      "listHint": "The owner sees the name and description at the \"Price and booking method\" step. A model turned off is offered to no new listing; listings already on it keep working. The order is the wizard order.",
+      "name": "Name",
+      "description": "Description",
+      "enabled": "On (offered in the wizard)",
+      "units": "Price units",
+      "fixedUnit": "Price: {unit}",
+      "usage": "Categories: {categories}, listings: {listings}",
+      "offWarning": "Turned off while listings use it (listings: {count}). They keep working; new listings do not get it.",
+      "matrixTitle": "Categories and models",
+      "matrixHint": "Tick which models a category offers in the wizard and pick its default price unit. A change leaves existing listings as they are; the number under a box is how many listings use that model today.",
+      "off": "off",
+      "defaultUnit": "Default unit",
+      "listings": "listings: {count}",
+      "historyTitle": "Model change history",
+      "reordered": "Model order changed",
+      "descriptionChanged": "{name}: description changed",
+      "turnedOn": "on",
+      "turnedOff": "off"
     }
   },
   "home": {

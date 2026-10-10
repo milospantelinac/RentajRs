@@ -15,6 +15,7 @@ export const ADMIN_NAV_GROUPS = [
     items: [
       { to: '/admin/sporovi', labelKey: 'admin.disputes', icon: 'disputes' },
       { to: '/admin/kategorije', labelKey: 'admin.categories', icon: 'categories' },
+      { to: '/admin/rezervacioni-modeli', labelKey: 'admin.bookingModels', icon: 'models' },
       { to: '/admin/korisnici', labelKey: 'admin.users', icon: 'users' },
     ],
   },

@@ -18,7 +18,7 @@ import { containsContactInfo } from '../../common/utils/contact-detector';
 import { getIcalAvailability } from '../../common/utils/ical-availability';
 import { getGuestUnits } from '../../common/utils/guest-capacity';
 import {
-  DEFINED_SLOTS_ONLY_CATEGORY_SLUGS,
+  bookingModelKeyOf,
   STAY_PRICE_UNITS,
   changesDatePriceMeaning,
   isDefinedSlotsSetup,
@@ -289,23 +289,6 @@ export class ListingsService {
 
   async updateListing(userId: string, listingId: string, dto: UpdateListingDto) {
     const listing = await this.assertOwnership(userId, listingId);
-    const category =
-      dto.bookingModel !== undefined || dto.slotSubmode !== undefined
-        ? await this.prisma.category.findUniqueOrThrow({ where: { id: listing.categoryId } })
-        : null;
-
-    // Dodavanje Oglasa spec §0/§2 — the owner only ever chooses "online
-    // rezervacije" vs "bez rezervacije"; PER_STAY vs PER_SLOT always comes
-    // from the category. Guard against a client sending a mismatched value.
-    // Exempt "Otključaj svoju kategoriju" listings (Kategorije spec §8) —
-    // they're parked under the Ostalo fallback with their OWN owner-chosen
-    // bookingModel until an admin assigns the real category, so Ostalo's
-    // own defaultBookingModel isn't the constraint yet.
-    if (category && dto.bookingModel !== undefined && dto.bookingModel !== 'NO_BOOKING' && !listing.pendingCategoryAssignment) {
-      if (dto.bookingModel !== category.defaultBookingModel) {
-        throw new BadRequestException('bookingModel must match the category\'s booking model, or be NO_BOOKING');
-      }
-    }
 
     // How the listing is booked once this update is saved.
     const next = {
@@ -313,20 +296,31 @@ export class ListingsService {
       slotSubmode: dto.slotSubmode !== undefined ? dto.slotSubmode : listing.slotSubmode,
       priceUnit: dto.priceUnit ?? listing.priceUnit,
     };
-    // T126: no stay is billed by the hour any more. Only a change to the model
-    // or the unit is checked, so a listing still on it can save its other steps.
-    const bookingUnitChanged = dto.bookingModel !== undefined || dto.priceUnit !== undefined;
-    if (bookingUnitChanged && next.bookingModel === 'PER_STAY' && !STAY_PRICE_UNITS.includes(next.priceUnit)) {
-      throw new BadRequestException(this.i18n.t('errors.PRICE_UNIT_NOT_ALLOWED'));
+    // T129 parts 3 and 4: a listing moves only to a booking model (and a unit
+    // of it) its category offers, as set in Administracija > Rezervacioni
+    // modeli. One that keeps its model and unit saves as before, offered or
+    // not, so taking a model away from a category leaves its listings be. A
+    // stay by the hour stands for no model at all (T126). Exempt "Otključaj
+    // svoju kategoriju" listings (Kategorije spec §8): they wait under Ostalo
+    // with the owner's own choice until an admin assigns the real category.
+    const bookingChanged =
+      next.bookingModel !== listing.bookingModel ||
+      next.slotSubmode !== listing.slotSubmode ||
+      next.priceUnit !== listing.priceUnit;
+    if (bookingChanged && !listing.pendingCategoryAssignment) {
+      const key = bookingModelKeyOf(next);
+      const offered = (await this.taxonomy.getOfferedBookingModels(listing.categoryId)).find((model) => model.key === key);
+      const unitOffered = key === 'CONTACT' || offered?.priceUnits.includes(next.priceUnit);
+      if (!offered || !unitOffered) {
+        throw new BadRequestException({ message: this.i18n.t('errors.BOOKING_MODEL_NOT_OFFERED'), code: 'BOOKING_MODEL_NOT_OFFERED' });
+      }
     }
-    // T138: a party hall is booked by its defined slots only.
-    if (
-      category &&
-      dto.slotSubmode !== undefined &&
-      dto.slotSubmode !== 'DEFINED_SLOTS' &&
-      DEFINED_SLOTS_ONLY_CATEGORY_SLUGS.includes(category.slug)
-    ) {
-      throw new BadRequestException(this.i18n.t('errors.SLOT_MODE_NOT_ALLOWED'));
+    // T129: a category may now offer both a stay and a slot model; the
+    // calendar is made the other way, so not while a booking is ahead (as T140).
+    const stayOrSlotChanged =
+      listing.bookingModel !== 'NO_BOOKING' && next.bookingModel !== 'NO_BOOKING' && next.bookingModel !== listing.bookingModel;
+    if (stayOrSlotChanged && (await this.hasFutureBookings(listing.id))) {
+      throw new BadRequestException(this.i18n.t('errors.SLOT_MODE_LOCKED_BY_BOOKINGS'));
     }
 
     // T140: the guest only ever sees one way of creating terms, so saving

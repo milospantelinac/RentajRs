@@ -6,6 +6,7 @@ import { emailTemplates } from './email-templates.seed-data';
 import { staticPages } from './static-pages.seed-data';
 import { faqs } from './faqs.seed-data';
 import { SEARCH_FILTERS } from './search-filters.seed-data';
+import { modelKeysForCategory } from '../src/common/utils/booking-models';
 
 const prisma = new PrismaClient();
 
@@ -703,6 +704,15 @@ async function seedCategoryNode(node: CategorySeed, parentId: string | null, ord
       cardFactKeys: SEED_FACT_KEYS[slug]?.card ?? [],
       listingFactKeys: SEED_FACT_KEYS[slug]?.listing ?? [],
     },
+  });
+
+  // T129: the booking models it offers (the rows of BookingModelSetting come
+  // with migration 20261010190000_booking_models, which runs before the seed).
+  await prisma.categoryBookingModel.createMany({
+    data: modelKeysForCategory({ slug, defaultBookingModel: node.defaultBookingModel, allowedPriceUnits: node.allowedPriceUnits }).map(
+      (modelKey) => ({ categoryId: category.id, modelKey }),
+    ),
+    skipDuplicates: true,
   });
 
   await setTranslationIfMissing('CATEGORY', category.id, 'name', node.name);

@@ -73,7 +73,6 @@
   "REVIEW_WINDOW_CLOSED": "The time to review this booking has passed",
   "REVIEW_EDIT_CLOSED": "The time to change this review has passed",
   "PRICE_UNIT_NOT_ALLOWED": "This price unit does not exist for the chosen booking method",
-  "SLOT_MODE_NOT_ALLOWED": "Party halls are booked by defined time slots only",
   "SLOT_MODE_LOCKED_BY_BOOKINGS": "The way time slots are created cannot change while you have upcoming bookings.",
   "AVAILABILITY_MODE_NOT_SAVED": "Save the \"Price and booking method\" step first, then set the availability",
   "CATEGORY_SLUG_INVALID": "The URL name may only contain lowercase letters without diacritics, digits and hyphens (e.g. spa-centri)",
@@ -92,5 +91,8 @@
   "FILTER_INVALID": "This kind of filter does not work for the chosen field or place.",
   "FILTER_DUPLICATE": "This filter already exists in the category.",
   "FILTER_THRESHOLDS_REQUIRED": "Enter the values to choose from (e.g. 1, 2, 3).",
-  "FACTS_INVALID": "Key facts: at most 3 on the card and 6 on the listing, each field once and only fields of this category."
+  "FACTS_INVALID": "Key facts: at most 3 on the card and 6 on the listing, each field once and only fields of this category.",
+  "BOOKING_MODEL_NOT_OFFERED": "This booking model or price unit is not offered in the listing's category.",
+  "BOOKING_MODELS_INVALID": "Pick at least one existing booking model.",
+  "BOOKING_MODEL_UNITS_INVALID": "A booking model needs at least one price unit, and only one it supports."
 }

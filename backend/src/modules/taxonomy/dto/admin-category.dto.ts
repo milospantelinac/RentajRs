@@ -41,18 +41,27 @@ export class CreateCategoryDto {
   @IsString()
   icon?: string;
 
-  @ApiProperty({ enum: BookingModel })
+  @ApiPropertyOptional({ enum: BookingModel, description: 'Without modelKeys: the booking fields the models are read from' })
+  @IsOptional()
   @IsEnum(BookingModel)
-  defaultBookingModel: BookingModel;
+  defaultBookingModel?: BookingModel;
 
-  @ApiProperty({ enum: PriceUnit, isArray: true })
+  @ApiPropertyOptional({ enum: PriceUnit, isArray: true })
+  @IsOptional()
   @IsArray()
   @IsEnum(PriceUnit, { each: true })
-  allowedPriceUnits: PriceUnit[];
+  allowedPriceUnits?: PriceUnit[];
 
-  @ApiProperty({ enum: PriceUnit })
+  @ApiPropertyOptional({ enum: PriceUnit })
+  @IsOptional()
   @IsEnum(PriceUnit)
-  defaultPriceUnit: PriceUnit;
+  defaultPriceUnit?: PriceUnit;
+
+  @ApiPropertyOptional({ type: [String], description: 'T129: the booking models it offers (BookingModelSetting keys)' })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  modelKeys?: string[];
 
   @ApiPropertyOptional()
   @IsOptional()

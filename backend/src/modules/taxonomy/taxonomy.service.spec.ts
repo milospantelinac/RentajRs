@@ -146,9 +146,10 @@ describe('TaxonomyService#getCategoryBySlug', () => {
     };
     const { service, cache } = makeService(prisma);
     jest.spyOn(service, 'resolveAttributesForCategory').mockResolvedValue([]);
+    jest.spyOn(service, 'getOfferedBookingModels').mockResolvedValue([]);
 
     await expect(service.getCategoryBySlug('nekretnine')).resolves.toMatchObject({ slug: 'nekretnine', name: 'Nekretnine', children: [] });
-    expect(cache.getOrSet).toHaveBeenCalledWith('taxonomy:category:v4:nekretnine', 1800, expect.any(Function));
+    expect(cache.getOrSet).toHaveBeenCalledWith('taxonomy:category:v5:nekretnine', 1800, expect.any(Function));
   });
 
   it('still answers 404 for an archived category', async () => {

@@ -1,10 +1,17 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { I18nService } from 'nestjs-i18n';
-import { Language } from '@prisma/client';
+import { Language, PriceUnit } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CacheService } from '../../common/cache/cache.service';
 import { UploadsService } from '../../common/uploads/uploads.service';
+import {
+  BOOKING_MODEL_KEYS,
+  BOOKING_MODEL_SETUPS,
+  BookingModelKey,
+  defaultBookingModelFor,
+  modelKeysForCategory,
+} from '../../common/utils/booking-models';
 import { ProposeCategoryDto } from './dto/propose-category.dto';
 import {
   CreateCategoryDto,
@@ -38,6 +45,8 @@ const LISTING_COUNTS_TTL = 60;
 export const SEARCH_FILTERS_CACHE_PREFIX = 'taxonomy:search-filters:v1:';
 /** T129: getFactKeys, one key per category; dropped with the tree. */
 const FACT_KEYS_CACHE_PREFIX = 'taxonomy:facts:v1:';
+/** T129: getOfferedBookingModels, one key per category; dropped with the tree. */
+const BOOKING_MODELS_CACHE_PREFIX = 'taxonomy:booking-models:v1:';
 const FUZZY_THRESHOLD = 0.35;
 export const FALLBACK_CATEGORY_SLUG = 'ostalo';
 /** T129: lowercase ASCII words joined by single hyphens, as uniqueSlug makes them. */
@@ -147,7 +156,8 @@ export class TaxonomyService {
     // keeps Redis from serving the old order after a deploy. v3 (Dizajn 50): the
     // category carries `published`, which its public page checks. v4 (T129): the
     // attributes carry hidden, showOnListing and icon, the category its key facts.
-    return this.cache.getOrSet(`taxonomy:category:v4:${slug}`, CACHE_TTL, () => this.loadCategoryBySlug(slug));
+    // v5 (T129): the booking models the category offers.
+    return this.cache.getOrSet(`taxonomy:category:v5:${slug}`, CACHE_TTL, () => this.loadCategoryBySlug(slug));
   }
 
   private async loadCategoryBySlug(slug: string) {
@@ -174,7 +184,72 @@ export class TaxonomyService {
 
     // T129: the key facts the category's cards and listing pages show, its parent's when it has none.
     const facts = await this.getFactKeys(category.id);
-    return { ...category, ...facts, name: name ?? category.slug, description, attributes, children };
+    const bookingModels = await this.getOfferedBookingModels(category.id);
+    return { ...category, ...facts, bookingModels, name: name ?? category.slug, description, attributes, children };
+  }
+
+  /**
+   * T129 parts 3 and 4: the booking models the wizard offers for a category:
+   * the ones assigned to it and switched on, in the admin's order, with the
+   * name and description the owner reads. A model's units are the ones the
+   * admin gave it that the category allows; one left with none is not offered.
+   */
+  async getOfferedBookingModels(categoryId: string) {
+    return this.cache.getOrSet(`${BOOKING_MODELS_CACHE_PREFIX}${categoryId}`, CACHE_TTL, async () => {
+      const category = await this.prisma.category.findUnique({
+        where: { id: categoryId },
+        select: { allowedPriceUnits: true, bookingModels: { include: { model: true } } },
+      });
+      if (!category) return [];
+      return category.bookingModels
+        .map((row) => row.model)
+        .filter((model) => model.enabled && model.key in BOOKING_MODEL_SETUPS)
+        .sort((a, b) => a.displayOrder - b.displayOrder)
+        .map((model) => {
+          const setup = BOOKING_MODEL_SETUPS[model.key as BookingModelKey];
+          return {
+            key: model.key as BookingModelKey,
+            name: model.name,
+            description: model.description,
+            bookingModel: setup.bookingModel,
+            slotSubmode: setup.slotSubmode,
+            priceUnits: model.key === 'CONTACT' ? [] : model.priceUnits.filter((unit) => category.allowedPriceUnits.includes(unit)),
+          };
+        })
+        .filter((model) => model.key === 'CONTACT' || model.priceUnits.length > 0);
+    });
+  }
+
+  /**
+   * T129 part 4: a category's unit fields for the models it offers. Each
+   * online model keeps at least one of its units, the default unit is one of
+   * the allowed ones, and defaultBookingModel (a new listing's start) follows.
+   */
+  async bookingFieldsForModels(modelKeys: string[], allowedPriceUnits: PriceUnit[] = [], defaultPriceUnit?: PriceUnit) {
+    const keys = this.validModelKeys(modelKeys);
+    const models = await this.prisma.bookingModelSetting.findMany({ where: { key: { in: keys } } });
+    const allowed = [...new Set(allowedPriceUnits)];
+    for (const model of models) {
+      if (model.key === 'CONTACT' || !model.priceUnits.length) continue;
+      if (!model.priceUnits.some((unit) => allowed.includes(unit))) allowed.push(model.priceUnits[0]);
+    }
+    const unit = defaultPriceUnit && allowed.includes(defaultPriceUnit) ? defaultPriceUnit : (allowed[0] ?? defaultPriceUnit ?? 'DAY');
+    if (!allowed.includes(unit)) allowed.push(unit);
+    return {
+      modelKeys: keys,
+      allowedPriceUnits: allowed,
+      defaultPriceUnit: unit,
+      defaultBookingModel: defaultBookingModelFor(keys, unit),
+    };
+  }
+
+  /** Known model keys, each once; a category offers at least one. */
+  validModelKeys(modelKeys: string[]): BookingModelKey[] {
+    const keys = [...new Set(modelKeys)];
+    if (!keys.length || keys.some((key) => !(BOOKING_MODEL_KEYS as readonly string[]).includes(key))) {
+      throw new BadRequestException({ message: this.i18n.t('errors.BOOKING_MODELS_INVALID'), code: 'BOOKING_MODELS_INVALID' });
+    }
+    return keys as BookingModelKey[];
   }
 
   /**
@@ -408,11 +483,13 @@ export class TaxonomyService {
   async adminGetCategory(id: string) {
     const category = await this.prisma.category.findUnique({ where: { id } });
     if (!category) throw new NotFoundException();
-    const [texts, listingCount, activeListingCount, childCount] = await Promise.all([
+    const [texts, listingCount, activeListingCount, childCount, assigned, models] = await Promise.all([
       this.getCategoryTexts(id),
       this.prisma.listing.count({ where: { categoryId: id, status: { not: 'DELETED' } } }),
       this.prisma.listing.count({ where: { categoryId: id, status: 'ACTIVE', available: true } }),
       this.prisma.category.count({ where: { parentId: id } }),
+      this.prisma.categoryBookingModel.findMany({ where: { categoryId: id } }),
+      this.prisma.bookingModelSetting.findMany({ orderBy: { displayOrder: 'asc' } }),
     ]);
     return {
       ...category,
@@ -422,6 +499,9 @@ export class TaxonomyService {
       listingCount,
       activeListingCount,
       childCount,
+      // T129 part 4: the models it offers, and all of them to choose from.
+      modelKeys: assigned.map((row) => row.modelKey),
+      bookingModelOptions: models.map(({ key, name, enabled, priceUnits }) => ({ key, name, enabled, priceUnits })),
     };
   }
 
@@ -454,6 +534,26 @@ export class TaxonomyService {
     const source = dto.copyFromId ? await this.prisma.category.findUnique({ where: { id: dto.copyFromId } }) : null;
     if (dto.copyFromId && !source) throw new NotFoundException();
     const slug = dto.slug ? await this.assertSlugFree(dto.slug) : await this.uniqueSlug(dto.name);
+    // T129 parts 3 and 4: the booking models it offers: the ones picked, a
+    // copy's source's, or the ones its booking fields stood for before.
+    const sourceModelKeys = source
+      ? (await this.prisma.categoryBookingModel.findMany({ where: { categoryId: source.id } })).map((row) => row.modelKey)
+      : [];
+    const booking = dto.modelKeys?.length
+      ? await this.bookingFieldsForModels(dto.modelKeys, dto.allowedPriceUnits, dto.defaultPriceUnit)
+      : (() => {
+          if (!dto.defaultBookingModel || !dto.allowedPriceUnits || !dto.defaultPriceUnit) {
+            throw new BadRequestException({ message: this.i18n.t('errors.BOOKING_MODELS_INVALID'), code: 'BOOKING_MODELS_INVALID' });
+          }
+          return {
+            modelKeys: sourceModelKeys.length
+              ? sourceModelKeys
+              : modelKeysForCategory({ slug, defaultBookingModel: dto.defaultBookingModel, allowedPriceUnits: dto.allowedPriceUnits }),
+            allowedPriceUnits: dto.allowedPriceUnits,
+            defaultPriceUnit: dto.defaultPriceUnit,
+            defaultBookingModel: dto.defaultBookingModel,
+          };
+        })();
     const lastSibling = await this.prisma.category.findFirst({
       where: { parentId },
       orderBy: { displayOrder: 'desc' },
@@ -466,9 +566,9 @@ export class TaxonomyService {
         slug,
         icon: dto.icon,
         status: 'ACTIVE',
-        defaultBookingModel: dto.defaultBookingModel,
-        allowedPriceUnits: dto.allowedPriceUnits,
-        defaultPriceUnit: dto.defaultPriceUnit,
+        defaultBookingModel: booking.defaultBookingModel,
+        allowedPriceUnits: booking.allowedPriceUnits,
+        defaultPriceUnit: booking.defaultPriceUnit,
         displayOrder: dto.displayOrder ?? (lastSibling ? lastSibling.displayOrder + 1 : 0),
         published: dto.published ?? false,
         cardFactKeys: source?.cardFactKeys ?? [],
@@ -480,11 +580,15 @@ export class TaxonomyService {
     await this.setOrClearCategoryText(category.id, 'shortDescription', dto.shortDescription);
     // A slug that used to redirect belongs to this category now.
     await this.prisma.redirect.deleteMany({ where: { oldPath: `/${slug}` } });
+    await this.prisma.categoryBookingModel.createMany({
+      data: booking.modelKeys.map((modelKey) => ({ categoryId: category.id, modelKey })),
+    });
     if (dto.copyFromId) await this.copyCategoryStructure(dto.copyFromId, category.id);
     await this.logChange(adminId, 'category.create', 'Category', category.id, undefined, {
       ...category,
       ...(await this.getCategoryTexts(category.id)),
       copiedFromId: dto.copyFromId,
+      modelKeys: booking.modelKeys,
     });
     await this.invalidateTreeCache();
     return category;
@@ -509,7 +613,8 @@ export class TaxonomyService {
           slug,
           parentId: moving ? (dto.parentId ?? null) : undefined,
           level,
-          icon: dto.icon,
+          // No icon picked is none, not an empty name.
+          icon: dto.icon === '' ? null : dto.icon,
           defaultBookingModel: dto.defaultBookingModel,
           allowedPriceUnits: dto.allowedPriceUnits,
           defaultPriceUnit: dto.defaultPriceUnit,
@@ -539,10 +644,11 @@ export class TaxonomyService {
     await this.setOrClearCategoryText(id, 'description', dto.description);
     await this.setOrClearCategoryText(id, 'shortDescription', dto.shortDescription);
     const updated = await this.prisma.category.findUniqueOrThrow({ where: { id } });
-    await this.logChange(adminId, 'category.update', 'Category', id, before, {
-      ...updated,
-      ...(await this.getCategoryTexts(id)),
-    });
+    const after = { ...updated, ...(await this.getCategoryTexts(id)) };
+    // A form saved as it was leaves no row in the history.
+    if (JSON.stringify(after) !== JSON.stringify(before)) {
+      await this.logChange(adminId, 'category.update', 'Category', id, before, after);
+    }
     await this.invalidateTreeCache(id);
     return updated;
   }
@@ -944,6 +1050,7 @@ export class TaxonomyService {
     await this.cache.delByPrefix('taxonomy:attributes:');
     await this.cache.delByPrefix(SEARCH_FILTERS_CACHE_PREFIX);
     await this.cache.delByPrefix(FACT_KEYS_CACHE_PREFIX);
+    await this.cache.delByPrefix(BOOKING_MODELS_CACHE_PREFIX);
   }
 }
 

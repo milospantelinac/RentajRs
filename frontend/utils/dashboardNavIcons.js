@@ -30,6 +30,7 @@ const NAV_ICON_FALLBACKS = {
   queue: 'clipboard-check',
   disputes: 'triangle-exclamation',
   categories: 'sitemap',
+  models: 'sliders',
   users: 'users',
   payments: 'credit-card',
   content: 'file-lines',

@@ -73,7 +73,6 @@
   "REVIEW_WINDOW_CLOSED": "Rok za recenziju ove rezervacije je istekao",
   "REVIEW_EDIT_CLOSED": "Rok za izmenu ove recenzije je istekao",
   "PRICE_UNIT_NOT_ALLOWED": "Ova jedinica cene ne postoji za izabrani način rezervacije",
-  "SLOT_MODE_NOT_ALLOWED": "Sale za proslave se rezervišu samo po definisanim terminima",
   "SLOT_MODE_LOCKED_BY_BOOKINGS": "Način kreiranja termina ne može da se promeni dok imate buduće rezervacije.",
   "AVAILABILITY_MODE_NOT_SAVED": "Prvo sačuvajte korak „Cena i način rezervacije”, pa podesite dostupnost",
   "CATEGORY_SLUG_INVALID": "Naziv u URL-u sme da sadrži samo mala slova bez kvačica, brojeve i crticu (npr. spa-centri)",
@@ -92,5 +91,8 @@
   "FILTER_INVALID": "Ova vrsta filtera ne može za izabrano polje ili mesto.",
   "FILTER_DUPLICATE": "Ovaj filter već postoji u kategoriji.",
   "FILTER_THRESHOLDS_REQUIRED": "Unesite vrednosti za izbor (npr. 1, 2, 3).",
-  "FACTS_INVALID": "Ključne činjenice: najviše 3 na kartici i 6 na oglasu, svako polje jednom i samo polja ove kategorije."
+  "FACTS_INVALID": "Ključne činjenice: najviše 3 na kartici i 6 na oglasu, svako polje jednom i samo polja ove kategorije.",
+  "BOOKING_MODEL_NOT_OFFERED": "Ovaj način rezervacije ili jedinica cene nije ponuđen u kategoriji oglasa.",
+  "BOOKING_MODELS_INVALID": "Izaberite bar jedan način rezervacije koji postoji.",
+  "BOOKING_MODEL_UNITS_INVALID": "Način rezervacije mora da ima bar jednu jedinicu cene, i to samo neku koju podržava."
 }

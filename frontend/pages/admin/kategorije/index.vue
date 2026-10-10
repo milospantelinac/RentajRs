@@ -186,33 +186,27 @@
             </select>
             <p class="admin-card-note cat-hint">{{ t('admin.cat.copyFromHint') }}</p>
           </div>
+          <!-- T129 part 4: the booking models it offers; a copy takes its source's. -->
           <template v-if="!createForm.copyFromId">
-            <div class="cat-grid">
-              <div class="form-group">
-                <label class="form-label" for="cat-new-model">{{ t('admin.bookingModel') }}</label>
-                <select id="cat-new-model" v-model="createForm.defaultBookingModel" class="form-control form-select">
-                  <option v-for="m in bookingModels" :key="m" :value="m">{{ m }}</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label class="form-label" for="cat-new-unit">{{ t('listing.priceUnit') }}</label>
-                <select id="cat-new-unit" v-model="createForm.defaultPriceUnit" class="form-control form-select">
-                  <option v-for="u in createForm.allowedPriceUnits" :key="u" :value="u">{{ u }}</option>
-                </select>
+            <div class="form-group">
+              <p class="form-label">{{ t('admin.bookingModels') }}</p>
+              <div class="cat-models">
+                <label v-for="model in createModels" :key="model.key" class="admin-check-row">
+                  <input
+                    type="checkbox"
+                    class="admin-check"
+                    :checked="createForm.modelKeys.includes(model.key)"
+                    @change="toggleCreateModel(model.key)"
+                  />
+                  {{ model.name }}
+                </label>
               </div>
             </div>
-            <div class="form-group">
-              <p class="form-label">{{ t('admin.allowedPriceUnits') }}</p>
-              <div class="admin-switch">
-                <button
-                  v-for="u in priceUnits"
-                  :key="u"
-                  type="button"
-                  class="admin-switch-btn"
-                  :class="{ 'is-active': createForm.allowedPriceUnits.includes(u) }"
-                  @click="toggleUnit(u)"
-                >{{ u }}</button>
-              </div>
+            <div v-if="createUnits.length" class="form-group">
+              <label class="form-label" for="cat-new-unit">{{ t('admin.models.defaultUnit') }}</label>
+              <select id="cat-new-unit" v-model="createForm.defaultPriceUnit" class="form-control form-select">
+                <option v-for="u in createUnits" :key="u" :value="u">{{ unitName(u) }}</option>
+              </select>
             </div>
           </template>
           <label class="admin-check-row">
@@ -261,8 +255,8 @@ definePageMeta({ middleware: ['auth', 'admin'], layout: 'admin' })
 const { t } = useI18n()
 const api = useApi()
 
-const priceUnits = ['NIGHT', 'DAY', 'HOUR', 'SLOT', 'MONTH', 'YEAR', 'GUEST']
-const bookingModels = ['PER_STAY', 'PER_SLOT', 'NO_BOOKING']
+const UNIT_LABELS = { NIGHT: 'Night', DAY: 'Day', HOUR: 'Hour', SLOT: 'Slot', MONTH: 'Month', YEAR: 'Year', GUEST: 'Guest' }
+const unitName = (unit) => t(`listing.unit${UNIT_LABELS[unit]}`)
 
 const { data: tree, refresh: refreshTree } = await useAsyncData('admin-categories', () => api.get('/admin/categories'))
 const { data: proposed, refresh: refreshProposed } = await useAsyncData('admin-categories-proposed', () => api.get('/admin/categories/proposed'))
@@ -397,33 +391,35 @@ const createForm = reactive({
   name: '',
   parentId: null,
   copyFromId: null,
-  defaultBookingModel: 'PER_STAY',
-  defaultPriceUnit: 'NIGHT',
-  allowedPriceUnits: ['NIGHT'],
+  modelKeys: ['CONTACT'],
+  defaultPriceUnit: '',
   published: false,
 })
 
-function openCreate() {
-  Object.assign(createForm, {
-    name: '',
-    parentId: null,
-    copyFromId: null,
-    defaultBookingModel: 'PER_STAY',
-    defaultPriceUnit: 'NIGHT',
-    allowedPriceUnits: ['NIGHT'],
-    published: false,
-  })
+// The models a new category can offer, read when the dialog opens.
+const createModels = ref([])
+async function openCreate() {
+  Object.assign(createForm, { name: '', parentId: null, copyFromId: null, modelKeys: ['CONTACT'], defaultPriceUnit: '', published: false })
   createError.value = ''
   showCreate.value = true
+  if (!createModels.value.length) {
+    createModels.value = ((await api.get('/admin/booking-models').catch(() => null))?.models || []).filter((model) => model.enabled)
+  }
 }
 
-function toggleUnit(u) {
-  const i = createForm.allowedPriceUnits.indexOf(u)
-  if (i === -1) createForm.allowedPriceUnits.push(u)
-  else if (createForm.allowedPriceUnits.length > 1) createForm.allowedPriceUnits.splice(i, 1)
-  if (!createForm.allowedPriceUnits.includes(createForm.defaultPriceUnit)) {
-    createForm.defaultPriceUnit = createForm.allowedPriceUnits[0]
+// The units of the picked models, for the default one.
+const createUnits = computed(() => {
+  const units = []
+  for (const model of createModels.value.filter((m) => createForm.modelKeys.includes(m.key))) {
+    for (const unit of model.priceUnits) if (!units.includes(unit)) units.push(unit)
   }
+  return units
+})
+function toggleCreateModel(key) {
+  const i = createForm.modelKeys.indexOf(key)
+  if (i === -1) createForm.modelKeys.push(key)
+  else if (createForm.modelKeys.length > 1) createForm.modelKeys.splice(i, 1)
+  if (!createUnits.value.includes(createForm.defaultPriceUnit)) createForm.defaultPriceUnit = createUnits.value[0] || ''
 }
 
 async function createCategory() {
@@ -435,9 +431,10 @@ async function createCategory() {
       name: createForm.name.trim(),
       parentId: createForm.parentId || undefined,
       copyFromId: source?.id,
-      defaultBookingModel: source?.defaultBookingModel ?? createForm.defaultBookingModel,
-      defaultPriceUnit: source?.defaultPriceUnit ?? createForm.defaultPriceUnit,
-      allowedPriceUnits: source?.allowedPriceUnits ?? createForm.allowedPriceUnits,
+      // A copy takes the source's booking fields and models; a new one the models picked here.
+      ...(source
+        ? { defaultBookingModel: source.defaultBookingModel, defaultPriceUnit: source.defaultPriceUnit, allowedPriceUnits: source.allowedPriceUnits }
+        : { modelKeys: createForm.modelKeys, defaultPriceUnit: createForm.defaultPriceUnit || undefined }),
       icon: source?.icon ?? undefined,
       published: createForm.published,
     })
@@ -637,6 +634,12 @@ tr[draggable='true'] {
     flex-wrap: nowrap;
     gap: 14px;
   }
+}
+
+.cat-models {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 22px;
 }
 
 .cat-modal {

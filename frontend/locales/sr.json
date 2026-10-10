@@ -1025,7 +1025,8 @@
     "reviewCancellationFree": "Besplatno do {value} pre početka",
     "reviewSubmit": "Pošalji na odobrenje",
     "resubmitForApproval": "Pošalji ponovo na odobrenje",
-    "renewPackage": "Obnovi paket"
+    "renewPackage": "Obnovi paket",
+    "bookingModelChoice": "Model rezervacije"
   },
   "search": {
     "sortRelevance": "Preporučeno",
@@ -1647,7 +1648,6 @@
     "create": "Kreiraj",
     "parentCategory": "Nadređena kategorija",
     "bookingModel": "Model rezervisanja",
-    "allowedPriceUnits": "Dozvoljene jedinice cene",
     "listingCount": "Broj oglasa",
     "categoryOnSite": "Na sajtu",
     "categoryVisibility": {
@@ -1752,7 +1752,8 @@
       "disputes": "Sporovi i prijave oglasa koji čekaju odluku.",
       "emailTemplates": "Tekst poruka koje platforma šalje, na srpskom i engleskom.",
       "content": "Statične stranice, pitanja i odgovori i video na početnoj.",
-      "settings": "Sistemske vrednosti koje menjaju ponašanje platforme."
+      "settings": "Sistemske vrednosti koje menjaju ponašanje platforme.",
+      "bookingModels": "Načini rezervacije koje vlasnici biraju u wizardu i koje kategorije ih nude."
     },
     "empty": {
       "queue": {
@@ -1875,7 +1876,7 @@
       "imageRemoveConfirm": "Ukloniti sliku kategorije?",
       "noParent": "Nema (glavna kategorija)",
       "bookingSection": "Rezervacija i cena",
-      "bookingSectionHint": "Podrazumevani način rezervacije i jedinice cene za nove oglase. Detaljna dodela modela kategorijama stiže u odeljku Rezervacioni modeli.",
+      "bookingSectionHint": "Načini rezervacije koje kategorija nudi u wizardu i jedinice cene. Oglasi koji već imaju neki način ostaju na njemu.",
       "published": "Prikazuje se na sajtu",
       "publishedHint": "Isključeno: kategorija je skica ili sakrivena. Postojeći oglasi ostaju, a nova se ne nudi vlasnicima.",
       "saved": "Izmene su sačuvane.",
@@ -1914,7 +1915,8 @@
         "filter_update": "Izmenjen filter",
         "filter_delete": "Uklonjen filter",
         "filter_reorder": "Promenjen redosled filtera",
-        "category_facts": "Promenjene ključne činjenice"
+        "category_facts": "Promenjene ključne činjenice",
+        "category_models": "Promenjeni modeli rezervacije"
       },
       "fields": {
         "name": "naziv",
@@ -1950,14 +1952,16 @@
         "listingFactKeys": "na oglasu",
         "order": "redosled",
         "dependsOnAttrKey": "uslov (polje)",
-        "dependsOnOptionKey": "uslov (stavka)"
+        "dependsOnOptionKey": "uslov (stavka)",
+        "modelKeys": "modeli rezervacije"
       },
       "yes": "da",
       "no": "ne",
       "empty": "prazno",
       "mergeHint": "Svi oglasi prelaze u izabranu kategoriju, a stara adresa vodi na novu. Ne može da se poništi.",
       "archiveHint": "Oglasi prelaze u \"Ostalo\", a kategorija nestaje sa sajta dok je ne vratite.",
-      "deleteHint": "Brisanje je moguće samo za kategoriju bez oglasa i podkategorija."
+      "deleteHint": "Brisanje je moguće samo za kategoriju bez oglasa i podkategorija.",
+      "allowedUnits": "Jedinice cene koje kategorija dozvoljava"
     },
     "attr": {
       "fieldsTitle": "Polja",
@@ -2066,6 +2070,28 @@
         "TOGGLE": "Da / Ne prekidač",
         "OPTION_TOGGLE": "Prekidač za jednu stavku"
       }
+    },
+    "bookingModels": "Rezervacioni modeli",
+    "models": {
+      "listTitle": "Modeli",
+      "listHint": "Naziv i opis vlasnik vidi u koraku \"Cena i način rezervacije\". Isključen model se ne nudi novim oglasima; oglasi koji ga već imaju rade kao i do sada. Redosled je redosled u wizardu.",
+      "name": "Naziv",
+      "description": "Opis",
+      "enabled": "Uključen (nudi se u wizardu)",
+      "units": "Jedinice cene",
+      "fixedUnit": "Cena: {unit}",
+      "usage": "Kategorija: {categories}, oglasa: {listings}",
+      "offWarning": "Isključen, a oglasi ga koriste (broj oglasa: {count}). Oni rade kao i do sada, a novi oglasi ga ne dobijaju.",
+      "matrixTitle": "Kategorije i modeli",
+      "matrixHint": "Štiklirajte koje modele kategorija nudi u wizardu i izaberite podrazumevanu jedinicu cene. Promena ne menja već postojeće oglase; broj ispod polja je koliko oglasa danas koristi taj model.",
+      "off": "isključen",
+      "defaultUnit": "Podrazumevana jedinica",
+      "listings": "oglasa: {count}",
+      "historyTitle": "Istorija izmena modela",
+      "reordered": "Promenjen redosled modela",
+      "descriptionChanged": "{name}: izmenjen opis",
+      "turnedOn": "uključen",
+      "turnedOff": "isključen"
     }
   },
   "home": {
