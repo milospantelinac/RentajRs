@@ -347,8 +347,8 @@
                     inputmode="numeric"
                     autocomplete="off"
                     class="rules-input-control"
-                    :value="form[field.key] ?? ''"
-                    @input="onRulesInput($event, field.key)"
+                    :value="rulesFieldValue(field)"
+                    @input="onRulesInput($event, field.key, field.scale)"
                   />
                   <span class="rules-input-unit">{{ field.unit }}</span>
                 </div>
@@ -1677,25 +1677,28 @@ const rulesSections = computed(() => {
       note,
     })
   }
-  // T122: the same two names in the fields, the panel and on the listing.
-  sections.push({
-    key: 'when',
-    title: t('listing.rulesWhenTitle'),
-    fields: [
-      field(
-        'earliestBookingHours',
-        t('listing.earliestBookingHours'),
-        t('listing.rulesUnitHours'),
-        t('listing.earliestBookingHoursHint'),
-      ),
+  // T122: the same two names in the fields, the panel and on the listing. T118: a
+  // month has no "Najranije" and its notice is in days (Tamara, 2026-10-10).
+  const inDays = rulesNoticeInDays.value
+  const notice = field(
+    'earliestBookingHours',
+    t('listing.earliestBookingHours'),
+    t(inDays ? 'listing.rulesUnitDays' : 'listing.rulesUnitHours'),
+    t(inDays ? 'listing.earliestBookingDaysHint' : 'listing.earliestBookingHoursHint'),
+  )
+  if (inDays) notice.scale = 24
+  const whenFields = [notice]
+  if (rulesFieldsShown.value.maxAdvanceBookingDays) {
+    whenFields.push(
       field(
         'maxAdvanceBookingDays',
         t('listing.maxAdvanceBookingDays'),
         t('listing.rulesUnitDays'),
         t('listing.maxAdvanceBookingDaysHint'),
       ),
-    ],
-  })
+    )
+  }
+  sections.push({ key: 'when', title: t('listing.rulesWhenTitle'), fields: whenFields })
   if (showGuestCount.value) {
     const unit = t(rulesChildren.value ? 'listing.rulesUnitChildren' : 'listing.rulesUnitGuests')
     const max = field('maxGuests', t('listing.maxGuests'), unit)
@@ -1739,6 +1742,15 @@ function termCount(key, count) {
   return t(`listing.${key}${srPluralCategory(count)}`, { count })
 }
 
+// T118: "Po mesecu" sets its notice in days (kept in hours).
+const rulesNoticeInDays = computed(() => isMonthlyListing(form))
+
+// "48 sati pre početka", or "2 dana pre početka" for a month.
+function noticeSummary(hours) {
+  const count = rulesNoticeInDays.value ? termCount('termDays', noticeHoursToDays(hours)) : termCount('termHours', hours)
+  return t('listing.rulesSummaryBeforeStart', { hours: count })
+}
+
 // The lower of the maximum and the capacity from step Detalji, as the booking card applies it.
 const rulesGuestCap = computed(() => {
   const capacity = capacityAttribute.value
@@ -1761,18 +1773,18 @@ const rulesSummary = computed(() => {
     rows.push({ key: 'duration', label: rulesDurationTitle.value, value })
   }
   const horizon = form.maxAdvanceBookingDays
-  rows.push({
-    key: 'horizon',
-    label: t('listing.rulesSummaryHorizon'),
-    value: horizon ? t('listing.rulesSummaryAhead', { days: termCount('termDays', horizon) }) : noLimit,
-  })
+  if (rulesFieldsShown.value.maxAdvanceBookingDays) {
+    rows.push({
+      key: 'horizon',
+      label: t('listing.rulesSummaryHorizon'),
+      value: horizon ? t('listing.rulesSummaryAhead', { days: termCount('termDays', horizon) }) : noLimit,
+    })
+  }
   const notice = form.earliestBookingHours
   rows.push({
     key: 'notice',
     label: t('listing.rulesSummaryNotice'),
-    value: notice
-      ? t('listing.rulesSummaryBeforeStart', { hours: termCount('termHours', notice) })
-      : t('listing.rulesSummaryUntilStart'),
+    value: notice ? noticeSummary(notice) : t('listing.rulesSummaryUntilStart'),
   })
   if (showGuestCount.value) {
     const min = form.minGuests || 1
@@ -2339,15 +2351,15 @@ const reviewRulesRows = computed(() => {
   rows.push({
     key: 'notice',
     label: t('listing.termLatest'),
-    value: form.earliestBookingHours
-      ? t('listing.rulesSummaryBeforeStart', { hours: termCount('termHours', form.earliestBookingHours) })
-      : t('listing.rulesSummaryUntilStart'),
+    value: form.earliestBookingHours ? noticeSummary(form.earliestBookingHours) : t('listing.rulesSummaryUntilStart'),
   })
-  rows.push({
-    key: 'horizon',
-    label: t('listing.termEarliestAhead'),
-    value: form.maxAdvanceBookingDays ? t('listing.rulesSummaryAhead', { days: termCount('termDays', form.maxAdvanceBookingDays) }) : noLimit,
-  })
+  if (rulesFieldsShown.value.maxAdvanceBookingDays) {
+    rows.push({
+      key: 'horizon',
+      label: t('listing.termEarliestAhead'),
+      value: form.maxAdvanceBookingDays ? t('listing.rulesSummaryAhead', { days: termCount('termDays', form.maxAdvanceBookingDays) }) : noLimit,
+    })
+  }
   if (showGuestCount.value) {
     const min = form.minGuests || 1
     const max = rulesGuestCap.value
@@ -2662,20 +2674,30 @@ const rulesErrors = reactive({
   guests: '',
 })
 
-// utils/integerInput.js keeps whole numbers only; an emptied field is null.
-function onRulesInput(event, field) {
-  form[field] = applyIntegerInput(event)
+// utils/integerInput.js keeps whole numbers only; an emptied field is null. T118:
+// a notice typed in days (scale 24) is kept in hours.
+function onRulesInput(event, field, scale = 1) {
+  const value = applyIntegerInput(event, scale > 1 ? 3 : 4)
+  form[field] = value === null ? null : value * scale
   rulesErrors[field] = ''
   if (field === 'minDuration' || field === 'maxDuration') rulesErrors.duration = ''
   if (field === 'minGuests' || field === 'maxGuests') rulesErrors.guests = ''
 }
 
+// The field's number: the hours, or the whole days of a notice set in days.
+function rulesFieldValue(field) {
+  const value = form[field.key]
+  if (value === null || value === undefined || value === '') return ''
+  return field.scale ? Math.ceil(value / field.scale) : value
+}
+
 // The rules this listing uses. The others stay hidden and are cleared on save.
+// T118: a month has no horizon (Tamara, 2026-10-10).
 const rulesFieldsShown = computed(() => ({
   minDuration: !isDefinedSlotsModel.value,
   maxDuration: !isDefinedSlotsModel.value,
   earliestBookingHours: true,
-  maxAdvanceBookingDays: true,
+  maxAdvanceBookingDays: !rulesNoticeInDays.value,
   minGuests: showGuestCount.value,
   maxGuests: showGuestCount.value,
   gapAfterMinutes: showGapAfter.value,
@@ -2700,13 +2722,18 @@ function validateRules() {
 }
 
 // Every rule goes out, null when emptied or hidden, so that rule stops applying.
+// A notice set in days goes out as the whole days it shows (T118).
 function rulesPayload() {
-  return Object.fromEntries(
+  const payload = Object.fromEntries(
     Object.entries(rulesFieldsShown.value).map(([field, shown]) => {
       const value = form[field]
       return [field, shown && value !== '' && value !== null && value !== undefined ? value : null]
     }),
   )
+  if (rulesNoticeInDays.value && payload.earliestBookingHours) {
+    payload.earliestBookingHours = noticeHoursToDays(payload.earliestBookingHours) * 24
+  }
+  return payload
 }
 
 // Dizajn 24: Dizajn 6 errors under the advance and the deadline, in UpdateListingDto's

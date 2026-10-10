@@ -1,5 +1,6 @@
 {
   "END_BEFORE_START": "End must be after the start",
+  "ALREADY_STARTED": "This term has already started. Pick a later one.",
   "TOO_SOON": "This time is too soon to book — earlier notice is required",
   "TOO_FAR_AHEAD": "This time cannot be booked more than {max} days in advance",
   "MIN_DURATION": "Minimum duration is {min} {unit}",

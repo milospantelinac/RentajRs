@@ -39,14 +39,15 @@
         :min-duration="listing.minDuration"
         :max-duration="listing.maxDuration"
         :earliest-booking-hours="listing.earliestBookingHours"
-        :max-advance-booking-days="listing.maxAdvanceBookingDays"
         :initial-month="monthStart"
         :initial-count="monthCount"
         @update:range="onMonthRangeUpdate"
+        @select="noMonthFree = $event.noneFree"
       />
 
       <!-- T127: the day, then the start and the length, as on the request page.
-           Both selects only offer what fits before closing and is still free. -->
+           Both selects only offer what fits before closing and is still free,
+           and each field opens only its own choice. -->
       <template v-else-if="isWorkingHours">
         <div class="booking-panel-fields">
           <button
@@ -70,6 +71,7 @@
             :earliest-booking-hours="listing.earliestBookingHours"
             :max-advance-booking-days="listing.maxAdvanceBookingDays"
             :available-days-of-week="availableDaysOfWeek"
+            :is-day-open="isHourDayOpen"
             :whole-day-blocking="false"
             :single-date="true"
             :initial-start="startsAt"
@@ -78,9 +80,11 @@
         </div>
 
         <div class="booking-panel-fields">
-          <label v-if="hourStarts.length" class="booking-panel-field booking-panel-field-select">
+          <!-- Disabled until the day has a start to offer: before a day is
+               picked, and on a day without a free term. -->
+          <label class="booking-panel-field booking-panel-field-select" :class="{ 'is-disabled': !hourStarts.length }">
             <span class="booking-panel-field-label">{{ t('booking.startLabel') }}</span>
-            <select v-model="slotStartTime" class="booking-panel-native-select">
+            <select v-model="slotStartTime" class="booking-panel-native-select" :disabled="!hourStarts.length">
               <option value="" disabled>{{ t('booking.pickTimePlaceholder') }}</option>
               <option v-for="time in hourStarts" :key="time" :value="time">{{ time }}</option>
             </select>
@@ -89,23 +93,19 @@
             </span>
             <img src="/images/icons/chevron-down.svg" alt="" class="booking-panel-field-chevron" />
           </label>
-          <!-- Without a day there is nothing to offer yet, so the field opens the calendar. -->
-          <button v-else type="button" class="booking-panel-field" @click="openPicker">
-            <span class="booking-panel-field-label">{{ t('booking.startLabel') }}</span>
-            <span class="booking-panel-field-value is-empty">{{ t('booking.pickTimePlaceholder') }}</span>
-            <img src="/images/icons/chevron-down.svg" alt="" class="booking-panel-field-chevron" />
-          </button>
-          <label class="booking-panel-field booking-panel-field-select">
+          <label class="booking-panel-field booking-panel-field-select" :class="{ 'is-disabled': !hourLengths.length }">
             <span class="booking-panel-field-label">{{ t('bookingForm.duration') }}</span>
             <select v-model.number="slotDurationHours" class="booking-panel-native-select" :disabled="!hourLengths.length">
               <option v-for="hours in hourLengths" :key="hours" :value="hours">{{ hoursText(hours) }}</option>
             </select>
-            <span class="booking-panel-field-value">{{ hoursText(slotDurationHours) }}</span>
+            <span class="booking-panel-field-value" :class="{ 'is-empty': !hourLengths.length }">
+              {{ hourLengths.length ? hoursText(slotDurationHours) : '-' }}
+            </span>
             <img src="/images/icons/chevron-down.svg" alt="" class="booking-panel-field-chevron" />
           </label>
         </div>
-        <p v-if="startsAt && !hourStarts.length" class="booking-panel-hint booking-panel-hours-hint">
-          {{ t('booking.noWorkingHoursForDay') }}
+        <p v-if="dayWithoutTerms" class="booking-panel-alert" role="alert">
+          <img src="/images/icons/field-error.svg" alt="" />{{ t('booking.noWorkingHoursForDay') }}
         </p>
       </template>
 
@@ -245,6 +245,10 @@
       </div>
 
       <span v-if="preview" class="booking-panel-cta booking-panel-cta-inert">{{ t('listing.sendRequest') }}</span>
+      <!-- T127, T118: nothing to ask for on the picked day, or no month free. -->
+      <button v-else-if="termUnavailable" type="button" class="booking-panel-cta" disabled>
+        {{ t('listing.sendRequest') }}
+      </button>
       <!-- T125: a guest count the listing can't take goes nowhere until fixed;
            the button shows why instead. -->
       <button v-else-if="guestError" type="button" class="booking-panel-cta" @click="revealGuestError">
@@ -382,9 +386,6 @@ function togglePicker() {
   pickerOpen.value = !pickerOpen.value
   pickerOpening = pickerOpen.value
 }
-function openPicker() {
-  if (!pickerOpen.value) togglePicker()
-}
 function pickerAnswered() {
   const first = pickerOpening
   pickerOpening = false
@@ -442,6 +443,18 @@ const hourLengths = computed(() =>
 watch(hourStarts, (times) => {
   if (slotStartTime.value && !times.includes(slotStartTime.value)) slotStartTime.value = ''
 })
+
+// T127 (Tamara, 2026-10-10): the calendar offers only the days a term can still
+// be booked on, once the terms are in.
+const isHourDayOpen = computed(() =>
+  isWorkingHours.value && props.availability ? makeHourDayCheck(props.listing, props.availability) : null,
+)
+// A day without a free term that got picked all the same (before the terms
+// were in): the fields stay shut, the card says why and sends nothing.
+const dayWithoutTerms = computed(() => isWorkingHours.value && !!startsAt.value && !hourStarts.value.length)
+// T118: a monthly listing with no month free.
+const noMonthFree = ref(false)
+const termUnavailable = computed(() => dayWithoutTerms.value || (isMonthly.value && noMonthFree.value))
 watch(hourLengths, (lengths) => {
   slotDurationHours.value = keepHourLength(lengths, slotDurationHours.value)
 })
@@ -661,6 +674,7 @@ const requestLink = computed(() => {
   padding-right: 40px;
 }
 
+// T127: drawn over the select, so clicks go through it (it used to swallow them).
 .booking-panel-field-chevron {
   position: absolute;
   right: 16px;
@@ -668,21 +682,39 @@ const requestLink = computed(() => {
   transform: translateY(-50%);
   width: 16px;
   height: 16px;
+  pointer-events: none;
 }
 
 // The native <select> stays the real control (keyboard, mobile pickers) but is
-// laid over the styled field rather than replacing it.
+// laid over the styled field rather than replacing it. T127: without its native
+// look it takes the field's whole height (Safari keeps a native select at its
+// own height, so only the field's top edge opened it); 16px keeps iOS from
+// zooming in on it.
 .booking-panel-native-select {
   position: absolute;
+  z-index: 1;
   inset: 0;
   width: 100%;
   height: 100%;
+  margin: 0;
   opacity: 0;
+  font-size: 16px;
+  appearance: none;
   cursor: pointer;
 }
 
 .booking-panel-native-select:disabled {
   cursor: default;
+}
+
+// T127: a field with nothing to offer yet, or on a day without a free term.
+.booking-panel-field.is-disabled {
+  cursor: default;
+}
+
+.booking-panel-field.is-disabled .booking-panel-field-label,
+.booking-panel-field.is-disabled .booking-panel-field-chevron {
+  opacity: 0.45;
 }
 
 // The select is invisible, so its keyboard focus shows on the field.
@@ -845,8 +877,26 @@ const requestLink = computed(() => {
   color: $color-text-muted;
 }
 
-.booking-panel-hours-hint {
+// T127: a day without a free term, said in Dizajn 6's error colours on a
+// light tint so it can't be missed.
+.booking-panel-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
   margin: 0;
+  padding: 10px 12px;
+  border-radius: $radius-input;
+  background: #fdecef;
+  font-size: 13px;
+  line-height: 18px;
+  color: $color-error;
+}
+
+.booking-panel-alert img {
+  flex-shrink: 0;
+  width: 15px;
+  height: 15px;
+  margin-top: 1.5px;
 }
 
 .booking-panel-divider {
@@ -934,7 +984,8 @@ const requestLink = computed(() => {
   cursor: pointer;
 }
 
-.booking-panel-cta-inert {
+.booking-panel-cta-inert,
+.booking-panel-cta:disabled {
   opacity: 0.55;
   cursor: default;
   pointer-events: none;

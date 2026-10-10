@@ -119,6 +119,9 @@ const props = defineProps({
   variant: { type: String, default: 'default' },
   // T117: a vehicle or a machine is picked up and returned, not arrived at and left.
   pickupReturn: { type: Boolean, default: false },
+  // T127: working hours say per day ("2026-10-16") whether a term can still be
+  // booked on it; a day that can't is off like a taken one. Null: no such check.
+  isDayOpen: { type: Function, default: null },
 })
 
 // `select` reports the dates as picked, also a stay still too short, which
@@ -238,7 +241,9 @@ function buildMonth(monthDate) {
     // lies between, the way the server's [) terms already allow it.
     const blocked = props.wholeDayBlocking && isBlocked(date) && !canEndOn(date)
     const dayOfWeek = ((date.getDay() + 6) % 7) + 1 // ISO Monday=1
-    const dayUnavailable = !!props.availableDaysOfWeek && !props.availableDaysOfWeek.includes(dayOfWeek)
+    const dayUnavailable =
+      (!!props.availableDaysOfWeek && !props.availableDaysOfWeek.includes(dayOfWeek)) ||
+      (!past && !!props.isDayOpen && !props.isDayOpen(key))
     const exceedsMaxFromStart =
       !!rangeStart.value &&
       !rangeEnd.value &&
@@ -409,9 +414,13 @@ watch(baseMonth, loadAvailability, { immediate: true })
   gap: 20px;
 }
 
+// T127: but never wider than the box it sits in. The listing's booking card is
+// narrower than a month between about 990 and 1300 px, and the month ran out of
+// the card there (a page scrolling sideways at 1157); it shrinks instead.
 .range-picker-month {
   flex: 1 1 300px;
-  min-width: 300px;
+  min-width: min(300px, 100%);
+  container-type: inline-size;
 }
 
 .range-picker-nav {
@@ -429,7 +438,7 @@ watch(baseMonth, loadAvailability, { immediate: true })
 
 .range-picker-grid {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 3px;
 }
 
@@ -469,6 +478,18 @@ watch(baseMonth, loadAvailability, { immediate: true })
 .range-picker-cell-price {
   font-size: 9.5px;
   color: $color-text-muted;
+}
+
+// A month squeezed so far that a day is narrower than its price ("60.000",
+// about 34 px) keeps square days, and only their numbers.
+@container (max-width: 255px) {
+  .range-picker-cell {
+    min-height: 0;
+  }
+
+  .range-picker-cell-price {
+    display: none;
+  }
 }
 
 .range-picker-cell-taken {

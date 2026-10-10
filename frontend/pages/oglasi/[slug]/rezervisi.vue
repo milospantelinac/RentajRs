@@ -29,11 +29,10 @@
               :min-duration="listing.minDuration"
               :max-duration="listing.maxDuration"
               :earliest-booking-hours="listing.earliestBookingHours"
-              :max-advance-booking-days="listing.maxAdvanceBookingDays"
               :initial-month="form.monthStart"
               :initial-count="form.monthCount"
               @update:range="onMonthRangeUpdate"
-              @select="monthBlocked = $event.blocked"
+              @select="onMonthSelect"
             />
             <p v-if="errors.term" class="request-error" role="alert">
               <img src="/images/icons/field-error.svg" alt="" />{{ errors.term }}
@@ -71,6 +70,7 @@
               :earliest-booking-hours="listing.earliestBookingHours"
               :max-advance-booking-days="listing.maxAdvanceBookingDays"
               :available-days-of-week="availableDaysOfWeek"
+              :is-day-open="isHourDayOpen"
               :whole-day-blocking="false"
               :single-date="true"
               @update:range="onSingleDateUpdate"
@@ -91,7 +91,6 @@
                   </select>
                   <img src="/images/icons/chevron-down-18.svg" alt="" />
                 </span>
-                <p v-if="!hourStarts.length" class="request-hint">{{ t('booking.noWorkingHoursForDay') }}</p>
               </div>
               <div class="request-field">
                 <label class="request-label" for="request-duration">{{ t('bookingForm.duration') }}</label>
@@ -102,6 +101,7 @@
                     class="request-select-control"
                     :disabled="!durationSelectOptions.length"
                   >
+                    <option v-if="!durationSelectOptions.length" :value="slotDurationHours" disabled>-</option>
                     <option v-for="option in durationSelectOptions" :key="option.value" :value="option.value">
                       {{ option.label }}
                     </option>
@@ -111,6 +111,10 @@
                 <p v-if="slotStartTime" class="request-hint">{{ closingHint }}</p>
               </div>
             </div>
+            <!-- T127: a day without a free term (a link can still carry one). -->
+            <p v-if="dayWithoutTerms" class="request-alert" role="alert">
+              <img src="/images/icons/field-error.svg" alt="" />{{ t('booking.noWorkingHoursForDay') }}
+            </p>
 
             <div v-if="termBox" class="request-term-box">
               <div class="request-term-box-text">
@@ -280,7 +284,7 @@
           </p>
 
           <!-- 375:430, 375:432 -->
-          <button type="submit" class="request-submit" :disabled="submitting">
+          <button type="submit" class="request-submit" :disabled="submitting || termUnavailable">
             {{ submitting ? t('bookingForm.sending') : t('listing.sendRequest') }}
           </button>
           <p class="request-note">{{ submitNote }}</p>
@@ -446,8 +450,14 @@ const calendar = ref(null)
 // those back from update:range).
 const stayPick = ref(handedStart ? { startsAt: handedStart, endsAt: handedEnd || null, tooShort: handedTooShort } : null)
 const stayTooShort = computed(() => model.value === 'stay' && !!stayPick.value?.tooShort)
-// A monthly stay that runs into a taken month; the month picker says so itself.
+// A monthly stay that runs into a taken month, or no free month at all (T118);
+// the month picker says so itself.
 const monthBlocked = ref(false)
+const noMonthFree = ref(false)
+function onMonthSelect({ blocked, noneFree }) {
+  monthBlocked.value = blocked
+  noMonthFree.value = noneFree
+}
 const minDurationMessage = computed(() =>
   t('booking.minDurationMessage', {
     min: listing.value.minDuration,
@@ -500,9 +510,20 @@ const hourStarts = computed(() =>
 )
 const hourLengths = computed(() =>
   model.value === 'hours' && listing.value
-    ? getHourLengths(listing.value, availability.value, form.startsAt, slotStartTime.value)
+    ? getHourLengths(listing.value, availability.value, form.startsAt, slotStartTime.value, now.value)
     : [],
 )
+// T127 (Tamara, 2026-10-10): the calendar offers only the days a term can still
+// be booked on; one handed over in the link without a free term keeps its
+// fields shut, says why and sends nothing.
+const isHourDayOpen = computed(() =>
+  model.value === 'hours' && listing.value && availability.value
+    ? makeHourDayCheck(listing.value, availability.value, now.value)
+    : null,
+)
+const dayWithoutTerms = computed(() => model.value === 'hours' && !!form.startsAt && !hourStarts.value.length)
+// T118: nor anything on a monthly listing with no month free.
+const termUnavailable = computed(() => dayWithoutTerms.value || (model.value === 'months' && noMonthFree.value))
 const durationSelectOptions = computed(() =>
   hourLengths.value.map((hours) => ({ value: hours, label: formatUnits(t, {}, 'HOUR', hours) })),
 )
@@ -552,7 +573,10 @@ watch(
 
 const termBox = computed(() => {
   if (model.value === 'stay') return buildStayBox(t, listing.value, stayPick.value)
-  if (model.value === 'hours') return buildHoursBox(t, form.startsAt, slotStartTime.value, slotDurationHours.value)
+  // T127: a day without a free term has the alert instead of "pick a start".
+  if (model.value === 'hours' && !dayWithoutTerms.value) {
+    return buildHoursBox(t, form.startsAt, slotStartTime.value, slotDurationHours.value)
+  }
   return null
 })
 
@@ -728,6 +752,7 @@ const advanceRow = computed(() => getAdvanceRow(t, quote.value, flow.value))
 // ---- Sending -----------------------------------------------------------------
 
 async function submit() {
+  if (termUnavailable.value) return
   error.value = ''
   guestTouched.value = true
   const payload = buildTermPayload()
@@ -1098,6 +1123,29 @@ $request-danger-border: #f43f5e;
   flex-shrink: 0;
   width: 15px;
   height: 15px;
+}
+
+// T127: a day without a free term, in the error's colours on a light tint so
+// it can't be missed.
+.request-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: #fdecef;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 18px;
+  color: $color-error;
+}
+
+.request-alert img {
+  flex-shrink: 0;
+  width: 15px;
+  height: 15px;
+  margin-top: 1.5px;
 }
 
 // Extra services take the slot cards' look (538:875).

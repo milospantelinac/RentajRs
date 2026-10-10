@@ -254,6 +254,20 @@ const { data: categories } = await useAsyncData('footer-categories', async () =>
   }
 }
 
+// The lg tier's content column is 912 wide, short of the 1067 these fixed
+// columns take, so the footer ran past the page edge from 992 to 1199 px (a
+// page scrolling sideways at 1157, T127). There the first two link columns
+// give way and the last keeps its longest name; from xl up nothing changes.
+@include respond-between(lg, xl) {
+  .footer-nav-group {
+    flex-shrink: 1;
+  }
+
+  .footer-nav-group:last-child {
+    min-width: auto;
+  }
+}
+
 .footer-nav-title {
   margin: 0 0 4px;
   color: $color-text-muted;

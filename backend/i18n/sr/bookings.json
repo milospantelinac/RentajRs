@@ -1,5 +1,6 @@
 {
   "END_BEFORE_START": "Kraj termina mora biti posle početka",
+  "ALREADY_STARTED": "Ovaj termin je već počeo. Izaberite neki kasniji.",
   "TOO_SOON": "Ovaj termin je prerano — potrebna je ranija najava",
   "TOO_FAR_AHEAD": "Ovaj termin se ne može rezervisati više od {max} dana unapred",
   "MIN_DURATION": "Minimalno trajanje je {min} {unit}",

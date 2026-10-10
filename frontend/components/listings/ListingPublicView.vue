@@ -568,17 +568,22 @@ const bookingTerms = computed(() => {
     rows.push({ label: t('listing.termGapAfter'), value: formatMinutes(l.gapAfterMinutes) })
   }
   // T122: the wizard's names for the two rules, "7 sati pre početka" and
-  // "30 dana unapred" ("Najraniji rok za zahtev" read as the opposite).
+  // "30 dana unapred" ("Najraniji rok za zahtev" read as the opposite). T118: a
+  // month counts its notice in days and has no horizon (Tamara, 2026-10-10).
   if (l.earliestBookingHours) {
+    const inDays = isMonthlyListing(l) && l.earliestBookingHours % 24 === 0
     rows.push({
       label: t('listing.termLatest'),
-      value: t('listing.rulesSummaryBeforeStart', { hours: durationLabel('termHours', l.earliestBookingHours) }),
+      value: t('listing.rulesSummaryBeforeStart', {
+        hours: inDays ? durationLabel('termDays', l.earliestBookingHours / 24) : durationLabel('termHours', l.earliestBookingHours),
+      }),
     })
   }
-  if (l.maxAdvanceBookingDays) {
+  const horizonDays = getBookingHorizonDays(l)
+  if (horizonDays) {
     rows.push({
       label: t('listing.termEarliestAhead'),
-      value: t('listing.rulesSummaryAhead', { days: durationLabel('termDays', l.maxAdvanceBookingDays) }),
+      value: t('listing.rulesSummaryAhead', { days: durationLabel('termDays', horizonDays) }),
     })
   }
   const guestCap = maxGuestCap.value

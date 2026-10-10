@@ -112,21 +112,85 @@ describe('BookingsService#assertTermRules (min/max guests, R30-ish term rules)',
     ).toThrow(BadRequestException);
   });
 
+  // An hour or a slot can't start in the past, so these terms lie a week ahead.
+  const HOUR = 3600_000;
+  const weekAhead = () => new Date(Math.ceil((Date.now() + 7 * 86_400_000) / HOUR) * HOUR);
+
   it('counts working hours in hours, also when the price is per guest (Dizajn 23)', () => {
     const service = makeService();
-    const start = new Date('2026-09-01T10:00:00Z');
+    const start = weekAhead();
+    const after = (hours: number) => new Date(start.getTime() + hours * HOUR);
     const listing = { bookingModel: 'PER_SLOT', slotSubmode: 'WORKING_HOURS', priceUnit: 'GUEST', minDuration: 2, maxDuration: 4 };
-    expect(() => callAssertTermRules(service, listing, start, new Date('2026-09-01T11:00:00Z'))).toThrow(BadRequestException);
-    expect(() => callAssertTermRules(service, listing, start, new Date('2026-09-01T13:00:00Z'))).not.toThrow();
-    expect(() => callAssertTermRules(service, listing, start, new Date('2026-09-01T15:00:00Z'))).toThrow(BadRequestException);
+    expect(() => callAssertTermRules(service, listing, start, after(1))).toThrow(BadRequestException);
+    expect(() => callAssertTermRules(service, listing, start, after(3))).not.toThrow();
+    expect(() => callAssertTermRules(service, listing, start, after(5))).toThrow(BadRequestException);
   });
 
   it('skips min/max duration for defined slots, which carry their own length (Dizajn 23)', () => {
     const service = makeService();
-    const start = new Date('2026-09-01T10:00:00Z');
-    const end = new Date('2026-09-01T12:00:00Z');
+    const start = weekAhead();
+    const end = new Date(start.getTime() + 2 * HOUR);
     const listing = { bookingModel: 'PER_SLOT', slotSubmode: 'DEFINED_SLOTS', priceUnit: 'SLOT', minDuration: 3, maxDuration: 1 };
     expect(() => callAssertTermRules(service, listing, start, end)).not.toThrow();
+  });
+
+  it('refuses an hour or a slot that has already begun', () => {
+    const service = makeService();
+    const start = new Date(Date.now() - HOUR);
+    const end = new Date(Date.now() + HOUR);
+    const hours = { bookingModel: 'PER_SLOT', slotSubmode: 'WORKING_HOURS', priceUnit: 'HOUR' };
+    expect(() => callAssertTermRules(service, hours, start, end)).toThrow(BadRequestException);
+    expect(i18n.t).toHaveBeenCalledWith('bookings.ALREADY_STARTED');
+    const slots = { bookingModel: 'PER_SLOT', slotSubmode: 'DEFINED_SLOTS', priceUnit: 'SLOT' };
+    expect(() => callAssertTermRules(service, slots, start, end)).toThrow(BadRequestException);
+  });
+
+  it('keeps a stay starting today bookable', () => {
+    const service = makeService();
+    const today = new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00Z');
+    const end = new Date(today.getTime() + 2 * 86_400_000);
+    expect(() => callAssertTermRules(service, { priceUnit: 'NIGHT' }, today, end)).not.toThrow();
+  });
+
+  describe('a month (T118, Tamara 2026-10-10)', () => {
+    const monthStart = (offset: number) => {
+      const now = new Date();
+      return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + offset, 1));
+    };
+    const monthly = { bookingModel: 'PER_STAY', priceUnit: 'MONTH' };
+
+    it('ignores the horizon, since a month always starts on the 1st', () => {
+      const service = makeService();
+      const listing = { ...monthly, maxAdvanceBookingDays: 2 };
+      expect(() => callAssertTermRules(service, listing, monthStart(1), monthStart(2))).not.toThrow();
+      expect(() => callAssertTermRules(service, listing, monthStart(6), monthStart(7))).not.toThrow();
+    });
+
+    it('still holds the horizon for every other unit', () => {
+      const service = makeService();
+      const start = new Date(Date.now() + 10 * 86_400_000);
+      const end = new Date(start.getTime() + 2 * 86_400_000);
+      expect(() => callAssertTermRules(service, { priceUnit: 'NIGHT', maxAdvanceBookingDays: 2 }, start, end)).toThrow(
+        BadRequestException,
+      );
+      expect(i18n.t).toHaveBeenCalledWith('bookings.TOO_FAR_AHEAD', { args: { max: 2 } });
+    });
+
+    it('refuses the month already under way', () => {
+      const service = makeService();
+      expect(() => callAssertTermRules(service, monthly, monthStart(0), monthStart(1))).toThrow(BadRequestException);
+      expect(i18n.t).toHaveBeenCalledWith('bookings.ALREADY_STARTED');
+    });
+
+    it('keeps the notice: a month starting sooner than it is refused', () => {
+      const service = makeService();
+      const next = monthStart(1);
+      const hoursToNext = Math.floor((next.getTime() - Date.now()) / 3600_000);
+      const listing = { ...monthly, earliestBookingHours: hoursToNext + 24 };
+      expect(() => callAssertTermRules(service, listing, next, monthStart(2))).toThrow(BadRequestException);
+      expect(i18n.t).toHaveBeenCalledWith('bookings.TOO_SOON');
+      expect(() => callAssertTermRules(service, listing, monthStart(2), monthStart(3))).not.toThrow();
+    });
   });
 });
 

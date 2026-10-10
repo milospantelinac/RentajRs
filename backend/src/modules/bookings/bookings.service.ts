@@ -241,6 +241,13 @@ export class BookingsService {
   ) {
     if (endsAt <= startsAt) throw new BadRequestException(this.i18n.t('bookings.END_BEFORE_START'));
 
+    // A month whose 1st has passed (T118: the current month, Tamara 2026-10-10)
+    // and an hour or a slot that has begun can't be asked for any more. A stay
+    // keeps its first day bookable on that day.
+    if ((listing.priceUnit === 'MONTH' || listing.bookingModel === 'PER_SLOT') && startsAt.getTime() < Date.now()) {
+      throw new BadRequestException(this.i18n.t('bookings.ALREADY_STARTED'));
+    }
+
     if (listing.earliestBookingHours) {
       const earliest = Date.now() + listing.earliestBookingHours * 3600_000;
       if (startsAt.getTime() < earliest) {
@@ -248,8 +255,10 @@ export class BookingsService {
       }
     }
 
-    // "Koliko kasno može da se rezerviše" (Dodavanje Oglasa spec §4).
-    if (listing.maxAdvanceBookingDays) {
+    // "Koliko kasno može da se rezerviše" (Dodavanje Oglasa spec §4). T118: a
+    // month always starts on the 1st, so the horizon doesn't apply to it; the
+    // guest may pick any month ahead (Tamara, 2026-10-10).
+    if (listing.maxAdvanceBookingDays && listing.priceUnit !== 'MONTH') {
       const latest = Date.now() + listing.maxAdvanceBookingDays * 86_400_000;
       if (startsAt.getTime() > latest) {
         throw new BadRequestException(

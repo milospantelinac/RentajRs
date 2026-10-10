@@ -8,9 +8,7 @@
         <span class="month-request-select" :class="{ 'is-empty': !selectedMonth }">
           <select :id="`${fieldId}-start`" v-model="selectedMonth" class="month-request-control">
             <option value="" disabled>{{ t('bookingForm.monthPlaceholder') }}</option>
-            <option v-for="m in availableMonths" :key="m.key" :value="m.key" :disabled="m.blocked || m.outsideRules">
-              {{ m.blocked ? t('bookingForm.monthTaken', { month: m.label }) : m.label }}
-            </option>
+            <option v-for="m in availableMonths" :key="m.key" :value="m.key" :disabled="!m.free">{{ m.text }}</option>
           </select>
           <img src="/images/icons/chevron-down-18.svg" alt="" />
         </span>
@@ -25,7 +23,10 @@
         </span>
       </div>
     </div>
-    <p v-if="selectedMonth && spanBlocked" class="month-request-error" role="alert">
+    <p v-if="noneFreeMessage" class="month-request-error" role="alert">
+      <img src="/images/icons/field-error.svg" alt="" />{{ noneFreeMessage }}
+    </p>
+    <p v-else-if="selectedMonth && spanBlocked" class="month-request-error" role="alert">
       <img src="/images/icons/field-error.svg" alt="" />{{ t('bookingForm.monthRangeBlocked') }}
     </p>
   </div>
@@ -39,9 +40,7 @@
         <span class="month-card-label">{{ t('booking.monthStart') }}</span>
         <select v-model="selectedMonth" class="month-card-native">
           <option value="" disabled>{{ t('booking.pickMonthPlaceholder') }}</option>
-          <option v-for="m in availableMonths" :key="m.key" :value="m.key" :disabled="m.blocked || m.outsideRules">
-            {{ m.blocked ? t('bookingForm.monthTaken', { month: m.label }) : m.label }}
-          </option>
+          <option v-for="m in availableMonths" :key="m.key" :value="m.key" :disabled="!m.free">{{ m.text }}</option>
         </select>
         <span class="month-card-value" :class="{ 'is-empty': !selectedMonth }">
           {{ startLabel || t('booking.pickMonthPlaceholder') }}
@@ -75,7 +74,10 @@
         </span>
       </div>
     </div>
-    <p v-if="selectedMonth && spanBlocked" class="month-card-error" role="alert">
+    <p v-if="noneFreeMessage" class="month-card-error" role="alert">
+      <img src="/images/icons/field-error.svg" alt="" />{{ noneFreeMessage }}
+    </p>
+    <p v-else-if="selectedMonth && spanBlocked" class="month-card-error" role="alert">
       <img src="/images/icons/field-error.svg" alt="" />{{ t('bookingForm.monthRangeBlocked') }}
     </p>
   </div>
@@ -91,9 +93,9 @@ const props = defineProps({
   basePrice: { type: Number, default: 0 },
   minDuration: { type: Number, default: null },
   maxDuration: { type: Number, default: null },
-  // Dizajn 23: the server holds a month's first instant to the notice and the horizon.
+  // Dizajn 23: the server holds a month's first instant to the notice. T118: not
+  // to the horizon, since a month always starts on the 1st (Tamara, 2026-10-10).
   earliestBookingHours: { type: Number, default: null },
-  maxAdvanceBookingDays: { type: Number, default: null },
   // Dizajn 40: 'request' draws the request page's two fields; T128: 'card'
   // the listing page's booking card's.
   variant: { type: String, default: 'card' },
@@ -102,8 +104,8 @@ const props = defineProps({
   initialCount: { type: Number, default: 1 },
 })
 
-// `select` tells the request page a month is picked but runs into a taken one,
-// which the picker explains itself.
+// `select` tells the page a month is picked but runs into a taken one, or that
+// no month is free at all (T118), which the picker explains itself.
 const emit = defineEmits(['update:range', 'select'])
 
 const { t } = useI18n()
@@ -153,27 +155,46 @@ function monthStartUTC(date) {
   return Date.UTC(date.getFullYear(), date.getMonth(), 1)
 }
 
+// T118: the months ahead, from the next one, since the current one has begun
+// and the server takes no month after its 1st (Tamara, 2026-10-10).
+const MONTHS_SHOWN = 18
+
 const availableMonths = computed(() => {
   const now = new Date()
-  const start = new Date(now.getFullYear(), now.getMonth(), 1)
-  return Array.from({ length: 18 }, (_, i) => {
+  const start = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+  return Array.from({ length: MONTHS_SHOWN }, (_, i) => {
     const date = new Date(start.getFullYear(), start.getMonth() + i, 1)
     const nextMonth = new Date(start.getFullYear(), start.getMonth() + i + 1, 1)
     const key = monthKey(date)
     const blocked = blocks.value.some(
       (b) => new Date(b.startsAt).getTime() < monthStartUTC(nextMonth) && new Date(b.endsAt).getTime() > monthStartUTC(date),
     )
-    const firstInstant = monthStartUTC(date)
-    const outsideRules =
-      (!!props.earliestBookingHours && firstInstant < now.getTime() + props.earliestBookingHours * 3600_000) ||
-      (!!props.maxAdvanceBookingDays && firstInstant > now.getTime() + props.maxAdvanceBookingDays * 86_400_000)
-    return {
-      key,
-      label: date.toLocaleDateString(t('listing.calendarLocale'), { month: 'long', year: 'numeric' }),
-      blocked,
-      outsideRules,
-    }
+    // Inside the owner's time to get ready ("Najkasnije se može rezervisati").
+    const tooSoon = !!props.earliestBookingHours && monthStartUTC(date) < now.getTime() + props.earliestBookingHours * 3600_000
+    const label = date.toLocaleDateString(t('listing.calendarLocale'), { month: 'long', year: 'numeric' })
+    let text = label
+    if (blocked) text = t('bookingForm.monthTaken', { month: label })
+    else if (tooSoon) text = t('bookingForm.monthTooSoon', { month: label })
+    return { key, label, text, blocked, tooSoon, free: !blocked && !tooSoon }
   })
+})
+
+// "30 dana", or the hours of a notice that isn't whole days.
+const noticeText = computed(() => {
+  const hours = props.earliestBookingHours || 0
+  return hours % 24 === 0
+    ? t(`listing.termDays${srPluralCategory(hours / 24)}`, { count: hours / 24 })
+    : t(`listing.termHours${srPluralCategory(hours)}`, { count: hours })
+})
+
+// T118: when no month can be picked, the reason, instead of a list that won't open.
+const noneFreeMessage = computed(() => {
+  const months = availableMonths.value
+  if (months.some((m) => m.free)) return ''
+  const tooSoon = months.some((m) => m.tooSoon)
+  if (tooSoon && months.some((m) => m.blocked)) return t('bookingForm.noMonthNoticeAndTaken', { notice: noticeText.value })
+  if (tooSoon) return t('bookingForm.noMonthNotice', { notice: noticeText.value })
+  return t('bookingForm.noMonthAllTaken', { count: MONTHS_SHOWN })
 })
 
 // T86 — the start month being free doesn't mean the whole span is: a longer
@@ -200,20 +221,34 @@ const startLabel = computed(() => availableMonths.value.find((m) => m.key === se
 
 async function loadAvailability() {
   const now = new Date()
-  const from = new Date(now.getFullYear(), now.getMonth(), 1)
-  const to = new Date(now.getFullYear(), now.getMonth() + 19, 1)
+  const from = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+  const to = new Date(now.getFullYear(), now.getMonth() + 1 + MONTHS_SHOWN, 1)
   const data = await api.get(`/listings/${props.listingId}/availability`, {
     query: { from: from.toISOString(), to: to.toISOString() },
   })
   blocks.value = data.blocked || []
 }
 
+// T118: a month handed over that has begun or falls inside the notice can't be
+// asked for, so it isn't kept (a taken one stays, with its message).
+watch(
+  () => availableMonths.value.find((m) => m.key === selectedMonth.value) || null,
+  (picked) => {
+    if (selectedMonth.value && (!picked || picked.tooSoon)) selectedMonth.value = ''
+  },
+  { immediate: true },
+)
+
 // Dizajn 40: a month handed over by the listing page counts once the blocked
 // months are known, so the request page's first quote uses it.
 watch([selectedMonth, monthCount, blocks], () => {
   const valid = selectedMonth.value && !spanBlocked.value && !durationViolation.value
   emit('update:range', { monthStart: valid ? selectedMonth.value : null, monthCount: monthCount.value })
-  emit('select', { monthStart: selectedMonth.value || null, blocked: !!selectedMonth.value && spanBlocked.value })
+  emit('select', {
+    monthStart: selectedMonth.value || null,
+    blocked: !!selectedMonth.value && spanBlocked.value,
+    noneFree: !!noneFreeMessage.value,
+  })
 })
 
 onMounted(loadAvailability)
@@ -277,16 +312,24 @@ onMounted(loadAvailability)
   color: $color-text-muted;
 }
 
-// The real select lies over the field (keyboard, a phone's own picker).
+// The real select lies over the field (keyboard, a phone's own picker). Without
+// its native look it takes the field's whole height (Safari keeps a native
+// select at its own height), so a click anywhere opens it; 16px keeps iOS from
+// zooming in on it.
 .month-card-native {
   position: absolute;
+  z-index: 1;
   inset: 0;
   width: 100%;
   height: 100%;
+  margin: 0;
   opacity: 0;
+  font-size: 16px;
+  appearance: none;
   cursor: pointer;
 }
 
+// The chevron is drawn on top; clicks go through it to the select (T127).
 .month-card-chevron {
   position: absolute;
   top: 50%;
@@ -294,6 +337,7 @@ onMounted(loadAvailability)
   width: 16px;
   height: 16px;
   transform: translateY(-50%);
+  pointer-events: none;
 }
 
 .month-card-count {

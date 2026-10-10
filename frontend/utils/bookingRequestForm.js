@@ -219,8 +219,9 @@ function hoursFit(availability, dateKey, window, startMinutes, hours) {
 
 // The start times a day offers: on the hour from each window's opening and
 // before midnight (a start is only offered on the day the owner set, T104),
-// inside the notice and the horizon (Dizajn 23), and only where the shortest
-// term fits before closing. Belgrade wall-clock times, whatever the browser's zone.
+// still ahead, inside the notice and the horizon (Dizajn 23), and only where the
+// shortest term fits before closing. Belgrade wall-clock times, whatever the
+// browser's zone.
 export function getHourStarts(listing, availability, dateKey, now = Date.now()) {
   if (!dateKey) return []
   const shortest = listing?.minDuration || 1
@@ -228,7 +229,12 @@ export function getHourStarts(listing, availability, dateKey, now = Date.now()) 
   for (const window of dayWindows(availability?.workingHours, dateKey)) {
     for (let minute = window.opens; minute < Math.min(window.closes, 24 * 60); minute += 60) {
       const time = timeOfMinutes(minute)
-      if (isStartWithinRules(listing, belgradeInstant(dateKey, time), now) && hoursFit(availability, dateKey, window, minute, shortest)) {
+      const instant = belgradeInstant(dateKey, time)
+      if (
+        instant.getTime() > now &&
+        isStartWithinRules(listing, instant, now) &&
+        hoursFit(availability, dateKey, window, minute, shortest)
+      ) {
         times.push(time)
       }
     }
@@ -236,20 +242,23 @@ export function getHourStarts(listing, availability, dateKey, now = Date.now()) 
   return times
 }
 
-// The lengths a start offers: whole hours from the minimum up to the maximum,
-// closing time or the next taken term, whichever comes first. Before a start
-// is picked, up to the maximum and the day's longest window.
-export function getHourLengths(listing, availability, dateKey, startTime) {
-  const all = getHourlyDurationOptions(listing)
-  if (!dateKey) return all
-  const windows = dayWindows(availability?.workingHours, dateKey)
-  if (!startTime) {
-    const longest = Math.max(0, ...windows.map((window) => window.closes - window.opens)) / 60
-    const lengths = all.filter((hours) => hours <= longest)
-    return lengths.length ? lengths : all.slice(0, 1)
+// T127 (Tamara, 2026-10-10): a day the calendars offer has at least one start
+// a term can still be booked from; one taken by requests, their gaps, a block,
+// the notice, the horizon or closed hours is off like a taken day. Each answer
+// is kept, since the calendar asks for every day it draws.
+export function makeHourDayCheck(listing, availability, now = Date.now()) {
+  const answers = new Map()
+  return (dateKey) => {
+    if (!answers.has(dateKey)) answers.set(dateKey, getHourStarts(listing, availability, dateKey, now).length > 0)
+    return answers.get(dateKey)
   }
+}
+
+// The lengths one start holds: from the minimum up to the maximum, closing time
+// or the next taken term, whichever comes first.
+function lengthsFrom(availability, dateKey, all, startTime) {
   const start = minutesOfTime(startTime)
-  const window = windows.find((candidate) => candidate.opens <= start && start < candidate.closes)
+  const window = dayWindows(availability?.workingHours, dateKey).find((candidate) => candidate.opens <= start && start < candidate.closes)
   if (!window) return []
   const lengths = []
   for (const hours of all) {
@@ -257,6 +266,20 @@ export function getHourLengths(listing, availability, dateKey, startTime) {
     lengths.push(hours)
   }
   return lengths
+}
+
+// The lengths a start offers, in whole hours. Before a start is picked, every
+// length one of the day's starts can hold, and none on a day without a start
+// (T127: it used to offer the day's longest window).
+export function getHourLengths(listing, availability, dateKey, startTime, now = Date.now()) {
+  const all = getHourlyDurationOptions(listing)
+  if (!dateKey) return all
+  if (startTime) return lengthsFrom(availability, dateKey, all, startTime)
+  const longest = Math.max(
+    0,
+    ...getHourStarts(listing, availability, dateKey, now).map((time) => lengthsFrom(availability, dateKey, all, time).length),
+  )
+  return all.slice(0, longest)
 }
 
 // The length to keep when the choice of lengths changes: the same one, else

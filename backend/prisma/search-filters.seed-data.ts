@@ -74,7 +74,14 @@ export const SEARCH_FILTERS: Record<string, FilterSeed[]> = {
   'prostori-za-proslave': EVENT_SPACE,
   'sale-za-proslave': EVENT_SPACE,
   'konferencijske-sale': EVENT_SPACE,
-  igraonice: [guests([10, 20, 30, 50], 'kapacitet_dece'), select('uzrast_dece', BAR), area, allOf('sadrzaji')],
+  // Uzrast dece takes several ages at once and shows a playroom with any of
+  // them (Tamara, 2026-10-10), as Marka vozila does.
+  igraonice: [
+    guests([10, 20, 30, 50], 'kapacitet_dece'),
+    { key: 'uzrast_dece', placement: BAR, control: FilterControl.MULTI_SELECT },
+    area,
+    allOf('sadrzaji'),
+  ],
   vozila: [
     select('tip_vozila', BAR),
     select('menjac', BAR),

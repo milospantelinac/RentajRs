@@ -177,6 +177,40 @@
             </template>
           </FilterPill>
 
+          <!-- T115: Uzrast dece ticks several ages at once; a listing with any
+               of them shows (Tamara, 2026-10-10). -->
+          <FilterPill
+            v-else-if="filter.control === 'MULTI_SELECT'"
+            :label="getSearchFilterLabel(filter, t)"
+            :value="barMultiLabel(filter)"
+            :active="isBarFilterSet(filter)"
+            :panel-width="260"
+            @open="multiDraft = [...(selections.get(filter.key) || [])]"
+          >
+            <template #default="{ close }">
+              <ul class="filter-check-list">
+                <li v-for="option in filter.options" :key="option.key">
+                  <label class="filter-check">
+                    <input
+                      type="checkbox"
+                      class="filter-check-input"
+                      :checked="multiDraft.includes(option.key)"
+                      @change="toggleMultiDraft(option.key)"
+                    />
+                    <span class="filter-check-box" aria-hidden="true">
+                      <img src="/images/icons/check-small.svg" alt="" width="12" height="12" />
+                    </span>
+                    <span class="filter-check-label">{{ option.name }}</span>
+                  </label>
+                </li>
+              </ul>
+              <div class="filter-panel-actions">
+                <button type="button" class="btn btn-text btn-sm" @click="applyMultiChoice(filter, [], close)">{{ t('search.reset') }}</button>
+                <button type="button" class="btn btn-primary-flat btn-sm" @click="applyMultiChoice(filter, multiDraft, close)">{{ t('search.apply') }}</button>
+              </div>
+            </template>
+          </FilterPill>
+
           <FilterPill
             v-else
             :label="getSearchFilterLabel(filter, t)"
@@ -435,6 +469,8 @@ const panelFilters = computed(() => searchFilters.value.filters.filter((filter) 
 const priceDraft = reactive({ min: query.priceMin, max: query.priceMax, unit: query.priceUnit })
 const dateDraft = reactive({ from: query.dateFrom, to: query.dateTo })
 const areaDraft = ref([])
+// The ticks of the open multiple-choice pill (Uzrast dece), applied on "Primeni".
+const multiDraft = ref([])
 
 // -- Options -----------------------------------------------------------
 
@@ -685,6 +721,26 @@ function applyBarChoice(filter, value, close) {
 function toggleBarFilter(filter) {
   if (selections.get(filter.key)) selections.delete(filter.key)
   else selections.set(filter.key, true)
+  runSearch()
+}
+
+// "4-6 godina", or "2 izabrano" once several are ticked, as Deo grada counts them.
+function barMultiLabel(filter) {
+  const keys = selections.get(filter.key) || []
+  if (keys.length !== 1) return keys.length ? t('search.choicesSelected', { count: keys.length }) : ''
+  return filter.options.find((option) => option.key === keys[0])?.name || ''
+}
+
+function toggleMultiDraft(key) {
+  multiDraft.value = multiDraft.value.includes(key) ? multiDraft.value.filter((picked) => picked !== key) : [...multiDraft.value, key]
+}
+
+// In the options' own order, whatever order they were ticked in.
+function applyMultiChoice(filter, keys, close) {
+  const picked = filter.options.map((option) => option.key).filter((key) => keys.includes(key))
+  if (picked.length) selections.set(filter.key, picked)
+  else selections.delete(filter.key)
+  close()
   runSearch()
 }
 

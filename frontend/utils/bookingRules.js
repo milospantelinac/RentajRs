@@ -77,11 +77,29 @@ export function getDurationUnit(listing) {
   return listing?.bookingModel === 'PER_SLOT' && !isDefinedSlotsListing(listing) ? 'HOUR' : listing?.priceUnit
 }
 
+// T118 (Tamara, 2026-10-10): a month always starts on the 1st, so "Najranije se
+// može rezervisati" doesn't apply to it, and its "Najkasnije se može rezervisati"
+// is the owner's time to get ready, set and shown in days (kept in hours).
+export function isMonthlyListing(listing) {
+  return listing?.priceUnit === 'MONTH'
+}
+
+// The horizon in days that holds for the listing, or null.
+export function getBookingHorizonDays(listing) {
+  return isMonthlyListing(listing) ? null : listing?.maxAdvanceBookingDays || null
+}
+
+// A notice kept in hours, in whole days (an odd hour counts as a day).
+export function noticeHoursToDays(hours) {
+  return Math.ceil(hours / 24)
+}
+
 // The notice before the start and the horizon, both checked against the start instant.
 export function isStartWithinRules(listing, startsAt, now = Date.now()) {
   const start = new Date(startsAt).getTime()
+  const horizonDays = getBookingHorizonDays(listing)
   if (listing?.earliestBookingHours && start < now + listing.earliestBookingHours * 3600_000) return false
-  if (listing?.maxAdvanceBookingDays && start > now + listing.maxAdvanceBookingDays * 86_400_000) return false
+  if (horizonDays && start > now + horizonDays * 86_400_000) return false
   return true
 }
 
