@@ -380,6 +380,7 @@ describe('BookingsService#listMine (Dizajn 34)', () => {
       listing: { title: 'Igraonica', slug: 'igraonica', categoryId, city: { name: 'Beograd' }, cityArea: { name: 'Vračar' } },
       guest: { firstName: 'Milica', lastName: 'Jovanović' },
       owner: { firstName: 'Dragan', lastName: 'Simić' },
+      _count: { changeRequests: id === 'confirmed' ? 1 : 0 },
     });
     const prisma = {
       booking: {
@@ -419,6 +420,9 @@ describe('BookingsService#listMine (Dizajn 34)', () => {
     });
     expect(rows[3].guestUnit).toBe('guests');
     expect(rows[6].guestUnit).toBe('people');
+    // T136: the row of a booking whose guest asked for another term says so.
+    expect(rows.map((r) => r.hasPendingChange)).toEqual([false, false, false, true, false, false, false]);
+    expect(rows[3]).not.toHaveProperty('_count');
     expect(rows[0]).not.toHaveProperty('guestName');
     expect(rows[0]).not.toHaveProperty('ownerShortName');
 
@@ -677,6 +681,9 @@ describe('BookingsService#getOne paymentDisputed', () => {
       listingAttribute: { findMany: jest.fn().mockResolvedValue([]) },
       conversation: { findMany: jest.fn().mockResolvedValue([]) },
       dispute: { count: jest.fn().mockResolvedValue(openReports) },
+      // T136: no request to move the booking; the deadline setting at its default.
+      bookingChangeRequest: { findMany: jest.fn().mockResolvedValue([]) },
+      setting: { findUnique: jest.fn().mockResolvedValue(null) },
     };
     const taxonomy = {
       resolveAttributesForCategory: jest.fn().mockResolvedValue([]),
@@ -1077,6 +1084,9 @@ describe('BookingsService#getOne for the sent request (Dizajn 41)', () => {
       listingAttribute: { findMany: jest.fn().mockResolvedValue([]) },
       conversation: { findMany: jest.fn().mockResolvedValue([]) },
       dispute: { count: jest.fn().mockResolvedValue(0) },
+      // T136: no request to move the booking; the deadline setting at its default.
+      bookingChangeRequest: { findMany: jest.fn().mockResolvedValue([]) },
+      setting: { findUnique: jest.fn().mockResolvedValue(null) },
     };
     const taxonomy = {
       resolveAttributesForCategory: jest.fn().mockResolvedValue([]),

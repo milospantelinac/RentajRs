@@ -51,6 +51,7 @@
 // 568:514, 568:698) the guest's page. The address stays /rezervacije/:id,
 // which the emails and notifications link to.
 import { formatBookingMoment } from '~/utils/bookingRequests'
+import { formatChangeTerm } from '~/utils/bookingChange'
 
 definePageMeta({ middleware: ['auth', 'booking-menu'], layout: 'dashboard' })
 const { t } = useI18n()
@@ -143,7 +144,16 @@ const CONFIRM_MESSAGES = {
       ? t('booking.confirmWithdraw')
       : t('booking.confirmCancelGuest', { terms: booking.value.cancellationTermsSnapshot || CANCELLATION_TERMS_FALLBACK() }),
   'no-show': () => t('booking.confirmNoShow'),
+  // T136: the change of term.
+  'change-withdraw': () => t('bookingChange.confirmWithdraw'),
+  'change-approve': () =>
+    t('bookingChange.confirmApprove', {
+      term: formatChangeTerm(t, booking.value, booking.value.change.pending.newStartsAt, booking.value.change.pending.newEndsAt),
+    }),
 }
+
+// T136: where the change of term's actions post.
+const ACTION_PATHS = { 'change-withdraw': 'change/withdraw', 'change-approve': 'change/approve', 'change-reject': 'change/reject' }
 
 // Resolved from the state before the action, since the reload has already
 // replaced the booking by the time this runs.
@@ -163,6 +173,12 @@ function successMessageFor(action, previousStatus) {
       return t('booking.successNoShow')
     case 'dispute-payment':
       return t('booking.successDisputePayment')
+    case 'change-withdraw':
+      return t('bookingChange.successWithdraw')
+    case 'change-approve':
+      return t('bookingChange.successApprove')
+    case 'change-reject':
+      return t('bookingChange.successReject')
     default:
       return ''
   }
@@ -185,14 +201,22 @@ async function act(action) {
   successMessage.value = ''
   const confirmMessage = CONFIRM_MESSAGES[action]?.()
   if (confirmMessage && !window.confirm(confirmMessage)) return
+  // T136: the owner may say why another term doesn't suit; the guest reads it.
+  let body = {}
+  if (action === 'change-reject') {
+    const reason = window.prompt(t('bookingChange.rejectPrompt'), '')
+    if (reason === null) return
+    body = { reason: reason.trim() || undefined }
+  }
   const previousStatus = booking.value.status
   acting.value = true
   try {
-    await api.post(`/bookings/${bookingId}/${action}`, {})
+    await api.post(`/bookings/${bookingId}/${ACTION_PATHS[action] || action}`, body)
     await refresh()
     successMessage.value = successMessageFor(action, previousStatus)
-    // An answered request leaves the menu's "Zahtevi" counter (Dizajn 30).
-    if (previousStatus === 'REQUESTED') dashboardCounts.refresh()
+    // An answered request leaves the menu's "Zahtevi" counter (Dizajn 30), and
+    // so does an answered change of term (T136).
+    if (previousStatus === 'REQUESTED' || action.startsWith('change-')) dashboardCounts.refresh()
   } catch (e) {
     actionError.value = extractErrorMessage(e, t('auth.genericError'))
     // A request answered elsewhere in the meantime shows its real state.

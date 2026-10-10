@@ -87,6 +87,7 @@
           <p class="bookreq-cell-amount bookreq-amount" role="cell">{{ row.amount }}</p>
           <div class="bookreq-cell-status" role="cell">
             <span class="bookreq-pill" :class="`bookreq-pill-${row.status}`">{{ row.statusText }}</span>
+            <span v-if="row.changeText" class="bookreq-pill bookreq-pill-change">{{ row.changeText }}</span>
           </div>
           <img src="/images/icons/chevron-right-faint.svg" alt="" width="16" height="16" class="bookreq-cell-arrow" />
         </div>
@@ -311,7 +312,9 @@ $bookreq-closed-bg: #f0f2f5;
 .bookreq-cell-status {
   display: flex;
   flex: 0 1 190px;
+  flex-wrap: wrap;
   align-items: center;
+  gap: 6px;
   min-width: 124px;
 }
 
@@ -435,6 +438,12 @@ $bookreq-closed-bg: #f0f2f5;
 .bookreq-pill-CANCELLED {
   background: $bookreq-closed-bg;
   color: $color-text-muted;
+}
+
+// T136: no frame; a request for another term, in the accent tint.
+.bookreq-pill-change {
+  background: $color-accent-tint;
+  color: $color-primary;
 }
 
 // Dizajn 44: the filtered empty state keeps the table row it stands in; the

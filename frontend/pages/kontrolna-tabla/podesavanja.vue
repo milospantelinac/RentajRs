@@ -451,6 +451,10 @@ const NOTIFICATION_CATEGORIES = [
       'booking_request_expired_guest',
       'booking_request_expired_owner',
       'booking_no_show_marked',
+      // T136: the approved and rejected changes are critical and always sent.
+      'booking_change_requested_owner',
+      'booking_change_expired_guest',
+      'booking_change_withdrawn_owner',
     ],
   },
   { key: 'Messages', events: ['new_message'] },

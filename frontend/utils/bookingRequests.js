@@ -184,6 +184,8 @@ export function buildBookingRow(t, booking) {
     amount: formatRsd(booking.totalAmount),
     status: booking.status,
     statusText: getBookingStatusLabel(t, booking.status),
+    // T136: a guest's request for another term waits for the owner.
+    changeText: booking.hasPendingChange ? t('bookingChange.listTag') : '',
   }
 }
 

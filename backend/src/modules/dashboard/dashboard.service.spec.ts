@@ -122,6 +122,7 @@ describe('DashboardService attention items (Dizajn 31)', () => {
   it("sends a term conflict to the conflicting listing's calendar, or to Moji oglasi for several", async () => {
     const makePrisma = (listingIds: string[]) => ({
       booking: { count: jest.fn().mockResolvedValue(0) },
+      bookingChangeRequest: { count: jest.fn().mockResolvedValue(0) },
       dispute: { findMany: jest.fn().mockResolvedValue(listingIds.map((listingId) => ({ listingId }))) },
       icalSource: { findMany: jest.fn().mockResolvedValue([]) },
       subscription: { count: jest.fn().mockResolvedValue(0) },
@@ -139,9 +140,26 @@ describe('DashboardService attention items (Dizajn 31)', () => {
     expect(item.actionUrl).toBe('/kontrolna-tabla/oglasi');
   });
 
+  it('asks the owner to answer a guest who wants another term (T136)', async () => {
+    const prisma = {
+      booking: { count: jest.fn().mockResolvedValue(0) },
+      bookingChangeRequest: { count: jest.fn().mockResolvedValue(2) },
+      dispute: { findMany: jest.fn().mockResolvedValue([]) },
+      icalSource: { findMany: jest.fn().mockResolvedValue([]) },
+      subscription: { count: jest.fn().mockResolvedValue(0) },
+      listing: { count: jest.fn().mockResolvedValue(0) },
+      conversation: { count: jest.fn().mockResolvedValue(0) },
+    };
+    const service = new DashboardService(prisma as any, {} as any, {} as any, {} as any);
+    await expect((service as any).getOwnerAttention('user1')).resolves.toEqual([
+      { urgency: 'decision', title: 'change_requests', actionUrl: '/kontrolna-tabla/rezervacije?role=owner', count: 2 },
+    ]);
+  });
+
   it('opens the rejected tab of Moji oglasi for rejected listings (Dizajn 32)', async () => {
     const prisma = {
       booking: { count: jest.fn().mockResolvedValue(0) },
+      bookingChangeRequest: { count: jest.fn().mockResolvedValue(0) },
       dispute: { findMany: jest.fn().mockResolvedValue([]) },
       icalSource: { findMany: jest.fn().mockResolvedValue([]) },
       subscription: { count: jest.fn().mockResolvedValue(0) },
@@ -157,6 +175,7 @@ describe('DashboardService attention items (Dizajn 31)', () => {
   it("warns about calendars that keep failing and opens the listing's iCal page (Dizajn 33)", async () => {
     const makePrisma = (listingIds: string[]) => ({
       booking: { count: jest.fn().mockResolvedValue(0) },
+      bookingChangeRequest: { count: jest.fn().mockResolvedValue(0) },
       dispute: { findMany: jest.fn().mockResolvedValue([]) },
       icalSource: { findMany: jest.fn().mockResolvedValue(listingIds.map((listingId) => ({ listingId }))) },
       subscription: { count: jest.fn().mockResolvedValue(0) },
@@ -263,11 +282,14 @@ describe('DashboardService#getCounts (Dizajn 30 menu counters)', () => {
   it('counts requests awaiting this owner and conversations unread on either side', async () => {
     const prisma = {
       booking: { count: jest.fn().mockResolvedValue(4) },
+      // T136: a guest's request for another term waits for the owner too.
+      bookingChangeRequest: { count: jest.fn().mockResolvedValue(1) },
       conversation: { count: jest.fn().mockResolvedValue(2) },
     };
     const service = new DashboardService(prisma as any, {} as any, {} as any, {} as any);
 
-    await expect(service.getCounts('user1')).resolves.toEqual({ bookingRequests: 4, unreadConversations: 2 });
+    await expect(service.getCounts('user1')).resolves.toEqual({ bookingRequests: 5, unreadConversations: 2 });
+    expect(prisma.bookingChangeRequest.count).toHaveBeenCalledWith({ where: { status: 'PENDING', booking: { ownerId: 'user1' } } });
     expect(prisma.booking.count).toHaveBeenCalledWith({ where: { ownerId: 'user1', status: 'REQUESTED' } });
     expect(prisma.conversation.count).toHaveBeenCalledWith({
       where: {

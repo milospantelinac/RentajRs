@@ -2,15 +2,20 @@ import { Body, Controller, Get, Param, ParseEnumPipe, Post, Query } from '@nestj
 import { ApiTags } from '@nestjs/swagger';
 import { BookingStatus } from '@prisma/client';
 import { BookingsService } from './bookings.service';
+import { BookingChangesService } from './booking-changes.service';
 import { CreateBookingRequestDto } from './dto/create-booking-request.dto';
 import { CancelBookingDto, DisputeNoShowDto, RejectBookingDto } from './dto/booking-actions.dto';
+import { ChangeTermDto, RejectBookingChangeDto, RequestBookingChangeDto } from './dto/booking-change.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 
 @ApiTags('bookings')
 @Controller()
 export class BookingsController {
-  constructor(private bookingsService: BookingsService) {}
+  constructor(
+    private bookingsService: BookingsService,
+    private changes: BookingChangesService,
+  ) {}
 
   @Post('listings/:id/bookings')
   create(@CurrentUser('id') guestId: string, @Param('id') listingId: string, @Body() dto: CreateBookingRequestDto) {
@@ -40,6 +45,42 @@ export class BookingsController {
   @Get('bookings/:id')
   getOne(@CurrentUser('id') userId: string, @Param('id') id: string) {
     return this.bookingsService.getOne(userId, id);
+  }
+
+  // -- T136: moving a booking to another term ------------------------------
+
+  /** The listing's terms for the guest's change screen, their own booking's term left free. */
+  @Get('bookings/:id/change/availability')
+  changeAvailability(@CurrentUser('id') guestId: string, @Param('id') id: string, @Query('from') from?: string, @Query('to') to?: string) {
+    const now = new Date();
+    const fromDate = from ? new Date(from) : now;
+    const toDate = to ? new Date(to) : new Date(now.getTime() + 90 * 86_400_000);
+    return this.changes.getAvailability(guestId, id, fromDate, toDate);
+  }
+
+  @Post('bookings/:id/change/quote')
+  changeQuote(@CurrentUser('id') guestId: string, @Param('id') id: string, @Body() dto: ChangeTermDto) {
+    return this.changes.quote(guestId, id, dto);
+  }
+
+  @Post('bookings/:id/change')
+  requestChange(@CurrentUser('id') guestId: string, @Param('id') id: string, @Body() dto: RequestBookingChangeDto) {
+    return this.changes.request(guestId, id, dto);
+  }
+
+  @Post('bookings/:id/change/withdraw')
+  withdrawChange(@CurrentUser('id') guestId: string, @Param('id') id: string) {
+    return this.changes.withdraw(guestId, id);
+  }
+
+  @Post('bookings/:id/change/approve')
+  approveChange(@CurrentUser('id') ownerId: string, @Param('id') id: string) {
+    return this.changes.approve(ownerId, id);
+  }
+
+  @Post('bookings/:id/change/reject')
+  rejectChange(@CurrentUser('id') ownerId: string, @Param('id') id: string, @Body() dto: RejectBookingChangeDto) {
+    return this.changes.reject(ownerId, id, dto);
   }
 
   @Get('bookings/:id/qr')

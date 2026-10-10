@@ -66,6 +66,26 @@
           </template>
         </div>
 
+        <!-- T136: another term asked of the owner, waiting for the answer; or the last answer. -->
+        <section v-if="changeView.pending" class="guestbook-panel guestbook-change" :aria-labelledby="`${uid}-change`">
+          <h2 :id="`${uid}-change`" class="guestbook-card-title">{{ t('bookingChange.pendingTitle') }}</h2>
+          <dl class="guestbook-facts">
+            <div v-for="row in changeView.pending.rows" :key="row.key" class="guestbook-fact" :class="{ 'is-wide': row.wide }">
+              <dt class="guestbook-label">{{ row.label }}</dt>
+              <dd class="guestbook-value">{{ row.value }}</dd>
+              <dd v-if="row.hint" class="guestbook-hint">{{ row.hint }}</dd>
+            </div>
+          </dl>
+          <p class="guestbook-hint">{{ changeView.pending.sent }}</p>
+          <div class="guestbook-panel-buttons">
+            <button type="button" class="guestbook-link" :disabled="busy" @click="emit('action', 'change-withdraw')">
+              {{ t('bookingChange.withdraw') }}
+            </button>
+          </div>
+        </section>
+        <p v-else-if="changeView.note" class="guestbook-note is-info" role="status">{{ changeView.note }}</p>
+        <p v-if="changeView.hint" class="guestbook-hint">{{ changeView.hint }}</p>
+
         <!-- T90: a dispute carries the guest's explanation for the admin. -->
         <section v-if="disputing" class="guestbook-panel" :aria-labelledby="`${uid}-dispute`">
           <h2 :id="`${uid}-dispute`" class="guestbook-card-title">{{ t('guestBooking.disputeTitle') }}</h2>
@@ -122,6 +142,7 @@
 // runs the actions and passes back what happened as `notice`.
 import { formatRsd } from '~/utils/bookingRequests'
 import { buildGuestBookingView } from '~/utils/guestBooking'
+import { buildGuestChangeView } from '~/utils/bookingChange'
 
 const props = defineProps({
   booking: { type: Object, required: true },
@@ -136,6 +157,8 @@ const { t } = useI18n()
 const uid = useId()
 
 const view = computed(() => buildGuestBookingView(t, props.booking))
+// T136: a change of term waiting for the owner, the last answer, or the deadline passed.
+const changeView = computed(() => buildGuestChangeView(t, props.booking))
 
 // What just happened wins over what the state itself says.
 const note = computed(() => props.notice || (view.value.note ? { tone: 'info', text: view.value.note } : null))
@@ -560,6 +583,11 @@ $guestbook-closed-bg: #f0f2f5;
   border-radius: 20px;
   background: $color-surface;
   box-shadow: inset 0 0 0 1px $color-border;
+}
+
+// T136: the change waiting for the owner lays its facts out as the booking's.
+.guestbook-change .guestbook-facts {
+  align-self: stretch;
 }
 
 .guestbook-panel-label {

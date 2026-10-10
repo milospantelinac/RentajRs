@@ -16,5 +16,13 @@
   "PAYMENT_DEADLINE_PASSED": "The payment deadline has passed, so the payment can no longer be reported.",
   "NO_SHOW_ALREADY_DISPUTED": "You have already disputed the no-show mark. An administrator is looking into it.",
   "STATE_CHANGED": "The booking changed in the meantime, so this action is no longer possible.",
-  "SLOT_REQUIRED": "Pick one of the offered time slots."
+  "SLOT_REQUIRED": "Pick one of the offered time slots.",
+  "CHANGE_NOT_AVAILABLE": "The term of this booking cannot be changed here right now. Agree it with the owner.",
+  "CHANGE_DEADLINE_PASSED": "A change of term can be asked for until {hours} hours before the start. For a later change, contact the owner.",
+  "CHANGE_ALREADY_PENDING": "You have already asked for another term. Wait for the owner to answer, or withdraw the request.",
+  "CHANGE_SAME_TERM": "That is the term you already have. Choose another one.",
+  "CHANGE_TERM_TAKEN": "The chosen term is taken. Choose another one.",
+  "CHANGE_TERM_NO_LONGER_FREE": "The new term has been taken meanwhile, so the change cannot be approved. Reject the request or agree another term with the guest.",
+  "CHANGE_NOT_PENDING": "There is no change of term waiting for an answer.",
+  "CHANGE_EXPIRED": "The request for another term has expired because the term has started."
 }

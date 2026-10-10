@@ -13,6 +13,7 @@ import { GUEST_CAPACITY_ATTRIBUTE_KEYS, GuestUnit, getGuestUnits } from '../../c
 import { canGuestCancel, getFreeCancellationUntil } from '../../common/utils/guest-cancellation';
 import { OPEN_PAYMENT_REPORT, isHeldByPaymentReport } from '../../common/utils/payment-report';
 import { readRequestResponseHours } from '../../common/utils/request-expiry';
+import { describeBookingChange, readChangeDeadlineHours } from '../../common/utils/booking-change';
 import { shortName } from '../../common/utils/short-name';
 import { CreateBookingRequestDto } from './dto/create-booking-request.dto';
 import { CancelBookingDto, DisputeNoShowDto, RejectBookingDto } from './dto/booking-actions.dto';
@@ -193,7 +194,9 @@ export class BookingsService {
     return this.serialize(booking);
   }
 
-  private async resolveRequestedTerm(
+  // T136: the term rules and pricing below are shared with BookingChangesService,
+  // so a moved booking is checked and priced exactly as a new one.
+  async resolveRequestedTerm(
     listing: { id: string; bookingModel: string; slotSubmode: string | null },
     dto: CreateBookingRequestDto,
   ): Promise<{ startsAt: Date; endsAt: Date; slotPrice?: bigint }> {
@@ -223,7 +226,7 @@ export class BookingsService {
     return { startsAt: new Date(dto.startsAt), endsAt: new Date(dto.endsAt) };
   }
 
-  private assertTermRules(
+  assertTermRules(
     listing: {
       minDuration: number | null;
       maxDuration: number | null;
@@ -312,7 +315,7 @@ export class BookingsService {
    * starts at. Every other combination keeps the flat unitPrice x unitCount
    * calculation.
    */
-  private async computeTotals(
+  async computeTotals(
     listing: PricingListing,
     startsAt: Date,
     endsAt: Date,
@@ -371,7 +374,7 @@ export class BookingsService {
    * (Igraonice) from wizard step 6 are CategoryAttributes separate from the
    * maxGuests set in step 4. Dizajn 23: both cap the guests, so the lower applies.
    */
-  private async getGuestCapacity(listingId: string, maxGuests: number | null): Promise<number | null> {
+  async getGuestCapacity(listingId: string, maxGuests: number | null): Promise<number | null> {
     const capacityAttrs = await this.prisma.listingAttribute.findMany({
       where: { listingId, attribute: { key: { in: GUEST_CAPACITY_ATTRIBUTE_KEYS } }, valueNumber: { not: null } },
       select: { valueNumber: true },
@@ -659,9 +662,10 @@ export class BookingsService {
             pickupTime: true,
             returnTime: true,
             paymentDeadlineHours: true,
+            bookingModel: true,
             city: { select: { name: true } },
             cityArea: { select: { name: true } },
-            subscription: { select: { package: { select: { hasMessaging: true } } } },
+            subscription: { select: { package: { select: { hasMessaging: true, hasBookings: true } } } },
             photos: {
               where: { pendingRemoval: false, versionId: null },
               orderBy: [{ isCover: 'desc' }, { displayOrder: 'asc' }],
@@ -717,7 +721,7 @@ export class BookingsService {
 
     const { listing } = booking;
     const isOwnerViewing = booking.ownerId === userId;
-    const [guestUnits, guestCapacity, categoryNames, messaging, openPaymentReports, decidedNoShowDisputes] = await Promise.all([
+    const [guestUnits, guestCapacity, categoryNames, messaging, openPaymentReports, decidedNoShowDisputes, changeRequests, changeDeadlineHours] = await Promise.all([
       getGuestUnits(this.taxonomy, [listing.categoryId]),
       this.getGuestCapacity(booking.listingId, listing.maxGuests),
       this.taxonomy.getCategoryNames([listing.categoryId]),
@@ -730,6 +734,9 @@ export class BookingsService {
       booking.status === 'NO_SHOW' && booking.noShowDisputed
         ? this.prisma.dispute.count({ where: { bookingId: booking.id, type: 'DISPUTED_NO_SHOW', status: 'RESOLVED' } })
         : 0,
+      // T136: the latest requests to move the booking.
+      this.prisma.bookingChangeRequest.findMany({ where: { bookingId: booking.id }, orderBy: { createdAt: 'desc' }, take: 5 }),
+      readChangeDeadlineHours(this.prisma),
     ]);
     const serialized = this.serialize(booking, userId);
 
@@ -765,6 +772,14 @@ export class BookingsService {
       },
       paymentDisputed: openPaymentReports > 0,
       noShowDisputeDecided: decidedNoShowDisputes > 0,
+      // T136: a change of term waiting for the owner, the last one decided, and
+      // whether the guest may ask for one (a live listing, before the deadline).
+      change: describeBookingChange(booking, changeRequests, {
+        deadlineHours: changeDeadlineHours,
+        listingBookable:
+          listing.status === ListingStatus.ACTIVE && listing.bookingModel !== 'NO_BOOKING' && !!listing.subscription?.package.hasBookings,
+        asGuest: booking.guestId === userId,
+      }),
       ...(isOwnerViewing
         ? { guestShortName: shortName(booking.guest) }
         : // The guest already sees "Dragan S." on the listing's page; the full
@@ -796,6 +811,7 @@ export class BookingsService {
         },
         guest: { select: { firstName: true, lastName: true } },
         owner: { select: { firstName: true, lastName: true } },
+        _count: { select: { changeRequests: { where: { status: 'PENDING' } } } },
       },
     });
     const guestUnits = await getGuestUnits(this.taxonomy, bookings.map((b) => b.listing.categoryId));
@@ -803,10 +819,12 @@ export class BookingsService {
     // Dizajn 34: a row names the listing with its area and, for the owner,
     // the guest ("Milica J. · 18 dece"); Dizajn 39 (380:671) names the owner
     // on the guest's rows ("Vlasnik: Dragan S."), as the listing's page does.
-    return bookings.sort(compareForList).map(({ guest, owner, listing, ...booking }) => ({
+    return bookings.sort(compareForList).map(({ guest, owner, listing, _count, ...booking }) => ({
       ...this.serialize(booking),
       listing: { title: listing.title, slug: listing.slug, place: listing.cityArea?.name ?? listing.city?.name ?? null },
       guestUnit: guestUnits.get(listing.categoryId),
+      // T136: the rows say when the guest waits for an answer about another term.
+      hasPendingChange: _count.changeRequests > 0,
       ...(role === 'owner' ? { guestShortName: shortName(guest) } : { ownerShortName: shortName(owner) }),
     }));
   }
@@ -1087,7 +1105,7 @@ export class BookingsService {
  * booking's own time-slot rules (assertTermRules) are untouched by this —
  * only how the total is priced changes, never how the term itself works.
  */
-function resolvePricingUnitCount(
+export function resolvePricingUnitCount(
   priceUnit: PriceUnit,
   startsAt: Date,
   endsAt: Date,
@@ -1154,11 +1172,11 @@ function compareForList(
 }
 
 /** Dizajn 23: a defined slot carries its own length, so the duration and gap rules skip it. */
-function isDefinedSlots(listing: { bookingModel: string; slotSubmode: string | null }): boolean {
+export function isDefinedSlots(listing: { bookingModel: string; slotSubmode: string | null }): boolean {
   return listing.bookingModel === 'PER_SLOT' && listing.slotSubmode === 'DEFINED_SLOTS';
 }
 
-function isWorkingHours(listing: { bookingModel: string; slotSubmode: string | null }): boolean {
+export function isWorkingHours(listing: { bookingModel: string; slotSubmode: string | null }): boolean {
   return listing.bookingModel === 'PER_SLOT' && listing.slotSubmode === 'WORKING_HOURS';
 }
 
@@ -1167,7 +1185,7 @@ function isWorkingHours(listing: { bookingModel: string; slotSubmode: string | n
  * pickup and return times do that job, and the return day stays free for
  * the next pickup (Tamara, 2026-10-09).
  */
-function isDayStay(listing: { bookingModel: string; priceUnit: PriceUnit }): boolean {
+export function isDayStay(listing: { bookingModel: string; priceUnit: PriceUnit }): boolean {
   return listing.bookingModel === 'PER_STAY' && listing.priceUnit === 'DAY';
 }
 

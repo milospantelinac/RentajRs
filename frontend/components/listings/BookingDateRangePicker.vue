@@ -122,6 +122,9 @@ const props = defineProps({
   // T127: working hours say per day ("2026-10-16") whether a term can still be
   // booked on it; a day that can't is off like a taken one. Null: no such check.
   isDayOpen: { type: Function, default: null },
+  // T136: the booking change screen reads the terms with the guest's own
+  // booking left free (GET /bookings/:id/change/availability).
+  availabilityPath: { type: String, default: '' },
 })
 
 // `select` reports the dates as picked, also a stay still too short, which
@@ -380,7 +383,7 @@ defineExpose({ clear })
 async function loadAvailability() {
   const from = new Date(baseMonth.value)
   const to = new Date(baseMonth.value.getFullYear(), baseMonth.value.getMonth() + 2, 1)
-  const data = await api.get(`/listings/${props.listingId}/availability`, {
+  const data = await api.get(props.availabilityPath || `/listings/${props.listingId}/availability`, {
     query: { from: from.toISOString(), to: to.toISOString() },
   })
   blocks.value = data.blocked || []

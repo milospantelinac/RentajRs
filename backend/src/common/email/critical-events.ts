@@ -30,6 +30,9 @@ export const CRITICAL_EMAIL_EVENTS = new Set<string>([
   'booking_confirmed_cash',
   'booking_cancelled',
   'booking_reminder_day_before',
+  // T136: a confirmed booking's term moved, or the move refused
+  'booking_change_approved_guest',
+  'booking_change_rejected_guest',
   // T90: the decision both sides were promised on a disputed no-show
   'booking_no_show_overturned_guest',
   'booking_no_show_upheld_guest',

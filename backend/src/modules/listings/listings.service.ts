@@ -785,7 +785,7 @@ export class ListingsService {
 
   // -- Public ------------------------------------------------------------
 
-  async getPublicBySlug(slug: string) {
+  async getPublicBySlug(slug: string, options: { countView?: boolean } = {}) {
     const listing = await this.prisma.listing.findUnique({
       where: { slug },
       include: this.publicDisplayInclude(),
@@ -794,7 +794,7 @@ export class ListingsService {
       throw new NotFoundException(this.i18n.t('errors.LISTING_NOT_FOUND'));
     }
 
-    await this.recordView(listing.id);
+    if (options.countView !== false) await this.recordView(listing.id);
     return this.buildDisplayPayload(listing);
   }
 

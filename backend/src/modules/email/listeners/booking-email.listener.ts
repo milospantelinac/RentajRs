@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { OnEvent } from '@nestjs/event-emitter';
 import * as QRCode from 'qrcode';
-import { Booking, DisputeOutcome, Listing, User } from '@prisma/client';
+import { Booking, BookingChangeRequest, DisputeOutcome, Listing, User } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { EmailService } from '../../../common/email/email.service';
 import { escapeHtml } from '../../../common/utils/escape-html';
@@ -10,6 +10,7 @@ import { IPS_QR_IMAGE_OPTIONS, bookingPaymentReference, formatBankAccount } from
 import { getRequestExpiresAt, readRequestResponseHours } from '../../../common/utils/request-expiry';
 import { GuestUnit, getGuestUnits } from '../../../common/utils/guest-capacity';
 import { toBelgradeDateOnly, toBelgradeHHMM } from '../../../common/utils/timezone';
+import { shortName } from '../../../common/utils/short-name';
 import { TaxonomyService } from '../../taxonomy/taxonomy.service';
 import { formatRsd, formatDate, formatDateTime, localeFor } from '../format';
 
@@ -332,6 +333,106 @@ export class BookingEmailListener {
       }),
     ]);
   }
+  // -- T136: another term asked for, and the owner's answer ------------------
+
+  private async loadChange(bookingId: string, changeRequestId: string) {
+    const [b, request] = await Promise.all([
+      this.load(bookingId),
+      this.prisma.bookingChangeRequest.findUnique({ where: { id: changeRequestId } }),
+    ]);
+    return b && request ? { b, request } : null;
+  }
+
+  /** The tokens of the change emails: the two terms and prices, in the reader's language. */
+  private changeContext(b: FullBooking, request: BookingChangeRequest, reader: User) {
+    const locale = localeFor(reader.language);
+    const term = (startsAt: Date, endsAt: Date) => formatRequestTerm({ startsAt, endsAt, priceUnit: b.priceUnit }, locale);
+    return {
+      oglas: b.listing.title,
+      gost: shortName(b.guest) ?? '',
+      stariTermin: term(request.oldStartsAt, request.oldEndsAt),
+      noviTermin: term(request.newStartsAt, request.newEndsAt),
+      staraCena: formatRsd(request.oldTotalAmount),
+      novaCena: formatRsd(request.newTotalAmount),
+    };
+  }
+
+  @OnEvent('booking.change_requested')
+  async onChangeRequested({ bookingId, changeRequestId }: { bookingId: string; changeRequestId: string }) {
+    const loaded = await this.loadChange(bookingId, changeRequestId);
+    if (!loaded) return;
+    const { b, request } = loaded;
+    await this.email.send({
+      key: 'booking_change_requested_owner',
+      to: b.owner.email,
+      language: b.owner.language,
+      userId: b.owner.id,
+      context: this.changeContext(b, request, b.owner),
+      buttonUrl: this.bookingUrl(b.id),
+      extraMjml: request.guestMessage ? quoteMjml(b.owner.language === 'EN' ? 'Message from the guest' : 'Poruka gosta', request.guestMessage) : undefined,
+    });
+  }
+
+  @OnEvent('booking.change_approved')
+  async onChangeApproved({ bookingId, changeRequestId }: { bookingId: string; changeRequestId: string }) {
+    const loaded = await this.loadChange(bookingId, changeRequestId);
+    if (!loaded) return;
+    const { b, request } = loaded;
+    await this.email.send({
+      key: 'booking_change_approved_guest',
+      to: b.guest.email,
+      language: b.guest.language,
+      userId: b.guest.id,
+      context: this.changeContext(b, request, b.guest),
+      buttonUrl: this.bookingUrl(b.id),
+    });
+  }
+
+  @OnEvent('booking.change_rejected')
+  async onChangeRejected({ bookingId, changeRequestId }: { bookingId: string; changeRequestId: string }) {
+    const loaded = await this.loadChange(bookingId, changeRequestId);
+    if (!loaded) return;
+    const { b, request } = loaded;
+    await this.email.send({
+      key: 'booking_change_rejected_guest',
+      to: b.guest.email,
+      language: b.guest.language,
+      userId: b.guest.id,
+      context: this.changeContext(b, request, b.guest),
+      buttonUrl: this.bookingUrl(b.id),
+      extraMjml: request.ownerReason ? quoteMjml(b.guest.language === 'EN' ? 'The owner says' : 'Vlasnik je napisao', request.ownerReason) : undefined,
+    });
+  }
+
+  @OnEvent('booking.change_expired')
+  async onChangeExpired({ bookingId, changeRequestId }: { bookingId: string; changeRequestId: string }) {
+    const loaded = await this.loadChange(bookingId, changeRequestId);
+    if (!loaded) return;
+    const { b, request } = loaded;
+    await this.email.send({
+      key: 'booking_change_expired_guest',
+      to: b.guest.email,
+      language: b.guest.language,
+      userId: b.guest.id,
+      context: this.changeContext(b, request, b.guest),
+      buttonUrl: this.bookingUrl(b.id),
+    });
+  }
+
+  @OnEvent('booking.change_withdrawn')
+  async onChangeWithdrawn({ bookingId, changeRequestId }: { bookingId: string; changeRequestId: string }) {
+    const loaded = await this.loadChange(bookingId, changeRequestId);
+    if (!loaded) return;
+    const { b, request } = loaded;
+    await this.email.send({
+      key: 'booking_change_withdrawn_owner',
+      to: b.owner.email,
+      language: b.owner.language,
+      userId: b.owner.id,
+      context: this.changeContext(b, request, b.owner),
+      buttonUrl: this.bookingUrl(b.id),
+    });
+  }
 }
 
 const DATE_UNITS = ['NIGHT', 'DAY'];
@@ -354,6 +455,14 @@ function requestDetailsMjml(b: FullBooking, guestUnit: GuestUnit | undefined): s
   return [
     `<mj-text font-weight="600" padding-bottom="8px">${isEn ? 'Request details' : 'Detalji zahteva'}</mj-text>`,
     ...rows.map(([label, value]) => `<mj-text padding-bottom="2px">${label}: ${escapeHtml(value)}</mj-text>`),
+  ].join('\n');
+}
+
+/** T136: a note one side wrote to the other, under the template's own text. */
+function quoteMjml(label: string, text: string): string {
+  return [
+    `<mj-text font-weight="600" padding-bottom="8px">${escapeHtml(label)}</mj-text>`,
+    `<mj-text padding-bottom="2px">${escapeHtml(text)}</mj-text>`,
   ].join('\n');
 }
 

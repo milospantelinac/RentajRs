@@ -12,124 +12,9 @@
 
       <div v-else class="request-split">
         <form class="request-card" novalidate @submit.prevent="submit">
-          <!-- 538:557: a day, then one of its defined slots. -->
-          <section v-if="model === 'slots'" class="request-term">
-            <RequestSlotPicker v-model="form.definedSlotId" :entries="slotEntries" />
-            <p v-if="errors.term" class="request-error" role="alert">
-              <img src="/images/icons/field-error.svg" alt="" />{{ errors.term }}
-            </p>
-          </section>
-
-          <!-- No frame: a monthly stay, from the frame's own fields. -->
-          <section v-else-if="model === 'months'" class="request-term">
-            <BookingMonthPicker
-              variant="request"
-              :listing-id="listing.id"
-              :base-price="listing.price"
-              :min-duration="listing.minDuration"
-              :max-duration="listing.maxDuration"
-              :earliest-booking-hours="listing.earliestBookingHours"
-              :initial-month="form.monthStart"
-              :initial-count="form.monthCount"
-              @update:range="onMonthRangeUpdate"
-              @select="onMonthSelect"
-            />
-            <p v-if="errors.term" class="request-error" role="alert">
-              <img src="/images/icons/field-error.svg" alt="" />{{ errors.term }}
-            </p>
-          </section>
-
-          <!-- 373:406: the calendar and the chosen dates. Working hours (no
-               frame) pick one day there, then the start time and length. -->
-          <section v-else class="request-term">
-            <p class="request-label">{{ t('bookingForm.pickDate') }}</p>
-            <BookingDateRangePicker
-              v-if="model === 'stay'"
-              ref="calendar"
-              variant="request"
-              :listing-id="listing.id"
-              :initial-start="handedStart"
-              :initial-end="handedEnd"
-              :show-pricing="false"
-              :pickup-return="pickupReturn"
-              :price-unit="listing.priceUnit"
-              :min-duration="listing.minDuration"
-              :max-duration="listing.maxDuration"
-              :earliest-booking-hours="listing.earliestBookingHours"
-              :max-advance-booking-days="listing.maxAdvanceBookingDays"
-              @update:range="onRangeUpdate"
-              @select="stayPick = $event"
-            />
-            <BookingDateRangePicker
-              v-else
-              ref="calendar"
-              variant="request"
-              :listing-id="listing.id"
-              :initial-start="handedStart"
-              :show-pricing="false"
-              :earliest-booking-hours="listing.earliestBookingHours"
-              :max-advance-booking-days="listing.maxAdvanceBookingDays"
-              :available-days-of-week="availableDaysOfWeek"
-              :is-day-open="isHourDayOpen"
-              :whole-day-blocking="false"
-              :single-date="true"
-              @update:range="onSingleDateUpdate"
-            />
-
-            <div v-if="model === 'hours' && form.startsAt" class="request-row">
-              <div class="request-field">
-                <label class="request-label" for="request-start-time">{{ t('booking.startTime') }}</label>
-                <span class="request-select" :class="{ 'is-empty': !slotStartTime }">
-                  <select
-                    id="request-start-time"
-                    v-model="slotStartTime"
-                    class="request-select-control"
-                    :disabled="!hourStarts.length"
-                  >
-                    <option value="" disabled>{{ t('bookingForm.startTimePlaceholder') }}</option>
-                    <option v-for="time in hourStarts" :key="time" :value="time">{{ time }}</option>
-                  </select>
-                  <img src="/images/icons/chevron-down-18.svg" alt="" />
-                </span>
-              </div>
-              <div class="request-field">
-                <label class="request-label" for="request-duration">{{ t('bookingForm.duration') }}</label>
-                <span class="request-select">
-                  <select
-                    id="request-duration"
-                    v-model.number="slotDurationHours"
-                    class="request-select-control"
-                    :disabled="!durationSelectOptions.length"
-                  >
-                    <option v-if="!durationSelectOptions.length" :value="slotDurationHours" disabled>-</option>
-                    <option v-for="option in durationSelectOptions" :key="option.value" :value="option.value">
-                      {{ option.label }}
-                    </option>
-                  </select>
-                  <img src="/images/icons/chevron-down-18.svg" alt="" />
-                </span>
-                <p v-if="slotStartTime" class="request-hint">{{ closingHint }}</p>
-              </div>
-            </div>
-            <!-- T127: a day without a free term (a link can still carry one). -->
-            <p v-if="dayWithoutTerms" class="request-alert" role="alert">
-              <img src="/images/icons/field-error.svg" alt="" />{{ t('booking.noWorkingHoursForDay') }}
-            </p>
-
-            <div v-if="termBox" class="request-term-box">
-              <div class="request-term-box-text">
-                <p class="request-term-box-title">{{ termBox.title }}</p>
-                <p class="request-term-box-detail">{{ termBox.detail }}</p>
-              </div>
-              <button type="button" class="request-term-box-change" @click="changeTerm">{{ t('bookingForm.change') }}</button>
-            </div>
-            <p v-if="stayTooShort" class="request-error" role="alert">
-              <img src="/images/icons/field-error.svg" alt="" />{{ minDurationMessage }}
-            </p>
-            <p v-if="errors.term" class="request-error" role="alert">
-              <img src="/images/icons/field-error.svg" alt="" />{{ errors.term }}
-            </p>
-          </section>
+          <!-- The term: a defined slot, months, a stay's dates or a day on working
+               hours (components/bookings/RequestTermFields.vue, T136). -->
+          <RequestTermFields :term="term" :listing="listing" :error="errors.term" />
 
           <!-- 375:406. T127: a playroom's adults sit next to its children and
                the payment moves under them; T125: a vehicle, a machine or a
@@ -284,7 +169,7 @@
           </p>
 
           <!-- 375:430, 375:432 -->
-          <button type="submit" class="request-submit" :disabled="submitting || termUnavailable">
+          <button type="submit" class="request-submit" :disabled="submitting || term.termUnavailable">
             {{ submitting ? t('bookingForm.sending') : t('listing.sendRequest') }}
           </button>
           <p class="request-note">{{ submitNote }}</p>
@@ -307,7 +192,7 @@
             <div class="request-bill">
               <p class="request-bill-row">
                 <span class="request-bill-label">{{ t('bookingForm.term') }}</span>
-                <span class="request-bill-value">{{ termValue }}</span>
+                <span class="request-bill-value">{{ term.termValue }}</span>
               </p>
               <p v-if="askGuests" class="request-bill-row">
                 <span class="request-bill-label">{{ guestLabel }}</span>
@@ -392,8 +277,6 @@ if (listing.value && (listing.value.bookingModel === 'NO_BOOKING' || !listing.va
 }
 
 const model = computed(() => getRequestModel(listing.value))
-// T117: a vehicle or a machine is picked up and returned.
-const pickupReturn = computed(() => usesPickupAndReturn(listing.value))
 
 // T86 — the server already refuses this (errors.CANNOT_BOOK_OWN_LISTING),
 // but the form let an owner fill the whole thing in first and only found out
@@ -415,26 +298,7 @@ const { data: availability, refresh: refreshAvailability } = await useAsyncData(
   })
 })
 
-const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/
-const queryString = (value) => (typeof value === 'string' ? value : '')
-
-// Dizajn 11 — the listing page's booking card hands its selection over in the
-// query string; the guest should not have to pick the same term twice.
-const handedStart = DAY_KEY.test(queryString(route.query.startsAt)) ? route.query.startsAt : ''
-let handedEnd = DAY_KEY.test(queryString(route.query.endsAt)) ? route.query.endsAt : ''
-if (handedEnd && (!handedStart || handedEnd <= handedStart)) handedEnd = ''
-// The calendar holds back a stay shorter than the minimum (T86); the page
-// starts from that answer too, so the server render and the browser agree.
-const handedNights = handedStart && handedEnd ? daysBetweenKeys(handedStart, handedEnd) : 0
-const handedTooShort =
-  model.value === 'stay' && !!listing.value?.minDuration && handedNights > 0 && handedNights < listing.value.minDuration
-
 const form = reactive({
-  startsAt: handedStart,
-  endsAt: handedTooShort ? '' : handedEnd,
-  monthStart: /^\d{4}-\d{2}$/.test(queryString(route.query.monthStart)) ? route.query.monthStart : '',
-  monthCount: Number(route.query.monthCount) || 1,
-  definedSlotId: queryString(route.query.definedSlotId) || null,
   guestMessage: '',
   extraServices: [],
   paymentMethod: '',
@@ -445,151 +309,16 @@ const submitting = ref(false)
 
 // ---- The term ------------------------------------------------------------
 
-const calendar = ref(null)
-// The dates as picked, a stay still too short included (the calendar holds
-// those back from update:range).
-const stayPick = ref(handedStart ? { startsAt: handedStart, endsAt: handedEnd || null, tooShort: handedTooShort } : null)
-const stayTooShort = computed(() => model.value === 'stay' && !!stayPick.value?.tooShort)
-// A monthly stay that runs into a taken month, or no free month at all (T118);
-// the month picker says so itself.
-const monthBlocked = ref(false)
-const noMonthFree = ref(false)
-function onMonthSelect({ blocked, noneFree }) {
-  monthBlocked.value = blocked
-  noMonthFree.value = noneFree
-}
-const minDurationMessage = computed(() =>
-  t('booking.minDurationMessage', {
-    min: listing.value.minDuration,
-    unit: srDurationUnitWord(listing.value.priceUnit, listing.value.minDuration),
-  }),
-)
+// Dizajn 11: the listing page's booking card hands its selection over in the
+// query string; the slot, the months, the dates or the hours and what they
+// allow are composables/useRequestTerm.js (shared with the T136 change screen).
+const term = useRequestTerm({ listing, availability, now, initial: route.query })
 
 // T86 — a stale server-rejection message used to sit above the button
 // forever, even after the guest fixed the very thing it complained about;
 // every selection change clears it instead of waiting for the next submit.
-function onRangeUpdate({ startsAt, endsAt }) {
-  form.startsAt = startsAt || ''
-  form.endsAt = endsAt || ''
-}
-function onMonthRangeUpdate({ monthStart, monthCount }) {
-  form.monthStart = monthStart || ''
-  form.monthCount = monthCount || 1
-}
-// Dizajn 23: the calendar reports the date the booking card handed over as soon as
-// it mounts, so only a different date clears the start time picked with it.
-function onSingleDateUpdate({ startsAt }) {
-  if ((startsAt || '') !== form.startsAt) slotStartTime.value = ''
-  form.startsAt = startsAt || ''
-}
-
-// 373:608: "Promeni" starts the choice over, from the first free day.
-async function changeTerm() {
-  calendar.value?.clear()
-  slotStartTime.value = ''
-  await nextTick()
-  calendar.value?.$el?.querySelector('button.range-picker-cell:not(:disabled)')?.focus()
-}
-
-// PER_SLOT + WORKING_HOURS: a picked date's day of the week gates which start
-// times are offered, straight from the owner's configured hours (T74).
-const workingHours = computed(() => availability.value?.workingHours || [])
-const availableDaysOfWeek = computed(() =>
-  workingHours.value.length ? [...new Set(workingHours.value.map((h) => h.dayOfWeek))] : null,
-)
-const slotStartTime = ref(/^\d{2}:\d{2}$/.test(queryString(route.query.startTime)) ? route.query.startTime : '')
-// Dizajn 23: whole hours from the listing's minimum, starting from the length
-// the listing page's booking card priced.
-const slotDurationHours = ref(Number(route.query.hours) || listing.value?.minDuration || 1)
-
-// T127: starts on the hour where the shortest term fits before closing (T74:
-// and runs into nothing taken; Dizajn 23: inside the notice and the horizon),
-// lengths up to closing or the next taken term (Tamara, 2026-10-09).
-const hourStarts = computed(() =>
-  model.value === 'hours' && listing.value ? getHourStarts(listing.value, availability.value, form.startsAt, now.value) : [],
-)
-const hourLengths = computed(() =>
-  model.value === 'hours' && listing.value
-    ? getHourLengths(listing.value, availability.value, form.startsAt, slotStartTime.value, now.value)
-    : [],
-)
-// T127 (Tamara, 2026-10-10): the calendar offers only the days a term can still
-// be booked on; one handed over in the link without a free term keeps its
-// fields shut, says why and sends nothing.
-const isHourDayOpen = computed(() =>
-  model.value === 'hours' && listing.value && availability.value
-    ? makeHourDayCheck(listing.value, availability.value, now.value)
-    : null,
-)
-const dayWithoutTerms = computed(() => model.value === 'hours' && !!form.startsAt && !hourStarts.value.length)
-// T118: nor anything on a monthly listing with no month free.
-const termUnavailable = computed(() => dayWithoutTerms.value || (model.value === 'months' && noMonthFree.value))
-const durationSelectOptions = computed(() =>
-  hourLengths.value.map((hours) => ({ value: hours, label: formatUnits(t, {}, 'HOUR', hours) })),
-)
-// A time handed over from the listing page may not be free (any more).
 watch(
-  hourStarts,
-  (times) => {
-    if (slotStartTime.value && !times.includes(slotStartTime.value)) slotStartTime.value = ''
-  },
-  { immediate: true },
-)
-// A later start can't hold as long a term: the length steps down with it.
-watch(
-  hourLengths,
-  (lengths) => {
-    slotDurationHours.value = keepHourLength(lengths, slotDurationHours.value)
-  },
-  { immediate: true },
-)
-// "Termin može da traje najduže do 20:00."
-const closingHint = computed(() => {
-  const longest = hourLengths.value[hourLengths.value.length - 1]
-  return slotStartTime.value && longest
-    ? t('bookingForm.latestEnd', { time: formatHoursRange(slotStartTime.value, longest).split(' - ')[1] })
-    : ''
-})
-
-const hoursRange = computed(() => {
-  if (model.value !== 'hours' || !form.startsAt || !slotStartTime.value) return null
-  const startsAt = belgradeInstant(form.startsAt, slotStartTime.value)
-  return { startsAt, endsAt: new Date(startsAt.getTime() + slotDurationHours.value * 3_600_000) }
-})
-
-// 538:874: the slots a guest may still pick, taken ones marked (T74).
-const slotEntries = computed(() =>
-  model.value === 'slots' && listing.value ? buildSlotEntries(t, listing.value, availability.value, now.value) : [],
-)
-const selectedSlot = computed(() => slotEntries.value.find((slot) => slot.id === form.definedSlotId && !slot.taken) || null)
-// A slot handed over from the listing page that is gone or taken meanwhile is dropped.
-watch(
-  slotEntries,
-  (entries) => {
-    if (form.definedSlotId && !entries.some((slot) => slot.id === form.definedSlotId && !slot.taken)) form.definedSlotId = null
-  },
-  { immediate: true },
-)
-
-const termBox = computed(() => {
-  if (model.value === 'stay') return buildStayBox(t, listing.value, stayPick.value)
-  // T127: a day without a free term has the alert instead of "pick a start".
-  if (model.value === 'hours' && !dayWithoutTerms.value) {
-    return buildHoursBox(t, form.startsAt, slotStartTime.value, slotDurationHours.value)
-  }
-  return null
-})
-
-const chosenTerm = computed(() => {
-  if (model.value === 'stay') return form.startsAt && form.endsAt ? { startsAt: form.startsAt, endsAt: form.endsAt } : null
-  if (model.value === 'months') return form.monthStart ? { monthStart: form.monthStart, monthCount: form.monthCount } : null
-  if (model.value === 'slots') return selectedSlot.value
-  return hoursRange.value
-})
-const termValue = computed(() => formatTermValue(t, model.value, chosenTerm.value))
-
-watch(
-  () => [form.startsAt, form.endsAt, form.monthStart, form.monthCount, form.definedSlotId, slotStartTime.value],
+  () => [term.form.startsAt, term.form.endsAt, term.form.monthStart, term.form.monthCount, term.form.definedSlotId, term.slotStartTime],
   () => {
     errors.term = ''
     error.value = ''
@@ -715,17 +444,7 @@ function buildTermPayload() {
     guestCount: askGuests.value ? quoteGuests.value : undefined,
     extraServices: form.extraServices.length ? form.extraServices : undefined,
   }
-  if (model.value === 'slots') return selectedSlot.value ? { ...base, definedSlotId: selectedSlot.value.id } : null
-  if (model.value === 'months') return form.monthStart ? { ...base, monthStart: form.monthStart, monthCount: form.monthCount } : null
-  if (model.value === 'hours') {
-    return hoursRange.value
-      ? { ...base, startsAt: hoursRange.value.startsAt.toISOString(), endsAt: hoursRange.value.endsAt.toISOString() }
-      : null
-  }
-  if (!form.startsAt || !form.endsAt) return null
-  // A stay starts and ends at UTC midnight of its dates, as the calendar and
-  // the server key nights.
-  return { ...base, startsAt: `${form.startsAt}T00:00:00.000Z`, endsAt: `${form.endsAt}T00:00:00.000Z` }
+  return term.payload ? { ...base, ...term.payload } : null
 }
 
 const quote = ref(null)
@@ -745,20 +464,18 @@ onMounted(() => {
   if (listing.value && !isOwnListing.value) refreshQuote()
 })
 
-const priceRows = computed(() => buildPriceRows(t, listing.value, quote.value, model.value === 'slots' ? selectedSlot.value : null))
+const priceRows = computed(() => buildPriceRows(t, listing.value, quote.value, model.value === 'slots' ? term.selectedSlot : null))
 const totalValue = computed(() => (quote.value ? formatRsd(quote.value.totalAmount) : '-'))
 const advanceRow = computed(() => getAdvanceRow(t, quote.value, flow.value))
 
 // ---- Sending -----------------------------------------------------------------
 
 async function submit() {
-  if (termUnavailable.value) return
+  if (term.termUnavailable) return
   error.value = ''
   guestTouched.value = true
   const payload = buildTermPayload()
-  // T117: a vehicle or a machine asks for its pickup and return days.
-  const termKind = model.value === 'stay' && pickupReturn.value ? 'pickup' : model.value
-  errors.term = payload || stayTooShort.value || monthBlocked.value ? '' : t(`bookingForm.termRequired.${termKind}`)
+  errors.term = term.missingTermMessage()
   errors.payment = flow.value.accepts === 'BOTH' && !form.paymentMethod ? t('bookingForm.paymentRequired') : ''
   if (!payload || errors.payment || guestError.value) {
     await nextTick()
@@ -794,9 +511,9 @@ useSeoMeta({ title: () => (listing.value ? `${t('listing.sendRequest')} - ${list
 </script>
 
 <style lang="scss" scoped>
-// Dizajn 6 (214:429): a field with an error.
-$request-danger-bg: #fcd8e0;
-$request-danger-border: #f43f5e;
+// The term fields, the message and the send button (and the error colours the
+// steppers share) are shared with the booking change screen (T136).
+@use '@/assets/scss/request-form' as *;
 
 // Dizajn 40, 363:443: the page grey under the header, 48 above the title
 // and 72 below the cards.
@@ -855,90 +572,6 @@ $request-danger-border: #f43f5e;
   font-size: 15px;
   line-height: 22px;
   color: $color-text-muted;
-}
-
-// 373:406: the label, the calendar and the chosen dates 12 apart.
-.request-term {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-width: 0;
-}
-
-// 373:407, 375:408
-.request-label {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 500;
-  line-height: normal;
-  color: $color-text;
-}
-
-// 373:604
-.request-term-box {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 14px 18px;
-  border-radius: 12px;
-  background: $color-accent-tint;
-}
-
-.request-term-box-text {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  min-width: 0;
-}
-
-.request-term-box-title {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 500;
-  line-height: normal;
-  color: $color-primary;
-}
-
-.request-term-box-detail {
-  margin: 0;
-  font-size: 12px;
-  font-weight: 300;
-  line-height: normal;
-  color: $color-text-muted;
-}
-
-// 373:608
-.request-term-box-change {
-  flex-shrink: 0;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: $color-primary;
-  font-family: $font-family-base;
-  font-size: 13px;
-  font-weight: 500;
-  line-height: normal;
-  cursor: pointer;
-}
-
-.request-term-box-change:hover {
-  text-decoration: underline;
-}
-
-// 375:406: two columns 20 apart; label, field and hint 10 apart.
-.request-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 20px;
-}
-
-.request-field {
-  display: flex;
-  flex: 1 1 0;
-  flex-direction: column;
-  gap: 10px;
-  min-width: 0;
 }
 
 // The guests and the payment (375:406), two columns 20 apart. T127: a
@@ -1027,62 +660,6 @@ $request-danger-border: #f43f5e;
   cursor: default;
 }
 
-// 375:419: 49 tall, the 18px chevron 16 from the right.
-.request-select {
-  position: relative;
-  display: block;
-}
-
-.request-select-control {
-  width: 100%;
-  height: 49px;
-  margin: 0;
-  padding: 0 44px 0 18px;
-  border: 0;
-  border-radius: 12px;
-  outline: none;
-  background: $color-background;
-  color: $color-text;
-  font-family: $font-family-base;
-  font-size: 15px;
-  font-weight: 400;
-  line-height: normal;
-  appearance: none;
-  cursor: pointer;
-  transition:
-    background-color 0.15s ease,
-    box-shadow 0.15s ease;
-}
-
-.request-select-control:focus-visible {
-  background: $color-surface;
-  box-shadow: inset 0 0 0 1.5px $color-primary;
-}
-
-.request-select-control:disabled {
-  cursor: default;
-  opacity: 0.6;
-}
-
-.request-select.is-empty .request-select-control {
-  color: $color-text-muted;
-}
-
-.request-select.is-invalid .request-select-control {
-  background: $request-danger-bg;
-  box-shadow: inset 0 0 0 1.5px $request-danger-border;
-}
-
-.request-select img {
-  position: absolute;
-  top: 50%;
-  right: 16px;
-  width: 18px;
-  height: 18px;
-  transform: translateY(-50%);
-  pointer-events: none;
-}
-
 // A listing that takes one method shows it without a choice.
 .request-fixed {
   display: flex;
@@ -1096,56 +673,6 @@ $request-danger-border: #f43f5e;
   font-weight: 400;
   line-height: normal;
   color: $color-text;
-}
-
-// 375:416
-.request-hint {
-  margin: 0;
-  font-size: 12px;
-  font-weight: 300;
-  line-height: normal;
-  color: $color-text-muted;
-}
-
-// Dizajn 6 (214:438), in the hint's place.
-.request-error {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  margin: 0;
-  font-size: 13px;
-  font-weight: 400;
-  line-height: normal;
-  color: $color-error;
-}
-
-.request-error img {
-  flex-shrink: 0;
-  width: 15px;
-  height: 15px;
-}
-
-// T127: a day without a free term, in the error's colours on a light tint so
-// it can't be missed.
-.request-alert {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin: 0;
-  padding: 12px 16px;
-  border-radius: 12px;
-  background: #fdecef;
-  font-size: 13px;
-  font-weight: 400;
-  line-height: 18px;
-  color: $color-error;
-}
-
-.request-alert img {
-  flex-shrink: 0;
-  width: 15px;
-  height: 15px;
-  margin-top: 1.5px;
 }
 
 // Extra services take the slot cards' look (538:875).
@@ -1193,93 +720,6 @@ $request-danger-border: #f43f5e;
 .request-extra-price {
   font-size: 13px;
   font-weight: 300;
-  color: $color-text-muted;
-}
-
-// 375:425
-.request-label-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.request-optional {
-  font-size: 12px;
-  font-weight: 300;
-  line-height: normal;
-  color: $color-text-muted;
-}
-
-// 375:428
-.request-textarea {
-  display: block;
-  width: 100%;
-  height: 84px;
-  margin: 0;
-  padding: 14px 18px;
-  border: 0;
-  border-radius: 12px;
-  outline: none;
-  background: $color-background;
-  color: $color-text;
-  font-family: $font-family-base;
-  font-size: 14px;
-  font-weight: 400;
-  line-height: 21px;
-  resize: none;
-  transition:
-    background-color 0.15s ease,
-    box-shadow 0.15s ease;
-}
-
-.request-textarea:focus {
-  background: $color-surface;
-  box-shadow: inset 0 0 0 1.5px $color-primary;
-}
-
-// 375:430: 53 tall, the frame's gradient and brand shadow.
-.request-submit {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 53px;
-  margin: 0;
-  padding: 0 24px;
-  border: 0;
-  border-radius: 12px;
-  background: linear-gradient(90deg, #1abaf3 0%, #0957df 100%);
-  box-shadow: 0 8px 18px rgba(9, 87, 223, 0.28);
-  color: $color-surface;
-  font-family: $font-family-base;
-  font-size: 15px;
-  font-weight: 500;
-  line-height: normal;
-  cursor: pointer;
-  transition: opacity 0.15s ease;
-}
-
-.request-submit:hover:not(:disabled) {
-  opacity: 0.92;
-}
-
-.request-submit:focus-visible {
-  outline: 2px solid $color-primary;
-  outline-offset: 3px;
-}
-
-.request-submit:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
-
-// 375:432
-.request-note {
-  margin: 0;
-  font-size: 12px;
-  font-weight: 300;
-  line-height: 18px;
   color: $color-text-muted;
 }
 
@@ -1533,22 +973,8 @@ $request-danger-border: #f43f5e;
     padding: 20px;
   }
 
-  .request-row {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 22px;
-  }
-
-  .request-row .request-field {
-    flex: none;
-  }
-
   .request-grid {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .request-term-box {
-    align-items: flex-start;
   }
 }
 </style>

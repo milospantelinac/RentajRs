@@ -157,6 +157,10 @@ function getActions(t, booking, now) {
       label: booking.status === 'REQUESTED' ? t('booking.withdrawRequest') : t('booking.cancelBooking'),
     })
   }
+  // T136: another term, asked of the owner on its own screen.
+  if (booking.change?.canRequest) {
+    actions.push({ name: 'change-term', look: 'plain', label: t('bookingChange.request'), to: `/rezervacije/${booking.id}/izmena-termina` })
+  }
   if (
     booking.status === 'AWAITING_PAYMENT' &&
     !booking.paymentDisputed &&

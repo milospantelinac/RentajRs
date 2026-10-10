@@ -102,6 +102,9 @@ const props = defineProps({
   // Dizajn 40: the choice the listing page's card handed over ("2026-10", 3).
   initialMonth: { type: String, default: '' },
   initialCount: { type: Number, default: 1 },
+  // T136: the booking change screen reads the months with the guest's own
+  // booking left free (GET /bookings/:id/change/availability).
+  availabilityPath: { type: String, default: '' },
 })
 
 // `select` tells the page a month is picked but runs into a taken one, or that
@@ -223,7 +226,7 @@ async function loadAvailability() {
   const now = new Date()
   const from = new Date(now.getFullYear(), now.getMonth() + 1, 1)
   const to = new Date(now.getFullYear(), now.getMonth() + 1 + MONTHS_SHOWN, 1)
-  const data = await api.get(`/listings/${props.listingId}/availability`, {
+  const data = await api.get(props.availabilityPath || `/listings/${props.listingId}/availability`, {
     query: { from: from.toISOString(), to: to.toISOString() },
   })
   blocks.value = data.blocked || []

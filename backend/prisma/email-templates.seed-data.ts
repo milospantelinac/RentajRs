@@ -458,6 +458,90 @@ export const emailTemplates: EmailTemplateSeed[] = [
       buttonLabel: 'View details',
     },
   },
+  // T136: a guest asks for another term and the owner answers (BookingChangesService).
+  {
+    key: 'booking_change_requested_owner',
+    sr: {
+      subject: 'Gost traži izmenu termina: {oglas}',
+      heading: 'Zahtev za izmenu termina',
+      bodyText:
+        '{gost} traži da se rezervacija za "{oglas}" premesti na novi termin, {noviTermin} (sada je {stariTermin}). Cena novog termina je {novaCena}, a do sada je bila {staraCena}. Dok ne odgovorite, važi postojeći termin.',
+      buttonLabel: 'Pogledaj zahtev',
+    },
+    en: {
+      subject: 'A guest asks for another term: {oglas}',
+      heading: 'Request to change the term',
+      bodyText:
+        '{gost} asks to move the booking for "{oglas}" from {stariTermin} to {noviTermin}. The new term costs {novaCena} (so far {staraCena}). Until you answer, the current term stands.',
+      buttonLabel: 'View request',
+    },
+  },
+  {
+    key: 'booking_change_approved_guest',
+    sr: {
+      subject: 'Novi termin važi: {oglas}',
+      heading: 'Vlasnik je prihvatio izmenu termina',
+      bodyText:
+        'Novi termin rezervacije za "{oglas}" je {noviTermin}, a ukupna cena {novaCena}. Ako ste uplatili avans, on važi i za novi termin; razliku u ceni dogovarate direktno sa vlasnikom.',
+      buttonLabel: 'Pogledaj rezervaciju',
+    },
+    en: {
+      subject: 'Your new term stands: {oglas}',
+      heading: 'The owner approved the change of term',
+      bodyText:
+        'Your booking for "{oglas}" now stands for {noviTermin}. The total price is {novaCena}. If you paid an advance, it counts for the new term; any difference in price you settle directly with the owner.',
+      buttonLabel: 'View booking',
+    },
+  },
+  {
+    key: 'booking_change_rejected_guest',
+    sr: {
+      subject: 'Izmena termina nije prihvaćena: {oglas}',
+      heading: 'Važi postojeći termin',
+      bodyText:
+        'Vlasnik nije prihvatio izmenu termina za "{oglas}", pa važi postojeći termin ({stariTermin}). Ako vam on ne odgovara, rezervaciju možete otkazati na njenoj stranici, po uslovima otkazivanja koji za nju važe.',
+      buttonLabel: 'Pogledaj rezervaciju',
+    },
+    en: {
+      subject: 'The change of term was not approved: {oglas}',
+      heading: 'Your current term stands',
+      bodyText:
+        'The owner did not approve the change of term for "{oglas}", so your current term stands: {stariTermin}. If it does not suit you, you can cancel the booking on its page, under the cancellation terms that apply to it.',
+      buttonLabel: 'View booking',
+    },
+  },
+  {
+    key: 'booking_change_expired_guest',
+    sr: {
+      subject: 'Zahtev za izmenu termina je istekao: {oglas}',
+      heading: 'Važi postojeći termin',
+      bodyText:
+        'Vlasnik nije na vreme odgovorio na vaš zahtev za izmenu termina za "{oglas}", pa je zahtev istekao i važi postojeći termin ({stariTermin}).',
+      buttonLabel: 'Pogledaj rezervaciju',
+    },
+    en: {
+      subject: 'Your request for another term has expired: {oglas}',
+      heading: 'Your current term stands',
+      bodyText:
+        'The owner did not answer your request for another term for "{oglas}" in time, so it has expired. Your current term stands: {stariTermin}.',
+      buttonLabel: 'View booking',
+    },
+  },
+  {
+    key: 'booking_change_withdrawn_owner',
+    sr: {
+      subject: 'Gost je povukao zahtev za izmenu termina: {oglas}',
+      heading: 'Zahtev za izmenu termina je povučen',
+      bodyText: 'Gost je povukao zahtev za izmenu termina za "{oglas}", pa važi postojeći termin ({stariTermin}).',
+      buttonLabel: 'Pogledaj rezervaciju',
+    },
+    en: {
+      subject: 'The guest withdrew the request for another term: {oglas}',
+      heading: 'The request for another term was withdrawn',
+      bodyText: 'The guest withdrew the request for another term for "{oglas}". The current term stands: {stariTermin}.',
+      buttonLabel: 'View booking',
+    },
+  },
   {
     key: 'booking_no_show_marked',
     sr: {

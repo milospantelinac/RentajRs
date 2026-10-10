@@ -21,6 +21,31 @@
 
     <p v-if="note" class="request-note" :class="`is-${note.tone}`" :role="note.tone === 'danger' ? 'alert' : 'status'">{{ note.text }}</p>
 
+    <!-- T136: the guest asks for another term; the owner decides. -->
+    <section v-if="pendingChange" class="request-change" :aria-label="t('bookingChange.ownerTitle')">
+      <p class="request-change-title">{{ t('bookingChange.ownerTitle') }}</p>
+      <dl class="request-facts">
+        <div v-for="row in changeRows" :key="row.key" class="request-fact is-wide">
+          <dt class="request-fact-label">{{ row.label }}</dt>
+          <dd class="request-fact-value">{{ row.value }}</dd>
+          <dd v-if="row.hint" class="request-fact-hint">{{ row.hint }}</dd>
+        </div>
+        <div v-if="pendingChange.guestMessage" class="request-fact is-wide">
+          <dt class="request-fact-label">{{ t('bookingChange.guestMessage') }}</dt>
+          <dd class="request-fact-value">„{{ pendingChange.guestMessage }}“</dd>
+        </div>
+      </dl>
+      <p class="request-change-note">{{ changeNote }}</p>
+      <div class="request-actions is-raised" :aria-busy="busy ? 'true' : undefined">
+        <button type="button" class="request-button request-button-primary" :disabled="busy" @click="emit('action', 'change-approve')">
+          {{ t('bookingChange.approve') }}
+        </button>
+        <button type="button" class="request-button request-button-danger" :disabled="busy" @click="emit('action', 'change-reject')">
+          {{ t('bookingChange.reject') }}
+        </button>
+      </div>
+    </section>
+
     <div v-if="actions" class="request-actions" :class="{ 'is-raised': actions.raised }" :aria-busy="busy ? 'true' : undefined">
       <button
         v-for="action in actions.buttons"
@@ -44,6 +69,7 @@
 // states use the same parts. The page runs the actions and passes back what
 // happened as `notice`.
 import { buildRequestCard } from '~/utils/bookingRequests'
+import { buildChangeRows, keepsAdvance } from '~/utils/bookingChange'
 
 const props = defineProps({
   booking: { type: Object, required: true },
@@ -57,6 +83,12 @@ const card = computed(() => buildRequestCard(t, props.booking))
 
 // What just happened wins over what the state itself says.
 const note = computed(() => props.notice || card.value.note)
+
+// T136: a guest's request for another term, with the term now, the new one and the price.
+const pendingChange = computed(() => props.booking.change?.pending || null)
+const changeRows = computed(() => (pendingChange.value ? buildChangeRows(t, props.booking, pendingChange.value) : []))
+// The advance only where one stays as it is.
+const changeNote = computed(() => t(keepsAdvance(props.booking) ? 'bookingChange.ownerNote' : 'bookingChange.ownerNoteNoAdvance'))
 
 const actions = computed(() => {
   switch (props.booking.status) {
@@ -284,6 +316,32 @@ $request-brand-shadow: 0 8px 18px rgba(9, 87, 223, 0.28);
 .request-note.is-danger {
   background: $request-danger-bg;
   color: $color-error;
+}
+
+// T136: no frame; the request for another term in the accent tint, its own buttons under it.
+.request-change {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 20px;
+  border-radius: $radius-input;
+  background: $color-accent-tint;
+}
+
+.request-change-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: normal;
+  color: $color-primary;
+}
+
+.request-change-note {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 300;
+  line-height: 18px;
+  color: $color-text-muted;
 }
 
 // 384:619, and 359:529 with room for the primary button's shadow.

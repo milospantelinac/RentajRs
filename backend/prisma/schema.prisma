@@ -1273,11 +1273,57 @@ model Booking {
   conversations Conversation[]
   review        Review?
   disputes      Dispute[]
+  changeRequests BookingChangeRequest[]
 
   @@index([listingId, status])
   @@index([guestId, status])
   @@index([ownerId, status])
   @@index([status, paymentDeadline])
+}
+
+enum BookingChangeStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  WITHDRAWN // by the guest
+  EXPIRED // unanswered in time, or its booking or a term moved on
+}
+
+/// T136: a guest's request to move a booking to another term, which the owner
+/// approves or rejects. The booking keeps its own term (and BlockedTerm rows)
+/// while the request waits; the new term is not held, so it is checked again
+/// on approval. The new term's price is worked out when the request is sent
+/// and becomes the booking's on approval; the advance stays as it was. One
+/// PENDING request per booking, a partial unique index in the migration.
+model BookingChangeRequest {
+  id              String              @id @default(uuid()) @db.Uuid
+  bookingId       String              @db.Uuid
+  status          BookingChangeStatus @default(PENDING)
+  oldStartsAt     DateTime            @db.Timestamptz
+  oldEndsAt       DateTime            @db.Timestamptz
+  newStartsAt     DateTime            @db.Timestamptz
+  newEndsAt       DateTime            @db.Timestamptz
+  oldTotalAmount  BigInt
+  newPricePerUnit BigInt
+  newUnitCount    Int
+  newTotalAmount  BigInt
+  /// The advance a booking still waiting for the owner's answer gets with the
+  /// new price; one already asked for or paid keeps its own.
+  newAmountDue    BigInt
+  /// The new term's price as Booking.fees keeps it: its priced lines and the
+  /// fees and extra services added to them (Dizajn 34), which replace the
+  /// booking's on approval; the chosen extra services stay the booking's.
+  newFees         Json                @db.JsonB
+  guestMessage    String?
+  ownerReason     String?
+  createdAt       DateTime            @default(now()) @db.Timestamptz
+  decidedAt       DateTime?           @db.Timestamptz
+  decidedByUserId String?             @db.Uuid
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId, status])
+  @@index([status, createdAt])
 }
 
 /// Needed for dispute evidence and the automatic CONFIRMED -> COMPLETED

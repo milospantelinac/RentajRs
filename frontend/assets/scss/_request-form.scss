@@ -1,0 +1,304 @@
+// The request form of the request page (Dizajn 40, frames 363:406, 373:406,
+// 375:406, 538:514): the term fields, the message and the send button, moved
+// here as they were when the booking change screen (T136) took the same parts.
+// pages/oglasi/[slug]/rezervisi.vue, components/bookings/RequestTermFields.vue
+// and pages/rezervacije/[id]/izmena-termina.vue @use it inside their scoped styles.
+@use 'tokens' as *;
+@use 'breakpoints' as *;
+
+// Dizajn 6 (214:429): a field with an error.
+$request-danger-bg: #fcd8e0;
+$request-danger-border: #f43f5e;
+
+// 373:406: the label, the calendar and the chosen dates 12 apart.
+.request-term {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+// 373:407, 375:408
+.request-label {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: normal;
+  color: $color-text;
+}
+
+// 373:604
+.request-term-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  border-radius: 12px;
+  background: $color-accent-tint;
+}
+
+.request-term-box-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.request-term-box-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: normal;
+  color: $color-primary;
+}
+
+.request-term-box-detail {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 300;
+  line-height: normal;
+  color: $color-text-muted;
+}
+
+// 373:608
+.request-term-box-change {
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: $color-primary;
+  font-family: $font-family-base;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: normal;
+  cursor: pointer;
+}
+
+.request-term-box-change:hover {
+  text-decoration: underline;
+}
+
+// 375:406: two columns 20 apart; label, field and hint 10 apart.
+.request-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.request-field {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+// 375:419: 49 tall, the 18px chevron 16 from the right.
+.request-select {
+  position: relative;
+  display: block;
+}
+
+.request-select-control {
+  width: 100%;
+  height: 49px;
+  margin: 0;
+  padding: 0 44px 0 18px;
+  border: 0;
+  border-radius: 12px;
+  outline: none;
+  background: $color-background;
+  color: $color-text;
+  font-family: $font-family-base;
+  font-size: 15px;
+  font-weight: 400;
+  line-height: normal;
+  appearance: none;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.request-select-control:focus-visible {
+  background: $color-surface;
+  box-shadow: inset 0 0 0 1.5px $color-primary;
+}
+
+.request-select-control:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.request-select.is-empty .request-select-control {
+  color: $color-text-muted;
+}
+
+.request-select.is-invalid .request-select-control {
+  background: $request-danger-bg;
+  box-shadow: inset 0 0 0 1.5px $request-danger-border;
+}
+
+.request-select img {
+  position: absolute;
+  top: 50%;
+  right: 16px;
+  width: 18px;
+  height: 18px;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+// 375:416
+.request-hint {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 300;
+  line-height: normal;
+  color: $color-text-muted;
+}
+
+// Dizajn 6 (214:438), in the hint's place.
+.request-error {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: normal;
+  color: $color-error;
+}
+
+.request-error img {
+  flex-shrink: 0;
+  width: 15px;
+  height: 15px;
+}
+
+// T127: a day without a free term, in the error's colours on a light tint so
+// it can't be missed.
+.request-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: #fdecef;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 18px;
+  color: $color-error;
+}
+
+.request-alert img {
+  flex-shrink: 0;
+  width: 15px;
+  height: 15px;
+  margin-top: 1.5px;
+}
+
+// 375:425
+.request-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.request-optional {
+  font-size: 12px;
+  font-weight: 300;
+  line-height: normal;
+  color: $color-text-muted;
+}
+
+// 375:428
+.request-textarea {
+  display: block;
+  width: 100%;
+  height: 84px;
+  margin: 0;
+  padding: 14px 18px;
+  border: 0;
+  border-radius: 12px;
+  outline: none;
+  background: $color-background;
+  color: $color-text;
+  font-family: $font-family-base;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 21px;
+  resize: none;
+  transition:
+    background-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.request-textarea:focus {
+  background: $color-surface;
+  box-shadow: inset 0 0 0 1.5px $color-primary;
+}
+
+// 375:430: 53 tall, the frame's gradient and brand shadow.
+.request-submit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 53px;
+  margin: 0;
+  padding: 0 24px;
+  border: 0;
+  border-radius: 12px;
+  background: linear-gradient(90deg, #1abaf3 0%, #0957df 100%);
+  box-shadow: 0 8px 18px rgba(9, 87, 223, 0.28);
+  color: $color-surface;
+  font-family: $font-family-base;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: normal;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.request-submit:hover:not(:disabled) {
+  opacity: 0.92;
+}
+
+.request-submit:focus-visible {
+  outline: 2px solid $color-primary;
+  outline-offset: 3px;
+}
+
+.request-submit:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+// 375:432
+.request-note {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 300;
+  line-height: 18px;
+  color: $color-text-muted;
+}
+
+@include respond-below(md) {
+  .request-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 22px;
+  }
+
+  .request-row .request-field {
+    flex: none;
+  }
+
+  .request-term-box {
+    align-items: flex-start;
+  }
+}

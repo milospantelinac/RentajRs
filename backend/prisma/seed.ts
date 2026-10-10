@@ -146,6 +146,11 @@ async function seedSettings() {
       value: 48,
       description: 'Dizajn 41: hours an owner has to answer a booking request before it expires (sooner if the term starts first)',
     },
+    {
+      key: 'booking_change_deadline_hours',
+      value: 48,
+      description: 'T136: hours before a booking starts until which its guest can still ask the owner to move it to another term',
+    },
     { key: 'moderation_sla_hours', value: 24, description: 'R30' },
     {
       key: 'admin_new_booking_notifications',

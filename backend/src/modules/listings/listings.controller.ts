@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
@@ -136,10 +137,11 @@ export class ListingsController {
     return this.listingsService.deleteListing(userId, id);
   }
 
+  // T136: view=0 reads the listing without counting a visit (the booking change screen).
   @Public()
   @Get('listings/public/:slug')
-  getPublic(@Param('slug') slug: string) {
-    return this.listingsService.getPublicBySlug(slug);
+  getPublic(@Param('slug') slug: string, @Query('view') view?: string) {
+    return this.listingsService.getPublicBySlug(slug, { countView: view !== '0' });
   }
 
   // T134: "Prikaži broj", 10 a minute per visitor across every listing, so

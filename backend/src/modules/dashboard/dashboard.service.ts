@@ -87,13 +87,15 @@ export class DashboardService {
 
   /**
    * Dizajn 30: the red counters in the dashboard menu, polled by the layout.
-   * Requests are the ones still waiting for this owner's answer, and messages
-   * count conversations (as owner or guest) with anything unread, the same
-   * rows the attention items above count.
+   * Requests are the ones still waiting for this owner's answer (T136: a
+   * guest's request for another term too), and messages count conversations
+   * (as owner or guest) with anything unread, the same rows the attention
+   * items above count.
    */
   async getCounts(userId: string) {
-    const [bookingRequests, unreadConversations] = await Promise.all([
+    const [newRequests, changeRequests, unreadConversations] = await Promise.all([
       this.prisma.booking.count({ where: { ownerId: userId, status: 'REQUESTED' } }),
+      this.prisma.bookingChangeRequest.count({ where: { status: 'PENDING', booking: { ownerId: userId } } }),
       this.prisma.conversation.count({
         where: {
           OR: [
@@ -103,7 +105,7 @@ export class DashboardService {
         },
       }),
     ]);
-    return { bookingRequests, unreadConversations };
+    return { bookingRequests: newRequests + changeRequests, unreadConversations };
   }
 
   private async getOwnerAttention(userId: string): Promise<AttentionItem[]> {
@@ -141,6 +143,12 @@ export class DashboardService {
     const newRequests = await this.prisma.booking.count({ where: { ownerId: userId, status: 'REQUESTED' } });
     if (newRequests) {
       items.push({ urgency: 'decision', title: 'new_requests', actionUrl: '/kontrolna-tabla/rezervacije?role=owner&status=REQUESTED', count: newRequests });
+    }
+
+    // T136: guests waiting for an answer about another term.
+    const changeRequests = await this.prisma.bookingChangeRequest.count({ where: { status: 'PENDING', booking: { ownerId: userId } } });
+    if (changeRequests) {
+      items.push({ urgency: 'decision', title: 'change_requests', actionUrl: '/kontrolna-tabla/rezervacije?role=owner', count: changeRequests });
     }
 
     // The same packages Moje pretplate marks red: renewed ones and ones no listing depends on don't count.

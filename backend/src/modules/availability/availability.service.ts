@@ -927,7 +927,8 @@ function datePricedUnit(override: bigint | undefined, isWeekend: boolean, basePr
   return isWeekend && weekendPrice ? { price: weekendPrice, kind: 'WEEKEND' } : { price: basePrice, kind: 'BASE' };
 }
 
-function isExclusionViolation(err: unknown): boolean {
+/** A BlockedTerm insert that ran into the no-overlap constraint (T136 reads it too). */
+export function isExclusionViolation(err: unknown): boolean {
   const message = (err as { message?: string })?.message ?? '';
   const meta = (err as { meta?: { message?: string } })?.meta?.message ?? '';
   return (

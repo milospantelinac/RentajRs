@@ -16,5 +16,13 @@
   "PAYMENT_DEADLINE_PASSED": "Rok za uplatu je prošao, pa prijava više nije moguća.",
   "NO_SHOW_ALREADY_DISPUTED": "Oznaku nedolaska ste već osporili. Administrator proverava prigovor.",
   "STATE_CHANGED": "Rezervacija se u međuvremenu promenila, pa ova radnja više nije moguća.",
-  "SLOT_REQUIRED": "Izaberite jedan od ponuđenih termina."
+  "SLOT_REQUIRED": "Izaberite jedan od ponuđenih termina.",
+  "CHANGE_NOT_AVAILABLE": "Za ovaj oglas izmena termina trenutno nije moguća. Dogovorite je sa vlasnikom.",
+  "CHANGE_DEADLINE_PASSED": "Izmena termina se traži najkasnije {hours} h pre početka. Za kasniju izmenu obratite se vlasniku.",
+  "CHANGE_ALREADY_PENDING": "Već ste poslali zahtev za izmenu termina. Sačekajte odgovor vlasnika ili povucite zahtev.",
+  "CHANGE_SAME_TERM": "To je termin koji već imate. Izaberite drugi.",
+  "CHANGE_TERM_TAKEN": "Izabrani termin je zauzet. Izaberite drugi.",
+  "CHANGE_TERM_NO_LONGER_FREE": "Novi termin je u međuvremenu zauzet, pa izmena ne može da se prihvati. Odbijte zahtev ili se sa gostom dogovorite za drugi termin.",
+  "CHANGE_NOT_PENDING": "Nema zahteva za izmenu termina koji čeka odgovor.",
+  "CHANGE_EXPIRED": "Zahtev za izmenu termina je istekao jer je termin već počeo."
 }
