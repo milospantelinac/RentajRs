@@ -493,7 +493,7 @@ const sortOptions = computed(() => [
 // this row; they are the pills below it.
 const categoryTiles = computed(() => [
   { slug: '', iconSlug: ALL_CATEGORIES_SLUG, name: t('search.allCategories'), category: null },
-  ...categories.value.map((c) => ({ slug: c.slug, iconSlug: c.slug, name: c.name, category: c })),
+  ...categories.value.map((c) => ({ slug: c.slug, iconSlug: categoryIconKey(c), name: c.name, category: c })),
 ])
 
 // A subcategory keeps its parent's tile highlighted.

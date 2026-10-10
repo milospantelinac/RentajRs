@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags } from '@nestjs/swagger';
 import { TaxonomyService } from './taxonomy.service';
 import { ProposeCategoryDto } from './dto/propose-category.dto';
@@ -6,6 +7,7 @@ import {
   CreateCategoryDto,
   MergeCategoryDto,
   RejectCategoryDto,
+  ReorderCategoriesDto,
   UpdateCategoryDto,
   UpsertAttributeDto,
 } from './dto/admin-category.dto';
@@ -36,6 +38,13 @@ export class TaxonomyController {
   @Get('categories/:slug')
   getBySlug(@Param('slug') slug: string) {
     return this.taxonomyService.getCategoryBySlug(slug);
+  }
+
+  /** T129: where an old category URL (merge, a new slug) leads now; newPath null when it does not move. */
+  @Public()
+  @Get('redirects/resolve')
+  resolveRedirect(@Query('path') path: string) {
+    return this.taxonomyService.resolveRedirect(path);
   }
 
   @Public()
@@ -77,57 +86,89 @@ export class TaxonomyController {
     return this.taxonomyService.adminListProposedCategories();
   }
 
+  // Declared before admin/categories/:id so "reorder" is not read as an id.
+  @RequirePermissions('manage_categories')
+  @Patch('admin/categories/reorder')
+  adminReorder(@CurrentUser('id') adminId: string, @Body() dto: ReorderCategoriesDto) {
+    return this.taxonomyService.adminReorderCategories(adminId, dto);
+  }
+
+  @RequirePermissions('manage_categories')
+  @Get('admin/categories/:id')
+  adminGetOne(@Param('id') id: string) {
+    return this.taxonomyService.adminGetCategory(id);
+  }
+
+  @RequirePermissions('manage_categories')
+  @Get('admin/categories/:id/history')
+  adminHistory(@Param('id') id: string) {
+    return this.taxonomyService.adminCategoryHistory(id);
+  }
+
+  @RequirePermissions('manage_categories')
+  @Post('admin/categories/:id/image')
+  @UseInterceptors(FileInterceptor('file'))
+  adminSetImage(@CurrentUser('id') adminId: string, @Param('id') id: string, @UploadedFile() file: Express.Multer.File) {
+    return this.taxonomyService.adminSetCategoryImage(adminId, id, file);
+  }
+
+  @RequirePermissions('manage_categories')
+  @Delete('admin/categories/:id/image')
+  adminRemoveImage(@CurrentUser('id') adminId: string, @Param('id') id: string) {
+    return this.taxonomyService.adminRemoveCategoryImage(adminId, id);
+  }
+
   @RequirePermissions('manage_categories')
   @Post('admin/categories')
-  adminCreate(@Body() dto: CreateCategoryDto) {
-    return this.taxonomyService.adminCreateCategory(dto);
+  adminCreate(@CurrentUser('id') adminId: string, @Body() dto: CreateCategoryDto) {
+    return this.taxonomyService.adminCreateCategory(adminId, dto);
   }
 
   @RequirePermissions('manage_categories')
   @Patch('admin/categories/:id')
-  adminUpdate(@Param('id') id: string, @Body() dto: UpdateCategoryDto) {
-    return this.taxonomyService.adminUpdateCategory(id, dto);
+  adminUpdate(@CurrentUser('id') adminId: string, @Param('id') id: string, @Body() dto: UpdateCategoryDto) {
+    return this.taxonomyService.adminUpdateCategory(adminId, id, dto);
   }
 
   @RequirePermissions('manage_categories')
   @Post('admin/categories/:id/approve')
-  adminApprove(@Param('id') id: string) {
-    return this.taxonomyService.adminApproveCategory(id);
+  adminApprove(@CurrentUser('id') adminId: string, @Param('id') id: string) {
+    return this.taxonomyService.adminApproveCategory(adminId, id);
   }
 
   @RequirePermissions('manage_categories')
   @Post('admin/categories/:id/reject')
-  adminReject(@Param('id') id: string, @Body() dto: RejectCategoryDto) {
-    return this.taxonomyService.adminRejectCategory(id, dto);
+  adminReject(@CurrentUser('id') adminId: string, @Param('id') id: string, @Body() dto: RejectCategoryDto) {
+    return this.taxonomyService.adminRejectCategory(adminId, id, dto);
   }
 
   @RequirePermissions('manage_categories')
   @Post('admin/categories/:id/merge')
-  adminMerge(@Param('id') id: string, @Body() dto: MergeCategoryDto) {
-    return this.taxonomyService.adminMergeCategory(id, dto);
+  adminMerge(@CurrentUser('id') adminId: string, @Param('id') id: string, @Body() dto: MergeCategoryDto) {
+    return this.taxonomyService.adminMergeCategory(adminId, id, dto);
   }
 
   @RequirePermissions('manage_categories')
   @Post('admin/categories/:id/promote')
-  adminPromote(@Param('id') id: string) {
-    return this.taxonomyService.adminPromoteCategory(id);
+  adminPromote(@CurrentUser('id') adminId: string, @Param('id') id: string) {
+    return this.taxonomyService.adminPromoteCategory(adminId, id);
   }
 
   @RequirePermissions('manage_categories')
   @Delete('admin/categories/:id')
-  adminDeleteCategory(@Param('id') id: string) {
-    return this.taxonomyService.adminDeleteCategory(id);
+  adminDeleteCategory(@CurrentUser('id') adminId: string, @Param('id') id: string) {
+    return this.taxonomyService.adminDeleteCategory(adminId, id);
   }
 
   @RequirePermissions('manage_categories')
   @Post('admin/categories/:id/attributes')
-  adminUpsertAttribute(@Param('id') id: string, @Body() dto: UpsertAttributeDto) {
-    return this.taxonomyService.adminUpsertAttribute(id, dto);
+  adminUpsertAttribute(@CurrentUser('id') adminId: string, @Param('id') id: string, @Body() dto: UpsertAttributeDto) {
+    return this.taxonomyService.adminUpsertAttribute(adminId, id, dto);
   }
 
   @RequirePermissions('manage_categories')
   @Delete('admin/attributes/:attributeId')
-  adminDeleteAttribute(@Param('attributeId') attributeId: string) {
-    return this.taxonomyService.adminDeleteAttribute(attributeId);
+  adminDeleteAttribute(@CurrentUser('id') adminId: string, @Param('attributeId') attributeId: string) {
+    return this.taxonomyService.adminDeleteAttribute(adminId, attributeId);
   }
 }

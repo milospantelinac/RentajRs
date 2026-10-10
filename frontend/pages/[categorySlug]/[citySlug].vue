@@ -31,6 +31,7 @@
 // city: it gets its 404 before this page renders or asks the API anything.
 definePageMeta({
   validate: (route) => ![route.params.categorySlug, route.params.citySlug].some((segment) => String(segment).includes('.')),
+  middleware: ['category-redirect'],
 })
 
 const { t } = useI18n()

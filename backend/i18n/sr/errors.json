@@ -25,7 +25,7 @@
   "SLOT_RANGE_TOO_LONG": "Termini se prave za najviše godinu dana odjednom",
   "WORKING_HOURS_OVERLAP": "Periodi radnog vremena se preklapaju",
   "CATEGORY_MAX_DEPTH": "Kategorija ne može imati više od tri nivoa",
-  "CATEGORY_HAS_LISTINGS": "Kategorija sa oglasima se ne može obrisati — spojite je ili arhivirajte",
+  "CATEGORY_HAS_LISTINGS": "Kategorija je u upotrebi (broj oglasa: {count}) i ne može da se obriše. Sakrijte je: oglasi ostaju, a kategorija se ne nudi za nove oglase.",
   "CATEGORY_HAS_CHILDREN": "Kategorija sa podkategorijama se ne može obrisati — prvo obrišite ili premestite podkategorije",
   "CATEGORY_IS_FALLBACK": "Ova kategorija je interna rezerva za neraspoređene oglase i ne može se obrisati",
   "SUBSCRIPTION_LISTING_LIMIT": "Dostigli ste broj oglasa dozvoljen na trenutnom paketu",
@@ -75,5 +75,9 @@
   "PRICE_UNIT_NOT_ALLOWED": "Ova jedinica cene ne postoji za izabrani način rezervacije",
   "SLOT_MODE_NOT_ALLOWED": "Sale za proslave se rezervišu samo po definisanim terminima",
   "SLOT_MODE_LOCKED_BY_BOOKINGS": "Način kreiranja termina ne može da se promeni dok imate buduće rezervacije.",
-  "AVAILABILITY_MODE_NOT_SAVED": "Prvo sačuvajte korak „Cena i način rezervacije”, pa podesite dostupnost"
+  "AVAILABILITY_MODE_NOT_SAVED": "Prvo sačuvajte korak „Cena i način rezervacije”, pa podesite dostupnost",
+  "CATEGORY_SLUG_INVALID": "Naziv u URL-u sme da sadrži samo mala slova bez kvačica, brojeve i crticu (npr. spa-centri)",
+  "CATEGORY_SLUG_TAKEN": "Taj naziv u URL-u već koristi druga kategorija",
+  "CATEGORY_PARENT_INVALID": "Kategorija ne može da se premesti ispod sebe ili svoje podkategorije",
+  "CATEGORY_REORDER_INVALID": "Redosled ne odgovara kategorijama na tom nivou. Osvežite stranu i pokušajte ponovo."
 }

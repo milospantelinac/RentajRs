@@ -2605,7 +2605,7 @@ const stepSubtitle = computed(() => {
   return t(step.descKey)
 })
 
-const categoryIconMarkup = computed(() => getWizardPillCategoryIconMarkup(listing.value?.category?.slug))
+const categoryIconMarkup = computed(() => getWizardPillCategoryIconMarkup(categoryIconKey(listing.value?.category)))
 
 // Dizajn 20: 228:316 is drawn for Igraonice. Its second tip names what guests
 // look for first, so each category the wizard knows gets its own version, and a

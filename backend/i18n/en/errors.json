@@ -25,7 +25,7 @@
   "SLOT_RANGE_TOO_LONG": "Slots can be made for a year at most at a time",
   "WORKING_HOURS_OVERLAP": "Working hour periods overlap",
   "CATEGORY_MAX_DEPTH": "A category cannot be nested more than three levels deep",
-  "CATEGORY_HAS_LISTINGS": "A category with listings cannot be deleted — merge or archive it instead",
+  "CATEGORY_HAS_LISTINGS": "The category is in use (listings: {count}) and cannot be deleted. Hide it instead: the listings stay and the category is not offered for new ones.",
   "CATEGORY_HAS_CHILDREN": "A category with subcategories cannot be deleted — delete or move the subcategories first",
   "CATEGORY_IS_FALLBACK": "This category is the internal fallback for unassigned listings and cannot be deleted",
   "SUBSCRIPTION_LISTING_LIMIT": "You've reached the listing limit for your current package",
@@ -75,5 +75,9 @@
   "PRICE_UNIT_NOT_ALLOWED": "This price unit does not exist for the chosen booking method",
   "SLOT_MODE_NOT_ALLOWED": "Party halls are booked by defined time slots only",
   "SLOT_MODE_LOCKED_BY_BOOKINGS": "The way time slots are created cannot change while you have upcoming bookings.",
-  "AVAILABILITY_MODE_NOT_SAVED": "Save the \"Price and booking method\" step first, then set the availability"
+  "AVAILABILITY_MODE_NOT_SAVED": "Save the \"Price and booking method\" step first, then set the availability",
+  "CATEGORY_SLUG_INVALID": "The URL name may only contain lowercase letters without diacritics, digits and hyphens (e.g. spa-centri)",
+  "CATEGORY_SLUG_TAKEN": "Another category already uses that URL name",
+  "CATEGORY_PARENT_INVALID": "A category cannot be moved under itself or one of its subcategories",
+  "CATEGORY_REORDER_INVALID": "The order does not match the categories on that level. Refresh the page and try again."
 }

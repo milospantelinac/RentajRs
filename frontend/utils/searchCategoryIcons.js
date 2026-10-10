@@ -24,9 +24,9 @@ const REGISTRY = Object.fromEntries(
 export const ALL_CATEGORIES_SLUG = 'sve'
 
 // Dizajn 46: the tile order used to be repeated here, because the categories
-// endpoint returned mašine before magacini. The seed now owns displayOrder and
-// re-syncs it on every reseed, so /categories already arrives in the one order
-// the ticket fixes, and this file is only about icons again.
+// endpoint returned mašine before magacini. displayOrder is the one order now
+// (the admin drags it in Administracija > Kategorije since T129), so
+// /categories already arrives sorted and this file is only about icons again.
 
 // Dizajn 50: Ostalo, the seventh tile, comes from the solid set at its 30px.
 export function getSearchCategoryIconMarkup(slug) {

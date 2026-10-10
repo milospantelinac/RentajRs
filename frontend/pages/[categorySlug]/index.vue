@@ -54,7 +54,10 @@
 // A segment with a dot is a file a browser or crawler asked for
 // (apple-touch-icon-precomposed.png, wp-login.php), never a category: it gets
 // its 404 before this page renders or asks the API anything.
-definePageMeta({ validate: (route) => !String(route.params.categorySlug).includes('.') })
+definePageMeta({
+  validate: (route) => !String(route.params.categorySlug).includes('.'),
+  middleware: ['category-redirect'],
+})
 
 const { t } = useI18n()
 const api = useApi()

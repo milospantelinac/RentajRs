@@ -27,6 +27,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let message: string | string[] = 'Internal server error';
     let error = 'InternalServerError';
+    // T129: extra keys a service puts next to the message (e.g. code and
+    // listingCount), so a page can act on the refusal and not only print it.
+    let details: Record<string, unknown> = {};
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
@@ -37,6 +40,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
       } else if (typeof body === 'object' && body !== null) {
         message = (body as any).message ?? exception.message;
         error = (body as any).error ?? exception.name;
+        const { message: _message, error: _error, statusCode: _statusCode, ...rest } = body as Record<string, unknown>;
+        details = rest;
       }
     } else if (exception instanceof Prisma.PrismaClientKnownRequestError) {
       switch (exception.code) {
@@ -73,6 +78,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     }
 
     response.status(status).json({
+      ...details,
       statusCode: status,
       error,
       message,

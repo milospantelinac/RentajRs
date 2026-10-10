@@ -10,24 +10,6 @@ import { SEARCH_FILTERS } from './search-filters.seed-data';
 const prisma = new PrismaClient();
 
 // ---------------------------------------------------------------------------
-// Translations helper — every category/attribute/option name goes through the
-// Translation table (R137), never a hard-coded _sr/_en column.
-// ---------------------------------------------------------------------------
-
-async function setTranslation(
-  entityType: 'CATEGORY' | 'ATTRIBUTE' | 'OPTION' | 'PAGE',
-  entityId: string,
-  field: string,
-  sr: string,
-) {
-  await prisma.translation.upsert({
-    where: { entityType_entityId_field_language: { entityType, entityId, field, language: Language.SR } },
-    update: { value: sr },
-    create: { entityType, entityId, field, language: Language.SR, value: sr },
-  });
-}
-
-// ---------------------------------------------------------------------------
 // Packages — exact v1 prices from Product Bible §11.2 (amounts in para, i.e.
 // RSD x 100 per P4).
 // ---------------------------------------------------------------------------
@@ -650,10 +632,6 @@ const CATEGORY_TREE: CategorySeed[] = [
       { key: 'radni_domet_viljuskar', name: 'Radni domet', type: AttributeType.LIST, dependsOnAttrKey: 'tip_masine', dependsOnOptionKey: 'viljuskar', options: opts(['0.5 m', '1 m', '1.5 m', '2 m', 'Preko 2 m']) },
     ],
   },
-  // "Oprema" and "Usluge" (T03) were dropped from v1 scope entirely — see
-  // pruneRemovedCategories() below, which deletes them (and any other
-  // never-real leftover category) from the DB on every reseed rather than
-  // just omitting them here, since upsert-only seeding never removes a row.
   // Fallback parent for rejected category proposals and "Otključaj svoju
   // kategoriju" intake listings (R6/§3.1, Kategorije spec §8). Dizajn 50 makes
   // it the seventh category, last and without subcategories, shown wherever
@@ -673,26 +651,28 @@ const CATEGORY_TREE: CategorySeed[] = [
   },
 ];
 
+// T129: the taxonomy belongs to the admin panel now. The seed only fills an
+// empty database (seedCategories) and never updates, reorders or deletes a
+// row, so a reseed can no longer undo what an admin changed in
+// Administracija > Kategorije.
+async function setTranslationIfMissing(
+  entityType: 'CATEGORY' | 'ATTRIBUTE' | 'OPTION',
+  entityId: string,
+  field: string,
+  sr: string,
+) {
+  await prisma.translation.upsert({
+    where: { entityType_entityId_field_language: { entityType, entityId, field, language: Language.SR } },
+    update: {},
+    create: { entityType, entityId, field, language: Language.SR, value: sr },
+  });
+}
+
 async function seedCategoryNode(node: CategorySeed, parentId: string | null, order: number) {
   const slug = slugify(node.name);
   const category = await prisma.category.upsert({
     where: { slug },
-    update: {
-      parentId: parentId ?? undefined,
-      icon: node.icon,
-      defaultBookingModel: node.defaultBookingModel,
-      allowedPriceUnits: node.allowedPriceUnits,
-      defaultPriceUnit: node.defaultPriceUnit,
-      // Dizajn 46: CATEGORY_TREE is the one source of truth for which
-      // categories exist AND what order they appear in, everywhere they are
-      // listed (homepage, /pretraga tiles, footer, /oglasi/novi). Without
-      // this line an existing database kept whatever order it was first
-      // created with, and a reseed could never repair it, so the frontend
-      // carried a second hardcoded order to paper over the difference.
-      // Counted from 0, so Ostalo (Dizajn 50) is 6, the seventh and last.
-      displayOrder: order,
-      // `published` is left out on purpose: it is the admin's switch (Dizajn 50).
-    },
+    update: {},
     create: {
       parentId,
       level: parentId ? 2 : 1,
@@ -701,91 +681,62 @@ async function seedCategoryNode(node: CategorySeed, parentId: string | null, ord
       defaultBookingModel: node.defaultBookingModel,
       allowedPriceUnits: node.allowedPriceUnits,
       defaultPriceUnit: node.defaultPriceUnit,
+      // Dizajn 46: counted from 0, so Ostalo (Dizajn 50) is 6, the seventh and last.
       displayOrder: order,
       published: node.published ?? true,
     },
   });
 
-  await setTranslation('CATEGORY', category.id, 'name', node.name);
+  await setTranslationIfMissing('CATEGORY', category.id, 'name', node.name);
   if (node.shortDescription) {
-    await setTranslation('CATEGORY', category.id, 'shortDescription', node.shortDescription);
+    await setTranslationIfMissing('CATEGORY', category.id, 'shortDescription', node.shortDescription);
   }
 
   for (const [i, attr] of node.attributes.entries()) {
-    const attrFields = {
-      type: attr.type,
-      required: attr.required ?? false,
-      unit: attr.unit,
-      isFilter: attr.isFilter ?? false,
-      filterType: attr.filterType,
-      showOnCard: attr.showOnCard ?? false,
-      dependsOnAttrKey: attr.dependsOnAttrKey,
-      dependsOnOptionKey: attr.dependsOnOptionKey,
-      displayOrder: i,
-    };
     const attribute = await prisma.categoryAttribute.upsert({
       where: { categoryId_key: { categoryId: category.id, key: attr.key } },
-      // Unlike StaticPage/Faq/Setting, CategoryAttribute is site config an
-      // admin doesn't hand-edit per install — same as Category itself above,
-      // it re-syncs to this file on every reseed rather than create-only.
-      update: attrFields,
-      create: { categoryId: category.id, key: attr.key, ...attrFields },
+      update: {},
+      create: {
+        categoryId: category.id,
+        key: attr.key,
+        type: attr.type,
+        required: attr.required ?? false,
+        unit: attr.unit,
+        isFilter: attr.isFilter ?? false,
+        filterType: attr.filterType,
+        showOnCard: attr.showOnCard ?? false,
+        dependsOnAttrKey: attr.dependsOnAttrKey,
+        dependsOnOptionKey: attr.dependsOnOptionKey,
+        displayOrder: i,
+      },
     });
-    await setTranslation('ATTRIBUTE', attribute.id, 'name', attr.name);
-
-    const optionKeys = (attr.options ?? []).map((o) => o.key);
-    const staleOptions = await prisma.attributeOption.findMany({
-      where: { attributeId: attribute.id, key: { notIn: optionKeys.length ? optionKeys : ['__none__'] } },
-    });
-    for (const stale of staleOptions) {
-      // T115: a listing that ticked it would keep its id in valueOptionIds.
-      await prisma.$executeRaw`UPDATE "ListingAttribute" SET "valueOptionIds" = array_remove("valueOptionIds", ${stale.id}::uuid) WHERE "attributeId" = ${attribute.id}::uuid`;
-      await prisma.translation.deleteMany({ where: { entityType: 'OPTION', entityId: stale.id } });
-      await prisma.attributeOption.delete({ where: { id: stale.id } });
-    }
+    await setTranslationIfMissing('ATTRIBUTE', attribute.id, 'name', attr.name);
 
     for (const [j, opt] of (attr.options ?? []).entries()) {
       const option = await prisma.attributeOption.upsert({
         where: { attributeId_key: { attributeId: attribute.id, key: opt.key } },
-        update: { displayOrder: j },
+        update: {},
         create: { attributeId: attribute.id, key: opt.key, displayOrder: j },
       });
-      await setTranslation('OPTION', option.id, 'name', opt.name);
+      await setTranslationIfMissing('OPTION', option.id, 'name', opt.name);
     }
   }
 
-  // Delete attributes no longer in this category's seed list (moved to a
-  // child category, renamed, or dropped) — otherwise resolveAttributesFor-
-  // Category's parent+child merge would keep surfacing a stale duplicate
-  // alongside its replacement forever, since upsert alone never removes rows.
-  const currentKeys = node.attributes.map((a) => a.key);
-  const staleAttributes = await prisma.categoryAttribute.findMany({
-    where: { categoryId: category.id, key: { notIn: currentKeys.length ? currentKeys : ['__none__'] } },
-  });
-  for (const stale of staleAttributes) {
-    await prisma.listingAttribute.deleteMany({ where: { attributeId: stale.id } });
-    await prisma.categoryAttribute.delete({ where: { id: stale.id } });
-  }
-
-  // T115: the category's /pretraga filters, kept in step with SEARCH_FILTERS
-  // the same way as the attributes above.
-  const filters = SEARCH_FILTERS[slug] ?? [];
-  await prisma.categoryFilter.deleteMany({
-    where: { categoryId: category.id, key: { notIn: filters.map((filter) => filter.key) } },
-  });
-  for (const [i, filter] of filters.entries()) {
-    const filterFields = {
-      attributeKey: filter.attributeKey === undefined ? filter.key : filter.attributeKey,
-      optionKey: filter.optionKey ?? null,
-      placement: filter.placement,
-      control: filter.control,
-      thresholds: filter.thresholds ?? [],
-      displayOrder: i,
-    };
+  // T115: the category's /pretraga filters, created when missing.
+  for (const [i, filter] of (SEARCH_FILTERS[slug] ?? []).entries()) {
     await prisma.categoryFilter.upsert({
       where: { categoryId_key: { categoryId: category.id, key: filter.key } },
-      update: filterFields,
-      create: { categoryId: category.id, key: filter.key, ...filterFields },
+      update: {},
+      create: {
+        categoryId: category.id,
+        key: filter.key,
+        attributeKey: filter.attributeKey === undefined ? filter.key : filter.attributeKey,
+        optionKey: filter.optionKey ?? null,
+        placement: filter.placement,
+        control: filter.control,
+        thresholds: filter.thresholds ?? [],
+        displayOrder: i,
+      },
     });
   }
 
@@ -795,38 +746,16 @@ async function seedCategoryNode(node: CategorySeed, parentId: string | null, ord
 }
 
 async function seedCategories() {
+  // T129: an admin may delete a seeded category, attribute or option; seeding
+  // into a database that already has a taxonomy would bring it back.
+  if ((await prisma.category.count()) > 0) {
+    console.log('Categories already exist, the taxonomy is left to the admin panel');
+    return;
+  }
   for (const [i, node] of CATEGORY_TREE.entries()) {
     await seedCategoryNode(node, null, i);
   }
   console.log(`Seeded ${CATEGORY_TREE.length} top-level categories with subcategories and attributes`);
-}
-
-// T03/T58 — categories that must not exist anywhere on the platform: "Oprema"
-// and "Usluge" (dropped from v1 scope) and "Automobili" (semantic duplicate
-// of "Putnička vozila", confirmed to hold zero real listings). Deleted, not
-// archived, because the AC requires them gone even from the admin category
-// list (adminGetCategoryTree() doesn't filter by status). Owner confirmed
-// (2026-08-23) any listings under these are test data, safe to delete
-// outright without a further check.
-const REMOVED_CATEGORY_SLUGS = ['oprema', 'usluge', 'automobili', 'masine'];
-
-async function pruneRemovedCategories() {
-  for (const slug of REMOVED_CATEGORY_SLUGS) {
-    const category = await prisma.category.findUnique({ where: { slug } });
-    if (!category) continue;
-
-    // EmptySearch.categoryId has no cascade (it's an optional analytics
-    // pointer, not ownership) — clear it rather than losing the search log.
-    await prisma.emptySearch.updateMany({ where: { categoryId: category.id }, data: { categoryId: null } });
-    // Listing.categoryId has no cascade either, but everything hanging off a
-    // Listing (attributes, photos, versions, bookings, favorites, featured
-    // waitlist, ...) does cascade from the listing itself.
-    await prisma.listing.deleteMany({ where: { categoryId: category.id } });
-    // CategoryAttribute -> AttributeOption cascades at the DB level.
-    await prisma.categoryAttribute.deleteMany({ where: { categoryId: category.id } });
-    await prisma.category.delete({ where: { id: category.id } });
-    console.log(`Pruned removed category "${slug}"`);
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -837,7 +766,8 @@ async function seedEmailTemplates() {
       const copy = template[language === Language.SR ? 'sr' : 'en'];
       await prisma.emailTemplate.upsert({
         where: { key_language: { key: template.key, language } },
-        update: copy,
+        // T129: create-only, an admin edit in E-mail sabloni survives a reseed.
+        update: {},
         create: { key: template.key, language, ...copy },
       });
     }
@@ -845,7 +775,7 @@ async function seedEmailTemplates() {
   console.log(`Seeded ${emailTemplates.length} email templates x 2 languages`);
 }
 
-// Create-only, unlike seedEmailTemplates above — this container reseeds on
+// Create-only, like seedEmailTemplates above (T129). This container reseeds on
 // every restart (see docker-compose.yml), and once an admin has edited a
 // page or FAQ item through /admin/sadrzaj, a reseed must never clobber it.
 async function seedStaticPages() {
@@ -911,7 +841,6 @@ async function main() {
   await seedSettings();
   await seedLocations();
   await seedCategories();
-  await pruneRemovedCategories();
   await seedEmailTemplates();
   await seedStaticPages();
   await seedFaqs();

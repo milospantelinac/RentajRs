@@ -10,24 +10,7 @@
         <p v-if="error" class="form-error mb-3">{{ error }}</p>
 
         <div class="category-pick-grid">
-          <button
-            v-for="cat in topCategories"
-            :key="cat.id"
-            type="button"
-            class="category-card"
-            @click="selectTopCategory(cat)"
-          >
-            <span
-              class="category-card-icon"
-              :class="{ 'category-card-icon-solid': hasSolidIcon(cat.slug) }"
-              aria-hidden="true"
-              v-html="iconMarkup(cat.slug)"
-            />
-            <span class="category-card-text">
-              <span class="category-card-name">{{ cat.name }}</span>
-              <span v-if="cat.shortDescription" class="category-card-desc">{{ cat.shortDescription }}</span>
-            </span>
-          </button>
+          <CategoryPickCard v-for="cat in topCategories" :key="cat.id" :category="cat" @click="selectTopCategory(cat)" />
           <!-- Fixed UI, always last. Dizajn 50: Ostalo itself is one of the
                categories above once the owner publishes it. -->
           <button v-if="!changingListingId" type="button" class="category-card category-card-unlock" @click="step = 'propose'">
@@ -53,24 +36,14 @@
         <p v-if="error" class="form-error mb-3">{{ error }}</p>
 
         <div class="category-pick-grid">
-          <button
+          <CategoryPickCard
             v-for="sub in activeTopCategory.children"
             :key="sub.id"
-            type="button"
-            class="category-card category-card-sub"
+            :category="sub"
+            :parent="activeTopCategory"
+            sub
             @click="selectLeafCategory(sub.id)"
-          >
-            <span
-              class="category-card-icon"
-              :class="{ 'category-card-icon-solid': hasSolidIcon(sub.slug) }"
-              aria-hidden="true"
-              v-html="iconMarkup(sub.slug, activeTopCategory.slug)"
-            />
-            <span class="category-card-text">
-              <span class="category-card-name">{{ sub.name }}</span>
-              <span v-if="sub.shortDescription" class="category-card-desc">{{ sub.shortDescription }}</span>
-            </span>
-          </button>
+          />
         </div>
       </template>
 
@@ -216,15 +189,10 @@ const changingListingId = computed(() => (typeof route.query.oglas === 'string' 
 const { data: categories } = await useAsyncData('wizard-categories', () => api.get('/categories'))
 
 // The frame puts Magacini i skladišta before Građevinske mašine. That is the
-// endpoint's own order since Dizajn 46 made the seed's displayOrder the one
-// place the category order is written down, so nothing is re-sorted here.
+// endpoint's own order: displayOrder is the one place the category order is
+// written down (Dizajn 46), set by dragging in Administracija > Kategorije
+// since T129, so nothing is re-sorted here.
 const topCategories = computed(() => categories.value || [])
-
-// Dizajn 50: every subcategory and Ostalo have a solid icon of their own, drawn
-// at the cards' 26px; the six categories keep their 172:287 exports. A
-// subcategory an admin adds later shows its parent's icon, as all of them did.
-const hasSolidIcon = (slug) => Boolean(getCategoryIconMarkup(slug))
-const iconMarkup = (slug, parentSlug) => getCategoryIconMarkup(slug) || getWizardCategoryIconMarkup(parentSlug || slug)
 
 // 651:1085 — "dan" is the unit the frame shows for Po boravku.
 const uncategorized = reactive({ title: '', bookingModel: 'PER_STAY', priceUnit: 'DAY', description: '' })
@@ -410,88 +378,6 @@ useSeoMeta({ title: () => t(changingListingId.value ? 'listing.changeCategory' :
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 32px;
   align-items: start;
-}
-
-// 174:304 — Figma's 1px stroke sits inside the 22px padding. The icon follows
-// the card's colour: #CED6DE idle, blue together with the border on hover,
-// which is the state 174:290 is drawn in.
-.category-card {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 16px;
-  width: 100%;
-  min-width: 0;
-  margin: 0;
-  padding: 21px;
-  border: 1px solid $color-border;
-  border-radius: 16px;
-  background: $color-surface;
-  color: #ced6de;
-  font-family: $font-family-base;
-  text-align: left;
-  cursor: pointer;
-  transition:
-    border-color 0.15s ease,
-    color 0.15s ease;
-}
-
-.category-card:hover,
-.category-card:focus-visible {
-  border-color: $color-primary;
-  color: $color-primary;
-}
-
-.category-card:focus-visible {
-  outline: 2px solid rgba($color-primary, 0.35);
-  outline-offset: 2px;
-}
-
-.category-card-icon {
-  display: flex;
-}
-
-// Dizajn 50 (1651:3254): the solid icons are 30px components drawn at the
-// cards' 26. The box sets the height; the 31-wide ones (Sobe, both vehicles)
-// spill evenly past it, as they do in Figma.
-.category-card-icon-solid {
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-}
-
-.category-card-icon-solid :deep(svg) {
-  flex-shrink: 0;
-  width: auto;
-  height: 100%;
-}
-
-// 1662:3280: unlike 172:287's cards, the subcategory card keeps its stroke
-// outside the padding, 22 round the content and 26 below the name.
-.category-card-sub {
-  padding: 22px 22px 26px;
-}
-
-.category-card-text {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  width: 100%;
-}
-
-.category-card-name {
-  font-size: 18px;
-  font-weight: 500;
-  line-height: normal;
-  color: $color-text;
-}
-
-// A two-line box in the frame, even where the copy fits on one line.
-.category-card-desc {
-  min-height: 36px;
-  font-size: 13px;
-  line-height: 18px;
-  color: $color-text-muted;
 }
 
 // 174:347 — dashed #C8D3E0, no fill. The stroke is painted over the card, not

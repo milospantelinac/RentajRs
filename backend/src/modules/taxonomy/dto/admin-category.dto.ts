@@ -10,6 +10,7 @@ import {
   IsString,
   IsUUID,
   MaxLength,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import { BookingModel, PriceUnit } from '@prisma/client';
@@ -58,9 +59,37 @@ export class CreateCategoryDto {
   @ApiPropertyOptional()
   @IsOptional()
   displayOrder?: number;
+
+  @ApiPropertyOptional({ description: 'T129: the URL name; made from the name when left out' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  slug?: string;
+
+  @ApiPropertyOptional({ description: 'T129: false (the default) keeps a new category as a draft, off the site' })
+  @IsOptional()
+  @IsBoolean()
+  published?: boolean;
+
+  @ApiPropertyOptional({ description: 'T129: copy the booking settings, attributes and filters of this category' })
+  @IsOptional()
+  @IsUUID('4')
+  copyFromId?: string;
 }
 
 export class UpdateCategoryDto {
+  @ApiPropertyOptional({ description: 'T129: the URL name; the old URL redirects to the new one' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  slug?: string;
+
+  @ApiPropertyOptional({ nullable: true, description: 'T129: moves the category; null makes it a main category' })
+  @IsOptional()
+  @ValidateIf((_dto, value) => value !== null)
+  @IsUUID('4')
+  parentId?: string | null;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -107,6 +136,21 @@ export class UpdateCategoryDto {
   @IsOptional()
   @IsBoolean()
   published?: boolean;
+}
+
+/** T129: the new order of one level of the tree, every sibling once. */
+export class ReorderCategoriesDto {
+  @ApiPropertyOptional({ nullable: true, description: 'Parent of that level; null for the main categories' })
+  @IsOptional()
+  @ValidateIf((_dto, value) => value !== null)
+  @IsUUID('4')
+  parentId?: string | null;
+
+  @ApiProperty({ type: [String] })
+  @IsArray()
+  @ArrayMaxSize(200)
+  @IsUUID('4', { each: true })
+  ids: string[];
 }
 
 export class RejectCategoryDto {

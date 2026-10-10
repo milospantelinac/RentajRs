@@ -438,6 +438,8 @@ model Category {
   level               Int // 1-3, derived on write
   slug                String         @unique
   icon                String?
+  /// T129: the category picture an admin uploads in Administracija > Kategorije.
+  imageUrl            String?
   status              CategoryStatus @default(ACTIVE)
   defaultBookingModel BookingModel
   allowedPriceUnits   PriceUnit[]
@@ -452,7 +454,7 @@ model Category {
   proposalComment     String?
   proposalCount       Int            @default(0)
   mergedIntoId        String?        @db.Uuid
-  listingCount        Int            @default(0) // cached, refreshed by scheduled job
+  listingCount        Int            @default(0) // unused: T129 counts live in TaxonomyService.adminGetCategoryTree
   createdAt           DateTime       @default(now()) @db.Timestamptz
 
   parent           Category?           @relation("CategoryTree", fields: [parentId], references: [id])
