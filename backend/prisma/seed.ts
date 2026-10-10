@@ -181,103 +181,11 @@ async function seedSettings() {
 }
 
 // ---------------------------------------------------------------------------
-// Locations — Serbian regions + a representative set of cities (R179 requires
-// this populated before launch; the full exhaustive municipality list is
-// flagged in DOCUMENTATION.md as a pre-launch content task, not a code task).
+// Locations: T119 moved them into migrations (20261010210100_serbian_settlements
+// holds every settlement of Serbia by okrug, with the parts of Beograd and Novi
+// Sad), so a new database has them before the seed runs and an admin's edits in
+// Administracija > Lokacije are never put back by a reseed.
 // ---------------------------------------------------------------------------
-
-async function seedLocations() {
-  const data: Record<string, string[]> = {
-    Beograd: ['Beograd'],
-    Vojvodina: ['Novi Sad', 'Subotica', 'Zrenjanin', 'Pančevo', 'Sombor', 'Kikinda', 'Sremska Mitrovica'],
-    Šumadija: ['Kragujevac', 'Kruševac', 'Jagodina', 'Čačak', 'Gornji Milanovac'],
-    'Zapadna Srbija': ['Užice', 'Valjevo', 'Šabac', 'Loznica'],
-    'Istočna Srbija': ['Zaječar', 'Bor', 'Negotin', 'Kladovo'],
-    'Južna Srbija': ['Niš', 'Leskovac', 'Vranje', 'Pirot', 'Prokuplje'],
-    Kosovo: ['Kosovska Mitrovica'],
-  };
-
-  // Locative for headings like "Oglasi u Beogradu" (Dizajn 8). Listed rather
-  // than derived: the ending changes irregularly (Šabac -> Šapcu, Čačak ->
-  // Čačku) and two-word names decline the adjective too.
-  const locative: Record<string, string> = {
-    Beograd: 'Beogradu',
-    'Novi Sad': 'Novom Sadu',
-    Subotica: 'Subotici',
-    Zrenjanin: 'Zrenjaninu',
-    Pančevo: 'Pančevu',
-    Sombor: 'Somboru',
-    Kikinda: 'Kikindi',
-    'Sremska Mitrovica': 'Sremskoj Mitrovici',
-    Kragujevac: 'Kragujevcu',
-    Kruševac: 'Kruševcu',
-    Jagodina: 'Jagodini',
-    Čačak: 'Čačku',
-    'Gornji Milanovac': 'Gornjem Milanovcu',
-    Užice: 'Užicu',
-    Valjevo: 'Valjevu',
-    Šabac: 'Šapcu',
-    Loznica: 'Loznici',
-    Zaječar: 'Zaječaru',
-    Bor: 'Boru',
-    Negotin: 'Negotinu',
-    Kladovo: 'Kladovu',
-    Niš: 'Nišu',
-    Leskovac: 'Leskovcu',
-    Vranje: 'Vranju',
-    Pirot: 'Pirotu',
-    Prokuplje: 'Prokuplju',
-    'Kosovska Mitrovica': 'Kosovskoj Mitrovici',
-  };
-
-  const beogradAreas = [
-    'Vračar',
-    'Novi Beograd',
-    'Zemun',
-    'Stari Grad',
-    'Savski Venac',
-    'Voždovac',
-    'Zvezdara',
-    'Palilula',
-    'Čukarica',
-    'Rakovica',
-  ];
-  const novisadAreas = ['Stari Grad', 'Liman', 'Grbavica', 'Detelinara', 'Podbara', 'Petrovaradin'];
-
-  for (const [regionName, cities] of Object.entries(data)) {
-    const region = await prisma.region.upsert({
-      where: { slug: slugify(regionName) },
-      update: {},
-      create: { name: regionName, slug: slugify(regionName) },
-    });
-
-    for (const cityName of cities) {
-      const city = await prisma.city.upsert({
-        where: { slug: slugify(cityName) },
-        // Unlike the rest of this seed, the locative is backfilled on every
-        // run: it was added after these rows already existed, and it is
-        // reference data no admin edits, so there is nothing to overwrite.
-        update: { nameLocative: locative[cityName] ?? null },
-        create: {
-          regionId: region.id,
-          name: cityName,
-          slug: slugify(cityName),
-          nameLocative: locative[cityName] ?? null,
-        },
-      });
-
-      const areas = cityName === 'Beograd' ? beogradAreas : cityName === 'Novi Sad' ? novisadAreas : [];
-      for (const areaName of areas) {
-        await prisma.cityArea.upsert({
-          where: { cityId_slug: { cityId: city.id, slug: slugify(areaName) } },
-          update: {},
-          create: { cityId: city.id, name: areaName, slug: slugify(areaName) },
-        });
-      }
-    }
-  }
-  console.log('Seeded regions, cities and city areas');
-}
 
 function slugify(input: string): string {
   const map: Record<string, string> = {
@@ -867,7 +775,6 @@ async function main() {
   await seedPackages();
   await seedPermissionsAndAdmin();
   await seedSettings();
-  await seedLocations();
   await seedCategories();
   await seedEmailTemplates();
   await seedStaticPages();

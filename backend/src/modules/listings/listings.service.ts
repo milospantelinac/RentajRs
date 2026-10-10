@@ -433,23 +433,32 @@ export class ListingsService {
   async updateLocation(userId: string, listingId: string, dto: UpdateLocationDto) {
     const listing = await this.assertOwnership(userId, listingId);
     const city = await this.prisma.city.findUniqueOrThrow({ where: { id: dto.cityId } });
+    // T119: a place or a part the admin hid stays with a listing that has it
+    // and is chosen by no other.
+    if (city.hidden && city.id !== listing.cityId) throw new BadRequestException(this.i18n.t('errors.PLACE_HIDDEN'));
     // Dizajn 26: before a booking is confirmed guests only see the city and its area, so a
     // city with areas needs one of them; a city without areas takes none.
-    const areaIds = (await this.prisma.cityArea.findMany({ where: { cityId: city.id }, select: { id: true } })).map((a) => a.id);
-    if (dto.cityAreaId ? !areaIds.includes(dto.cityAreaId) : areaIds.length > 0) {
+    const areas = await this.prisma.cityArea.findMany({ where: { cityId: city.id }, select: { id: true, hidden: true } });
+    const area = dto.cityAreaId ? areas.find((a) => a.id === dto.cityAreaId) : undefined;
+    const offered = areas.filter((a) => !a.hidden || a.id === listing.cityAreaId);
+    if (dto.cityAreaId ? !area : offered.length > 0) {
       throw new BadRequestException(
         this.i18n.t(dto.cityAreaId ? 'errors.CITY_AREA_NOT_IN_CITY' : 'errors.CITY_AREA_REQUIRED'),
       );
     }
+    if (area?.hidden && area.id !== listing.cityAreaId) throw new BadRequestException(this.i18n.t('errors.CITY_AREA_HIDDEN'));
     // RNT-026 — a dragged pin from the wizard's map wins over auto-geocoding;
-    // otherwise fall back to R40's original automatic behavior.
+    // otherwise fall back to R40's original automatic behavior. T119: many
+    // villages share a name, so the municipality goes with it.
+    const place = city.municipality && city.municipality !== city.name ? `${city.name}, ${city.municipality}` : city.name;
     const coords =
       dto.latitude !== undefined && dto.longitude !== undefined
         ? { latitude: dto.latitude, longitude: dto.longitude }
-        : await this.geocoding.geocode(dto.address, city.name);
+        : await this.geocoding.geocode(dto.address, place);
 
     const locationData = {
-      regionId: dto.regionId,
+      // T119: a listing's okrug is its place's, whatever the form sent.
+      regionId: city.regionId,
       cityId: dto.cityId,
       cityAreaId: dto.cityAreaId ?? null,
       address: dto.address,

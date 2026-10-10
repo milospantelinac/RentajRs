@@ -43,11 +43,14 @@ const { data: category, error: categoryError } = await useAsyncData(`cc-category
   api.get(`/categories/${route.params.categorySlug}`),
 )
 
-const { data: cities, error: citiesError } = await useAsyncData('cc-cities', () => api.get('/locations/cities'))
-const city = computed(() => cities.value?.find((c) => c.slug === route.params.citySlug))
+// T119: the one place by its slug (there are some six thousand now); a slug
+// an admin changed is redirected by the middleware before this runs.
+const { data: city, error: cityError } = await useAsyncData(`cc-city-${route.params.citySlug}`, () =>
+  api.get(`/locations/cities/${route.params.citySlug}`),
+)
 
 // Dizajn 50: nor does an unpublished category have city pages.
-if (categoryError.value || citiesError.value) throw createError(pageLoadError(categoryError.value || citiesError.value, 'Not found'))
+if (categoryError.value || cityError.value) throw createError(pageLoadError(categoryError.value || cityError.value, 'Not found'))
 if (!category.value || category.value.published === false || !city.value) {
   throw createError({ statusCode: 404, statusMessage: 'Not found' })
 }

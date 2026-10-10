@@ -349,28 +349,7 @@ export class TaxonomyService {
     });
   }
 
-  // -- Locations -------------------------------------------------------
-
-  async getRegions() {
-    return this.cache.getOrSet('taxonomy:regions', CACHE_TTL, () =>
-      this.prisma.region.findMany({ orderBy: { name: 'asc' } }),
-    );
-  }
-
-  async getCities(regionId?: string) {
-    const key = `taxonomy:cities:${regionId ?? 'all'}`;
-    return this.cache.getOrSet(key, CACHE_TTL, () =>
-      this.prisma.city.findMany({ where: regionId ? { regionId } : undefined, orderBy: { name: 'asc' } }),
-    );
-  }
-
-  async getCityAreas(citySlug: string) {
-    return this.cache.getOrSet(`taxonomy:areas:${citySlug}`, CACHE_TTL, async () => {
-      const city = await this.prisma.city.findUnique({ where: { slug: citySlug } });
-      if (!city) throw new NotFoundException();
-      return this.prisma.cityArea.findMany({ where: { cityId: city.id }, orderBy: { name: 'asc' } });
-    });
-  }
+  // Locations (regions, places, parts of a city) are LocationsService (T119).
 
   // -- Proposal flow (ADR-001) -------------------------------------------
 

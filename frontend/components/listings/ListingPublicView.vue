@@ -337,7 +337,7 @@
         <div class="listing-similar-head">
           <h2 class="listing-similar-title">
             {{ t('listing.similarListings') }}
-            <span v-if="cityLocative" class="listing-similar-title-muted">{{ t('listing.inCity', { city: cityLocative }) }}</span>
+            <span v-if="cityInSentence" class="listing-similar-title-muted">{{ cityInSentence }}</span>
           </h2>
           <NuxtLink :to="allListingsLink" class="listing-similar-all">
             {{ t('listing.seeAllListings') }}
@@ -634,7 +634,8 @@ const cancellationLine = computed(() =>
 // -- Similar listings -----------------------------------------------------
 
 const similarListings = ref([])
-const cityLocative = computed(() => props.listing.city?.nameLocative || props.listing.city?.name || '')
+// "u Beogradu", or "u mestu Surduk" for a place with no locative (T119).
+const cityInSentence = computed(() => placeInSentence(t, props.listing.city))
 
 const allListingsLink = computed(() => {
   const query = new URLSearchParams({ categorySlug: props.listing.category.slug })

@@ -171,6 +171,14 @@ enum OccupancySource {
   GAP
 }
 
+/// T119: what a settlement is in the RZS register, so a town comes before the
+/// villages that start like it when a place is searched.
+enum PlaceKind {
+  SEAT // the seat of its municipality
+  TOWN // another urban settlement
+  VILLAGE
+}
+
 enum SubscriptionStatus {
   AWAITING_PAYMENT // created at checkout, before the NestPay redirect resolves — see nestpay callback handlers
   PENDING_ACTIVATION
@@ -600,6 +608,8 @@ model Translation {
   @@index([entityType, entityId, language])
 }
 
+/// T119: an upravni okrug (Beograd is one of its own); the places of a
+/// listing's choice are grouped by it.
 model Region {
   id   String @id @default(uuid()) @db.Uuid
   name String
@@ -609,11 +619,20 @@ model Region {
   listings Listing[]
 }
 
+/// T119: every settlement (naselje) of Serbia, not only the bigger towns.
+/// Two places can share a name, so the slug of all but one carries the
+/// municipality (novo-selo-lebane) and the municipality is shown with the name.
 model City {
   id       String @id @default(uuid()) @db.Uuid
   regionId String @db.Uuid
   name     String
   slug     String @unique
+  /// T119: the municipality (opština or grad) the place belongs to.
+  municipality String?
+  kind         PlaceKind @default(VILLAGE)
+  /// T119: no longer offered for a new listing or a search; the listings that
+  /// have it keep it and its pages stay up.
+  hidden       Boolean   @default(false)
   // Serbian locative ("u Beogradu", "u Šapcu", "u Novom Sadu") for headings
   // that put the city into a sentence. Can't be derived from `name` — the
   // locative drops and changes consonants (Šabac -> Šapcu) and agrees with
@@ -635,6 +654,8 @@ model CityArea {
   cityId String @db.Uuid
   name   String
   slug   String
+  /// T119: as City.hidden, for a part of the city.
+  hidden Boolean @default(false)
 
   city     City      @relation(fields: [cityId], references: [id], onDelete: Cascade)
   listings Listing[]

@@ -693,3 +693,53 @@ describe('ListingsService#upsertAttributes, hidden fields and items (T129)', () 
     ]);
   });
 });
+
+describe('ListingsService#updateLocation (T119)', () => {
+  const SURDUK = { id: 'c-surduk', name: 'Surduk', municipality: 'Stara Pazova', regionId: 'r-srem', hidden: false };
+  const dto = { regionId: 'r-old', cityId: 'c-surduk', address: 'Glavna 1' };
+
+  function serviceWith({ city = SURDUK, areas = [] as any[], listing = {} as any } = {}) {
+    const prisma = {
+      listing: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'l1', userId: 'u1', cityId: null, cityAreaId: null, ...listing }),
+        update: jest.fn(({ data }) => Promise.resolve(listingRow(data))),
+      },
+      city: { findUniqueOrThrow: jest.fn().mockResolvedValue(city) },
+      cityArea: { findMany: jest.fn().mockResolvedValue(areas) },
+    };
+    const geocoding = { geocode: jest.fn().mockResolvedValue({ latitude: 45.07, longitude: 20.08 }) };
+    const service = new ListingsService(prisma as any, {} as any, {} as any, geocoding as any, {} as any, {} as any, i18n as any, {} as any);
+    return { service, prisma, geocoding };
+  }
+
+  it('takes the okrug from the place and geocodes the place with its municipality', async () => {
+    const { service, prisma, geocoding } = serviceWith();
+    await service.updateLocation('u1', 'l1', dto);
+    expect(prisma.listing.update.mock.calls[0][0].data).toMatchObject({ regionId: 'r-srem', cityId: 'c-surduk', cityAreaId: null });
+    expect(geocoding.geocode).toHaveBeenCalledWith('Glavna 1', 'Surduk, Stara Pazova');
+  });
+
+  it('refuses a hidden place for a new choice and keeps it for a listing that has it', async () => {
+    const hidden = { ...SURDUK, hidden: true };
+    await expect(serviceWith({ city: hidden }).service.updateLocation('u1', 'l1', dto)).rejects.toThrow('errors.PLACE_HIDDEN');
+    const { service, prisma } = serviceWith({ city: hidden, listing: { cityId: 'c-surduk' } });
+    await service.updateLocation('u1', 'l1', dto);
+    expect(prisma.listing.update).toHaveBeenCalled();
+  });
+
+  it('needs a part of the city only when one is offered, and takes a hidden part from no new listing', async () => {
+    const areas = [{ id: 'a-old', hidden: true }];
+    // Only a hidden part: nothing to pick, so none is needed.
+    await serviceWith({ areas }).service.updateLocation('u1', 'l1', dto);
+    await expect(serviceWith({ areas }).service.updateLocation('u1', 'l1', { ...dto, cityAreaId: 'a-old' })).rejects.toThrow(
+      'errors.CITY_AREA_HIDDEN',
+    );
+    await serviceWith({ areas, listing: { cityId: 'c-surduk', cityAreaId: 'a-old' } }).service.updateLocation('u1', 'l1', {
+      ...dto,
+      cityAreaId: 'a-old',
+    });
+    await expect(
+      serviceWith({ areas: [...areas, { id: 'a-new', hidden: false }] }).service.updateLocation('u1', 'l1', dto),
+    ).rejects.toThrow('errors.CITY_AREA_REQUIRED');
+  });
+});

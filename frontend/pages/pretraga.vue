@@ -15,15 +15,15 @@
           />
         </div>
         <span class="search-bar-separator" aria-hidden="true" />
-        <div class="search-bar-city">
+        <div class="search-bar-city" data-place-anchor>
           <img src="/images/icons/pin-line.svg" alt="" class="search-bar-icon" width="18" height="18" />
-          <SelectMenu
-            v-model="query.cityId"
-            :options="cityOptions"
+          <!-- T119: every settlement of Serbia, so the field searches as it is typed. -->
+          <LocationAutocomplete
+            v-model="selectedPlace"
+            class="search-bar-place"
             :placeholder="t('search.allCities')"
             :aria-label="t('search.cityLabel')"
-            variant="bare"
-            @update:model-value="onCityChange"
+            @update:model-value="onPlaceChange"
           />
         </div>
         <button type="submit" class="search-bar-submit">{{ t('search.submit') }}</button>
@@ -409,7 +409,10 @@ const route = useRoute()
 const router = useRouter()
 
 const categories = ref([])
-const cities = ref([])
+// T119: the place field's value (a settlement, or a part of a city picked
+// there) and the city the search is in, read by its id from a link.
+const selectedPlace = ref(null)
+const selectedCity = ref(null)
 const cityAreas = ref([])
 const selectedCategory = ref(null)
 const results = ref([])
@@ -473,11 +476,6 @@ const areaDraft = ref([])
 const multiDraft = ref([])
 
 // -- Options -----------------------------------------------------------
-
-const cityOptions = computed(() => [
-  { value: '', label: t('search.allCities') },
-  ...cities.value.map((c) => ({ value: c.id, label: c.name })),
-])
 
 const sortOptions = computed(() => [
   { value: 'relevance', label: t('search.sortRelevance') },
@@ -605,14 +603,18 @@ const hasAnyFilter = computed(
 // Dizajn 10 — the heading follows the choice: "Nekretnine u Beogradu" once a
 // category is picked, "Oglasi u Beogradu" otherwise. The city is in the
 // locative (from the City row), since Serbian city names decline irregularly.
+// T119: a place without one is "u mestu Surduk", which reads right as it is.
 const resultsTitle = computed(() => {
-  const city = cities.value.find((c) => c.id === query.cityId)
-  const cityName = city ? city.nameLocative || city.name : ''
+  const city = query.cityId && selectedCity.value?.id === query.cityId ? selectedCity.value : null
   const category = activeSubcategory.value?.name || selectedCategory.value?.name || ''
 
-  if (category && cityName) return t('search.categoryInCity', { category, city: cityName })
+  if (category && city) {
+    return city.nameLocative
+      ? t('search.categoryInCity', { category, city: city.nameLocative })
+      : t('search.categoryInPlace', { category, city: city.name })
+  }
   if (category) return category
-  if (cityName) return t('search.listingsInCity', { city: cityName })
+  if (city) return city.nameLocative ? t('search.listingsInCity', { city: city.nameLocative }) : t('search.listingsInPlace', { city: city.name })
   return t('search.listingsAll')
 })
 
@@ -683,6 +685,10 @@ function toggleAreaDraft(id) {
 // could before; the panel no longer has them.
 function applyAreas(ids, close) {
   query.cityAreaIds = [...ids]
+  // T119: the place field names one part only while that part alone is ticked.
+  if (selectedPlace.value?.type === 'area' && !(ids.length === 1 && ids[0] === selectedPlace.value.id)) {
+    selectedPlace.value = cityAsPlace(selectedCity.value)
+  }
   close()
   runSearch()
 }
@@ -760,16 +766,20 @@ function applyPanelFilters(panelSelections) {
   runSearch()
 }
 
-async function onCityChange() {
-  // A city area only means something inside its own city.
-  query.cityAreaIds = []
+// T119: a part of a city picked in the place field searches its city with
+// only that part ticked; a city area only means something inside its own city.
+async function onPlaceChange(place) {
+  const city = placeCity(place)
+  query.cityId = city?.id || ''
+  query.cityAreaIds = place?.type === 'area' && searchFilters.value.filters.some((filter) => filter.control === 'AREA') ? [place.id] : []
+  selectedCity.value = city
   await loadCityAreas()
   runSearch()
 }
 
 async function loadCityAreas() {
-  const city = cities.value.find((c) => c.id === query.cityId)
-  if (!city) {
+  const city = selectedCity.value
+  if (!city || city.id !== query.cityId) {
     cityAreas.value = []
     return
   }
@@ -777,6 +787,17 @@ async function loadCityAreas() {
     cityAreas.value = await api.get(`/locations/cities/${city.slug}/areas`)
   } catch {
     cityAreas.value = []
+  }
+}
+
+// A link carries the city's id only: its name, slug and locative come from the API.
+async function loadSelectedCity() {
+  if (!query.cityId) return
+  try {
+    selectedCity.value = await api.get(`/locations/cities/${query.cityId}`)
+    selectedPlace.value = cityAsPlace(selectedCity.value)
+  } catch {
+    selectedCity.value = null
   }
 }
 
@@ -838,6 +859,8 @@ async function clearCategory() {
 async function clearAllFilters() {
   query.q = ''
   query.cityId = ''
+  selectedPlace.value = null
+  selectedCity.value = null
   query.cityAreaIds = []
   query.priceMin = null
   query.priceMax = null
@@ -966,7 +989,9 @@ async function tryRelaxedSearch() {
 }
 
 async function submitNotify() {
-  await api.post('/search/notify-empty', { search: query, email: notifyEmail.value })
+  // The same body a search sends: the raw query has cityId '' with no place
+  // picked, which the database refused as a uuid (T119, found on the way).
+  await api.post('/search/notify-empty', { search: buildSearchBody(), email: notifyEmail.value })
   notifySent.value = true
 }
 
@@ -987,7 +1012,7 @@ function onBoundsChange(bounds) {
 }
 
 onMounted(async () => {
-  ;[categories.value, cities.value] = await Promise.all([api.get('/categories'), api.get('/locations/cities')])
+  ;[categories.value] = await Promise.all([api.get('/categories'), loadSelectedCity()])
   if (query.categorySlug) {
     selectedCategory.value =
       categories.value.find((c) => c.slug === query.categorySlug) ||
@@ -1066,17 +1091,17 @@ useSeoMeta({ title: t('common.search') })
   flex-shrink: 0;
 }
 
-// The bare SelectMenu carries the hero's muted 14px styling; here the city
-// reads as a chosen value, per Figma 158:194.
-.search-bar-city :deep(.select-menu-trigger) {
+// The city reads as a chosen value, per Figma 158:194, "Svi gradovi" included
+// (T119: now the place field's placeholder).
+.search-bar-place {
+  width: 220px;
   font-size: 15px;
   font-weight: 500;
   color: $color-text;
 }
 
-.search-bar-city :deep(.select-menu-chevron) {
-  width: 16px;
-  height: 16px;
+.search-bar-place :deep(.place-field-input::placeholder) {
+  color: $color-text;
 }
 
 .search-bar-submit {
@@ -1737,6 +1762,11 @@ useSeoMeta({ title: t('common.search') })
   .search-bar-term,
   .search-bar-city {
     flex: 1 1 100%;
+  }
+
+  .search-bar-place {
+    flex: 1;
+    width: auto;
   }
 
   .search-bar-submit {

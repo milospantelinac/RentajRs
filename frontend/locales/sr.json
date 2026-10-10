@@ -882,7 +882,6 @@
     "cancellationAfterDeadline": "Posle tog roka otkazivanje se dogovara direktno sa vlasnikom.",
     "noMoneyThroughPlatform": "Rentaj ne prima i ne prosleđuje novac. Uplata i eventualni povraćaj su dogovor između vas i vlasnika.",
     "similarListings": "Slični oglasi",
-    "inCity": "u {city}",
     "seeAllListings": "Pogledaj sve oglase",
     "messageOwner": "Pošalji poruku vlasniku",
     "photosOrderNote": "Prevlačenjem menjate redosled; prva fotografija automatski postaje naslovna.",
@@ -1121,7 +1120,9 @@
     "noResultsTitle": "Nema rezultata",
     "removeFilterHint": "Pokušajte da uklonite neki filter.",
     "loadErrorTitle": "Pretraga nije učitana",
-    "loadErrorText": "Proverite internet vezu i pokušajte ponovo."
+    "loadErrorText": "Proverite internet vezu i pokušajte ponovo.",
+    "categoryInPlace": "{category} u mestu {city}",
+    "listingsInPlace": "Oglasi u mestu {city}"
   },
   "legalPages": {
     "lastUpdated": "Poslednja izmena: {date}",
@@ -1753,7 +1754,8 @@
       "emailTemplates": "Tekst poruka koje platforma šalje, na srpskom i engleskom.",
       "content": "Statične stranice, pitanja i odgovori i video na početnoj.",
       "settings": "Sistemske vrednosti koje menjaju ponašanje platforme.",
-      "bookingModels": "Načini rezervacije koje vlasnici biraju u wizardu i koje kategorije ih nude."
+      "bookingModels": "Načini rezervacije koje vlasnici biraju u wizardu i koje kategorije ih nude.",
+      "locations": "Okruzi, mesta i delovi grada koje vlasnici biraju u oglasu, a gosti u pretrazi."
     },
     "empty": {
       "queue": {
@@ -2092,6 +2094,103 @@
       "descriptionChanged": "{name}: izmenjen opis",
       "turnedOn": "uključen",
       "turnedOff": "isključen"
+    },
+    "locations": "Lokacije",
+    "loc": {
+      "tabs": {
+        "cities": "Mesta",
+        "regions": "Okruzi",
+        "history": "Istorija izmena"
+      },
+      "newCity": "Novo mesto",
+      "newRegion": "Novi okrug",
+      "renameRegion": "Izmena okruga",
+      "searchPlaceholder": "Pretraga po nazivu, opštini ili URL-u",
+      "region": "Okrug",
+      "allRegions": "Svi okruzi",
+      "chooseRegion": "Izaberite okrug",
+      "visibility": "Prikaz",
+      "visibilityAll": "Sva mesta",
+      "visibilityVisible": "Vidljiva",
+      "visibilityHidden": "Sakrivena",
+      "withListings": "Samo mesta sa oglasima",
+      "loading": "Učitavanje...",
+      "noResults": "Nijedno mesto ne odgovara pretrazi.",
+      "place": "Mesto",
+      "municipality": "Opština",
+      "areaCount": "delova grada: {count}",
+      "hidden": "Sakriveno",
+      "visible": "Vidljivo",
+      "show": "Prikaži",
+      "hide": "Sakrij",
+      "previous": "Prethodna",
+      "next": "Sledeća",
+      "pageOf": "Strana {page} od {pages} (ukupno mesta: {total})",
+      "total": "Ukupno mesta: {total}",
+      "placesCount": "Mesta",
+      "rename": "Izmeni",
+      "historyEmpty": "Za lokacije još nema zabeleženih izmena.",
+      "historyEmptyCity": "Za ovo mesto još nema zabeleženih izmena.",
+      "name": "Naziv",
+      "kind": "Vrsta mesta",
+      "kinds": {
+        "SEAT": "Sedište opštine",
+        "TOWN": "Gradsko naselje",
+        "VILLAGE": "Selo ili drugo naselje"
+      },
+      "locative": "Lokativ (reč posle \"u\")",
+      "locativeHint": "Za naslove kao \"Stanovi u Surduku\" upišite samo reč posle \"u\" (Surduku). Bez lokativa naslov glasi \"Stanovi u mestu Surduk\".",
+      "createAndOpen": "Napravi i otvori",
+      "hiddenNotice": "Mesto {name} je sakriveno: više se ne nudi za nove oglase ni u pretrazi.",
+      "shownNotice": "Mesto {name} se ponovo nudi.",
+      "regionInUseTitle": "Okrug ima mesta",
+      "regionInUse": "Okrug \"{name}\" ima mesta (ukupno: {count}), pa ne može da se obriše. Prvo premestite ili obrišite mesta.",
+      "deleteRegionConfirm": "Obrisati okrug \"{name}\"?",
+      "cityInUseTitle": "Mesto je u upotrebi",
+      "cityInUse": "Mesto \"{name}\" je u upotrebi (broj oglasa: {count}), pa ne može da se obriše. Sakrijte ga: postojeći oglasi ostaju, a mesto se više ne nudi za nove oglase ni u pretrazi.",
+      "hideInstead": "Sakrij umesto brisanja",
+      "deleteCityConfirm": "Obrisati mesto \"{name}\"? Brišu se i njegovi delovi grada.",
+      "notFound": "Mesto nije pronađeno",
+      "listingsLine": "Oglasa: {total}, od toga u pretrazi {active}.",
+      "slugHint": "Adresa strana mesta: rentaj.rs/kategorija/{slug}. Kad ga promenite, stari linkovi vode na novi.",
+      "moveHint": "Svi oglasi ovog mesta (ukupno: {count}) prelaze u novi okrug.",
+      "hiddenCheck": "Sakrij mesto",
+      "hiddenHint": "Sakriveno mesto se ne nudi za nove oglase ni u pretrazi. Oglasi koji ga imaju ostaju, kao i njihove strane.",
+      "saved": "Sačuvano.",
+      "savedMoved": "Sačuvano. U novi okrug je prešlo oglasa: {count}.",
+      "deleteCity": "Obriši mesto",
+      "slugChangeConfirm": "Promeniti adresu mesta sa {from} na {to}? Stari linkovi će voditi na novi.",
+      "areas": "Delovi grada",
+      "areasHint": "Deo grada vlasnik bira uz mesto, a gost ga vidi pre potvrđene rezervacije. Kad mesto ima delove grada, izbor dela je obavezan.",
+      "areaName": "Naziv dela grada",
+      "areaListings": "oglasa: {count}",
+      "noAreas": "Mesto nema delove grada.",
+      "addArea": "Dodaj deo grada",
+      "firstAreaHint": "Kad mesto dobije prvi deo grada, svaki od njegovih oglasa (ukupno: {count}) bira deo grada pri sledećem čuvanju lokacije.",
+      "areaInUseTitle": "Deo grada je u upotrebi",
+      "areaInUse": "Deo grada \"{name}\" je u upotrebi (broj oglasa: {count}), pa ne može da se obriše. Sakrijte ga: oglasi ostaju, a deo grada se više ne nudi za nove oglase.",
+      "deleteAreaConfirm": "Obrisati deo grada \"{name}\"?",
+      "actions": {
+        "region_create": "Novi okrug",
+        "region_update": "Izmena okruga",
+        "region_delete": "Brisanje okruga",
+        "city_create": "Novo mesto",
+        "city_update": "Izmena mesta",
+        "city_delete": "Brisanje mesta",
+        "area_create": "Novi deo grada",
+        "area_update": "Izmena dela grada",
+        "area_delete": "Brisanje dela grada"
+      },
+      "fields": {
+        "name": "Naziv",
+        "slug": "Naziv u URL-u",
+        "municipality": "Opština",
+        "kind": "Vrsta mesta",
+        "nameLocative": "Lokativ",
+        "regionId": "Okrug",
+        "hidden": "Sakriveno",
+        "listingsMoved": "Premešteno oglasa"
+      }
     }
   },
   "home": {
@@ -2772,5 +2871,15 @@
     "backToListing": "Nazad na oglas",
     "backToSearch": "Nazad na pretragu",
     "pageTitle": "Zahtev je poslat - {listing}"
+  },
+  "location": {
+    "clear": "Obriši izbor mesta",
+    "searching": "Tražim...",
+    "noResults": "Nema mesta sa tim nazivom",
+    "typeHint": "Upišite naziv mesta",
+    "typePlaceholder": "Upišite naziv mesta",
+    "area": "Deo grada",
+    "inLocative": "u {city}",
+    "inPlace": "u mestu {city}"
   }
 }

@@ -29,13 +29,14 @@
             </div>
             <div class="hero-search-divider" aria-hidden="true" />
             <div class="hero-search-field">
-              <span class="hero-search-label">{{ t('home.searchLocationLabel') }}</span>
-              <SelectMenu
-                v-model="searchCityId"
-                :options="cityOptions"
+              <label class="hero-search-label" for="hero-search-place">{{ t('home.searchLocationLabel') }}</label>
+              <!-- T119: every settlement of Serbia, so the field searches as it is typed. -->
+              <LocationAutocomplete
+                v-model="searchPlace"
+                input-id="hero-search-place"
+                class="hero-search-place"
                 :placeholder="t('home.searchCityAny')"
-                variant="bare"
-                :aria-label="t('home.searchLocationLabel')"
+                @enter="submitSearch"
               />
             </div>
             <div class="hero-search-divider" aria-hidden="true" />
@@ -110,13 +111,13 @@
                     />
                   </div>
                   <div class="filters-sheet-field">
-                    <span class="filters-sheet-label">{{ t('home.searchLocationLabel') }}</span>
-                    <SelectMenu
-                      v-model="searchCityId"
-                      :options="cityOptions"
+                    <label class="filters-sheet-label" for="filters-sheet-place">{{ t('home.searchLocationLabel') }}</label>
+                    <LocationAutocomplete
+                      v-model="searchPlace"
+                      input-id="filters-sheet-place"
+                      class="filters-sheet-place"
                       :placeholder="t('home.searchCityAny')"
-                      variant="bare"
-                      :aria-label="t('home.searchLocationLabel')"
+                      @enter="submitSearch"
                     />
                   </div>
                   <div class="filters-sheet-field">
@@ -399,14 +400,15 @@ const api = useApi()
 
 const searchQuery = ref('')
 const searchCategorySlug = ref('')
-const searchCityId = ref('')
+// T119: the place picked in the Lokacija field (a settlement or a part of a city), or none.
+const searchPlace = ref(null)
 const searchPriceBucket = ref('')
 const filtersOpen = ref(false)
 
 function resetFilters() {
   searchQuery.value = ''
   searchCategorySlug.value = ''
-  searchCityId.value = ''
+  searchPlace.value = null
   searchPriceBucket.value = ''
 }
 
@@ -671,28 +673,21 @@ onBeforeUnmount(() => {
 
 // One useAsyncData covering everything the page needs, fetched concurrently.
 const { data: homeData } = await useAsyncData('home-page-data', async () => {
-  const [categories, cities, search] = await Promise.all([
+  const [categories, search] = await Promise.all([
     api.get('/categories'),
-    api.get('/locations/cities'),
     api.post('/search', { sort: 'newest', page: 1, pageSize: 8 }),
   ])
-  return { categories, cities, featuredListings: search.results }
+  return { categories, featuredListings: search.results }
 })
 
 const categories = computed(() => homeData.value?.categories || [])
 const homeCategories = computed(() =>
   categories.value.filter((c) => HOME_CATEGORY_TILES[c.slug]).map((c) => ({ slug: c.slug, ...HOME_CATEGORY_TILES[c.slug] })),
 )
-const cities = computed(() => homeData.value?.cities || [])
 const featuredListings = computed(() => homeData.value?.featuredListings || [])
 
 // SelectMenu takes flat { value, label } pairs so it stays independent of the
 // API's shape; the leading entry is the "any" option the old <option> carried.
-const cityOptions = computed(() => [
-  { value: '', label: t('home.searchCityAny') },
-  ...cities.value.map((c) => ({ value: c.id, label: c.name })),
-])
-
 const categoryOptions = computed(() => [
   { value: '', label: t('home.searchCategoryAny') },
   ...categories.value.map((c) => ({ value: c.slug, label: c.name })),
@@ -702,7 +697,10 @@ const searchLink = computed(() => {
   const params = new URLSearchParams()
   if (searchQuery.value) params.set('q', searchQuery.value)
   if (searchCategorySlug.value) params.set('categorySlug', searchCategorySlug.value)
-  if (searchCityId.value) params.set('cityId', searchCityId.value)
+  // A part of a city searches its city, with only that part ticked.
+  const city = placeCity(searchPlace.value)
+  if (city) params.set('cityId', city.id)
+  if (searchPlace.value?.type === 'area') params.set('cityAreaIds', searchPlace.value.id)
   if (searchPriceBucket.value) {
     const [min, max] = searchPriceBucket.value.split('-')
     if (min) params.set('priceMin', min)
@@ -959,6 +957,13 @@ useHead({
 
 .hero-search-input:focus {
   outline: none;
+}
+
+// T119: the place field types like the "Šta tražite" input next to it.
+.hero-search-place {
+  font-size: 14px;
+  line-height: 1.1;
+  color: $color-text-muted;
 }
 
 .hero-search-select {
@@ -1222,6 +1227,19 @@ useHead({
   font-size: 14px;
   color: $color-text-muted;
   opacity: 1;
+}
+
+// T119: the place field, typed at 16px like the field above it (no iOS zoom).
+.filters-sheet-place {
+  height: 19px;
+  margin: -1.8px 0;
+  font-size: 16px;
+  line-height: 19px;
+  color: $color-text;
+}
+
+.filters-sheet-place :deep(.place-field-input::placeholder) {
+  font-size: 14px;
 }
 
 // 26:4664: a 44px page-grey button, radius 7, 13.4 Medium ink.

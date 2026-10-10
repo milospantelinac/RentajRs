@@ -4,9 +4,11 @@ import { undefinedIfBlank } from '../../../common/validators/undefined-if-blank.
 
 /** Korak 5 — the owner only ever types an address; region/city are picked from lists, coordinates are automatic (R40). */
 export class UpdateLocationDto {
-  @ApiProperty()
+  // T119: the okrug comes from the place; still accepted from an older form.
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsUUID('4', { message: 'validation.REGION_REQUIRED' })
-  regionId: string;
+  regionId?: string;
 
   @ApiProperty()
   @IsUUID('4', { message: 'validation.CITY_REQUIRED' })

@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UploadedFile,
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags } from '@nestjs/swagger';
 import { TaxonomyService } from './taxonomy.service';
+import { LocationsService } from './locations.service';
 import { ProposeCategoryDto } from './dto/propose-category.dto';
 import {
   CreateCategoryDto,
@@ -17,7 +18,10 @@ import { RequirePermissions } from '../../common/decorators/require-permissions.
 @ApiTags('taxonomy')
 @Controller()
 export class TaxonomyController {
-  constructor(private taxonomyService: TaxonomyService) {}
+  constructor(
+    private taxonomyService: TaxonomyService,
+    private locations: LocationsService,
+  ) {}
 
   // -- Public --------------------------------------------------------------
 
@@ -49,19 +53,48 @@ export class TaxonomyController {
   @Public()
   @Get('locations/regions')
   getRegions() {
-    return this.taxonomyService.getRegions();
+    return this.locations.getRegions();
   }
 
   @Public()
   @Get('locations/cities')
   getCities(@Query('regionId') regionId?: string) {
-    return this.taxonomyService.getCities(regionId);
+    return this.locations.getCities(regionId);
+  }
+
+  /**
+   * T119: the place fields' search ("sur" -> Surduk, Stara Pazova); parts of a
+   * city come too unless areas=0. regionId keeps to one okrug, preferRegionId
+   * puts one first (the wizard's picked okrug).
+   */
+  @Public()
+  @Get('locations/search')
+  searchPlaces(
+    @Query('q') q?: string,
+    @Query('regionId') regionId?: string,
+    @Query('preferRegionId') preferRegionId?: string,
+    @Query('limit') limit?: string,
+    @Query('areas') areas?: string,
+  ) {
+    return this.locations.search(q ?? '', {
+      regionId: regionId || undefined,
+      preferRegionId: preferRegionId || undefined,
+      limit: limit ? Number(limit) || undefined : undefined,
+      withAreas: areas !== '0',
+    });
+  }
+
+  /** T119: one place by its id or slug (a city page, a search opened from a link). */
+  @Public()
+  @Get('locations/cities/:key')
+  getCity(@Param('key') key: string) {
+    return this.locations.getCity(key);
   }
 
   @Public()
   @Get('locations/cities/:citySlug/areas')
   getCityAreas(@Param('citySlug') citySlug: string) {
-    return this.taxonomyService.getCityAreas(citySlug);
+    return this.locations.getCityAreas(citySlug);
   }
 
   // -- Authenticated users ---------------------------------------------

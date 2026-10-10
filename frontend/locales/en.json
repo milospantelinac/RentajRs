@@ -882,7 +882,6 @@
     "cancellationAfterDeadline": "After that deadline, cancellation is arranged directly with the owner.",
     "noMoneyThroughPlatform": "Rentaj neither collects nor forwards money. Payment and any refund are arranged between you and the owner.",
     "similarListings": "Similar listings",
-    "inCity": "in {city}",
     "seeAllListings": "See all listings",
     "messageOwner": "Message the owner",
     "photosOrderNote": "Drag to reorder; the first photo automatically becomes the cover.",
@@ -1121,7 +1120,9 @@
     "noResultsTitle": "No results",
     "removeFilterHint": "Try removing a filter.",
     "loadErrorTitle": "Search could not be loaded",
-    "loadErrorText": "Check your internet connection and try again."
+    "loadErrorText": "Check your internet connection and try again.",
+    "categoryInPlace": "{category} in {city}",
+    "listingsInPlace": "Listings in {city}"
   },
   "legalPages": {
     "lastUpdated": "Last updated: {date}",
@@ -1753,7 +1754,8 @@
       "emailTemplates": "The text of the messages the platform sends, in Serbian and English.",
       "content": "Static pages, the FAQ and the homepage video.",
       "settings": "System values that change how the platform behaves.",
-      "bookingModels": "The ways of booking owners pick in the wizard, and which categories offer them."
+      "bookingModels": "The ways of booking owners pick in the wizard, and which categories offer them.",
+      "locations": "Districts, places and parts of a city that owners pick for a listing and guests search by."
     },
     "empty": {
       "queue": {
@@ -2092,6 +2094,103 @@
       "descriptionChanged": "{name}: description changed",
       "turnedOn": "on",
       "turnedOff": "off"
+    },
+    "locations": "Locations",
+    "loc": {
+      "tabs": {
+        "cities": "Places",
+        "regions": "Districts",
+        "history": "Change history"
+      },
+      "newCity": "New place",
+      "newRegion": "New district",
+      "renameRegion": "Edit district",
+      "searchPlaceholder": "Search by name, municipality or URL",
+      "region": "District",
+      "allRegions": "All districts",
+      "chooseRegion": "Choose a district",
+      "visibility": "Visibility",
+      "visibilityAll": "All places",
+      "visibilityVisible": "Visible",
+      "visibilityHidden": "Hidden",
+      "withListings": "Only places with listings",
+      "loading": "Loading...",
+      "noResults": "No place matches the search.",
+      "place": "Place",
+      "municipality": "Municipality",
+      "areaCount": "parts: {count}",
+      "hidden": "Hidden",
+      "visible": "Visible",
+      "show": "Show",
+      "hide": "Hide",
+      "previous": "Previous",
+      "next": "Next",
+      "pageOf": "Page {page} of {pages} ({total} places)",
+      "total": "Places: {total}",
+      "placesCount": "Places",
+      "rename": "Edit",
+      "historyEmpty": "No changes to the locations yet.",
+      "historyEmptyCity": "No changes to this place yet.",
+      "name": "Name",
+      "kind": "Kind of place",
+      "kinds": {
+        "SEAT": "Seat of the municipality",
+        "TOWN": "Urban settlement",
+        "VILLAGE": "Village or other settlement"
+      },
+      "locative": "Locative (the word after \"u\")",
+      "locativeHint": "For Serbian headings like \"Stanovi u Surduku\" type only the word after \"u\" (Surduku). Without it the heading reads \"Stanovi u mestu Surduk\".",
+      "createAndOpen": "Create and open",
+      "hiddenNotice": "{name} is hidden: no longer offered for new listings or in search.",
+      "shownNotice": "{name} is offered again.",
+      "regionInUseTitle": "The district has places",
+      "regionInUse": "The district \"{name}\" has places ({count}), so it cannot be deleted. Move or delete the places first.",
+      "deleteRegionConfirm": "Delete the district \"{name}\"?",
+      "cityInUseTitle": "The place is in use",
+      "cityInUse": "\"{name}\" is in use ({count} listings), so it cannot be deleted. Hide it: the listings stay, and the place is no longer offered for new listings or in search.",
+      "hideInstead": "Hide instead",
+      "deleteCityConfirm": "Delete the place \"{name}\"? Its parts go too.",
+      "notFound": "Place not found",
+      "listingsLine": "Listings: {total}, {active} of them in search.",
+      "slugHint": "The place's pages: rentaj.rs/category/{slug}. When you change it, the old links lead to the new one.",
+      "moveHint": "All listings of this place ({count}) move to the new district.",
+      "hiddenCheck": "Hide the place",
+      "hiddenHint": "A hidden place is not offered for new listings or in search. The listings that have it stay, and so do their pages.",
+      "saved": "Saved.",
+      "savedMoved": "Saved. Listings moved to the new district: {count}.",
+      "deleteCity": "Delete the place",
+      "slugChangeConfirm": "Change the place's address from {from} to {to}? The old links will lead to the new one.",
+      "areas": "Parts of the city",
+      "areasHint": "The owner picks a part with the place, and guests see it before a confirmed booking. When a place has parts, picking one is required.",
+      "areaName": "Name of the part",
+      "areaListings": "listings: {count}",
+      "noAreas": "The place has no parts.",
+      "addArea": "Add a part",
+      "firstAreaHint": "Once the place has a part, each of its listings ({count}) picks a part the next time its location is saved.",
+      "areaInUseTitle": "The part is in use",
+      "areaInUse": "\"{name}\" is in use ({count} listings), so it cannot be deleted. Hide it: the listings stay, and the part is no longer offered for new listings.",
+      "deleteAreaConfirm": "Delete the part \"{name}\"?",
+      "actions": {
+        "region_create": "New district",
+        "region_update": "District edited",
+        "region_delete": "District deleted",
+        "city_create": "New place",
+        "city_update": "Place edited",
+        "city_delete": "Place deleted",
+        "area_create": "New part",
+        "area_update": "Part edited",
+        "area_delete": "Part deleted"
+      },
+      "fields": {
+        "name": "Name",
+        "slug": "URL name",
+        "municipality": "Municipality",
+        "kind": "Kind of place",
+        "nameLocative": "Locative",
+        "regionId": "District",
+        "hidden": "Hidden",
+        "listingsMoved": "Listings moved"
+      }
     }
   },
   "home": {
@@ -2772,5 +2871,15 @@
     "backToListing": "Back to the listing",
     "backToSearch": "Back to search",
     "pageTitle": "Request sent - {listing}"
+  },
+  "location": {
+    "clear": "Clear the place",
+    "searching": "Searching...",
+    "noResults": "No place with that name",
+    "typeHint": "Type the name of a place",
+    "typePlaceholder": "Type the name of a place",
+    "area": "Part of the city",
+    "inLocative": "in {city}",
+    "inPlace": "in {city}"
   }
 }

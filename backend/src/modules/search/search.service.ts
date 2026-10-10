@@ -292,7 +292,8 @@ export class SearchService {
       data: {
         query: dto.q,
         categoryId,
-        cityId: dto.cityId,
+        // The body is not validated (an inline type), so an empty pick arrives as ''.
+        cityId: dto.cityId || undefined,
         filters: dto as unknown as Prisma.InputJsonValue,
         notifyEmail,
       },

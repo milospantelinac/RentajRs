@@ -686,18 +686,18 @@
             <label for="location-city" class="location-label">
               {{ t('listing.city') }} <span class="basics-required">*</span>
             </label>
-            <div class="location-select" :class="{ 'is-empty': !location.cityId, 'is-invalid': locationErrors.cityId }">
-              <select
-                id="location-city"
-                v-model="location.cityId"
-                class="location-select-control"
-                :disabled="!location.regionId"
-                @change="onCityChange"
-              >
-                <option value="">{{ t('listing.detailsSelectPlaceholder') }}</option>
-                <option v-for="c in citiesInRegion" :key="c.id" :value="c.id">{{ c.name }}</option>
-              </select>
-              <img src="/images/icons/chevron-down.svg" alt="" class="location-select-chevron" />
+            <!-- T119: every settlement of Serbia, searched as it is typed (the
+                 picked okrug's first); a place fills its okrug in. -->
+            <div class="location-place" :class="{ 'is-invalid': locationErrors.cityId }" data-place-anchor>
+              <LocationAutocomplete
+                :model-value="locationPlace"
+                input-id="location-city"
+                class="location-place-field"
+                :prefer-region-id="location.regionId"
+                :placeholder="t('location.typePlaceholder')"
+                :invalid="!!locationErrors.cityId"
+                @update:model-value="onPlacePicked"
+              />
             </div>
             <p v-if="locationErrors.cityId" class="rules-error">
               <img src="/images/icons/field-error.svg" alt="" />{{ locationErrors.cityId }}
@@ -1282,7 +1282,8 @@ function onSlotTemplateSaved(template) {
 }
 const photos = ref([])
 const regions = ref([])
-const cities = ref([])
+// T119: the listing's place, from the listing or from the place field.
+const locationCity = ref(null)
 const cityAreas = ref([])
 const fileInput = ref(null)
 const dropzoneActive = ref(false)
@@ -2230,10 +2231,12 @@ const cardPreviewListing = computed(() => ({
 const location = reactive({ regionId: '', cityId: '', cityAreaId: '', address: '', latitude: null, longitude: null, googlePlaceId: '' })
 
 async function previewLocationOnMap() {
-  const city = cities.value.find((c) => c.id === location.cityId)
+  const city = locationCity.value
   if (!location.address?.trim() || !city) return
+  // T119: many villages share a name, so the municipality goes with it (as on save).
+  const place = city.municipality && city.municipality !== city.name ? `${city.name}, ${city.municipality}` : city.name
   try {
-    const coords = await api.get(`/geocoding/preview?address=${encodeURIComponent(location.address)}&city=${encodeURIComponent(city.name)}`)
+    const coords = await api.get(`/geocoding/preview?address=${encodeURIComponent(location.address)}&city=${encodeURIComponent(place)}`)
     if (coords) {
       location.latitude = coords.latitude
       location.longitude = coords.longitude
@@ -2251,7 +2254,8 @@ function onPinDragged({ latitude, longitude }) {
 
 // Dizajn 26 (279:292): before a booking the guest sees the city and its area, the way
 // ListingCard writes them; the address comes with the confirmed booking.
-const locationCity = computed(() => cities.value.find((c) => c.id === location.cityId))
+// T119: the place field shows the listing's place; picking one sets it (onPlacePicked).
+const locationPlace = computed(() => (locationCity.value ? { ...cityAsPlace(locationCity.value), sharedName: true } : null))
 const locationArea = computed(() => cityAreas.value.find((a) => a.id === location.cityAreaId))
 const locationPublicText = computed(() => {
   if (!locationCity.value) return t('listing.locationGuestViewNoCity')
@@ -2631,8 +2635,6 @@ function validateLocation() {
 const attributeValues = reactive({})
 const hasBankAccount = computed(() => !!auth.user?.bankAccount)
 
-const citiesInRegion = computed(() => cities.value.filter((c) => c.regionId === location.regionId))
-
 // Dizajn 19: every wizard frame is drawn for Igraonice, a slot category, so the
 // frames' subtitles for the pricing, availability and rules steps talk about
 // time slots. Stay listings keep the general wording on those three steps.
@@ -2964,6 +2966,7 @@ async function loadListing() {
     longitude: listing.value.longitude !== null && listing.value.longitude !== undefined ? Number(listing.value.longitude) : null,
     googlePlaceId: listing.value.googlePlaceId || '',
   })
+  locationCity.value = listing.value.city || null
   photos.value = listing.value.photos || []
 
   for (const attr of listing.value.category?.attributes || []) {
@@ -3003,19 +3006,42 @@ async function loadListing() {
   }
 }
 
+// T119: another okrug drops a place that is not in it.
 async function onRegionChange() {
-  location.cityId = ''
-  location.cityAreaId = ''
-  cityAreas.value = []
   locationErrors.regionId = ''
+  if (locationCity.value && locationCity.value.regionId === location.regionId) return
+  setLocationCity(null)
 }
 
-async function onCityChange() {
-  location.cityAreaId = ''
+// T119: a place from the field fills its okrug in; a part of a city ("Vračar,
+// Beograd") picks its city and the part.
+async function onPlacePicked(place) {
   locationErrors.cityId = ''
   locationErrors.cityAreaId = ''
-  const city = cities.value.find((c) => c.id === location.cityId)
-  cityAreas.value = city ? await api.get(`/locations/cities/${city.slug}/areas`) : []
+  const city = placeCity(place)
+  if (!city) return setLocationCity(null)
+  if (place.region?.id) {
+    location.regionId = place.region.id
+    locationErrors.regionId = ''
+  }
+  await setLocationCity(
+    { id: city.id, name: city.name, slug: city.slug, municipality: place.type === 'area' ? null : place.municipality, regionId: place.region?.id },
+    place.type === 'area' ? place.id : '',
+  )
+}
+
+async function setLocationCity(city, areaId = '') {
+  locationCity.value = city
+  location.cityId = city?.id || ''
+  location.cityAreaId = areaId
+  cityAreas.value = city ? await loadAreasOf(city) : []
+}
+
+// The parts a new listing may pick, and the listing's own even when hidden since.
+async function loadAreasOf(city) {
+  const areas = await api.get(`/locations/cities/${city.slug}/areas`).catch(() => [])
+  const own = listing.value?.cityArea
+  return own && own.cityId === city.id && !areas.some((a) => a.id === own.id) ? [...areas, own] : areas
 }
 
 // R160 — a phone photo can be several MB; shrinking it in the browser first
@@ -3280,13 +3306,10 @@ async function resubmitForApproval() {
 }
 
 onMounted(async () => {
-  ;[regions.value, cities.value] = await Promise.all([api.get('/locations/regions'), api.get('/locations/cities')])
+  regions.value = await api.get('/locations/regions')
   api.get('/subscriptions/mine').then((subs) => { mySubscriptions.value = subs }).catch(() => {})
   await loadListing()
-  if (location.cityId) {
-    const city = cities.value.find((c) => c.id === location.cityId)
-    if (city) cityAreas.value = await api.get(`/locations/cities/${city.slug}/areas`)
-  }
+  if (locationCity.value) cityAreas.value = await loadAreasOf(locationCity.value)
 })
 
 // T98 — this wizard is reused for editing an already-published listing too
@@ -4277,6 +4300,47 @@ $field-danger-border: #f43f5e;
   height: 16px;
   margin-top: -8px;
   pointer-events: none;
+}
+
+// T119: the place field in the select's box (277:291): 48 tall, the text 18
+// from the left, focus and error drawn the same way.
+.location-place {
+  display: flex;
+  align-items: center;
+  height: 48px;
+  padding: 0 12px 0 18px;
+  border-radius: $radius-input;
+  background-color: $color-background;
+  color: $color-text;
+  font-size: 14px;
+  line-height: normal;
+  cursor: text;
+  transition:
+    background-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.location-place:focus-within {
+  background-color: $color-surface;
+  box-shadow: inset 0 0 0 1.5px $color-primary;
+}
+
+.location-place.is-invalid {
+  background-color: $field-danger-bg;
+  box-shadow: inset 0 0 0 1.5px $field-danger-border;
+}
+
+.location-place-field {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+}
+
+// Typed at 16px on a phone, or iOS zooms the page into the field.
+@include respond-below(md) {
+  .location-place {
+    font-size: 16px;
+  }
 }
 
 // 277:312: 49 tall, the 18 pin 18 from the left and 10 before the text.

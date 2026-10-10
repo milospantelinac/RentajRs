@@ -184,7 +184,7 @@ Redis, via `common/cache/cache.service.ts`. Used deliberately narrowly, only for
 | Live listings per category (ACTIVE and available, as search counts them) | `taxonomy:listing-counts` | 60 s | A listing's status, availability or category changes, a package runs out or is renewed, an account is deleted, and with the tree |
 | Category page (category, resolved attributes, subcategories) | `taxonomy:category:v2:<slug>` | 30 min | With the tree |
 | Resolved attribute set per category | `taxonomy:attributes:v2:<id>` | 30 min | With the tree |
-| Regions, cities, city areas | `taxonomy:regions`, `taxonomy:cities:*`, `taxonomy:areas:*` | 30 min | Only the seed changes them (see below) |
+| Regions (okrugs), places, city areas | `taxonomy:regions`, `taxonomy:cities:*`, `taxonomy:city:*`, `taxonomy:areas:*` | 30 min | Any edit in Administracija > Lokacije (T119, LocationsService.invalidate). The place search (`GET /locations/search`) keeps its list of some 6,300 places in the process for 10 min, dropped by the same edits |
 | Active packages list | `subscriptions:packages` | 5 min | Admin package price update |
 | Search ranking weights | `settings:ranking_weights` | 5 min | TTL only, so an admin edit takes up to 5 min |
 | Google sign-in exchange code | `auth:google-exchange:<code>` | 30 s | Used once; not a copy of anything, Redis is the only place it lives |
