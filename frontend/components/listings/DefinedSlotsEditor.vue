@@ -67,7 +67,7 @@
     </section>
 
     <!-- 1701:3968: the dates the slots above are made for. -->
-    <section class="avail-section">
+    <section class="avail-section avail-range-section">
       <p class="avail-label">{{ t('listing.dsRangeTitle') }}</p>
       <div class="avail-range-row">
         <div class="avail-add-field avail-add-date">

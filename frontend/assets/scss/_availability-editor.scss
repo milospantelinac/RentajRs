@@ -332,12 +332,37 @@
   outline-offset: 2px;
 }
 
-// 1701:3970: the two dates and "Napravi termine", 16 apart, bottom aligned.
+// 1701:3970: the two dates and "Napravi termine" on one line, 16 apart, the
+// button on the fields' bottom edge (1701:3987, 24 down where the dates have
+// their labels). The dates give up width before that line breaks (a tablet);
+// where they could no longer show a whole date (a phone), they share a line
+// and the button takes the next one, as tall as they are.
+.avail-range-section {
+  container-type: inline-size;
+}
+
 .avail-range-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
+  display: grid;
+  grid-template-columns: minmax(0, 190px) minmax(0, 190px) auto;
+  justify-content: start;
+  align-items: end;
   gap: 16px;
+}
+
+// Its own align-self (flex-start) is for the sections it stands alone in.
+.avail-range-row .avail-btn-outline {
+  align-self: end;
+}
+
+@container (max-width: 445.98px) {
+  .avail-range-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .avail-range-row .avail-btn-outline {
+    grid-column: 1 / -1;
+  }
 }
 
 // 252:360: as wide as the frame's dash.
@@ -919,8 +944,7 @@
 }
 
 @include respond-below(sm) {
-  .avail-add,
-  .avail-range-row {
+  .avail-add {
     flex-direction: column;
     align-items: stretch;
   }
@@ -929,10 +953,6 @@
   .avail-add-time,
   .avail-add-price {
     flex-basis: auto;
-  }
-
-  .avail-range-row .avail-btn-outline {
-    align-self: stretch;
   }
 
   // No phone frame: the times on one line, the price and its remove button under them.
