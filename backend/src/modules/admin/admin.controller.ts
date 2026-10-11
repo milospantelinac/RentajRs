@@ -1,5 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { UPLOAD_LIMITS } from '../../common/uploads/uploads.service';
 import { ApiTags } from '@nestjs/swagger';
 import { ProcessingStatus, Language, BookingStatus } from '@prisma/client';
 import { AdminService } from './admin.service';
@@ -117,7 +118,7 @@ export class AdminController {
 
   @RequirePermissions('manage_settings')
   @Post('admin/homepage-video-thumbnail')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: UPLOAD_LIMITS }))
   setHomepageVideoThumbnail(@CurrentUser('id') adminId: string, @UploadedFile() file: Express.Multer.File) {
     return this.adminService.setHomepageVideoThumbnail(adminId, file);
   }

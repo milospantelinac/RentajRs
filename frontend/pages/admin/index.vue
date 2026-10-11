@@ -67,7 +67,7 @@
         </div>
 
         <div v-if="l.photos?.length" class="queue-thumbs">
-          <img v-for="p in l.photos.slice(0, 4)" :key="p.id" :src="p.url" alt="" class="queue-thumb" />
+          <img v-for="p in l.photos.slice(0, 4)" :key="p.id" :src="mediaVariant(p.url, 400)" alt="" class="queue-thumb" />
         </div>
 
         <div class="queue-actions">

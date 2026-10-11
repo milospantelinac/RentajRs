@@ -434,7 +434,7 @@ const ratingLine = computed(() => {
 })
 const coverUrl = computed(() => {
   const photos = (listing.value.photos || []).filter((photo) => !photo.pendingRemoval)
-  return (photos.find((photo) => photo.isCover) || photos[0])?.url || ''
+  return mediaVariant((photos.find((photo) => photo.isCover) || photos[0])?.url, 400) || ''
 })
 
 // T83: the exact shape /bookings and /bookings/quote both expect, so the

@@ -111,7 +111,8 @@ const route = useRoute()
 const dashboardCounts = useDashboardCountsStore()
 const inbox = inject(CONVERSATIONS_INBOX, null)
 
-const MAX_ATTACHMENT_MB = 5
+// T143: the size limit is set in Administracija > Skladište.
+const uploadLimits = useUploadLimits()
 const ALLOWED_ATTACHMENT_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
 const ATTACHMENT_ACCEPT = ALLOWED_ATTACHMENT_TYPES.join(',')
 
@@ -185,8 +186,9 @@ function onFileSelected(event) {
     attachError.value = t('conversations.attachmentTypeError')
     return
   }
-  if (file.size > MAX_ATTACHMENT_MB * 1024 * 1024) {
-    attachError.value = t('conversations.attachmentSizeError', { max: MAX_ATTACHMENT_MB })
+  const maxMb = uploadLimits.value.attachmentMaxMb
+  if (file.size > maxMb * 1024 * 1024) {
+    attachError.value = t('conversations.attachmentSizeError', { max: maxMb })
     return
   }
   pendingFile.value = file

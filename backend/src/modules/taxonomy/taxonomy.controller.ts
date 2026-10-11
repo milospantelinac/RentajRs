@@ -1,5 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { UPLOAD_LIMITS } from '../../common/uploads/uploads.service';
 import { ApiTags } from '@nestjs/swagger';
 import { TaxonomyService } from './taxonomy.service';
 import { LocationsService } from './locations.service';
@@ -139,7 +140,7 @@ export class TaxonomyController {
 
   @RequirePermissions('manage_categories')
   @Post('admin/categories/:id/image')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: UPLOAD_LIMITS }))
   adminSetImage(@CurrentUser('id') adminId: string, @Param('id') id: string, @UploadedFile() file: Express.Multer.File) {
     return this.taxonomyService.adminSetCategoryImage(adminId, id, file);
   }

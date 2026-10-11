@@ -5,9 +5,11 @@ import {
   HttpException,
   HttpStatus,
   Logger,
+  PayloadTooLargeException,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
+import { I18nContext } from 'nestjs-i18n';
 
 /**
  * Single place every thrown error passes through, so every API error response
@@ -42,6 +44,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
         error = (body as any).error ?? exception.name;
         const { message: _message, error: _error, statusCode: _statusCode, ...rest } = body as Record<string, unknown>;
         details = rest;
+      }
+      // T143: multer's own refusal of an upload over UPLOAD_LIMITS, in the user's language.
+      if (exception instanceof PayloadTooLargeException) {
+        message = I18nContext.current(host)?.t('errors.FILE_TOO_LARGE') ?? message;
       }
     } else if (exception instanceof Prisma.PrismaClientKnownRequestError) {
       switch (exception.code) {

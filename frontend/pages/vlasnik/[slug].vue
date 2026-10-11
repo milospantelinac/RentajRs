@@ -24,7 +24,7 @@
         <div class="row">
           <div v-for="l in profile.listings" :key="l.id" class="col-6 col-md-4 mb-3">
             <NuxtLink :to="`/oglasi/${l.slug}`" class="card card-interactive listing-tile">
-              <img v-if="l.photos?.[0]" :src="l.photos[0].url" :alt="l.photos[0].altText || ''" class="listing-tile-img" />
+              <img v-if="l.photos?.[0]" :src="mediaVariant(l.photos[0].url, 800)" :alt="l.photos[0].altText || ''" class="listing-tile-img" />
               <div class="card-body-sm">
                 <p class="text-body">{{ l.title }}</p>
                 <p class="text-muted">{{ formatListingPrice(l, t) || t('listing.noUpcomingSlots') }}</p>

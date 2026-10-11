@@ -1,12 +1,12 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { RequestMethod, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
-import { join } from 'path';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
+import { StorageService } from './common/uploads/storage.service';
 import { i18nValidationExceptionFactory } from './common/i18n/validation-error.factory';
 
 async function bootstrap() {
@@ -19,8 +19,9 @@ async function bootstrap() {
 
   app.use(
     helmet({
-      // Listing photos/avatars are served from this origin but embedded as
-      // <img> on the frontend's origin (different port in dev, different
+      // Pictures served from this origin (the local storage driver's /media/,
+      // and the old /uploads/ addresses until T143's migration) are embedded
+      // as <img> on the frontend's origin (different port in dev, different
       // subdomain in prod) — Helmet's default same-origin CORP silently
       // blocks the browser from ever painting them (fails with
       // net::ERR_BLOCKED_BY_RESPONSE.NotSameOrigin), even though the request
@@ -36,10 +37,19 @@ async function bootstrap() {
   });
   app.set('trust proxy', 1);
 
-  app.setGlobalPrefix(apiPrefix);
-  app.useStaticAssets(join(process.cwd(), config.get<string>('uploads.dir')!), {
-    prefix: '/uploads/',
+  // T143: uploads live in Object Storage on the server. Outside the API
+  // prefix: the old /uploads/ addresses (LegacyUploadsController) and, on a
+  // developer's machine, the local storage driver's /media/ and /media-private/.
+  app.setGlobalPrefix(apiPrefix, {
+    exclude: [
+      { path: 'uploads/(.*)', method: RequestMethod.GET },
+      { path: 'media-private/(.*)', method: RequestMethod.GET },
+    ],
   });
+  const localStorage = app.get(StorageService).localDriver;
+  if (localStorage) {
+    app.useStaticAssets(localStorage.publicRoot, { prefix: '/media/', index: false, maxAge: '365d', immutable: true });
+  }
 
   app.useGlobalPipes(
     new ValidationPipe({

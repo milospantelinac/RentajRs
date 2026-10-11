@@ -185,7 +185,8 @@
       <p v-if="!featuredListings.length" class="text-muted">{{ t('home.noListingsYet') }}</p>
       <div v-else class="featured-grid">
         <div v-for="listing in featuredListings" :key="listing.id" class="featured-grid-item">
-          <ListingCard :listing="listing" />
+          <!-- T143: a phone's row of 253px cards, four of at most 300px elsewhere. -->
+          <ListingCard :listing="listing" image-sizes="(max-width: 767.98px) 253px, 300px" />
         </div>
       </div>
     </section>

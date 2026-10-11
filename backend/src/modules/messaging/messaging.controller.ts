@@ -9,6 +9,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { UPLOAD_LIMITS } from '../../common/uploads/uploads.service';
 import { ApiTags } from '@nestjs/swagger';
 import { MessagingService } from './messaging.service';
 import { StartConversationDto, SendMessageDto } from './dto/messaging.dto';
@@ -40,7 +41,7 @@ export class MessagingController {
   }
 
   @Post('messages/:messageId/attachments')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: UPLOAD_LIMITS }))
   addAttachment(
     @CurrentUser('id') userId: string,
     @Param('messageId', ParseUUIDPipe) messageId: string,

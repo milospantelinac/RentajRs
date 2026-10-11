@@ -199,6 +199,44 @@ Never cached: bookings, messages, availability, anything user-specific or money-
 
 ---
 
+## 8a. Uploaded files (T143)
+
+Everything uploaded (listing photos, avatars, category pictures, the homepage video poster, message attachments) goes through `common/uploads/`: `UploadsService` checks and re-encodes it, `StorageService` keeps it.
+
+**Where.** On the server `STORAGE_DRIVER=s3`: Hetzner Object Storage, endpoint `https://fsn1.your-objectstorage.com`, region `fsn1`, two buckets per environment (bucket names are unique across all of Hetzner): a public one (visibility "public" in the Hetzner Console: files are read by URL without keys, listing stays refused) and a private one. On a developer's machine nothing needs setting: the same files go to `UPLOADS_DIR/media` (public, served by the backend at `/media/`) and `UPLOADS_DIR/private` (only through a signed link to `/media-private/`), so pages with pictures can be built and tried without a bucket. With `s3` and a value missing, the backend refuses to start. The build puts two scripts in `dist/src/scripts/`; on the server they run inside the backend container:
+
+```
+docker exec rentaj_backend node dist/src/scripts/check-storage.js
+docker exec rentaj_backend node dist/src/scripts/migrate-uploads.js --dry-run
+docker exec rentaj_backend node dist/src/scripts/migrate-uploads.js
+```
+
+`check-storage` writes, reads and deletes a test file on each side (under `system/health-check/`) and checks that the private side does not open without a signed link. `migrate-uploads` moves the files from before T143 (below); it can be run again, a record already on a key is skipped. Both are also buttons in Administracija > Skladište.
+
+**Layout** (`common/uploads/media.ts`). One folder per picture, under the record whose lifetime it shares, one file per width plus a master copy the widths can be made again from:
+
+| What | Key (folder) | Files |
+|---|---|---|
+| Listing photo | `listings/{listingId}/photos/{fileId}` | `400`, `800`, `1280`, `1920.webp`, `master.webp` (2560px on the longer side) |
+| Avatar | `users/{userId}/avatar/{fileId}` | `128`, `400.webp` (no master, the crop dialog uploads 400 x 400) |
+| Category picture | `categories/{categoryId}/{fileId}` | `400`, `800`, `1600.webp`, `master.webp` |
+| Homepage poster | `site/homepage/video-poster/{fileId}` | `800`, `1600.webp`, `master.webp` |
+| Message attachment (private) | `conversations/{conversationId}/{messageId}/{attachmentId}.webp` or `.pdf` | one file |
+
+No folder is made ahead of time (a new user gets none): a prefix exists once its first file does. Names are random and never reused, so public files are sent with `Cache-Control: public, max-age=31536000, immutable`. The wizard shrinks a photo to 2560px in the browser before sending it, the size of the master.
+
+**Keys, not URLs.** The database keeps the key (`ListingPhoto.url`, `User.avatarUrl`, `Category.imageUrl`, the `homepage_video_thumbnail` setting, `MessageAttachment.url`). `MediaUrlInterceptor` turns every image key in an API response into the URL of its largest width under `MEDIA_BASE_URL` (unset: the public bucket's own address, or the backend's `/media/` locally), so moving the files behind a CDN is an environment change. The frontend's `utils/media.js` picks smaller widths from that URL (`mediaVariant`, `mediaSrcset`); cards and the listing gallery send a `srcset` with `sizes`. Values that are not keys (a Google avatar, a photo not moved yet) pass through unchanged. Attachments are never public: `MessagingService` hands out signed links, the same for a whole hour (the conversation page reloads every 30 s) and valid for at least one more.
+
+**Checks.** JPG, PNG or WebP pictures, attachments a picture or a real PDF (the bytes are checked, not the declared type), each up to the size set in Administracija > Skladište (8 and 5 MB by default; the frontend reads them from `GET /upload-limits`), every message in Serbian. Multer itself stops anything over 20 MB (`UPLOAD_LIMITS`) before it is held in memory. Pictures are re-encoded with sharp, turned by their EXIF and stored without it (no GPS position). Multer reads file names as Latin-1; `uploadedFileName` reads them back as the UTF-8 browsers send, so "Račun.pdf" keeps its letters.
+
+**Deletion.** A removed or replaced photo, avatar, category picture or poster loses its folder at once (the user's own action); so does the avatar of a deleted account. Everything else is never deleted on its own (decided 2026-10-11): the storage check (`StorageScanService`, weekly, daily or off as set, at 04:45, or the "Pokreni proveru" button) only lists what could go in `StorageScanItem`: folders and attachments no record points at that are older than a day, photos of listings deleted longer ago than their retention, and attachments sent by accounts deleted longer ago than theirs (30 days each by default). An admin deletes or keeps them in Administracija > Skladište; just before deleting, every item is checked again against the database (in use again, listing brought back, period lengthened, kept: it stays). A kept file goes to `StorageHold` and is never listed again until the hold is removed. A list covering more than half of a bucket (20 or more items) carries a warning, and deleting from it needs an extra confirmation: that usually means the database and the buckets belong to different environments. While attachments of deleted accounts wait past their period, the admins get a reminder every morning at 09:00 (the privacy policy promises that a deleted account's data goes).
+
+**Administracija > Skladište** (`/admin/skladiste`, permission `manage_storage`, which the migration gives to everyone with `manage_settings`): the connection, shown read only with the access key masked (it stays in the environment on purpose: a copy of the database must not carry another environment's keys) and its check (every 15 minutes and on demand; on failure the admins with `manage_storage` get an email, at most every six hours, and another when it works again); the retention periods, the check's frequency, the upload limits and the prices for the cost estimate (`storage_*` rows of Setting, kept off the general settings page); the list to decide on; usage and the estimated monthly cost per check; the files from before T143 with a dry run and a run; a lookup by link; and the page's own admin log.
+
+**Files from before T143.** They stay in `UPLOADS_DIR` (`listings/`, `avatars/`, `categories/`, `homepage/`, `messages/`) until `migrate-uploads` moves them; until then `LegacyUploadsController` serves one at its old `/uploads/` address only while a record still points at it (a deleted photo or a removed avatar is no longer served, nor is any attachment once moved). A moved listing photo keeps its old file name as its folder name, and its old address answers `301` to the new 1920 file, for search engines and old links. A message attachment whose record says PDF but whose bytes are not one is left on disk and reported. Once the site has been checked, the old folders can be deleted from the uploads volume.
+
+---
+
 ## 9. Auth & security
 
 - Passwords: `argon2`. Sessions: JWT access (15m) + refresh (30d, rotated on use) as httpOnly cookies.
@@ -245,7 +283,8 @@ Never cached: bookings, messages, availability, anything user-specific or money-
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALLBACK_URL` | OAuth (optional — unset disables the button functionally, doesn't crash the app) |
 | `TWO_FACTOR_APP_NAME` | Shown in the authenticator app |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM_NAME`, `MAIL_FROM_ADDRESS` | Email delivery: MailDev in dev, Postmark over SMTP in production (values in `backend/.env.example`, see §7) |
-| `UPLOADS_DIR`, `UPLOADS_BASE_URL`, `MAX_PHOTO_SIZE_MB`, `MAX_PHOTOS_PER_LISTING` | Photo storage |
+| `UPLOADS_DIR`, `MAX_PHOTO_SIZE_MB`, `MAX_PHOTOS_PER_LISTING` | `UPLOADS_DIR` holds the local driver's files and the ones from before T143 (§8a); `MAX_PHOTO_SIZE_MB` is the photo limit until one is set in Administracija > Skladište |
+| `STORAGE_DRIVER`, `MEDIA_BASE_URL`, `S3_ENDPOINT`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_PUBLIC_BUCKET`, `S3_PRIVATE_BUCKET`, `S3_FORCE_PATH_STYLE` | Where uploaded files are kept: the local disk by default, Hetzner Object Storage with `STORAGE_DRIVER=s3` (§8a). `UPLOADS_BASE_URL` is no longer read |
 | `GEOCODING_PROVIDER`, `GOOGLE_MAPS_API_KEY` | `nominatim` (default, free, no key) or `google` |
 | `ICAL_ALLOW_PRIVATE_ADDRESSES` | Whether an owner's iCal feed address may point at a loopback, private, link-local or unique-local host. Unset: allowed unless `NODE_ENV=production` (local development reads test feeds from `127.0.0.1`). Set it to `false` on every internet-facing server that doesn't run with `NODE_ENV=production` (the docker-compose setup runs `development`), and `true` only where a trusted internal feed has to be read |
 | `PAYMENT_PROVIDER`, `BANCA_INTESA_*` | `mock` (default) or real Banca Intesa credentials |

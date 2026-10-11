@@ -1,6 +1,7 @@
 // Dizajn 32: what the "Moji oglasi" table (380:526) says about each listing,
 // with dates read in Belgrade time so the server render and the browser agree.
 import { srPluralCategory } from './pluralize'
+import { mediaVariant } from './media'
 import { getWizardSteps } from './wizardSteps'
 
 const TIME_ZONE = 'Europe/Belgrade'
@@ -131,7 +132,7 @@ export function buildMyListingRow(t, listing, now = Date.now()) {
     live: listing.status === 'ACTIVE',
     published,
     title: listing.title || t('myListings.untitled'),
-    cover: listing.coverPhotoUrl,
+    cover: mediaVariant(listing.coverPhotoUrl, 400),
     meta: [category, getDetail(t, listing)].filter(Boolean).join(' · '),
     statusText: proposal ? t('myListings.proposalSent') : t(STATUS_LABELS[listing.status] || STATUS_LABELS.DRAFT),
     package: published ? getPackageCell(t, listing, now) : { name: '-', text: t('myListings.notPublished') },

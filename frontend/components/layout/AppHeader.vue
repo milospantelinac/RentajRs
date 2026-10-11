@@ -52,7 +52,7 @@
         <template v-if="auth.isAuthenticated">
           <div ref="userMenuRef" class="user-menu">
             <button class="user-menu-trigger" @click="menuOpen = !menuOpen">
-              <img v-if="auth.user?.avatarUrl" :src="auth.user.avatarUrl" alt="" class="user-menu-avatar" />
+              <img v-if="auth.user?.avatarUrl" :src="mediaVariant(auth.user.avatarUrl, 128)" alt="" class="user-menu-avatar" />
               <span v-else class="user-menu-avatar user-menu-avatar-placeholder">{{ initials }}</span>
               <span class="user-menu-name d-none-mobile">{{ auth.user?.firstName }}</span>
               <svg class="user-menu-chevron d-none-mobile" viewBox="0 0 12 8" fill="none">

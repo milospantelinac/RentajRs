@@ -664,10 +664,11 @@ export class TaxonomyService {
     const category = await this.prisma.category.findUnique({ where: { id } });
     if (!category) throw new NotFoundException();
     if (!file) throw new BadRequestException(this.i18n.t('errors.IMAGE_INVALID'));
-    const { url } = await this.uploads.saveImage(file, 'categories', { maxWidth: 1600 });
-    const updated = await this.prisma.category.update({ where: { id }, data: { imageUrl: url } });
-    await this.logChange(adminId, 'category.image', 'Category', id, { imageUrl: category.imageUrl }, { imageUrl: url });
+    const key = await this.uploads.saveImage(file, { kind: 'categoryImage', categoryId: id });
+    const updated = await this.prisma.category.update({ where: { id }, data: { imageUrl: key } });
+    await this.logChange(adminId, 'category.image', 'Category', id, { imageUrl: category.imageUrl }, { imageUrl: key });
     await this.invalidateTreeCache(id);
+    await this.uploads.removeImage(category.imageUrl);
     return updated;
   }
 
@@ -677,6 +678,7 @@ export class TaxonomyService {
     const updated = await this.prisma.category.update({ where: { id }, data: { imageUrl: null } });
     await this.logChange(adminId, 'category.image', 'Category', id, { imageUrl: category.imageUrl }, { imageUrl: null });
     await this.invalidateTreeCache(id);
+    await this.uploads.removeImage(category.imageUrl);
     return updated;
   }
 

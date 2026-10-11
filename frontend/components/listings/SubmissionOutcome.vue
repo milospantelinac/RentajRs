@@ -12,7 +12,7 @@
 
       <div v-if="listing" class="outcome-summary">
         <div class="outcome-listing">
-          <img v-if="listing.coverPhotoUrl" :src="listing.coverPhotoUrl" alt="" class="outcome-listing-photo" />
+          <img v-if="listing.coverPhotoUrl" :src="mediaVariant(listing.coverPhotoUrl, 400)" alt="" class="outcome-listing-photo" />
           <span v-else class="outcome-listing-photo is-empty" />
           <div class="outcome-listing-text">
             <p class="outcome-listing-title">{{ listing.title }}</p>

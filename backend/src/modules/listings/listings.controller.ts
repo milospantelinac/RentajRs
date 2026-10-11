@@ -12,6 +12,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { UPLOAD_LIMITS } from '../../common/uploads/uploads.service';
 import { ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { ListingsService } from './listings.service';
@@ -98,7 +99,7 @@ export class ListingsController {
   }
 
   @Post('listings/:id/photos')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: UPLOAD_LIMITS }))
   addPhoto(
     @CurrentUser('id') userId: string,
     @Param('id') id: string,

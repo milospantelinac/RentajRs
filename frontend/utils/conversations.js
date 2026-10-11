@@ -2,6 +2,7 @@
 // conversation (380:998) say, with times read in Belgrade so the server render
 // and the browser agree.
 import { srPluralCategory } from './pluralize'
+import { mediaVariant } from './media'
 import { formatBookingDate, formatBookingDays, formatBookingListing } from './bookingRequests'
 import { formatUpcomingTimes } from './upcomingBooking'
 
@@ -102,7 +103,7 @@ export function buildConversationRow(t, conversation, { activeId = null, now = D
     unread: !active && conversation.unreadCount > 0,
     name: getCounterpartName(t, counterpart),
     initials: getCounterpartInitials(t, counterpart),
-    avatarUrl: (!counterpart?.removed && counterpart?.avatarUrl) || '',
+    avatarUrl: (!counterpart?.removed && mediaVariant(counterpart?.avatarUrl, 128)) || '',
     listing: formatBookingListing(conversation.listing),
     preview: formatMessagePreview(t, conversation.lastMessage),
     time: formatConversationTime(t, conversation.lastMessage?.sentAt, now),

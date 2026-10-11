@@ -7,6 +7,7 @@
 import { belgradeDayKey, formatTermValue, isoWeekdayOfKey } from './bookingRequestForm'
 import { formatBookingDate, formatBookingListing, formatBookingTime, formatRsd, formatUnits } from './bookingRequests'
 import { formatUpcomingTimes } from './upcomingBooking'
+import { mediaVariant } from './media'
 
 // R59: the hours to pay when the listing sets none (BookingsService).
 const DEFAULT_PAYMENT_DEADLINE_HOURS = 48
@@ -120,7 +121,7 @@ export function buildRequestSentView(t, booking) {
     listing: formatBookingListing(listing),
     // 391:546 "Prostori za proslave · Beograd"
     meta: [listing.categoryName, listing.city].filter(Boolean).join(' · '),
-    photo: listing.coverPhotoUrl || '',
+    photo: mediaVariant(listing.coverPhotoUrl, 400) || '',
     rows: buildRows(t, booking),
     // The QR block: what to pay and by when (T47's QR, T91's amount).
     pay: payment ? { amount: formatRsd(booking.amountDue), deadline: formatDeadline(t, booking) } : null,

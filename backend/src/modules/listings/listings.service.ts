@@ -594,12 +594,17 @@ export class ListingsService {
       throw new BadRequestException(this.i18n.t('errors.PHOTO_LIMIT_EXCEEDED', { args: { max: MAX_PHOTOS } }));
     }
 
-    const { url } = await this.uploads.saveImage(file, `listings/${listing.id}`, { maxWidth: 1920 });
+    // T143: the photo's widths and master go to storage (StorageService); the row keeps their folder.
+    const key = await this.uploads.saveImage(file, { kind: 'listingPhoto', listingId: listing.id });
     const isFirstPhoto = currentCount === 0;
-    const photo = await this.prisma.listingPhoto.create({
-      data: { listingId: listing.id, url, displayOrder: currentCount, isCover: isFirstPhoto },
-    });
-    return photo;
+    try {
+      return await this.prisma.listingPhoto.create({
+        data: { listingId: listing.id, url: key, displayOrder: currentCount, isCover: isFirstPhoto },
+      });
+    } catch (error) {
+      await this.uploads.removeImage(key);
+      throw error;
+    }
   }
 
   async removePhoto(userId: string, listingId: string, photoId: string) {
@@ -608,6 +613,7 @@ export class ListingsService {
     if (!photo) throw new NotFoundException();
 
     await this.prisma.listingPhoto.delete({ where: { id: photo.id } });
+    await this.uploads.removeImage(photo.url);
 
     // Dizajn 27 — every read of a listing's image asks for isCover (search results,
     // favorites, the dashboard, the subscription mailer), so deleting the cover used to

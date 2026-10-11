@@ -8,8 +8,8 @@ const taxonomy = {
   getOptionNames: jest.fn().mockResolvedValue(new Map([['o1', 'Bazen']])),
 };
 
-function makeService(prisma: any, cache: any = {}) {
-  return new UsersService(prisma, {} as any, i18n as any, {} as any, taxonomy as any, cache);
+function makeService(prisma: any, cache: any = {}, uploads: any = { removeImage: jest.fn() }) {
+  return new UsersService(prisma, uploads, i18n as any, {} as any, taxonomy as any, cache);
 }
 
 // A whole Listing row, private fields included, the way Prisma hands it over.
@@ -152,6 +152,7 @@ describe('UsersService#executeDeletion', () => {
     };
     const prisma = {
       booking: { findMany: jest.fn().mockResolvedValue([]) },
+      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ avatarUrl: null }) },
       $transaction: jest.fn(async (run: (client: typeof tx) => Promise<void>) => {
         await run(tx);
         steps.push('committed');
@@ -162,6 +163,28 @@ describe('UsersService#executeDeletion', () => {
     await makeService(prisma, cache).executeDeletion('u1');
     expect(cache.del).toHaveBeenCalledWith(LISTING_COUNTS_CACHE_KEY);
     expect(steps).toEqual(['listings deleted', 'committed', 'counts dropped']);
+  });
+
+  it('deletes the avatar files once the account is anonymized (T143)', async () => {
+    const steps: string[] = [];
+    const tx = {
+      booking: { update: jest.fn() },
+      listing: { updateMany: jest.fn() },
+      subscription: { updateMany: jest.fn() },
+      session: { updateMany: jest.fn() },
+      user: { update: jest.fn(async () => steps.push('anonymized')) },
+    };
+    const avatar = 'users/0b6f8e5e-6a43-4c39-9a52-2f3f43c9a001/avatar/7d3c3f0e-1c9f-4b7a-a0d4-6bfa2b0f2a10';
+    const prisma = {
+      booking: { findMany: jest.fn().mockResolvedValue([]) },
+      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ avatarUrl: avatar }) },
+      $transaction: jest.fn(async (run: (client: typeof tx) => Promise<void>) => run(tx)),
+    };
+    const uploads = { removeImage: jest.fn(async () => steps.push('avatar files deleted')) };
+
+    await makeService(prisma, { del: jest.fn() }, uploads).executeDeletion('u1');
+    expect(uploads.removeImage).toHaveBeenCalledWith(avatar);
+    expect(steps).toEqual(['anonymized', 'avatar files deleted']);
   });
 
   it('frees the terms of the bookings it cancels', async () => {
@@ -175,9 +198,11 @@ describe('UsersService#executeDeletion', () => {
     };
     const prisma = {
       booking: { findMany: jest.fn().mockResolvedValue([{ id: 'b1' }, { id: 'b2' }]) },
+      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ avatarUrl: null }) },
       $transaction: jest.fn(async (run: (client: typeof tx) => Promise<void>) => run(tx)),
     };
-    const service = new UsersService(prisma as any, {} as any, i18n as any, { emit: jest.fn() } as any, taxonomy as any, { del: jest.fn() } as any);
+    const uploads = { removeImage: jest.fn() };
+    const service = new UsersService(prisma as any, uploads as any, i18n as any, { emit: jest.fn() } as any, taxonomy as any, { del: jest.fn() } as any);
 
     await service.executeDeletion('u1');
     expect(tx.blockedTerm.deleteMany.mock.calls).toEqual([[{ where: { bookingId: 'b1' } }], [{ where: { bookingId: 'b2' } }]]);

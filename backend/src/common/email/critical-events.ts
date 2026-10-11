@@ -47,4 +47,8 @@ export const CRITICAL_EMAIL_EVENTS = new Set<string>([
   'admin_payment_disputed',
   'admin_no_show_disputed',
   'admin_new_booking',
+  // T143: the storage behind every picture and attachment
+  'admin_storage_unavailable',
+  'admin_storage_recovered',
+  'admin_storage_deletion_pending',
 ]);

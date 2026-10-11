@@ -11,8 +11,16 @@
       >
         <!-- T116: where the first photo is shown whole (a phone, one photo),
              a blurred copy of it fills the rest of the frame. -->
-        <img v-if="i === 0" :src="photo.url" alt="" aria-hidden="true" class="listing-gallery-backdrop" />
-        <img :src="photo.url" :alt="photo.altText || title" class="listing-gallery-img" :loading="i === 0 ? 'eager' : 'lazy'" />
+        <!-- T143: the blurred copy needs no detail; the photo itself comes at the width its tile is drawn. -->
+        <img v-if="i === 0" :src="mediaVariant(photo.url, 400)" alt="" aria-hidden="true" class="listing-gallery-backdrop" />
+        <img
+          :src="mediaVariant(photo.url, 1280)"
+          :srcset="mediaSrcset(photo.url)"
+          :sizes="tileSizes(i)"
+          :alt="photo.altText || title"
+          class="listing-gallery-img"
+          :loading="i === 0 ? 'eager' : 'lazy'"
+        />
       </button>
 
       <span v-if="photos.length > 1" class="listing-gallery-counter" :class="{ 'listing-gallery-counter-raised': videoUrl }">
@@ -102,6 +110,15 @@ const layout = computed(() => {
 })
 
 const tilePhotos = computed(() => props.photos.slice(0, props.photos.length >= 4 ? 4 : props.photos.length))
+
+// T143: how wide each tile is drawn, for the browser to pick the photo's width.
+// A phone shows only the first, across the screen; the desktop frame is 1216px
+// wide, half of it for the first tile (and the mosaic's wide second one).
+function tileSizes(index) {
+  if (index === 0 && layout.value === 'single') return '(max-width: 1215.98px) 100vw, 1216px'
+  if (index >= 2 && layout.value === 'mosaic') return '(max-width: 1215.98px) 25vw, 304px'
+  return '(max-width: 767.98px) 100vw, (max-width: 1215.98px) 50vw, 608px'
+}
 
 // The wizard only saves links utils/youtube.js recognises (Dizajn 20), so the
 // <video> fallback is left for links saved before that.

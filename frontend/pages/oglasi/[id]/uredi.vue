@@ -797,7 +797,7 @@
             @dragover.prevent
             @drop.prevent="onPhotoDrop(index)"
           >
-            <img :src="photo.url" :alt="photo.altText || ''" class="photos-image" />
+            <img :src="mediaVariant(photo.url, 400)" :alt="photo.altText || ''" class="photos-image" />
             <!-- 283:292: the pill only labels the first photo — the cover follows the order,
                  which the owner changes by dragging (283:320). -->
             <span v-if="index === 0" class="photos-cover">{{ t('listing.coverPhotoBadge') }}</span>
@@ -831,7 +831,7 @@
         >
           <img src="/images/icons/upload-brand.svg" alt="" class="photos-dropzone-icon" />
           <strong class="photos-dropzone-title">{{ t('listing.dropzoneTitle') }}</strong>
-          <span class="photos-dropzone-hint">{{ t('listing.dropzoneHint', { max: PHOTO_MAX_SIZE_MB }) }}</span>
+          <span class="photos-dropzone-hint">{{ t('listing.dropzoneHint', { max: uploadLimits.photoMaxMb }) }}</span>
         </div>
         <p v-else class="photos-limit">{{ t('listing.photoLimitReached', { max: PHOTO_MAX_COUNT }) }}</p>
 
@@ -1290,9 +1290,10 @@ const dropzoneActive = ref(false)
 const draggedPhotoIndex = ref(null)
 // What the upload endpoint really accepts: UploadsService's ALLOWED_MIME_TYPES and
 // MAX_PHOTO_SIZE_MB, and ListingsService's MAX_PHOTOS. The frame's hint says "JPG, PNG do
-// 10MB", which would let the owner pick a file the API then rejects.
+// 10MB", which would let the owner pick a file the API then rejects. T143: the size limit
+// is set in Administracija > Skladište.
 const PHOTO_ACCEPT = 'image/jpeg,image/png,image/webp'
-const PHOTO_MAX_SIZE_MB = 8
+const uploadLimits = useUploadLimits()
 const PHOTO_MAX_COUNT = 20
 const mySubscriptions = ref([])
 const finishing = ref(false)
@@ -3045,11 +3046,12 @@ async function loadAreasOf(city) {
 }
 
 // R160 — a phone photo can be several MB; shrinking it in the browser first
-// (matching the server's own 1920px cap in UploadsService.saveImage) means a
-// twenty-photo listing doesn't choke slow mobile uploads. Falls back to the
-// original file untouched for anything that isn't a decodable raster image.
-const DOWNSCALE_MAX_DIMENSION = 1920
-const DOWNSCALE_QUALITY = 0.85
+// means a twenty-photo listing doesn't choke slow mobile uploads. T143: down
+// to the server's master copy (2560px on the longer side, UploadsService),
+// not below it, so the master is worth keeping. Falls back to the original
+// file untouched for anything that isn't a decodable raster image.
+const DOWNSCALE_MAX_DIMENSION = 2560
+const DOWNSCALE_QUALITY = 0.9
 
 async function downscaleImage(file) {
   if (!file.type.startsWith('image/') || file.type === 'image/svg+xml') return file

@@ -82,6 +82,8 @@ const PERMISSION_DEFS: Array<{ key: string; description: string }> = [
   { key: 'manage_static_pages', description: 'Manage static pages, legal documents and translations' },
   { key: 'resolve_disputes', description: 'Resolve disputes and reports' },
   { key: 'manage_settings', description: 'Change platform settings, prices and thresholds' },
+  // T143: Administracija > Skladište, where file deletions are approved.
+  { key: 'manage_storage', description: 'Check storage, approve file deletions and set retention and upload limits' },
 ];
 
 async function seedPermissionsAndAdmin() {

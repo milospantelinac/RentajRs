@@ -9,6 +9,7 @@ import { paraToRsd } from '../../common/utils/money';
 import { OPEN_DISPUTE_STATUSES, PAYMENT_REPORT_HOLD_MS } from '../../common/utils/payment-report';
 import { PaymentSettingsService } from '../../common/payment/nestpay/payment-settings.service';
 import { UploadsService } from '../../common/uploads/uploads.service';
+import { STORAGE_SETTING_PREFIX } from '../../common/uploads/storage-settings.service';
 import { UpdatePaymentSettingsDto } from '../../common/payment/nestpay/dto/payment-settings.dto';
 import {
   ReportListingDto,
@@ -271,7 +272,11 @@ export class AdminService {
   // -- Settings (R171) -----------------------------------------------
 
   async listSettings() {
-    return this.prisma.setting.findMany({ orderBy: { key: 'asc' } });
+    // T143: storage_* rows are set in Administracija > Skladište, with their limits.
+    return this.prisma.setting.findMany({
+      where: { NOT: { key: { startsWith: STORAGE_SETTING_PREFIX } } },
+      orderBy: { key: 'asc' },
+    });
   }
 
   async updateSetting(adminId: string, key: string, dto: UpdateSettingDto) {
@@ -291,8 +296,8 @@ export class AdminService {
    */
   async setHomepageVideoThumbnail(adminId: string, file: Express.Multer.File) {
     if (!file) throw new BadRequestException(this.i18n.t('errors.FILE_REQUIRED'));
-    const { url } = await this.uploads.saveImage(file, 'homepage', { maxWidth: 1600 });
-    return this.writeVideoThumbnail(adminId, url);
+    const key = await this.uploads.saveImage(file, { kind: 'homepagePoster' });
+    return this.writeVideoThumbnail(adminId, key);
   }
 
   async removeHomepageVideoThumbnail(adminId: string) {
@@ -308,6 +313,8 @@ export class AdminService {
       update: { value: url },
     });
     await this.logAction(adminId, 'update_setting', 'Setting', key, existing?.value ?? null, url);
+    // T143: the replaced or removed poster's files go too.
+    if (typeof existing?.value === 'string' && existing.value !== url) await this.uploads.removeImage(existing.value);
     return { thumbnailUrl: url || null };
   }
 

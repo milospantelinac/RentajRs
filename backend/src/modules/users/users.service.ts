@@ -68,13 +68,17 @@ export class UsersService {
   }
 
   async setAvatar(userId: string, file: Express.Multer.File) {
-    const { url } = await this.uploads.saveImage(file, 'avatars', { maxWidth: 400, maxHeight: 400 });
-    await this.prisma.user.update({ where: { id: userId }, data: { avatarUrl: url } });
-    return { avatarUrl: url };
+    const key = await this.uploads.saveImage(file, { kind: 'avatar', userId });
+    const { avatarUrl: previous } = await this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { avatarUrl: true } });
+    await this.prisma.user.update({ where: { id: userId }, data: { avatarUrl: key } });
+    await this.uploads.removeImage(previous);
+    return { avatarUrl: key };
   }
 
   async removeAvatar(userId: string) {
+    const { avatarUrl: previous } = await this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { avatarUrl: true } });
     await this.prisma.user.update({ where: { id: userId }, data: { avatarUrl: null } });
+    await this.uploads.removeImage(previous);
     return { avatarUrl: null };
   }
 
@@ -287,6 +291,7 @@ export class UsersService {
         status: { in: ['REQUESTED', 'AWAITING_PAYMENT', 'CONFIRMED'] },
       },
     });
+    const { avatarUrl } = await this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { avatarUrl: true } });
 
     await this.prisma.$transaction(async (tx) => {
       for (const booking of activeBookings) {
@@ -326,6 +331,10 @@ export class UsersService {
     });
     // After the commit: deleted inside the transaction, a read in between could cache the old count again.
     await this.cache.del(LISTING_COUNTS_CACHE_KEY);
+    // T143: the avatar goes at once; the listings' photos and the attachments
+    // this account sent are kept for their retention, then listed for an
+    // admin to delete (StorageScanService).
+    await this.uploads.removeImage(avatarUrl);
 
     for (const booking of activeBookings) {
       this.events.emit('booking.cancelled_account_deleted', { bookingId: booking.id });

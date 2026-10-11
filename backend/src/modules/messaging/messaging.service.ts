@@ -2,13 +2,12 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { BookingStatus, ListingStatus, Prisma } from '@prisma/client';
 import { I18nService } from 'nestjs-i18n';
+import { randomUUID } from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
-import { UploadsService } from '../../common/uploads/uploads.service';
+import { UploadsService, uploadedFileName } from '../../common/uploads/uploads.service';
 import { containsContactInfo } from '../../common/utils/contact-detector';
 import { shortName } from '../../common/utils/short-name';
 import { StartConversationDto } from './dto/messaging.dto';
-
-const ATTACHMENT_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
 
 // Dizajn 37: a list row shows one line of the latest message, so it gets no
 // more than this much of it.
@@ -192,13 +191,29 @@ export class MessagingService {
     if (!message) throw new NotFoundException();
     if (message.senderId !== userId) throw new ForbiddenException();
 
-    const { url } = file.mimetype === 'application/pdf'
-      ? await this.uploads.saveRawFile(file, 'messages', ATTACHMENT_ALLOWED_TYPES, 5)
-      : await this.uploads.saveImage(file, 'messages', { maxWidth: 1600, maxSizeMb: 5 });
-
-    return this.prisma.messageAttachment.create({
-      data: { messageId, url, type: file.mimetype, size: file.size, filename: file.originalname },
+    // T143: private, under the conversation it belongs to; only its two sides get a (signed) link.
+    const attachmentId = randomUUID();
+    const { key, contentType } = await this.uploads.saveAttachment(file, {
+      conversationId: message.conversationId,
+      messageId,
+      attachmentId,
     });
+    try {
+      const attachment = await this.prisma.messageAttachment.create({
+        data: {
+          id: attachmentId,
+          messageId,
+          url: key,
+          type: contentType,
+          size: file.size,
+          filename: uploadedFileName(file.originalname),
+        },
+      });
+      return { ...attachment, url: await this.uploads.attachmentUrl(attachment.url) };
+    } catch (error) {
+      await this.uploads.removeAttachment(key);
+      throw error;
+    }
   }
 
   /**
@@ -294,13 +309,20 @@ export class MessagingService {
       listing: serializeListing(conversation.listing),
       booking: await this.findHeaderBooking(conversation),
       canReply: !counterpart.removed,
-      messages: conversation.messages.map((m) => ({
-        id: m.id,
-        text: m.content,
-        sentAt: m.sentAt,
-        mine: m.senderId === userId,
-        attachments: m.attachments,
-      })),
+      messages: await Promise.all(
+        conversation.messages.map(async (m) => ({
+          id: m.id,
+          text: m.content,
+          sentAt: m.sentAt,
+          mine: m.senderId === userId,
+          attachments: await Promise.all(
+            m.attachments.map(async (attachment) => ({
+              ...attachment,
+              url: await this.uploads.attachmentUrl(attachment.url),
+            })),
+          ),
+        })),
+      ),
     };
   }
 

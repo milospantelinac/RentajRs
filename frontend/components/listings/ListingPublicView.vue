@@ -79,7 +79,7 @@
           <div v-if="keyFacts.length" class="listing-divider" />
 
           <div class="listing-owner-brief">
-            <img v-if="listing.owner?.avatarUrl" :src="listing.owner.avatarUrl" alt="" class="listing-owner-brief-avatar" />
+            <img v-if="listing.owner?.avatarUrl" :src="mediaVariant(listing.owner.avatarUrl, 128)" alt="" class="listing-owner-brief-avatar" />
             <span v-else class="listing-owner-brief-avatar listing-avatar-initials">{{ ownerInitials }}</span>
             <span class="listing-owner-brief-text">
               <span class="listing-owner-brief-name">{{ t('listing.rentedBy', { name: ownerName }) }}</span>
@@ -239,7 +239,7 @@
                      date, under them when the row has no room. -->
                 <div class="listing-review-head">
                   <div class="listing-review-author">
-                    <img v-if="review.author?.avatarUrl" :src="review.author.avatarUrl" alt="" class="listing-review-avatar" />
+                    <img v-if="review.author?.avatarUrl" :src="mediaVariant(review.author.avatarUrl, 128)" alt="" class="listing-review-avatar" />
                     <span v-else class="listing-review-avatar listing-avatar-initials">{{ initialsOf(review.author) }}</span>
                     <span class="listing-review-author-text">
                       <span class="listing-review-author-name">{{ shortName(review.author) }}</span>
@@ -272,7 +272,7 @@
             <h2 class="listing-section-title">{{ t('listing.ownerHeading') }}</h2>
             <div class="listing-owner-card">
               <div class="listing-owner-head">
-                <img v-if="listing.owner?.avatarUrl" :src="listing.owner.avatarUrl" alt="" class="listing-owner-avatar" />
+                <img v-if="listing.owner?.avatarUrl" :src="mediaVariant(listing.owner.avatarUrl, 128)" alt="" class="listing-owner-avatar" />
                 <span v-else class="listing-owner-avatar listing-avatar-initials">{{ ownerInitials }}</span>
                 <span class="listing-owner-head-text">
                   <NuxtLink v-if="listing.owner?.profileSlug" :to="`/vlasnik/${listing.owner.profileSlug}`" class="listing-owner-name">

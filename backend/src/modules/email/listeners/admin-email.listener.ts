@@ -4,6 +4,7 @@ import { OnEvent } from '@nestjs/event-emitter';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { EmailService } from '../../../common/email/email.service';
 import { escapeHtml } from '../../../common/utils/escape-html';
+import { formatDateTime } from '../format';
 
 @Injectable()
 export class AdminEmailListener {
@@ -177,6 +178,38 @@ export class AdminEmailListener {
       { oglas: booking.listing.title },
       `${this.frontendUrl}/admin`,
       booking.ownerId,
+    );
+  }
+
+  // -- T143: storage (StorageHealthService, StorageScanService) ---------------
+
+  @OnEvent('storage.health_failed')
+  async onStorageFailed({ checkedAt, detail }: { checkedAt: string; detail: string }) {
+    await this.sendToAdmins(
+      'manage_storage',
+      'admin_storage_unavailable',
+      { vreme: formatDateTime(checkedAt, 'sr-Latn-RS'), greska: detail },
+      `${this.frontendUrl}/admin/skladiste`,
+    );
+  }
+
+  @OnEvent('storage.health_recovered')
+  async onStorageRecovered({ checkedAt }: { checkedAt: string }) {
+    await this.sendToAdmins(
+      'manage_storage',
+      'admin_storage_recovered',
+      { vreme: formatDateTime(checkedAt, 'sr-Latn-RS') },
+      `${this.frontendUrl}/admin/skladiste`,
+    );
+  }
+
+  @OnEvent('storage.deletion_pending')
+  async onStorageDeletionPending({ count }: { count: number }) {
+    await this.sendToAdmins(
+      'manage_storage',
+      'admin_storage_deletion_pending',
+      { broj: String(count) },
+      `${this.frontendUrl}/admin/skladiste`,
     );
   }
 }

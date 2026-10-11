@@ -27,6 +27,8 @@ export const ADMIN_NAV_GROUPS = [
       { to: '/admin/rezervacije', labelKey: 'admin.bookings', icon: 'bookings' },
       { to: '/admin/pretplate', labelKey: 'admin.subscriptions', icon: 'packages' },
       { to: '/admin/placanje', labelKey: 'admin.paymentSettings', icon: 'payments' },
+      // T143: stored files, their checks and limits.
+      { to: '/admin/skladiste', labelKey: 'admin.storage', icon: 'storage' },
     ],
   },
   {

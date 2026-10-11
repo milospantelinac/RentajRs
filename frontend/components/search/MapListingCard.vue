@@ -6,7 +6,7 @@
       <div class="map-card-photo">
         <img
           v-if="listing.coverPhoto"
-          :src="listing.coverPhoto.url"
+          :src="mediaVariant(listing.coverPhoto.url, 400)"
           :alt="listing.coverPhoto.altText || listing.title"
           class="map-card-image"
         />

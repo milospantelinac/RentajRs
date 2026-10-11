@@ -25,6 +25,7 @@ import {
   faFileLines,
   faEnvelope,
   faGear,
+  faHardDrive,
 } from '@fortawesome/free-solid-svg-icons'
 import '@fortawesome/fontawesome-svg-core/styles.css'
 
@@ -53,6 +54,7 @@ library.add(
   faFileLines,
   faEnvelope,
   faGear,
+  faHardDrive,
 )
 
 export default defineNuxtPlugin((nuxtApp) => {

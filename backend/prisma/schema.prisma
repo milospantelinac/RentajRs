@@ -1673,3 +1673,83 @@ model ContactMessage {
 
   @@index([createdAt])
 }
+
+// ---------------------------------------------------------------------------
+// Storage (T143): the checks behind Administracija > Skladište
+// ---------------------------------------------------------------------------
+
+enum StorageScanStatus {
+  RUNNING
+  DONE
+  FAILED
+}
+
+enum StorageItemReason {
+  ORPHAN // no record points at it
+  DELETED_LISTING // photos of a listing deleted longer ago than its retention
+  DELETED_ACCOUNT // an attachment sent by an account deleted longer ago than its retention
+}
+
+enum StorageItemStatus {
+  PENDING
+  DELETED
+  KEPT
+  SKIPPED // approved, but in use again (or gone) by the time it was to be deleted
+  SUPERSEDED // a later check listed it again, or no longer
+}
+
+/// T143: one run of the storage check (StorageScanService). It only lists the
+/// files that could go; nothing is deleted until an admin approves an item.
+model StorageScan {
+  id            String            @id @default(uuid()) @db.Uuid
+  status        StorageScanStatus @default(RUNNING)
+  trigger       String // "schedule" or "manual"
+  triggeredById String?           @db.Uuid
+  startedAt     DateTime          @default(now()) @db.Timestamptz
+  finishedAt    DateTime?         @db.Timestamptz
+  error         String?
+  /// Files and bytes per kind of file, counted on the way.
+  usage         Json?             @db.JsonB
+  /// More than half of a bucket would go: the database and the buckets may belong to different environments.
+  warning       Boolean           @default(false)
+
+  items StorageScanItem[]
+
+  @@index([startedAt])
+}
+
+model StorageScanItem {
+  id           String            @id @default(uuid()) @db.Uuid
+  scanId       String            @db.Uuid
+  bucket       String // "public" or "private"
+  /// A picture's folder (public) or an attachment's file (private), as in common/uploads/media.ts.
+  key          String
+  reason       StorageItemReason
+  files        Int
+  bytes        Int
+  lastModified DateTime          @db.Timestamptz
+  /// The listing or attachment whose retention ran out; null for an orphan.
+  sourceId     String?           @db.Uuid
+  dueAt        DateTime?         @db.Timestamptz
+  /// What the database still knows about it (listing title, file name), for the admin.
+  context      Json?             @db.JsonB
+  status       StorageItemStatus @default(PENDING)
+  decidedById  String?           @db.Uuid
+  decidedAt    DateTime?         @db.Timestamptz
+  note         String?
+
+  scan StorageScan @relation(fields: [scanId], references: [id], onDelete: Cascade)
+
+  @@index([scanId, status])
+  @@index([status])
+}
+
+/// T143: files an admin chose to keep; later checks never list them again.
+model StorageHold {
+  id          String            @id @default(uuid()) @db.Uuid
+  bucket      String
+  key         String            @unique
+  reason      StorageItemReason
+  createdById String?           @db.Uuid
+  createdAt   DateTime          @default(now()) @db.Timestamptz
+}

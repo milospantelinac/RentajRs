@@ -1,3 +1,5 @@
+import * as path from 'path';
+
 export default () => ({
   env: process.env.NODE_ENV || 'development',
   port: parseInt(process.env.PORT || '3001', 10),
@@ -42,11 +44,15 @@ export default () => ({
   },
 
   uploads: {
+    // T143: holds the files uploaded before Object Storage (served only by the
+    // legacy /uploads/ route until src/scripts/migrate-uploads.ts moves them)
+    // and, without STORAGE_DRIVER=s3, the local driver's media/ and private/.
     dir: process.env.UPLOADS_DIR || 'uploads',
-    baseUrl: process.env.UPLOADS_BASE_URL || 'http://localhost:3001/uploads',
     maxPhotoSizeMb: parseInt(process.env.MAX_PHOTO_SIZE_MB || '8', 10),
     maxPhotosPerListing: parseInt(process.env.MAX_PHOTOS_PER_LISTING || '20', 10),
   },
+
+  storage: storageConfig(),
 
   geocoding: {
     provider: process.env.GEOCODING_PROVIDER || 'nominatim',
@@ -93,3 +99,47 @@ export default () => ({
     password: process.env.ADMIN_SEED_PASSWORD || 'ChangeMe123!',
   },
 });
+
+/**
+ * T143: where uploaded files are kept. STORAGE_DRIVER=s3 on the server:
+ * Object Storage, Hetzner's (endpoint https://fsn1.your-objectstorage.com,
+ * region fsn1). Unset, on a developer's machine: the disk under UPLOADS_DIR,
+ * served by this backend at /media/. MEDIA_BASE_URL is where the browser
+ * reads public files from; unset, the public bucket's own address or this
+ * backend's /media/.
+ */
+function storageConfig() {
+  const driver: 'local' | 's3' = process.env.STORAGE_DRIVER === 's3' ? 's3' : 'local';
+  const s3 = {
+    endpoint: trimSlash(process.env.S3_ENDPOINT),
+    region: process.env.S3_REGION || 'fsn1',
+    accessKeyId: process.env.S3_ACCESS_KEY_ID || '',
+    secretAccessKey: process.env.S3_SECRET_ACCESS_KEY || '',
+    publicBucket: process.env.S3_PUBLIC_BUCKET || '',
+    privateBucket: process.env.S3_PRIVATE_BUCKET || '',
+    forcePathStyle: process.env.S3_FORCE_PATH_STYLE === 'true',
+  };
+  const defaultBaseUrl =
+    driver === 's3'
+      ? bucketAddress(s3.endpoint, s3.publicBucket, s3.forcePathStyle)
+      : `http://localhost:${process.env.PORT || '3001'}/media`;
+  return {
+    driver,
+    publicBaseUrl: trimSlash(process.env.MEDIA_BASE_URL) || defaultBaseUrl,
+    localDir: path.resolve(process.cwd(), process.env.UPLOADS_DIR || 'uploads'),
+    // Signs the local driver's links to private files.
+    linkSecret: process.env.JWT_ACCESS_SECRET || 'dev_access_secret',
+    s3,
+  };
+}
+
+function bucketAddress(endpoint: string, bucket: string, pathStyle: boolean): string {
+  if (!endpoint || !bucket) return '';
+  if (pathStyle) return `${endpoint}/${bucket}`;
+  const url = new URL(endpoint);
+  return `${url.protocol}//${bucket}.${url.host}`;
+}
+
+function trimSlash(value: string | undefined): string {
+  return (value || '').trim().replace(/\/+$/, '');
+}

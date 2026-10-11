@@ -1,12 +1,16 @@
 <template>
   <NuxtLink :to="`/oglasi/${listing.slug}`" class="listing-card">
     <div class="listing-card-media">
+      <!-- T143: the browser takes the width the card needs from the photo's sizes. -->
       <img
         v-if="listing.coverPhoto"
-        :src="listing.coverPhoto.url"
+        :src="mediaVariant(listing.coverPhoto.url, 800)"
+        :srcset="mediaSrcset(listing.coverPhoto.url)"
+        :sizes="imageSizes"
         :alt="listing.coverPhoto.altText || listing.title"
         class="listing-card-image"
         loading="lazy"
+        decoding="async"
       />
       <div v-else class="listing-card-image listing-card-image-placeholder" />
       <div class="listing-card-scrim" aria-hidden="true" />
@@ -88,6 +92,9 @@ const route = useRoute()
 
 const props = defineProps({
   listing: { type: Object, required: true },
+  // How wide the card is drawn: a column of its own on a phone, at most about
+  // 400px elsewhere. A grid with two cards across a phone says so.
+  imageSizes: { type: String, default: '(max-width: 767.98px) 100vw, 400px' },
 })
 
 const togglingFavorite = ref(false)

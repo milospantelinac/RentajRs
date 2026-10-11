@@ -931,6 +931,56 @@ export const emailTemplates: EmailTemplateSeed[] = [
       buttonLabel: 'View request',
     },
   },
+  // T143: Administracija > Skladište, to the admins holding manage_storage.
+  {
+    key: 'admin_storage_unavailable',
+    sr: {
+      subject: 'Skladište fajlova ne radi',
+      heading: 'Veza sa skladištem fajlova ne radi',
+      bodyText:
+        'Provera skladišta u {vreme} nije uspela ({greska}). Dok se veza ne vrati, otpremanje slika i priloga ne radi, a slike se možda ne prikazuju. Sledeći mejl stiže najranije za šest sati ako problem potraje.',
+      buttonLabel: 'Otvori Skladište',
+    },
+    en: {
+      subject: 'File storage is down',
+      heading: 'The connection to file storage is not working',
+      bodyText:
+        'The storage check at {vreme} failed ({greska}). Until it is back, uploading pictures and attachments does not work and pictures may not show. If it stays down, the next email comes in six hours at the earliest.',
+      buttonLabel: 'Open Storage',
+    },
+  },
+  {
+    key: 'admin_storage_recovered',
+    sr: {
+      subject: 'Skladište fajlova ponovo radi',
+      heading: 'Veza sa skladištem fajlova ponovo radi',
+      bodyText: 'Provera skladišta u {vreme} je uspela, otpremanje i prikaz slika ponovo rade.',
+      buttonLabel: 'Otvori Skladište',
+    },
+    en: {
+      subject: 'File storage works again',
+      heading: 'The connection to file storage works again',
+      bodyText: 'The storage check at {vreme} passed; uploading and showing pictures work again.',
+      buttonLabel: 'Open Storage',
+    },
+  },
+  {
+    key: 'admin_storage_deletion_pending',
+    sr: {
+      subject: 'Prilozi obrisanih naloga čekaju brisanje',
+      heading: 'Prilozi obrisanih naloga čekaju odluku',
+      bodyText:
+        'U skladištu je još {broj} priloga iz poruka naloga koji su obrisani pre više od dozvoljenog roka. Politika privatnosti obećava da se podaci obrisanog naloga brišu, pa ih pregledaj i odobri brisanje. Ovaj podsetnik stiže jednom dnevno dok takvih priloga ima.',
+      buttonLabel: 'Otvori Skladište',
+    },
+    en: {
+      subject: 'Attachments of deleted accounts are waiting to be deleted',
+      heading: 'Attachments of deleted accounts are waiting for a decision',
+      bodyText:
+        'Storage still holds {broj} message attachments of accounts deleted longer ago than their retention period. The privacy policy promises that a deleted account\'s data is deleted, so review them and approve the deletion. This reminder comes once a day while there are any.',
+      buttonLabel: 'Open Storage',
+    },
+  },
 
   // -- Zaštita podataka / Data protection -----------------------------------------------------
   {
