@@ -9,8 +9,15 @@
         :aria-label="t('listing.openGallery')"
         @click="openLightbox(i)"
       >
+        <!-- T116: where the first photo is shown whole (a phone, one photo),
+             a blurred copy of it fills the rest of the frame. -->
+        <img v-if="i === 0" :src="photo.url" alt="" aria-hidden="true" class="listing-gallery-backdrop" />
         <img :src="photo.url" :alt="photo.altText || title" class="listing-gallery-img" :loading="i === 0 ? 'eager' : 'lazy'" />
       </button>
+
+      <span v-if="photos.length > 1" class="listing-gallery-counter" :class="{ 'listing-gallery-counter-raised': videoUrl }">
+        1 / {{ photos.length }}
+      </span>
 
       <!-- Dizajn 11 — both overlays sit inside the mosaic, 20px in from the
            bottom-left and bottom-right corner respectively. -->
@@ -113,19 +120,50 @@ const videoOpen = ref(false)
 // phone breakpoint, so a short touch screen counts as a phone too.
 const PHONE_VIEWER_QUERY = '(max-width: 767.98px), (max-height: 500px) and (pointer: coarse)'
 // PhotoSwipe lays a slide out by its photo's size, which the API does not
-// send: a slide starts with the size the photo had when it was opened
-// before, or this one, and is laid out again once its photo has loaded.
+// send. T116 (Tamara, 2026-10-10, iPhone): a slide laid out before its size
+// was known came out stretched to the fallback, and the photos PhotoSwipe
+// loads ahead never told their size at all (squashed from the third one
+// on); rebuilding a slide from inside PhotoSwipe's own load event (Safari has
+// a cached photo loaded at once) left the old slide on screen behind the new
+// one, the same photo twice. So sizes are read ahead, the opened photo before
+// the viewer opens and the next ones while it is open, and a slide laid out
+// too early is rebuilt once its size is in, after PhotoSwipe is done with it.
 const FALLBACK_PHOTO_SIZE = { width: 1600, height: 1200 }
 const photoSizes = new Map()
+const sizeLoads = new Map()
 let phoneViewer = null
 
 function loadPhotoSize(url) {
-  return new Promise((resolve) => {
-    const image = new Image()
-    image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight })
-    image.onerror = () => resolve(null)
-    image.src = url
-  })
+  if (!sizeLoads.has(url)) {
+    sizeLoads.set(
+      url,
+      new Promise((resolve) => {
+        const image = new Image()
+        image.onload = () => {
+          photoSizes.set(url, { width: image.naturalWidth, height: image.naturalHeight })
+          resolve(photoSizes.get(url))
+        }
+        image.onerror = () => {
+          sizeLoads.delete(url)
+          resolve(null)
+        }
+        image.src = url
+      }),
+    )
+  }
+  return sizeLoads.get(url)
+}
+
+function wholeOnScreen(zoom) {
+  return Math.min(zoom.panAreaSize.x / zoom.elementSize.x, zoom.panAreaSize.y / zoom.elementSize.y)
+}
+
+// The photos from `back` before `index` to `ahead` after it, round the end.
+function photosAround(index, back, ahead) {
+  const count = props.photos.length
+  const indexes = new Set()
+  for (let step = -back; step <= ahead; step++) indexes.add((((index + step) % count) + count) % count)
+  return [...indexes]
 }
 
 async function openPhoneViewer(index) {
@@ -134,22 +172,23 @@ async function openPhoneViewer(index) {
     import('photoswipe/style.css'),
   ])
   // The photo that opens has its size from the start (the mosaic usually has it loaded already).
-  const first = props.photos[index]
-  if (!photoSizes.has(first.url)) {
-    const size = await loadPhotoSize(first.url)
-    if (size) photoSizes.set(first.url, size)
-  }
+  await loadPhotoSize(props.photos[index].url)
   const dataSource = props.photos.map((photo) => ({
     src: photo.url,
     alt: photo.altText || props.title,
     ...(photoSizes.get(photo.url) || FALLBACK_PHOTO_SIZE),
   }))
-  phoneViewer = new PhotoSwipe({
+  const viewer = new PhotoSwipe({
     dataSource,
     index,
     mainClass: 'listing-photo-viewer',
     bgOpacity: 1,
     padding: { top: 0, bottom: 0, left: 0, right: 0 },
+    // Every photo as large as the screen takes it whole, a smaller one too
+    // (PhotoSwipe's "fit" never goes past a photo's own size); a double tap
+    // zooms in from there.
+    initialZoomLevel: wholeOnScreen,
+    secondaryZoomLevel: (zoom) => (zoom.initial < 1 ? Math.min(1, zoom.initial * 3) : zoom.initial * 2),
     showHideAnimationType: 'fade',
     indexIndicatorSep: ' / ',
     closeTitle: t('common.close'),
@@ -158,20 +197,37 @@ async function openPhoneViewer(index) {
     arrowNextTitle: t('listing.nextPhoto'),
     errorMsg: t('listing.photoLoadError'),
   })
-  phoneViewer.on('loadComplete', ({ content }) => {
+  phoneViewer = viewer
+
+  // A size learnt for a photo whose slide was laid out with another one. The
+  // rebuild waits for PhotoSwipe to finish what it is doing; it also drops the
+  // photo PhotoSwipe loaded ahead with the old size.
+  function applySize(slideIndex, size) {
+    const item = dataSource[slideIndex]
+    if (!size || !item || (item.width === size.width && item.height === size.height)) return
+    item.width = size.width
+    item.height = size.height
+    setTimeout(() => {
+      if (phoneViewer === viewer) viewer.refreshSlideContent(slideIndex)
+    })
+  }
+  // PhotoSwipe keeps one photo back and two ahead; their sizes come first.
+  function readAhead(current) {
+    for (const slideIndex of photosAround(current, 2, 3)) {
+      loadPhotoSize(props.photos[slideIndex].url).then((size) => applySize(slideIndex, size))
+    }
+  }
+  viewer.on('change', () => readAhead(viewer.currIndex))
+  // Anything still laid out with another size than the one it loaded with.
+  viewer.on('loadComplete', ({ content }) => {
     const image = content.element
-    const item = dataSource[content.index]
-    if (!image?.naturalWidth || !item) return
-    if (item.width === image.naturalWidth && item.height === image.naturalHeight) return
-    item.width = image.naturalWidth
-    item.height = image.naturalHeight
-    photoSizes.set(item.src, { width: item.width, height: item.height })
-    phoneViewer?.refreshSlideContent(content.index)
+    if (image?.naturalWidth) applySize(content.index, { width: image.naturalWidth, height: image.naturalHeight })
   })
-  phoneViewer.on('destroy', () => {
-    phoneViewer = null
+  viewer.on('destroy', () => {
+    if (phoneViewer === viewer) phoneViewer = null
   })
-  phoneViewer.init()
+  viewer.init()
+  readAhead(index)
 }
 
 function openLightbox(index) {
@@ -214,6 +270,34 @@ onBeforeUnmount(() => {
 </script>
 
 <style lang="scss" scoped>
+// T116 (Tamara, 2026-10-10): a photo shown whole sits on a blurred copy of
+// itself, so the frame keeps its shape with nothing cut off and no empty
+// bands, and a hairline keeps the rounded edge in sight on a white photo.
+@mixin gallery-backdrop-shown {
+  display: block;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: blur(24px) brightness(0.9);
+  transform: scale(1.2);
+}
+
+@mixin gallery-photo-whole {
+  position: relative;
+  object-fit: contain;
+}
+
+@mixin gallery-hairline {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px rgba(6, 27, 49, 0.08);
+  pointer-events: none;
+}
+
 .listing-gallery-grid {
   position: relative;
   display: grid;
@@ -257,6 +341,41 @@ onBeforeUnmount(() => {
 .listing-gallery-grid-single {
   grid-template-columns: 1fr;
   aspect-ratio: 1216 / 480;
+}
+
+// T116: one photo is shown whole in the wide frame, not cut to a strip.
+.listing-gallery-backdrop {
+  display: none;
+}
+
+.listing-gallery-grid-single .listing-gallery-backdrop {
+  @include gallery-backdrop-shown;
+}
+
+.listing-gallery-grid-single .listing-gallery-img {
+  @include gallery-photo-whole;
+}
+
+.listing-gallery-grid-single::after {
+  @include gallery-hairline;
+}
+
+// T116: a phone's "1 / 6" over the photo's bottom-left corner, above
+// "Pogledaj video" when the listing has one.
+.listing-gallery-counter {
+  display: none;
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  align-items: center;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: $radius-pill;
+  background: rgba(6, 27, 49, 0.6);
+  color: $color-surface;
+  font-size: 13px;
+  font-weight: 500;
+  pointer-events: none;
 }
 
 .listing-gallery-tile {
@@ -403,11 +522,15 @@ onBeforeUnmount(() => {
   display: block;
 }
 
+// T116 (agreed 2026-10-11): a phone shows one photo, the cover, whole in a 4:3
+// frame on every listing; "Prikaži sve" or a tap opens the rest.
 @include respond-below(md) {
   .listing-gallery-grid-mosaic,
-  .listing-gallery-grid-trio {
-    grid-template-columns: 1fr 1fr;
-    grid-template-rows: 1fr 1fr;
+  .listing-gallery-grid-trio,
+  .listing-gallery-grid-duo,
+  .listing-gallery-grid-single {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
     aspect-ratio: 4 / 3;
   }
 
@@ -416,8 +539,28 @@ onBeforeUnmount(() => {
     grid-row: auto;
   }
 
-  .listing-gallery-grid-mosaic .listing-gallery-tile:nth-child(2) {
-    grid-column: auto;
+  .listing-gallery-tile + .listing-gallery-tile {
+    display: none;
+  }
+
+  .listing-gallery-tile:first-child .listing-gallery-backdrop {
+    @include gallery-backdrop-shown;
+  }
+
+  .listing-gallery-tile:first-child .listing-gallery-img {
+    @include gallery-photo-whole;
+  }
+
+  .listing-gallery-grid::after {
+    @include gallery-hairline;
+  }
+
+  .listing-gallery-counter {
+    display: inline-flex;
+  }
+
+  .listing-gallery-counter-raised {
+    bottom: 56px;
   }
 
   .listing-gallery-video-badge,
