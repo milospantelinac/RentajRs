@@ -20,7 +20,7 @@ import { parseIcs, buildIcsCalendar, icalSourceName, isIcsCalendar, normalizeIca
 import { ICAL_FAILURE_ALERT_THRESHOLD, getIcalAvailability } from '../../common/utils/ical-availability';
 import { NonPublicAddressError, fetchUserUrl } from '../../common/utils/outbound-fetch';
 import { paraToRsd, rsdToPara } from '../../common/utils/money';
-import { belgradeWallClock, toBelgradeDateOnly, toBelgradeHHMM, toBelgradeISODayOfWeek } from '../../common/utils/timezone';
+import { belgradeDayStart, belgradeWallClock, toBelgradeDateOnly, toBelgradeHHMM } from '../../common/utils/timezone';
 import { DAY_MS } from '../../common/utils/subscription-renewal';
 import {
   SetWorkingHoursDto,
@@ -552,8 +552,9 @@ export class AvailabilityService {
    * T127: the price of each hour of a working-hours booking, so a term that
    * runs from one part of the working hours into another pays each hour at
    * its own rate (it used to pay every hour at the start's). All hours count
-   * to the day the term starts on: a Saturday evening that runs past
-   * midnight keeps Saturday's ranges, special prices and weekend price.
+   * to the day whose working hours the term lies in: a Saturday evening that
+   * runs past midnight keeps Saturday's ranges, special prices and weekend
+   * price, and so does a term that only starts after that midnight (T141).
    */
   async getWorkingHoursPrices(
     listingId: string,
@@ -566,8 +567,9 @@ export class AvailabilityService {
     // the Belgrade offset (e.g. a late-evening booking rolling into the next
     // UTC day), missing a same-day SlotPriceOverride; SlotPriceOverride.date
     // is itself a Belgrade calendar day, so both sides need the same zone.
-    const dateOnly = toBelgradeDateOnly(startsAt);
-    const dayOfWeek = toBelgradeISODayOfWeek(startsAt);
+    const rows = await this.prisma.workingHours.findMany({ where: { listingId } });
+    const dateOnly = workingDayOf(rows, startsAt, endsAt) ?? toBelgradeDateOnly(startsAt);
+    const dayOfWeek = isoDayOfWeek(dateOnly);
     const { overrides, ranges } = await this.loadHourlyPriceRules(listingId, dateOnly);
     const prices: PricedUnit[] = [];
     for (let time = startsAt.getTime(); time < endsAt.getTime(); time += 3600_000) {
@@ -591,18 +593,30 @@ export class AvailabilityService {
    */
   async fitsWorkingHours(listingId: string, startsAt: Date, endsAt: Date): Promise<boolean> {
     const rows = await this.prisma.workingHours.findMany({ where: { listingId } });
-    const startDay = toBelgradeDateOnly(startsAt);
-    for (const dayOffset of [0, -1]) {
-      const day = new Date(startDay.getTime() + dayOffset * 86_400_000);
-      const dayOfWeek = ((day.getUTCDay() + 6) % 7) + 1;
-      for (const row of rows.filter((r) => r.dayOfWeek === dayOfWeek)) {
-        const closingDay = row.endsAt <= row.startsAt ? new Date(day.getTime() + 86_400_000) : day;
-        const opens = belgradeWallClock(day, row.startsAt);
-        const closes = belgradeWallClock(closingDay, row.endsAt);
-        if (opens <= startsAt && endsAt <= closes) return true;
-      }
-    }
-    return false;
+    return workingDayOf(rows, startsAt, endsAt) !== null;
+  }
+
+  /**
+   * T141: "Blokiraj dan" blocks a calendar day, midnight to midnight, while
+   * that day's working hours can run on past midnight (10:00 - 01:00). A term
+   * in those hours after midnight overlaps no block, yet belongs to the day
+   * the owner closed, so it is not free either.
+   */
+  async isInBlockedWorkingDay(listingId: string, startsAt: Date, endsAt: Date): Promise<boolean> {
+    const rows = await this.prisma.workingHours.findMany({ where: { listingId } });
+    const day = workingDayOf(rows, startsAt, endsAt);
+    if (!day || day.getTime() === toBelgradeDateOnly(startsAt).getTime()) return false;
+    const next = new Date(day.getTime() + 86_400_000);
+    const block = await this.prisma.blockedTerm.findFirst({
+      where: {
+        listingId,
+        source: 'MANUAL',
+        startsAt: { lte: belgradeDayStart(day.getUTCFullYear(), day.getUTCMonth() + 1, day.getUTCDate()) },
+        endsAt: { gte: belgradeDayStart(next.getUTCFullYear(), next.getUTCMonth() + 1, next.getUTCDate()) },
+      },
+      select: { id: true },
+    });
+    return !!block;
   }
 
   /** Per-night price for a PER_STAY booking spanning [startsAt, endsAt) — override where set, weekend/base price otherwise. */
@@ -863,6 +877,36 @@ const MAX_SLOT_RANGE_DAYS = 366;
 /** UTC midnight of a YYYY-MM-DD calendar day, the day belgradeWallClock takes. */
 function calendarDay(value: string): Date {
   return new Date(`${value}T00:00:00.000Z`);
+}
+
+/** ISO day of week (Monday 1 to Sunday 7) of a day kept as its UTC midnight. */
+function isoDayOfWeek(day: Date): number {
+  return ((day.getUTCDay() + 6) % 7) + 1;
+}
+
+/**
+ * The Belgrade day whose working hours hold a whole term, as its UTC midnight,
+ * or null when none does. A window that ends at or before it opens runs past
+ * midnight (T104), so a term that starts after midnight can still belong to
+ * the evening before (Mon 10:00 - 01:00 holds Tue 00:00 - 01:00, T141); the
+ * term's own day is asked first.
+ */
+function workingDayOf(
+  rows: Array<{ dayOfWeek: number; startsAt: string; endsAt: string }>,
+  startsAt: Date,
+  endsAt: Date,
+): Date | null {
+  const startDay = toBelgradeDateOnly(startsAt);
+  for (const dayOffset of [0, -1]) {
+    const day = new Date(startDay.getTime() + dayOffset * 86_400_000);
+    for (const row of rows.filter((r) => r.dayOfWeek === isoDayOfWeek(day))) {
+      const closingDay = row.endsAt <= row.startsAt ? new Date(day.getTime() + 86_400_000) : day;
+      const opens = belgradeWallClock(day, row.startsAt);
+      const closes = belgradeWallClock(closingDay, row.endsAt);
+      if (opens <= startsAt && endsAt <= closes) return day;
+    }
+  }
+  return null;
 }
 
 function minutesOfDay(time: string): number {

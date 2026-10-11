@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { I18nContext, I18nService } from 'nestjs-i18n';
@@ -111,6 +111,10 @@ export class BookingsService {
     // booking card and the request page only offer lengths up to closing.
     if (isWorkingHours(listing) && !(await this.availability.fitsWorkingHours(listingId, startsAt, endsAt))) {
       throw new BadRequestException(this.i18n.t('bookings.OUTSIDE_WORKING_HOURS'));
+    }
+    // T141: nor after midnight in the hours of a day the owner blocked.
+    if (isWorkingHours(listing) && (await this.availability.isInBlockedWorkingDay(listingId, startsAt, endsAt))) {
+      throw new ConflictException(this.i18n.t('errors.TERM_NOT_AVAILABLE'));
     }
     // T127: a playroom also asks how many adults come with the children. It is
     // there for the owner only: no limit, no effect on the price.

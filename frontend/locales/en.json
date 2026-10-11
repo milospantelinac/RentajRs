@@ -1267,6 +1267,8 @@
     "monthLabel": "Month",
     "pickDatePlaceholder": "Pick a date",
     "pickTimePlaceholder": "Pick a time",
+    "afterMidnight": "{time} (after midnight)",
+    "afterMidnightNote": "The term starts after midnight, on {date} at {time}.",
     "pickSlotPlaceholder": "Pick a slot",
     "pickMonthPlaceholder": "Pick a month",
     "guestCountDecrease": "Fewer guests",

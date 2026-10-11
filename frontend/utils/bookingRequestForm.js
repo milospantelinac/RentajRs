@@ -165,20 +165,48 @@ export function buildStayBox(t, listing, selection) {
 }
 
 // The same box for a day of working hours: "subota, 12. septembar 2026." over
-// "16:00 - 18:00 · 2 sata".
+// "16:00 - 18:00 · 2 sata", or "00:00 - 01:00 (posle ponoći) · 1 sat".
 export function buildHoursBox(t, dateKey, startTime, hours) {
   if (!dateKey) return null
   const title = `${weekdayWord(t, 'bookingRequests.weekdays', dateKey)}, ${formatLongDay(t, dateKey)}`
   if (!startTime) return { title, detail: t('bookingForm.pickStartTime') }
+  const range = formatHoursRange(startTime, hours)
   return {
     title,
-    detail: `${formatHoursRange(startTime, hours)} · ${formatUnits(t, {}, 'HOUR', hours)}`,
+    detail: `${isAfterMidnight(startTime) ? t('booking.afterMidnight', { time: range }) : range} · ${formatUnits(t, {}, 'HOUR', hours)}`,
   }
 }
 
 // "16:00 - 18:00", past midnight too.
 export function formatHoursRange(startTime, hours) {
-  return `${startTime} - ${timeOfMinutes(minutesOfTime(startTime) + hours * 60)}`
+  const start = minutesOfTime(startTime)
+  return `${timeOfMinutes(start)} - ${timeOfMinutes(start + hours * 60)}`
+}
+
+// T141: a start the working hours of the picked day reach after midnight is
+// kept as the hours from that day's midnight ("24:00" is 00:00 that night),
+// so it stays apart from the next day's own starts; the guest reads
+// "00:00 (posle ponoći)".
+export function isAfterMidnight(startTime) {
+  return minutesOfTime(startTime) >= 24 * 60
+}
+
+export function formatHourStart(t, startTime) {
+  const time = formatStartClock(startTime)
+  return isAfterMidnight(startTime) ? t('booking.afterMidnight', { time }) : time
+}
+
+// The clock a start time shows on its own ("00:00" for "24:00").
+export function formatStartClock(startTime) {
+  return timeOfMinutes(minutesOfTime(startTime))
+}
+
+// The booking card's field only has room for the clock, so a start past
+// midnight gets a line naming its day: "Termin počinje posle ponoći, 13. 10. u 00:00."
+export function getAfterMidnightNote(t, dateKey, startTime) {
+  if (!dateKey || !startTime || !isAfterMidnight(startTime)) return ''
+  const day = addDaysToKey(dateKey, Math.floor(minutesOfTime(startTime) / (24 * 60)))
+  return t('booking.afterMidnightNote', { date: formatShortKey(day), time: formatStartClock(startTime) })
 }
 
 function minutesOfTime(time) {
@@ -190,6 +218,13 @@ function timeOfMinutes(total) {
   const pad = (value) => String(value).padStart(2, '0')
   const minutes = ((total % (24 * 60)) + 24 * 60) % (24 * 60)
   return `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}`
+}
+
+// Minutes from a day's midnight as a start time; past midnight the hours go on
+// counting ("24:00", "24:30").
+function startOfMinutes(total) {
+  const pad = (value) => String(value).padStart(2, '0')
+  return `${pad(Math.floor(total / 60))}:${pad(total % 60)}`
 }
 
 // ---- Working hours (T127) ---------------------------------------------------------
@@ -208,38 +243,59 @@ function dayWindows(workingHours, dateKey) {
     })
 }
 
+// The instant `minutes` after the midnight that starts a day, past 24:00 on
+// the next day's clock.
+function instantAt(dateKey, minutes) {
+  return belgradeInstant(addDaysToKey(dateKey, Math.floor(minutes / (24 * 60))), timeOfMinutes(minutes))
+}
+
+// T141: "Blokiraj dan" blocks the date from midnight to midnight; the hours
+// that day runs on after midnight are closed with it (the server agrees).
+function isDayBlocked(availability, dateKey) {
+  const from = belgradeInstant(dateKey, '00:00').getTime()
+  const to = belgradeInstant(addDaysToKey(dateKey, 1), '00:00').getTime()
+  return (availability?.blocked || []).some(
+    (b) => b.source === 'MANUAL' && new Date(b.startsAt).getTime() <= from && new Date(b.endsAt).getTime() >= to,
+  )
+}
+
 // Whether `hours` from a start stay inside its window (Tamara, 2026-10-09: no
 // term past closing) and run into no booking, block or imported event (T74).
 function hoursFit(availability, dateKey, window, startMinutes, hours) {
   if (startMinutes + hours * 60 > window.closes) return false
-  const from = belgradeInstant(dateKey, timeOfMinutes(startMinutes))
+  const from = instantAt(dateKey, startMinutes)
   const to = new Date(from.getTime() + hours * 3_600_000)
   return !(availability?.blocked || []).some((b) => new Date(b.startsAt) < to && new Date(b.endsAt) > from)
 }
 
-// The start times a day offers: on the hour from each window's opening and
-// before midnight (a start is only offered on the day the owner set, T104),
-// still ahead, inside the notice and the horizon (Dizajn 23), and only where the
-// shortest term fits before closing. Belgrade wall-clock times, whatever the
-// browser's zone.
+// The start times a day offers: on the hour from each window's opening, up to
+// closing less the shortest term, after midnight too when the window runs past
+// it (Tamara, 2026-10-10: 10:00 - 01:00 with 1 hour also offers 00:00). When
+// closing is off that hourly beat, the last start is the one whose shortest
+// term ends right at closing (00:30 with 2 hours: 22:30). A start is only
+// offered on the day whose hours it is in (T104), still ahead, inside the
+// notice and the horizon (Dizajn 23), and where the shortest term runs into
+// nothing taken. Belgrade wall-clock times, whatever the browser's zone.
 export function getHourStarts(listing, availability, dateKey, now = Date.now()) {
-  if (!dateKey) return []
+  if (!dateKey || isDayBlocked(availability, dateKey)) return []
   const shortest = listing?.minDuration || 1
-  const times = []
+  const starts = new Map()
   for (const window of dayWindows(availability?.workingHours, dateKey)) {
-    for (let minute = window.opens; minute < Math.min(window.closes, 24 * 60); minute += 60) {
-      const time = timeOfMinutes(minute)
-      const instant = belgradeInstant(dateKey, time)
-      if (
+    const last = window.closes - shortest * 60
+    for (let minute = window.opens; minute <= last; minute += 60) starts.set(minute, window)
+    if (last >= window.opens && !starts.has(last)) starts.set(last, window)
+  }
+  return [...starts.keys()]
+    .sort((a, b) => a - b)
+    .filter((minute) => {
+      const instant = instantAt(dateKey, minute)
+      return (
         instant.getTime() > now &&
         isStartWithinRules(listing, instant, now) &&
-        hoursFit(availability, dateKey, window, minute, shortest)
-      ) {
-        times.push(time)
-      }
-    }
-  }
-  return times
+        hoursFit(availability, dateKey, starts.get(minute), minute, shortest)
+      )
+    })
+    .map(startOfMinutes)
 }
 
 // T127 (Tamara, 2026-10-10): a day the calendars offer has at least one start

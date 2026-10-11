@@ -371,11 +371,12 @@ describe('AvailabilityService#getIcalOverview (Dizajn 33)', () => {
 
 describe('AvailabilityService working hours (T127)', () => {
   const rsd = (value: number) => BigInt(value * 100);
-  function hoursService(rules: { overrides?: any[]; ranges?: any[]; hours?: any[] }) {
+  function hoursService(rules: { overrides?: any[]; ranges?: any[]; hours?: any[]; block?: any }) {
     const prisma = {
       slotPriceOverride: { findMany: jest.fn(async () => rules.overrides ?? []) },
       hourlyPriceRange: { findMany: jest.fn(async () => rules.ranges ?? []) },
       workingHours: { findMany: jest.fn(async () => rules.hours ?? []) },
+      blockedTerm: { findFirst: jest.fn(async () => rules.block ?? null) },
     };
     return { service: new AvailabilityService(prisma as any, { emit: jest.fn() } as any, i18n as any, configWith(false) as any), prisma };
   }
@@ -415,6 +416,58 @@ describe('AvailabilityService working hours (T127)', () => {
     const ranged = hoursService({ ranges: [{ dayOfWeek: null, startTime: '22:00', endTime: '02:00', price: rsd(7000) }] });
     const late = await ranged.service.getWorkingHoursPrices('l1', at('2026-10-10T19:00:00Z'), at('2026-10-11T00:00:00Z'), rsd(5000), rsd(6000));
     expect(prices(late)).toEqual(['WEEKEND 6000', 'RANGE 7000', 'RANGE 7000', 'RANGE 7000', 'RANGE 7000']);
+  });
+
+  it('prices a term that only starts after midnight as the evening whose working hours it is in (T141)', async () => {
+    const hours = [
+      { dayOfWeek: 1, startsAt: '10:00', endsAt: '01:00' },
+      { dayOfWeek: 2, startsAt: '10:00', endsAt: '01:00' },
+      { dayOfWeek: 6, startsAt: '14:00', endsAt: '02:00' },
+    ];
+    const monday = hoursService({
+      hours,
+      overrides: [{ startTime: '23:00', endTime: '01:00', price: rsd(9000) }],
+      ranges: [
+        { dayOfWeek: 1, startTime: '22:00', endTime: '01:00', price: rsd(6000) },
+        { dayOfWeek: 2, startTime: '10:00', endTime: '16:00', price: rsd(3500) },
+      ],
+    });
+    // Tue 00:00 to 01:00 is Monday night: Monday's special price for that date.
+    const night = await monday.service.getWorkingHoursPrices('l1', at('2026-10-12T22:00:00Z'), at('2026-10-12T23:00:00Z'), rsd(1500), null);
+    expect(prices(night)).toEqual(['SPECIAL 9000']);
+    expect(monday.prisma.slotPriceOverride.findMany).toHaveBeenCalledWith({ where: { listingId: 'l1', date: new Date('2026-10-12T00:00:00Z') } });
+
+    const plain = hoursService({ hours, ranges: [{ dayOfWeek: 1, startTime: '22:00', endTime: '01:00', price: rsd(6000) }] });
+    const mondayNight = await plain.service.getWorkingHoursPrices('l1', at('2026-10-12T22:00:00Z'), at('2026-10-12T23:00:00Z'), rsd(1500), null);
+    expect(prices(mondayNight)).toEqual(['RANGE 6000']);
+    // Tuesday's own hours stay Tuesday's.
+    const tuesday = await plain.service.getWorkingHoursPrices('l1', at('2026-10-13T08:00:00Z'), at('2026-10-13T09:00:00Z'), rsd(1500), null);
+    expect(prices(tuesday)).toEqual(['BASE 1500']);
+    // Sun 00:00 to 02:00 is Saturday night: still the weekend price.
+    const saturdayNight = await plain.service.getWorkingHoursPrices('l1', at('2026-10-10T22:00:00Z'), at('2026-10-11T00:00:00Z'), rsd(5000), rsd(6000));
+    expect(prices(saturdayNight)).toEqual(['WEEKEND 6000', 'WEEKEND 6000']);
+  });
+
+  it('closes the hours after midnight of a day the owner blocked as a whole (T141)', async () => {
+    const hours = [{ dayOfWeek: 1, startsAt: '10:00', endsAt: '01:00' }];
+    const blocked = hoursService({ hours, block: { id: 'b1' } });
+    // Tue 00:00 to 01:00 is Monday night; Monday 12. 10. runs from 11. 10. 22:00 UTC.
+    await expect(blocked.service.isInBlockedWorkingDay('l1', at('2026-10-12T22:00:00Z'), at('2026-10-12T23:00:00Z'))).resolves.toBe(true);
+    expect(blocked.prisma.blockedTerm.findFirst).toHaveBeenCalledWith({
+      where: {
+        listingId: 'l1',
+        source: 'MANUAL',
+        startsAt: { lte: new Date('2026-10-11T22:00:00Z') },
+        endsAt: { gte: new Date('2026-10-12T22:00:00Z') },
+      },
+      select: { id: true },
+    });
+    // A term on the day itself overlaps the block, which settles it on its own.
+    blocked.prisma.blockedTerm.findFirst.mockClear();
+    await expect(blocked.service.isInBlockedWorkingDay('l1', at('2026-10-12T20:00:00Z'), at('2026-10-12T21:00:00Z'))).resolves.toBe(false);
+    expect(blocked.prisma.blockedTerm.findFirst).not.toHaveBeenCalled();
+    const open = hoursService({ hours });
+    await expect(open.service.isInBlockedWorkingDay('l1', at('2026-10-12T22:00:00Z'), at('2026-10-12T23:00:00Z'))).resolves.toBe(false);
   });
 
   it('accepts a term only inside one window of the working hours', async () => {

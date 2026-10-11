@@ -1267,6 +1267,8 @@
     "monthLabel": "Mesec",
     "pickDatePlaceholder": "Izaberi datum",
     "pickTimePlaceholder": "Izaberi vreme",
+    "afterMidnight": "{time} (posle ponoći)",
+    "afterMidnightNote": "Termin počinje posle ponoći, {date} u {time}.",
     "pickSlotPlaceholder": "Izaberi termin",
     "pickMonthPlaceholder": "Izaberi mesec",
     "guestCountDecrease": "Smanji broj gostiju",

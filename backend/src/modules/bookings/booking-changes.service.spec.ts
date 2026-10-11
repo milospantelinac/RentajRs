@@ -70,6 +70,7 @@ function setup({ booking = bookingRow(), pendingCount = 0, clash = null as any, 
   };
   const availability = {
     fitsWorkingHours: jest.fn().mockResolvedValue(true),
+    isInBlockedWorkingDay: jest.fn().mockResolvedValue(false),
     applyGapAfter: jest.fn(),
     getAvailability: jest.fn().mockResolvedValue({ blocked: [{ id: 'own' }, { id: 'other' }], workingHours: [] }),
   };

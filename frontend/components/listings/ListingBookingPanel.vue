@@ -86,10 +86,11 @@
             <span class="booking-panel-field-label">{{ t('booking.startLabel') }}</span>
             <select v-model="slotStartTime" class="booking-panel-native-select" :disabled="!hourStarts.length">
               <option value="" disabled>{{ t('booking.pickTimePlaceholder') }}</option>
-              <option v-for="time in hourStarts" :key="time" :value="time">{{ time }}</option>
+              <!-- T141: "00:00 (posle ponoći)" where the day's hours run past midnight. -->
+              <option v-for="time in hourStarts" :key="time" :value="time">{{ formatHourStart(t, time) }}</option>
             </select>
             <span class="booking-panel-field-value" :class="{ 'is-empty': !slotStartTime }">
-              {{ slotStartTime || t('booking.pickTimePlaceholder') }}
+              {{ slotStartTime ? formatStartClock(slotStartTime) : t('booking.pickTimePlaceholder') }}
             </span>
             <img src="/images/icons/chevron-down.svg" alt="" class="booking-panel-field-chevron" />
           </label>
@@ -104,6 +105,7 @@
             <img src="/images/icons/chevron-down.svg" alt="" class="booking-panel-field-chevron" />
           </label>
         </div>
+        <p v-if="afterMidnightNote" class="booking-panel-start-note">{{ afterMidnightNote }}</p>
         <p v-if="dayWithoutTerms" class="booking-panel-alert" role="alert">
           <img src="/images/icons/field-error.svg" alt="" />{{ t('booking.noWorkingHoursForDay') }}
         </p>
@@ -443,6 +445,11 @@ const hourLengths = computed(() =>
 watch(hourStarts, (times) => {
   if (slotStartTime.value && !times.includes(slotStartTime.value)) slotStartTime.value = ''
 })
+// T141: "Termin počinje posle ponoći, 13. 10. u 00:00." under a start the
+// day's hours reach after midnight.
+const afterMidnightNote = computed(() =>
+  isWorkingHours.value ? getAfterMidnightNote(t, startsAt.value, slotStartTime.value) : '',
+)
 
 // T127 (Tamara, 2026-10-10): the calendar offers only the days a term can still
 // be booked on, once the terms are in.
@@ -874,6 +881,14 @@ const requestLink = computed(() => {
 
 .booking-panel-hint {
   font-size: $font-size-body;
+  color: $color-text-muted;
+}
+
+// T141: tied to the fields above it rather than the panel's 18px rhythm.
+.booking-panel-start-note {
+  margin: -8px 0 0;
+  font-size: 13px;
+  line-height: 18px;
   color: $color-text-muted;
 }
 

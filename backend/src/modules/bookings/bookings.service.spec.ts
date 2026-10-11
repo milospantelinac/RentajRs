@@ -1126,7 +1126,7 @@ describe('BookingsService#getOne for the sent request (Dizajn 41)', () => {
 });
 
 describe('BookingsService#createRequest (T127, T117)', () => {
-  function requestService(listingOverrides: Record<string, unknown>, options: { children?: boolean; fits?: boolean } = {}) {
+  function requestService(listingOverrides: Record<string, unknown>, options: { children?: boolean; fits?: boolean; blockedDay?: boolean } = {}) {
     const listing = {
       id: 'l1',
       userId: 'owner',
@@ -1164,6 +1164,7 @@ describe('BookingsService#createRequest (T127, T117)', () => {
     };
     const availability = {
       fitsWorkingHours: jest.fn(async () => options.fits ?? true),
+      isInBlockedWorkingDay: jest.fn(async () => options.blockedDay ?? false),
       getWorkingHoursPrices: jest.fn(async () => [
         { price: 100000n, kind: 'BASE' },
         { price: 120000n, kind: 'RANGE' },
@@ -1186,6 +1187,13 @@ describe('BookingsService#createRequest (T127, T117)', () => {
     const { service, prisma, availability } = requestService({}, { children: true, fits: false });
     await expect(service.createRequest('g1', 'l1', hours as any)).rejects.toThrow('bookings.OUTSIDE_WORKING_HOURS');
     expect(availability.fitsWorkingHours).toHaveBeenCalledWith('l1', new Date(hours.startsAt), new Date(hours.endsAt));
+    expect(prisma.booking.create).not.toHaveBeenCalled();
+  });
+
+  it('refuses a term after midnight in the hours of a day the owner blocked (T141)', async () => {
+    const { service, prisma, availability } = requestService({}, { children: true, blockedDay: true });
+    await expect(service.createRequest('g1', 'l1', hours as any)).rejects.toThrow('errors.TERM_NOT_AVAILABLE');
+    expect(availability.isInBlockedWorkingDay).toHaveBeenCalledWith('l1', new Date(hours.startsAt), new Date(hours.endsAt));
     expect(prisma.booking.create).not.toHaveBeenCalled();
   });
 

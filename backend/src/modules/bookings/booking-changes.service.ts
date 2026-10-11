@@ -138,6 +138,10 @@ export class BookingChangesService {
       throw new BadRequestException(this.i18n.t('bookings.CHANGE_EXPIRED'));
     }
     const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: booking.listingId } });
+    // T141: a day blocked since the request was sent closes its hours after midnight too.
+    if (isWorkingHours(listing) && (await this.availability.isInBlockedWorkingDay(listing.id, pending.newStartsAt, pending.newEndsAt))) {
+      throw new ConflictException(this.i18n.t('bookings.CHANGE_TERM_NO_LONGER_FREE'));
+    }
     const fees = (booking.fees ?? {}) as Record<string, unknown>;
     try {
       await this.prisma.$transaction(async (tx) => {
@@ -263,6 +267,10 @@ export class BookingChangesService {
     this.bookings.assertTermRules({ ...listing, maxGuests }, startsAt, endsAt, guestCount);
     if (isWorkingHours(listing) && !(await this.availability.fitsWorkingHours(listing.id, startsAt, endsAt))) {
       throw new BadRequestException(this.i18n.t('bookings.OUTSIDE_WORKING_HOURS'));
+    }
+    // T141: nor after midnight in the hours of a day the owner blocked.
+    if (isWorkingHours(listing) && (await this.availability.isInBlockedWorkingDay(listing.id, startsAt, endsAt))) {
+      throw new ConflictException(this.i18n.t('bookings.CHANGE_TERM_TAKEN'));
     }
     // Taken by anything but this booking itself (a new booking, a block, another's gap, iCal).
     const clash = await this.prisma.blockedTerm.findFirst({

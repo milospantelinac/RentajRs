@@ -77,7 +77,8 @@
             :disabled="!term.hourStarts.length"
           >
             <option value="" disabled>{{ t('bookingForm.startTimePlaceholder') }}</option>
-            <option v-for="time in term.hourStarts" :key="time" :value="time">{{ time }}</option>
+            <!-- T141: "00:00 (posle ponoći)" where the day's hours run past midnight. -->
+            <option v-for="time in term.hourStarts" :key="time" :value="time">{{ formatHourStart(t, time) }}</option>
           </select>
           <img src="/images/icons/chevron-down-18.svg" alt="" />
         </span>
