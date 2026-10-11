@@ -292,8 +292,15 @@
             </div>
           </header>
 
+          <!-- T113 (Tamara, 2026-10-10): the switch between the list and the map
+               is a blue outlined button across the column, hard to miss. -->
           <div class="search-mobile-toolbar">
-            <button type="button" class="btn btn-tertiary btn-sm" @click="mapOpenMobile = !mapOpenMobile">
+            <button type="button" class="search-map-toggle" :aria-pressed="mapOpenMobile" @click="mapOpenMobile = !mapOpenMobile">
+              <img
+                :src="mapOpenMobile ? '/images/icons/images-grid-brand.svg' : '/images/icons/map-marker.svg'"
+                alt=""
+                class="search-map-toggle-icon"
+              />
               {{ mapOpenMobile ? t('search.showList') : t('search.showMap') }}
             </button>
           </div>
@@ -364,15 +371,19 @@
               @card-change="mapCardOffset = $event.offset"
             />
 
-            <!-- These three sit on top of the map, so they wait for it too. -->
-            <label v-if="mapReady" class="map-live-toggle">
-              <input v-model="searchAsIMove" type="checkbox" class="map-live-checkbox" />
-              <span>{{ t('search.searchAsIMove') }}</span>
-            </label>
+            <!-- These three sit on top of the map, so they wait for it too.
+                 T113: "Pretraži ovo područje" follows the toggle on its line, or
+                 under it where the map is too narrow (it used to cover it). -->
+            <div v-if="mapReady" class="map-top-controls">
+              <label class="map-live-toggle">
+                <input v-model="searchAsIMove" type="checkbox" class="map-live-checkbox" />
+                <span>{{ t('search.searchAsIMove') }}</span>
+              </label>
 
-            <button v-if="mapMovedManually && !searchAsIMove" type="button" class="map-search-area-btn" @click="searchThisArea">
-              {{ t('search.searchThisArea') }}
-            </button>
+              <button v-if="mapMovedManually && !searchAsIMove" type="button" class="map-search-area-btn" @click="searchThisArea">
+                {{ t('search.searchThisArea') }}
+              </button>
+            </div>
 
             <!-- T113: on a phone it moves up over the listing card docked at the bottom. -->
             <button
@@ -1518,11 +1529,13 @@ useSeoMeta({ title: t('common.search') })
   min-width: 0;
 }
 
-// Figma: results 632 and map 552 of the 1216 content column.
+// Figma: results 632 and map 552 of the 1216 content column. T113: the grid's
+// [class*="col"] padding took 12 off each side (a 528 map, 319 on a phone).
 .search-map-col {
   flex: 0 0 552px;
   position: sticky;
   top: 120px;
+  padding: 0;
 }
 
 .results-header {
@@ -1640,11 +1653,27 @@ useSeoMeta({ title: t('common.search') })
   color: $color-text-muted;
 }
 
-.map-live-toggle {
+// T113: the toggle keeps its 16/16 corner (624:550); the button that searches
+// the area comes 8 after it, or wraps under it. Only the controls take clicks,
+// the strip between them leaves the map draggable.
+.map-top-controls {
   position: absolute;
   top: 16px;
   left: 16px;
+  right: 16px;
   z-index: $z-dropdown;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.map-top-controls > * {
+  pointer-events: auto;
+}
+
+.map-live-toggle {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -1683,11 +1712,6 @@ useSeoMeta({ title: t('common.search') })
 }
 
 .map-search-area-btn {
-  position: absolute;
-  top: 16px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: $z-dropdown;
   height: 34px;
   padding: 0 14px;
   border: none;
@@ -1708,6 +1732,41 @@ useSeoMeta({ title: t('common.search') })
   margin-bottom: 16px;
 }
 
+// T113 (Tamara, 2026-10-10): blue, outlined, across the column, 44 tall.
+.search-map-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  height: 44px;
+  margin: 0;
+  padding: 0 16px;
+  border: 1px solid $color-primary;
+  border-radius: $radius-button;
+  background: $color-surface;
+  color: $color-primary;
+  font-family: $font-family-base;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.search-map-toggle:hover {
+  background: $color-accent-tint;
+}
+
+.search-map-toggle:focus-visible {
+  outline: 2px solid rgba($color-primary, 0.35);
+  outline-offset: 2px;
+}
+
+.search-map-toggle-icon {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+}
+
 @include respond-below(lg) {
   .search-split {
     flex-direction: column;
@@ -1717,6 +1776,12 @@ useSeoMeta({ title: t('common.search') })
     flex: 1 1 auto;
     width: 100%;
     position: static;
+  }
+
+  // T113: with the cards hidden behind the map, the column kept only its
+  // header's width and the map button shrank with it.
+  .search-results {
+    width: 100%;
   }
 
   .search-map-frame {

@@ -61,6 +61,16 @@ let resizeObserver = null
 // that event would trigger another search, whose new results would call
 // fitBounds again, forever. Only a real user-driven move should emit.
 let suppressNextMoveEnd = false
+// T113 (Tamara, 2026-10-10): a phone shows the list first and keeps the map
+// hidden, and a hidden map has no size: Leaflet then fits the pins into
+// nothing and lands on their middle at the closest zoom, often with no pin in
+// sight. The fit waits until the map is shown. A map nobody has moved since
+// its last fit fits its pins again whenever its size changes ("Uvećaj mapu", a
+// turned phone, a resized window); a resize is never taken for the user's move
+// (it used to bring up "Pretraži ovo područje" the moment the map was opened).
+let fitPending = false
+let movedByUser = false
+let ignoreMoves = false
 
 // -- T113: one pill per point, the card of the clicked one ------------------
 
@@ -223,7 +233,10 @@ async function initMap() {
 
   // Zoom sits bottom-left: Dizajn 8 puts the "search as I move" control in
   // the map's top-left corner, where Leaflet's default zoom would cover it.
-  map = L.map(mapEl.value, { zoomControl: false }).setView([44.7866, 20.4489], 12) // Belgrade default
+  // T113: the ResizeObserver below follows every size change, the window's
+  // too, so Leaflet's own resize handling (a moveend 200ms later, read as the
+  // user's move) stays off.
+  map = L.map(mapEl.value, { zoomControl: false, trackResize: false }).setView([44.7866, 20.4489], 12) // Belgrade default
   L.control.zoom({ position: 'bottomleft' }).addTo(map)
   const tiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; OpenStreetMap contributors',
@@ -242,9 +255,14 @@ async function initMap() {
   // The map/list toggle hides this container with display:none on mobile
   // (R158), so Leaflet often initializes at zero size and never learns its
   // real dimensions afterwards — this catches every size change, including
-  // the hidden-to-visible one, and makes it recompute.
+  // the hidden-to-visible one, and makes it recompute. T113: then the pins
+  // that came while it was hidden are fitted, and an unmoved map refits.
   resizeObserver = new ResizeObserver(() => {
-    map?.invalidateSize()
+    if (!map) return
+    ignoreMoves = true
+    map.invalidateSize()
+    ignoreMoves = false
+    if (hasSize() && (fitPending || !movedByUser)) fitPins({ animate: false })
     startReadyFallback()
     if (selectedKey.value) placeCard()
   })
@@ -258,10 +276,12 @@ async function initMap() {
   })
 
   map.on('moveend', () => {
+    if (ignoreMoves) return
     if (suppressNextMoveEnd) {
       suppressNextMoveEnd = false
       return
     }
+    movedByUser = true
     const bounds = map.getBounds()
     emit('bounds-change', {
       north: bounds.getNorth(),
@@ -280,7 +300,6 @@ function renderMarkers() {
   if (!markersLayer) return
   markersLayer.clearLayers()
   markersByKey.clear()
-  const points = []
 
   for (const group of groups.value) {
     // Dizajn 8 — the map shows the price itself rather than a generic pin, so
@@ -292,7 +311,6 @@ function renderMarkers() {
     marker.on('click', () => selectGroup(group.key))
     marker.addTo(markersLayer)
     markersByKey.set(group.key, marker)
-    points.push([group.lat, group.lng])
   }
 
   // A new search keeps the card while its listing is still among the results.
@@ -305,11 +323,35 @@ function renderMarkers() {
     }
   }
 
-  if (points.length && map) {
-    suppressNextMoveEnd = true
-    map.fitBounds(points, { maxZoom: 14, padding: [24, 24] })
-  }
+  if (groups.value.length) fitPins()
+  else fitPending = false
   if (selectedKey.value) placeCard()
+}
+
+function hasSize() {
+  return Boolean(mapEl.value?.clientWidth && mapEl.value?.clientHeight)
+}
+
+// Every pin in view, once the map has a size to fit them into (T113). The fit
+// after a search animates as before; one on showing or resizing the map is
+// immediate, and its moves are the map's own.
+function fitPins({ animate } = {}) {
+  const points = groups.value.map((group) => [group.lat, group.lng])
+  if (!map || !points.length) return
+  if (!hasSize()) {
+    fitPending = true
+    return
+  }
+  fitPending = false
+  movedByUser = false
+  if (animate === false) {
+    ignoreMoves = true
+    map.fitBounds(points, { maxZoom: 14, padding: [24, 24], animate: false })
+    ignoreMoves = false
+    return
+  }
+  suppressNextMoveEnd = true
+  map.fitBounds(points, { maxZoom: 14, padding: [24, 24] })
 }
 
 watch(() => props.listings, renderMarkers)
