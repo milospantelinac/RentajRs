@@ -3,7 +3,7 @@
     <div class="container search-top">
       <!-- Dizajn 8 — one bar across the full 1216 content column: term,
            separator, city, primary action. -->
-      <form class="search-bar" @submit.prevent="runSearch">
+      <form class="search-bar" data-place-bounds @submit.prevent="runSearch">
         <div class="search-bar-term">
           <img src="/images/icons/search-line.svg" alt="" class="search-bar-icon" width="18" height="18" />
           <input
@@ -15,16 +15,20 @@
           />
         </div>
         <span class="search-bar-separator" aria-hidden="true" />
+        <!-- A dropdown by the button: its panel searches every settlement of
+             Serbia (T119) above a list of the towns to scroll through. -->
         <div class="search-bar-city" data-place-anchor>
-          <img src="/images/icons/pin-line.svg" alt="" class="search-bar-icon" width="18" height="18" />
-          <!-- T119: every settlement of Serbia, so the field searches as it is typed. -->
-          <LocationAutocomplete
+          <LocationSelect
             v-model="selectedPlace"
             class="search-bar-place"
             :placeholder="t('search.allCities')"
             :aria-label="t('search.cityLabel')"
             @update:model-value="onPlaceChange"
-          />
+          >
+            <template #icon>
+              <img src="/images/icons/pin-line.svg" alt="" class="search-bar-icon" width="18" height="18" />
+            </template>
+          </LocationSelect>
         </div>
         <button type="submit" class="search-bar-submit">{{ t('search.submit') }}</button>
       </form>
@@ -1117,24 +1121,22 @@ useSeoMeta({ title: t('common.search') })
 
 .search-bar-city {
   display: flex;
-  align-items: center;
-  gap: 11px;
   height: 52px;
-  padding: 0 16px 0 18px;
   flex-shrink: 0;
 }
 
-// The city reads as a chosen value, per Figma 158:194, "Svi gradovi" included
-// (T119: now the place field's placeholder).
+// The city reads as a chosen value, per Figma 158:194, "Svi gradovi" included,
+// and sits by the button as wide as its name. The whole cell opens the list.
 .search-bar-place {
-  width: 220px;
+  max-width: 280px;
   font-size: 15px;
   font-weight: 500;
   color: $color-text;
 }
 
-.search-bar-place :deep(.place-field-input::placeholder) {
-  color: $color-text;
+.search-bar-place :deep(.place-select-trigger) {
+  gap: 11px;
+  padding: 0 16px 0 18px;
 }
 
 .search-bar-submit {
@@ -1853,7 +1855,7 @@ useSeoMeta({ title: t('common.search') })
 
   .search-bar-place {
     flex: 1;
-    width: auto;
+    max-width: none;
   }
 
   .search-bar-submit {

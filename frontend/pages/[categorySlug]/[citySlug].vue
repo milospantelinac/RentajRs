@@ -5,7 +5,7 @@
       <NuxtLink :to="`/${category.slug}`">{{ category.name }}</NuxtLink> /
       {{ city.name }}
     </nav>
-    <h1 class="text-page-title mb-4">{{ category.name }} — {{ city.name }}</h1>
+    <h1 class="text-page-title mb-4">{{ category.name }} - {{ city.name }}</h1>
 
     <div v-if="results.length" class="row">
       <div v-for="listing in results" :key="listing.id" class="col-6 col-md-3 mb-4">
@@ -64,8 +64,8 @@ const results = computed(() => searchResponse.value?.results || [])
 const shouldIndex = computed(() => (searchResponse.value?.total || 0) >= (searchResponse.value?.indexThreshold ?? 3))
 
 useSeoMeta({
-  title: () => `${category.value?.name} — ${city.value?.name}`,
-  description: () => `${category.value?.name} u gradu ${city.value?.name} — Rentaj`,
+  title: () => `${category.value?.name} - ${city.value?.name}`,
+  description: () => `${category.value?.name} u gradu ${city.value?.name} - Rentaj`,
   robots: () => (shouldIndex.value ? 'index,follow' : 'noindex,follow'),
 })
 

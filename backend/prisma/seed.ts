@@ -131,7 +131,7 @@ async function seedPermissionsAndAdmin() {
 
 async function seedSettings() {
   const settings: Array<{ key: string; value: any; description: string }> = [
-    { key: 'search_result_counters_enabled', value: false, description: 'R44 — off in v1' },
+    { key: 'search_result_counters_enabled', value: false, description: 'R44 - off in v1' },
     // R114: set in Administracija > Istaknuti oglasi (common/utils/featured-rules.ts reads them).
     {
       key: 'featured_rules',
@@ -155,12 +155,12 @@ async function seedSettings() {
       description:
         "Leaders' program: an owner whose first listing went live by cutoffDate gets one free featured period of the given days (Administracija > Istaknuti oglasi)",
     },
-    { key: 'featured_listing_prices', value: { '7': 890, '15': 1590, '30': 2490 }, description: 'Ch.11.3 — istaknut oglas, cena po trajanju (RSD)' },
-    { key: 'auto_approve_listings', value: false, description: 'R119 — switch exists, off in v1' },
+    { key: 'featured_listing_prices', value: { '7': 890, '15': 1590, '30': 2490 }, description: 'Ch.11.3 - istaknut oglas, cena po trajanju (RSD)' },
+    { key: 'auto_approve_listings', value: false, description: 'R119 - switch exists, off in v1' },
     {
       key: 'ranking_weights',
       value: { rating: 0.35, freshness: 0.25, responseTime: 0.2, random: 0.2 },
-      description: 'R146 — search result ranking weights',
+      description: 'R146 - search result ranking weights',
     },
     { key: 'daily_new_conversation_limit', value: 10, description: 'R77' },
     { key: 'listing_index_threshold', value: 3, description: 'R135' },
@@ -181,13 +181,13 @@ async function seedSettings() {
     {
       key: 'admin_new_booking_notifications',
       value: true,
-      description: 'R182 — admin can turn off the "new booking" admin email once volume makes it noisy',
+      description: 'R182 - admin can turn off the "new booking" admin email once volume makes it noisy',
     },
     {
       key: 'homepage_video_url',
       value: null,
       description:
-        'Ch.18.3 — YouTube/Vimeo/direct video URL for the homepage "how it works" section; section is hidden entirely while this is empty',
+        'Ch.18.3 - YouTube/Vimeo/direct video URL for the homepage "how it works" section; section is hidden entirely while this is empty',
     },
     {
       key: 'homepage_video_thumbnail',
@@ -288,12 +288,12 @@ function opts(names: string[]): Array<{ key: string; name: string }> {
 }
 
 const AMENITIES_APARTMANI = opts([
-  'Bazen — spoljašnji', 'Bazen — unutrašnji', 'Đakuzi', 'Sauna', 'Bademantil', 'Fen za kosu', 'Kafe aparat',
+  'Bazen - spoljašnji', 'Bazen - unutrašnji', 'Đakuzi', 'Sauna', 'Bademantil', 'Fen za kosu', 'Kafe aparat',
   'Kamin', 'Klima', 'Kuhinja', 'Ledomat', 'Ležaljke', 'Lift', 'Mašina za veš', 'Parking', 'Pegla', 'Peškiri',
   'Posteljina', 'Privatni ulaz', 'Pušenje dozvoljeno', 'Roštilj', 'Terasa', 'TV', 'WiFi', 'Kućni ljubimci dozvoljeni',
 ]);
 const AMENITIES_KUCE = opts([
-  'Bazen — spoljašnji', 'Bazen — unutrašnji', 'Bio sauna', 'Đakuzi', 'Fen za kosu', 'Finska sauna',
+  'Bazen - spoljašnji', 'Bazen - unutrašnji', 'Bio sauna', 'Đakuzi', 'Fen za kosu', 'Finska sauna',
   'Igralište za decu', 'Kafe aparat', 'Kamin', 'Klima', 'Kuhinja', 'Ledomat', 'Ležaljke', 'Mašina za veš',
   'Ozvučenje', 'Parking', 'Pegla', 'Peškiri', 'Posteljina', 'Privatni ulaz', 'Pušenje dozvoljeno', 'Roštilj',
   'Sauna', 'Slana soba', 'Terasa', 'Tuš kabina', 'TV', 'WiFi', 'Kućni ljubimci dozvoljeni',
@@ -382,7 +382,7 @@ const CATEGORY_TREE: CategorySeed[] = [
       { key: 'ketering', name: 'Ketering', type: AttributeType.LIST, isFilter: true, filterType: FilterType.SELECT, options: opts(['Uključen', 'Sopstveni ketering dozvoljen', 'Po dogovoru', 'Nije dostupan']) },
       {
         key: 'sadrzaji', name: 'Sadržaji', type: AttributeType.CHECKBOX_GROUP, isFilter: true, filterType: FilterType.SELECT,
-        options: opts(['Bazen — spoljašnji', 'Bazen — unutrašnji', 'Đakuzi', 'Igralište za decu', 'Kafe aparat', 'Klima', 'Kuhinja', 'Kupatilo', 'Ledomat', 'Mikrofon', 'Ozvučenje', 'Parking', 'Privatni ulaz', 'Projektor', 'Pušenje dozvoljeno', 'Roštilj', 'Terasa', 'TV', 'WiFi']),
+        options: opts(['Bazen - spoljašnji', 'Bazen - unutrašnji', 'Đakuzi', 'Igralište za decu', 'Kafe aparat', 'Klima', 'Kuhinja', 'Kupatilo', 'Ledomat', 'Mikrofon', 'Ozvučenje', 'Parking', 'Privatni ulaz', 'Projektor', 'Pušenje dozvoljeno', 'Roštilj', 'Terasa', 'TV', 'WiFi']),
       },
     ],
     children: [

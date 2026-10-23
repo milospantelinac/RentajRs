@@ -57,7 +57,7 @@
           class="form-control form-select"
           @change="$emit('set-attr', attr.attributeIds, 'optionIds', $event.target.value ? [[$event.target.value]] : [])"
         >
-          <option value="">—</option>
+          <option value="">-</option>
           <option v-for="opt in attr.options" :key="opt.id" :value="opt.id">{{ opt.name }}</option>
         </select>
       </div>

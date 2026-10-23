@@ -47,6 +47,7 @@ interface PlaceEntry extends PlaceMatchFields {
 export class LocationsService {
   private index: { at: number; entries: PlaceEntry[] } | null = null;
   private building: Promise<PlaceEntry[]> | null = null;
+  private browseList: { of: PlaceEntry[]; items: Array<Record<string, unknown>> } | null = null;
 
   constructor(
     private prisma: PrismaService,
@@ -129,6 +130,24 @@ export class LocationsService {
         placeNameCollator.compare(a.entry.name, b.entry.name),
     );
     return scored.slice(0, limit).map(({ entry }) => entry.result);
+  }
+
+  /**
+   * The list a place dropdown offers before anything is typed, by name: every
+   * town (a municipality's seat or another urban settlement) and any other
+   * place that has live listings. Villages and parts of a city are left to
+   * the search. Built once per place list.
+   */
+  async browse() {
+    const entries = await this.getIndex();
+    if (this.browseList?.of !== entries) {
+      const items = entries
+        .filter((entry) => entry.type === 'city' && (entry.kindOrder > PLACE_KIND_ORDER.VILLAGE || entry.activeListings > 0))
+        .sort((a, b) => placeNameCollator.compare(a.name, b.name))
+        .map((entry) => entry.result);
+      this.browseList = { of: entries, items };
+    }
+    return this.browseList.items;
   }
 
   /** After an admin edit: every list and the search read the places again. */

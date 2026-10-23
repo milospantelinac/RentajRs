@@ -1126,6 +1126,13 @@ describe('BookingsService#getOne for the sent request (Dizajn 41)', () => {
 });
 
 describe('BookingsService#createRequest (T127, T117)', () => {
+  // The terms below are fixed dates, so the clock stands a week before the
+  // first of them; past that, every hour is refused as ALREADY_STARTED.
+  const NOW = new Date(Date.UTC(2026, 9, 5, 12));
+
+  beforeEach(() => jest.useFakeTimers({ now: NOW }));
+  afterEach(() => jest.useRealTimers());
+
   function requestService(listingOverrides: Record<string, unknown>, options: { children?: boolean; fits?: boolean; blockedDay?: boolean } = {}) {
     const listing = {
       id: 'l1',

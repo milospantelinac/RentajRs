@@ -44,7 +44,7 @@
         />
         <div v-for="review in profile.reviewsReceived" :key="review.id" class="mb-3 card">
           <div class="card-body-sm">
-            <p class="text-body">★ {{ review.rating }}/5 — {{ review.author?.firstName }}</p>
+            <p class="text-body">★ {{ review.rating }}/5 - {{ review.author?.firstName }}</p>
             <p class="text-muted">{{ review.comment }}</p>
             <p v-if="review.reply" class="text-muted owner-reply">↳ {{ review.reply.content }}</p>
             <template v-else-if="isOwnProfile">

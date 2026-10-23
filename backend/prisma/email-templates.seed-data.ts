@@ -84,13 +84,13 @@ export const emailTemplates: EmailTemplateSeed[] = [
     sr: {
       subject: 'Dvofaktorska autentikacija je isključena',
       heading: 'Dvofaktorska autentikacija je isključena',
-      bodyText: 'Pošto ste upravo resetovali lozinku, dvofaktorska autentikacija na vašem nalogu je isključena — tako se rešava zaključavanje kada izgubite pristup aplikaciji za kodove. Ako ste administrator, moraćete da je ponovo podesite pri sledećoj prijavi. Ako niste vi zatražili resetovanje lozinke, odmah kontaktirajte podršku.',
+      bodyText: 'Pošto ste upravo resetovali lozinku, dvofaktorska autentikacija na vašem nalogu je isključena - tako se rešava zaključavanje kada izgubite pristup aplikaciji za kodove. Ako ste administrator, moraćete da je ponovo podesite pri sledećoj prijavi. Ako niste vi zatražili resetovanje lozinke, odmah kontaktirajte podršku.',
       buttonLabel: 'Otvori nalog',
     },
     en: {
       subject: 'Two-factor authentication has been turned off',
       heading: 'Two-factor authentication has been turned off',
-      bodyText: 'Since you just reset your password, two-factor authentication on your account has been turned off — that\'s how a lockout from your authenticator app gets resolved. If you\'re an admin, you\'ll need to set it up again on your next login. If you didn\'t request this password reset, contact support immediately.',
+      bodyText: 'Since you just reset your password, two-factor authentication on your account has been turned off - that\'s how a lockout from your authenticator app gets resolved. If you\'re an admin, you\'ll need to set it up again on your next login. If you didn\'t request this password reset, contact support immediately.',
       buttonLabel: 'Open account',
     },
   },
@@ -260,13 +260,13 @@ export const emailTemplates: EmailTemplateSeed[] = [
   {
     key: 'booking_requested_guest',
     sr: {
-      subject: 'Zahtev je poslat — čekate odgovor',
+      subject: 'Zahtev je poslat - čekate odgovor',
       heading: 'Zahtev za "{oglas}" je poslat',
       bodyText: 'Vaš zahtev za rezervaciju je poslat vlasniku. Obavestićemo vas čim odgovori.',
       buttonLabel: 'Pogledaj zahtev',
     },
     en: {
-      subject: 'Request sent — awaiting a reply',
+      subject: 'Request sent - awaiting a reply',
       heading: 'Your request for "{oglas}" was sent',
       bodyText: 'Your booking request has been sent to the owner. We’ll notify you as soon as they respond.',
       buttonLabel: 'View request',
@@ -290,14 +290,14 @@ export const emailTemplates: EmailTemplateSeed[] = [
   {
     key: 'booking_request_unopened_reminder',
     sr: {
-      subject: 'Gost čeka odgovor — {oglas}',
+      subject: 'Gost čeka odgovor - {oglas}',
       heading: 'Gost i dalje čeka odgovor',
       bodyText:
         'Prošlo je 6 časova otkako je stigao zahtev za "{oglas}", a još uvek niste odgovorili. Brz odgovor povećava šansu da rezervacija bude potvrđena. Ako ne odgovorite do {rok}, zahtev ističe i termin se oslobađa.',
       buttonLabel: 'Odgovori',
     },
     en: {
-      subject: 'Guest is waiting — {oglas}',
+      subject: 'Guest is waiting - {oglas}',
       heading: 'A guest is still waiting for a reply',
       bodyText:
         'It’s been 6 hours since a request came in for "{oglas}" and you haven’t responded yet. A quick reply improves your odds of confirming the booking. If you don’t respond by {rok}, the request expires and the term is released.',
@@ -325,14 +325,14 @@ export const emailTemplates: EmailTemplateSeed[] = [
       subject: 'Uplatite {iznos} da potvrdite rezervaciju',
       heading: 'Uplatite {iznos} da potvrdite rezervaciju',
       bodyText:
-        'Vaš zahtev za "{oglas}" je prihvaćen. Uplatite {iznos} do {rok} da potvrdite rezervaciju — u suprotnom termin se automatski oslobađa. Uplata ide direktno vlasniku; Rentaj ne posreduje u plaćanju i nema pristup vašim sredstvima.',
+        'Vaš zahtev za "{oglas}" je prihvaćen. Uplatite {iznos} do {rok} da potvrdite rezervaciju - u suprotnom termin se automatski oslobađa. Uplata ide direktno vlasniku; Rentaj ne posreduje u plaćanju i nema pristup vašim sredstvima.',
       buttonLabel: 'Otvori uputstvo',
     },
     en: {
       subject: 'Pay {iznos} to confirm your booking',
       heading: 'Pay {iznos} to confirm your booking',
       bodyText:
-        'Your request for "{oglas}" was accepted. Pay {iznos} by {rok} to confirm the booking — otherwise the term is automatically released. Payment goes directly to the owner; Rentaj never mediates payment and has no access to your funds.',
+        'Your request for "{oglas}" was accepted. Pay {iznos} by {rok} to confirm the booking - otherwise the term is automatically released. Payment goes directly to the owner; Rentaj never mediates payment and has no access to your funds.',
       buttonLabel: 'Open instructions',
     },
   },
@@ -659,13 +659,13 @@ export const emailTemplates: EmailTemplateSeed[] = [
   {
     key: 'new_message',
     sr: {
-      subject: 'Nova poruka — {oglas}',
+      subject: 'Nova poruka - {oglas}',
       heading: 'Nova poruka o "{oglas}"',
       bodyText: 'Dobili ste novu poruku. Odgovorite što pre da ne biste propustili priliku.',
       buttonLabel: 'Pogledaj poruku',
     },
     en: {
-      subject: 'New message — {oglas}',
+      subject: 'New message - {oglas}',
       heading: 'New message about "{oglas}"',
       bodyText: 'You’ve received a new message. Reply promptly so you don’t miss the opportunity.',
       buttonLabel: 'View message',
@@ -912,26 +912,26 @@ export const emailTemplates: EmailTemplateSeed[] = [
     sr: {
       subject: 'Hitno: {oglas} ima više prijava',
       heading: 'Oglas je dostigao prag za prioritetnu proveru',
-      bodyText: 'Oglas "{oglas}" je prijavljen {broj} puta — dostignut je prag za prioritetnu proveru (R144).',
+      bodyText: 'Oglas "{oglas}" je prijavljen {broj} puta - dostignut je prag za prioritetnu proveru (R144).',
       buttonLabel: 'Pregledaj prijave',
     },
     en: {
       subject: 'Urgent: {oglas} has multiple reports',
       heading: 'A listing crossed the priority-review threshold',
-      bodyText: '"{oglas}" has been reported {broj} times — this crosses the priority-review threshold (R144).',
+      bodyText: '"{oglas}" has been reported {broj} times - this crosses the priority-review threshold (R144).',
       buttonLabel: 'Review reports',
     },
   },
   {
     key: 'admin_payment_disputed',
     sr: {
-      subject: 'Spor oko uplate — {oglas}',
+      subject: 'Spor oko uplate - {oglas}',
       heading: 'Prijavljen je spor oko uplate',
       bodyText: 'Gost je prijavio da je uplatu poslao, ali vlasnik nije potvrdio prijem za "{oglas}".',
       buttonLabel: 'Pregledaj spor',
     },
     en: {
-      subject: 'Payment dispute — {oglas}',
+      subject: 'Payment dispute - {oglas}',
       heading: 'A payment dispute was filed',
       bodyText: 'A guest reported sending payment that the owner hasn’t confirmed for "{oglas}".',
       buttonLabel: 'Review dispute',
@@ -940,13 +940,13 @@ export const emailTemplates: EmailTemplateSeed[] = [
   {
     key: 'admin_no_show_disputed',
     sr: {
-      subject: 'Osporena oznaka nedolaska — {oglas}',
+      subject: 'Osporena oznaka nedolaska - {oglas}',
       heading: 'Oznaka nedolaska je osporena',
       bodyText: 'Gost je osporio oznaku "nije se pojavio" za rezervaciju "{oglas}".',
       buttonLabel: 'Pregledaj spor',
     },
     en: {
-      subject: 'Disputed no-show — {oglas}',
+      subject: 'Disputed no-show - {oglas}',
       heading: 'A no-show mark was disputed',
       bodyText: 'A guest disputed the "no-show" mark on the "{oglas}" booking.',
       buttonLabel: 'Review dispute',
@@ -955,13 +955,13 @@ export const emailTemplates: EmailTemplateSeed[] = [
   {
     key: 'admin_new_booking',
     sr: {
-      subject: 'Novi zahtev za rezervaciju — {oglas}',
+      subject: 'Novi zahtev za rezervaciju - {oglas}',
       heading: 'Poslat je novi zahtev za rezervaciju',
       bodyText: 'Poslat je novi zahtev za rezervaciju za "{oglas}". Ovo obaveštenje možete isključiti u podešavanjima.',
       buttonLabel: 'Pogledaj zahtev',
     },
     en: {
-      subject: 'New booking request — {oglas}',
+      subject: 'New booking request - {oglas}',
       heading: 'A new booking request was submitted',
       bodyText: 'A new booking request was submitted for "{oglas}". You can turn this notification off in settings.',
       buttonLabel: 'View request',
@@ -1025,14 +1025,14 @@ export const emailTemplates: EmailTemplateSeed[] = [
       subject: 'Potvrdite brisanje naloga',
       heading: 'Potvrdite brisanje naloga',
       bodyText:
-        'Zatražili ste brisanje svog Rentaj naloga. Ova radnja je trajna. Ako ste sigurni, potvrdite ispod — link važi 1 čas. Ako niste vi zatražili ovo, ignorišite ovu poruku.',
+        'Zatražili ste brisanje svog Rentaj naloga. Ova radnja je trajna. Ako ste sigurni, potvrdite ispod - link važi 1 čas. Ako niste vi zatražili ovo, ignorišite ovu poruku.',
       buttonLabel: 'Potvrdi brisanje',
     },
     en: {
       subject: 'Confirm account deletion',
       heading: 'Confirm account deletion',
       bodyText:
-        'You requested deletion of your Rentaj account. This action is permanent. If you’re sure, confirm below — the link is valid for 1 hour. If you didn’t request this, ignore this email.',
+        'You requested deletion of your Rentaj account. This action is permanent. If you’re sure, confirm below - the link is valid for 1 hour. If you didn’t request this, ignore this email.',
       buttonLabel: 'Confirm deletion',
     },
   },

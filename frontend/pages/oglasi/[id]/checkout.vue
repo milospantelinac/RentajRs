@@ -62,7 +62,7 @@
           <h2 class="checkout-card-title">{{ t('billing.yourOrder') }}</h2>
 
           <div class="checkout-item">
-            <span class="checkout-item-name">{{ pkg.key }} — {{ cycle === 'YEARLY' ? t('billing.yearly') : t('billing.monthly') }}</span>
+            <span class="checkout-item-name">{{ pkg.key }} - {{ cycle === 'YEARLY' ? t('billing.yearly') : t('billing.monthly') }}</span>
             <span class="checkout-item-price">{{ formatPrice(priceForCycle) }}</span>
           </div>
 

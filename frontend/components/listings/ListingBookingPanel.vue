@@ -133,7 +133,7 @@
             :class="{ 'booking-panel-slot-active': definedSlotId === slot.id }"
             @click="pickSlot(slot)"
           >
-            <span>{{ formatDateTime(slot.startsAt) }} — {{ formatDateTime(slot.endsAt) }}</span>
+            <span>{{ formatDateTime(slot.startsAt) }} - {{ formatDateTime(slot.endsAt) }}</span>
             <!-- T138: a hall priced per guest says so under every slot's price. -->
             <span class="booking-panel-slot-price">
               {{ formatPrice(slot.price ?? listing.price) }}
@@ -487,7 +487,7 @@ function formatPrice(value) {
 const startLabel = computed(() => formatShortDate(startsAt.value))
 const endLabel = computed(() => formatShortDate(endsAt.value))
 const slotLabel = computed(() =>
-  selectedSlot.value ? `${formatDateTime(selectedSlot.value.startsAt)} — ${formatDateTime(selectedSlot.value.endsAt)}` : '',
+  selectedSlot.value ? `${formatDateTime(selectedSlot.value.startsAt)} - ${formatDateTime(selectedSlot.value.endsAt)}` : '',
 )
 const guestLabel = computed(
   () => `${guestCount.value} ${t(`booking.guestNoun${srPluralCategory(guestCount.value)}`)}`,

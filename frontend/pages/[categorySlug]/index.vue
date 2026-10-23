@@ -96,7 +96,7 @@ const shouldIndex = computed(() => (searchResponse.value?.total || 0) >= (search
 
 useSeoMeta({
   title: () => category.value?.name,
-  description: () => category.value?.description?.slice(0, 160) || `${category.value?.name} — Rentaj`,
+  description: () => category.value?.description?.slice(0, 160) || `${category.value?.name} - Rentaj`,
   robots: () => (shouldIndex.value ? 'index,follow' : 'noindex,follow'),
 })
 

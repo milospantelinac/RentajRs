@@ -5,7 +5,7 @@
         <BackLink :fallback="`/oglasi/${route.params.slug}`" class="mb-3" />
         <h1 class="text-page-title mb-1">{{ t('listing.contactOwner') }}</h1>
         <p class="text-muted mb-4">
-          {{ t('listing.messageAboutListing') }} <strong>{{ listing.title }}</strong> —
+          {{ t('listing.messageAboutListing') }} <strong>{{ listing.title }}</strong> -
           {{ ownerName }}
         </p>
         <div class="card">

@@ -103,6 +103,18 @@ describe('place search (T119)', () => {
     expect((await service.search('')).map((place: any) => place.id)).toEqual(['c-bg', 'c-surduk']);
   });
 
+  it('lists the towns and the places with listings by name, without the villages and the parts of a city', async () => {
+    const { service, prisma } = locationsWith(CITIES, undefined, { 'c-surduk': 1 });
+    const list = await service.browse();
+    expect(list.map((place: any) => place.id)).toEqual(['c-bg', 'c-bor', 'c-borca', 'c-sp', 'c-surduk']);
+    expect(list[0]).toMatchObject({ type: 'city', slug: 'beograd', region: { id: 'r-bg', name: 'Beograd' } });
+    // The same list again, until the places are read anew.
+    expect(await service.browse()).toBe(list);
+    await service.invalidate();
+    expect(await service.browse()).not.toBe(list);
+    expect(prisma.city.findMany).toHaveBeenCalledTimes(2);
+  });
+
   it('builds the list once and again after an admin edit', async () => {
     const { service, prisma } = locationsWith();
     await service.search('bor');

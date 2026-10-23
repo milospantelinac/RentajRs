@@ -24,5 +24,5 @@ const { data: reviews } = await useAsyncData(`listing-preview-reviews-${route.pa
   api.get(`/listings/${route.params.id}/reviews`),
 )
 
-useSeoMeta({ title: () => `${t('listing.previewBanner')} — ${listing.value?.title}` })
+useSeoMeta({ title: () => `${t('listing.previewBanner')} - ${listing.value?.title}` })
 </script>

@@ -838,7 +838,7 @@ const searchLink = computed(() => {
 })
 
 useSeoMeta({
-  title: 'Rentaj — Oglasi. Rezervacije. Jedno mesto.',
+  title: 'Rentaj - Oglasi. Rezervacije. Jedno mesto.',
   description: 'Rentaj je platforma koja spaja oglasnik i rezervacioni sistem, bez provizije.',
   ogTitle: 'Rentaj',
   ogDescription: 'Rentaj je platforma koja spaja oglasnik i rezervacioni sistem, bez provizije.',

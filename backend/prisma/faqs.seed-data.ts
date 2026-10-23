@@ -26,12 +26,12 @@ export const faqs: FaqSeed[] = [
     sr: {
       question: 'Da li Rentaj naplaćuje proviziju?',
       answer:
-        'Ne. Rentaj ne uzima proviziju po rezervaciji — prihod ostvarujemo isključivo kroz mesečnu ili godišnju pretplatu vlasnika. Sav novac od rezervacije ide direktno vama.',
+        'Ne. Rentaj ne uzima proviziju po rezervaciji - prihod ostvarujemo isključivo kroz mesečnu ili godišnju pretplatu vlasnika. Sav novac od rezervacije ide direktno vama.',
     },
     en: {
       question: 'Does Rentaj charge a commission?',
       answer:
-        "No. Rentaj doesn't take a commission per booking — our revenue comes exclusively from the owner's monthly or yearly subscription. All the money from a booking goes directly to you.",
+        "No. Rentaj doesn't take a commission per booking - our revenue comes exclusively from the owner's monthly or yearly subscription. All the money from a booking goes directly to you.",
     },
   },
   {
@@ -60,12 +60,12 @@ export const faqs: FaqSeed[] = [
     sr: {
       question: 'Koje vrste rezervacija mogu da koristim?',
       answer:
-        'Možete primati direktne rezervacije, rezervacije po boravku ili po terminu, sa ili bez ugrađenog rezervacionog sistema — u zavisnosti od vaših potreba.',
+        'Možete primati direktne rezervacije, rezervacije po boravku ili po terminu, sa ili bez ugrađenog rezervacionog sistema - u zavisnosti od vaših potreba.',
     },
     en: {
       question: 'What kinds of bookings can I use?',
       answer:
-        "You can accept direct booking requests, stay-based or slot-based bookings, with or without the built-in booking system — depending on your needs.",
+        "You can accept direct booking requests, stay-based or slot-based bookings, with or without the built-in booking system - depending on your needs.",
     },
   },
   {

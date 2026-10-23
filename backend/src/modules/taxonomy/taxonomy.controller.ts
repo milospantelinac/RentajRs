@@ -85,6 +85,13 @@ export class TaxonomyController {
     });
   }
 
+  /** The towns, and the other places with listings, by name: the place dropdown's list before anything is typed. */
+  @Public()
+  @Get('locations/browse')
+  browsePlaces() {
+    return this.locations.browse();
+  }
+
   /** T119: one place by its id or slug (a city page, a search opened from a link). */
   @Public()
   @Get('locations/cities/:key')

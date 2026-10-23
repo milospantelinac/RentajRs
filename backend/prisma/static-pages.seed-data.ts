@@ -17,28 +17,28 @@ export const staticPages: StaticPageSeed[] = [
     sr: {
       title: 'O nama',
       bodyHtml: `
-<p class="lead-paragraph">Rentaj spaja oglasnik i rezervacioni sistem na jednom mestu. Vlasnik objavljuje ono što izdaje — stan, salu, igraonicu, vozilo, mašinu, magacin ili opremu — i prima rezervacije direktno, bez posrednika i bez provizije.</p>
+<p class="lead-paragraph">Rentaj spaja oglasnik i rezervacioni sistem na jednom mestu. Vlasnik objavljuje ono što izdaje - stan, salu, igraonicu, vozilo, mašinu, magacin ili opremu - i prima rezervacije direktno, bez posrednika i bez provizije.</p>
 <h2>Zašto smo napravili Rentaj</h2>
-<p>Vlasnici koji izdaju jedan do nekoliko objekata najčešće biraju između oglasnika bez alata za rezervisanje i platformi koje uzimaju procenat od svake rezervacije. Rentaj radi drugačije: plaćate jednu fiksnu pretplatu za oglas, a rezervacioni sistem — kalendar, potvrda uplate, iCal sinhronizacija, poruke sa gostima — dolazi uz njega.</p>
+<p>Vlasnici koji izdaju jedan do nekoliko objekata najčešće biraju između oglasnika bez alata za rezervisanje i platformi koje uzimaju procenat od svake rezervacije. Rentaj radi drugačije: plaćate jednu fiksnu pretplatu za oglas, a rezervacioni sistem - kalendar, potvrda uplate, iCal sinhronizacija, poruke sa gostima - dolazi uz njega.</p>
 <h2>Kako zarađujemo</h2>
-<p>Isključivo od pretplate koju plaća vlasnik oglasa. Rentaj nikada ne uzima procenat od rezervacije i nikada ne dodiruje novac gosta — gost plaća vlasnika direktno, kešom ili uplatom na tekući račun. To je razlog zašto poruka „0% provizije" nešto zaista znači, a ne samo marketinški slogan.</p>
+<p>Isključivo od pretplate koju plaća vlasnik oglasa. Rentaj nikada ne uzima procenat od rezervacije i nikada ne dodiruje novac gosta - gost plaća vlasnika direktno, kešom ili uplatom na tekući račun. To je razlog zašto poruka „0% provizije" nešto zaista znači, a ne samo marketinški slogan.</p>
 <h2>Za koga je Rentaj</h2>
-<p>Prvenstveno za vlasnike koji izdaju jedan do četiri objekta — apartman, vozilo, salu za proslave, igraonicu, mašinu ili magacin — i za goste koji traže overen, pregledan način da ih pronađu i rezervišu.</p>
+<p>Prvenstveno za vlasnike koji izdaju jedan do četiri objekta - apartman, vozilo, salu za proslave, igraonicu, mašinu ili magacin - i za goste koji traže overen, pregledan način da ih pronađu i rezervišu.</p>
 <h2>Kontakt</h2>
-<p>Pišite nam na <a href="mailto:podrska@rentaj.rs">podrska@rentaj.rs</a> — rado čujemo pitanja, predloge i prijave problema.</p>`.trim(),
+<p>Pišite nam na <a href="mailto:podrska@rentaj.rs">podrska@rentaj.rs</a> - rado čujemo pitanja, predloge i prijave problema.</p>`.trim(),
     },
     en: {
       title: 'About us',
       bodyHtml: `
-<p class="lead-paragraph">Rentaj combines a listings marketplace and a booking system in one place. Owners publish what they rent out — an apartment, a venue, a playroom, a vehicle, machinery, a warehouse, or equipment — and receive bookings directly, with no middleman and no commission.</p>
+<p class="lead-paragraph">Rentaj combines a listings marketplace and a booking system in one place. Owners publish what they rent out - an apartment, a venue, a playroom, a vehicle, machinery, a warehouse, or equipment - and receive bookings directly, with no middleman and no commission.</p>
 <h2>Why we built Rentaj</h2>
-<p>Owners renting out one to a few properties usually have to choose between a listings site with no booking tools, or a platform that takes a cut of every booking. Rentaj works differently: you pay one fixed subscription per listing, and the booking system — calendar, payment confirmation, iCal sync, guest messaging — comes with it.</p>
+<p>Owners renting out one to a few properties usually have to choose between a listings site with no booking tools, or a platform that takes a cut of every booking. Rentaj works differently: you pay one fixed subscription per listing, and the booking system - calendar, payment confirmation, iCal sync, guest messaging - comes with it.</p>
 <h2>How we make money</h2>
-<p>Exclusively from the subscription the listing owner pays. Rentaj never takes a percentage of a booking and never touches the guest's money — the guest pays the owner directly, in cash or by bank transfer. That's why "0% commission" actually means something here, not just a marketing line.</p>
+<p>Exclusively from the subscription the listing owner pays. Rentaj never takes a percentage of a booking and never touches the guest's money - the guest pays the owner directly, in cash or by bank transfer. That's why "0% commission" actually means something here, not just a marketing line.</p>
 <h2>Who Rentaj is for</h2>
-<p>Primarily for owners renting out one to four properties — an apartment, a vehicle, an event venue, a playroom, machinery, or a warehouse — and for guests looking for a vetted, easy way to find and book them.</p>
+<p>Primarily for owners renting out one to four properties - an apartment, a vehicle, an event venue, a playroom, machinery, or a warehouse - and for guests looking for a vetted, easy way to find and book them.</p>
 <h2>Contact</h2>
-<p>Write to us at <a href="mailto:podrska@rentaj.rs">podrska@rentaj.rs</a> — we're happy to hear questions, suggestions, and problem reports.</p>`.trim(),
+<p>Write to us at <a href="mailto:podrska@rentaj.rs">podrska@rentaj.rs</a> - we're happy to hear questions, suggestions, and problem reports.</p>`.trim(),
     },
   },
   {
@@ -198,7 +198,7 @@ export const staticPages: StaticPageSeed[] = [
 <p>The rentaj.rs platform allows service users to book a property (properties) and other services advertised by advertisers, in accordance with these General Terms. Payments for booking and rental services are made directly to the advertiser's account stated in the advertiser's registration application, and there is also the option of cash payment, which the advertiser may specify as a payment method.</p>
 <p>The rentaj.rs platform does not assume responsibility for processing payments or for the accuracy of information entered by the advertiser, nor does it guarantee advertisers that payment will be made by the user.</p>
 <p>The rentaj.rs platform does not charge a commission on rentals and has no insight into the financial transactions between advertisers and third parties.</p>
-<p>All payments will be made in the local currency of the Republic of Serbia — the dinar (RSD). For informational display of prices in other currencies, the National Bank of Serbia's median exchange rate is used. The amount charged to your payment card will be expressed in your local currency through conversion at the exchange rate used by the card organizations, which we cannot know at the time of the transaction. As a result of this conversion, there may be a slight difference between the original price stated on our website and the one shown on your card statement.</p>
+<p>All payments will be made in the local currency of the Republic of Serbia - the dinar (RSD). For informational display of prices in other currencies, the National Bank of Serbia's median exchange rate is used. The amount charged to your payment card will be expressed in your local currency through conversion at the exchange rate used by the card organizations, which we cannot know at the time of the transaction. As a result of this conversion, there may be a slight difference between the original price stated on our website and the one shown on your card statement.</p>
 <p><em>Note: Rentaj.rs is not registered for VAT, so listing prices are stated without VAT.</em></p>
 <h2>Fulfillment of the service</h2>
 <p>After a purchase is completed and payment is successfully authorized, a confirmation of service fulfillment is sent to the buyer's registered email address. The service is considered fulfilled at the moment this confirmation is sent.</p>
