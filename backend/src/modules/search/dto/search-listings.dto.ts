@@ -2,6 +2,7 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { PriceUnit } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   IsArray,
   IsBoolean,
   IsEnum,
@@ -12,6 +13,7 @@ import {
   IsString,
   IsUUID,
   Max,
+  MaxLength,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -172,6 +174,19 @@ export class SearchListingsDto {
   @Min(1)
   @Max(50)
   pageSize?: number;
+
+  @ApiPropertyOptional({ description: 'R146: the seed the first page answered with; the next pages send it back for the same order' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  seed?: string;
+
+  @ApiPropertyOptional({ type: [String], description: 'T129: the featured ids the first page put on top; the next pages leave them out' })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @IsUUID('4', { each: true })
+  featuredIds?: string[];
 }
 
 export class RelaxedSearchNotifyDto {

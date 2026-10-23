@@ -35,6 +35,7 @@ const NAV_ICON_FALLBACKS = {
   users: 'users',
   payments: 'credit-card',
   storage: 'hard-drive',
+  featured: 'star',
   content: 'file-lines',
   emails: 'envelope',
   settings: 'gear',

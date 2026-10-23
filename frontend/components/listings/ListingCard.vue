@@ -1,5 +1,5 @@
 <template>
-  <NuxtLink :to="`/oglasi/${listing.slug}`" class="listing-card">
+  <NuxtLink :to="`/oglasi/${listing.slug}`" class="listing-card" @click="countFeaturedOpen">
     <div class="listing-card-media">
       <!-- T143: the browser takes the width the card needs from the photo's sizes. -->
       <img
@@ -15,7 +15,19 @@
       <div v-else class="listing-card-image listing-card-image-placeholder" />
       <div class="listing-card-scrim" aria-hidden="true" />
 
-      <span v-if="listing.category?.name" class="listing-card-category-pill">{{ listing.category.name }}</span>
+      <!-- T129: a featured listing says so before its category, wherever it shows. -->
+      <div v-if="listing.featured || listing.category?.name" class="listing-card-pills">
+        <span v-if="listing.featured" class="listing-card-featured-pill">
+          <svg viewBox="0 0 12 12" class="listing-card-featured-star" aria-hidden="true">
+            <path
+              d="M6 0.9l1.55 3.14 3.46.5-2.5 2.44.59 3.45L6 8.8l-3.1 1.63.59-3.45L1 4.54l3.46-.5L6 .9z"
+              fill="currentColor"
+            />
+          </svg>
+          {{ t('listing.featuredBadge') }}
+        </span>
+        <span v-if="listing.category?.name" class="listing-card-category-pill">{{ listing.category.name }}</span>
+      </div>
 
       <button
         type="button"
@@ -126,6 +138,18 @@ const keyFacts = computed(() => getCardKeyFacts(props.listing))
 // Dizajn 3: "/ noć", "/ danu", "/ terminu", "/ satu", from utils/listingPrice.js.
 const priceUnitSuffix = computed(() => getCardPriceUnitSuffix(props.listing.priceUnit, t))
 const priceText = computed(() => formatListingPrice(props.listing, t))
+
+// T129: how often a featured card is opened goes into its numbers (admin and
+// owner). A beacon outlives the page change and needs no answer.
+const apiBase = useRuntimeConfig().public.apiBase
+function countFeaturedOpen() {
+  if (!props.listing.featured || typeof navigator === 'undefined' || !navigator.sendBeacon) return
+  try {
+    navigator.sendBeacon(`${apiBase}/featured/${props.listing.id}/click`)
+  } catch {
+    // A lost count is no reason to stop the visitor.
+  }
+}
 </script>
 
 <style lang="scss" scoped>
@@ -175,21 +199,57 @@ $listing-card-saved: #f43f5e;
   pointer-events: none;
 }
 
-// 626:516: a fixed 22 tall pill with the name centred in it.
-.listing-card-category-pill {
+// The pills sit where 626:516 puts the category pill, and stop short of the
+// favourite button (14 + 36 + 14 from the right edge).
+.listing-card-pills {
   position: absolute;
   top: 14px;
   left: 14px;
+  right: 64px;
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+
+// 626:516: a fixed 22 tall pill with the name centred in it.
+.listing-card-category-pill {
   display: flex;
   align-items: center;
+  min-width: 0;
   height: 22px;
   padding: 0 11px;
   border-radius: $radius-pill;
   background: rgba($color-background, 0.7);
   color: $color-text;
   font-size: 10px;
+  line-height: 22px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+// T129 "Istaknuto": no Figma frame yet, so it borrows the category pill's
+// shape in the brand blue, with a small star.
+.listing-card-featured-pill {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 10px 0 8px;
+  border-radius: $radius-pill;
+  background: $color-primary;
+  color: $color-surface;
+  font-size: 10px;
+  font-weight: 500;
   line-height: normal;
   white-space: nowrap;
+}
+
+.listing-card-featured-star {
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
 }
 
 .listing-card-favorite-btn {

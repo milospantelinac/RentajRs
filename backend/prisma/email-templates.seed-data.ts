@@ -1048,4 +1048,101 @@ export const emailTemplates: EmailTemplateSeed[] = [
       buttonLabel: 'View listing',
     },
   },
+  // -- Istaknuti oglasi / Featured listings (T129) ----------------------------
+  {
+    key: 'featured_started',
+    sr: {
+      subject: 'Vaš oglas je istaknut: {oglas}',
+      heading: 'Vaš oglas je istaknut',
+      bodyText:
+        'Oglas "{oglas}" je istaknut do {datum}. Istaknuti oglasi se smenjuju na početnoj strani i pri vrhu pretrage, svi podjednako. Koliko puta je prikazan i otvoren vidite u Mojim oglasima.',
+      buttonLabel: 'Moji oglasi',
+    },
+    en: {
+      subject: 'Your listing is featured: {oglas}',
+      heading: 'Your listing is featured',
+      bodyText:
+        '"{oglas}" is featured until {datum}. Featured listings take turns on the home page and at the top of search, all equally. You can see how often it was shown and opened in My listings.',
+      buttonLabel: 'My listings',
+    },
+  },
+  {
+    key: 'featured_waiting',
+    sr: {
+      subject: 'Oglas čeka mesto za isticanje: {oglas}',
+      heading: 'Oglas čeka slobodno mesto',
+      bodyText:
+        'Sva mesta za istaknute oglase u kategoriji {kategorija} su trenutno zauzeta. Oglas "{oglas}" je na listi čekanja i biće istaknut čim se mesto oslobodi. Javićemo vam.',
+      buttonLabel: 'Moji oglasi',
+    },
+    en: {
+      subject: 'Your listing waits for a featured place: {oglas}',
+      heading: 'Your listing waits for a free place',
+      bodyText:
+        'Every featured place in {kategorija} is taken at the moment. "{oglas}" is on the waiting list and will be featured as soon as a place frees up. We will let you know.',
+      buttonLabel: 'My listings',
+    },
+  },
+  {
+    key: 'featured_ending_soon',
+    sr: {
+      subject: 'Isticanje oglasa ističe {datum}',
+      heading: 'Isticanje uskoro ističe',
+      bodyText: 'Oglas "{oglas}" je istaknut do {datum}. Posle toga ostaje u pretrazi kao i ostali oglasi.',
+      buttonLabel: 'Moji oglasi',
+    },
+    en: {
+      subject: 'Featuring ends on {datum}',
+      heading: 'Featuring ends soon',
+      bodyText: '"{oglas}" is featured until {datum}. After that it stays in search like every other listing.',
+      buttonLabel: 'My listings',
+    },
+  },
+  {
+    key: 'featured_ended',
+    sr: {
+      subject: 'Isticanje oglasa je završeno: {oglas}',
+      heading: 'Isticanje je završeno',
+      bodyText:
+        'Oglas "{oglas}" više nije istaknut. Ostaje u pretrazi kao i ostali oglasi. Ako želite da ga ponovo istaknete, pošaljite zahtev iz Mojih oglasa.',
+      buttonLabel: 'Moji oglasi',
+    },
+    en: {
+      subject: 'Featuring has ended: {oglas}',
+      heading: 'Featuring has ended',
+      bodyText:
+        '"{oglas}" is no longer featured. It stays in search like every other listing. To feature it again, send a request from My listings.',
+      buttonLabel: 'My listings',
+    },
+  },
+  {
+    key: 'featured_request_rejected',
+    sr: {
+      subject: 'Zahtev za isticanje nije prihvaćen: {oglas}',
+      heading: 'Zahtev za isticanje nije prihvaćen',
+      bodyText: 'Zahtev da oglas "{oglas}" bude istaknut nije prihvaćen. Razlog: {razlog}',
+      buttonLabel: 'Moji oglasi',
+    },
+    en: {
+      subject: 'Featuring request declined: {oglas}',
+      heading: 'Featuring request declined',
+      bodyText: 'The request to feature "{oglas}" was declined. Reason: {razlog}',
+      buttonLabel: 'My listings',
+    },
+  },
+  {
+    key: 'admin_featured_request',
+    sr: {
+      subject: 'Zahtev za isticanje: {oglas}',
+      heading: 'Stigao je zahtev za isticanje oglasa',
+      bodyText: 'Korisnik {korisnik} traži da oglas "{oglas}" bude istaknut.',
+      buttonLabel: 'Otvori zahteve',
+    },
+    en: {
+      subject: 'Featuring request: {oglas}',
+      heading: 'A request to feature a listing arrived',
+      bodyText: '{korisnik} asks for "{oglas}" to be featured.',
+      buttonLabel: 'Open requests',
+    },
+  },
 ];

@@ -427,6 +427,9 @@ const selectedCity = ref(null)
 const cityAreas = ref([])
 const selectedCategory = ref(null)
 const results = ref([])
+// What the first page of the current search answered with (see buildSearchBody).
+const searchSeed = ref('')
+const shownFeaturedIds = ref([])
 const total = ref(0)
 const loading = ref(false)
 const searchError = ref('')
@@ -942,6 +945,9 @@ function buildSearchBody() {
   const attributeFilters = buildAttributeFilters(searchFilters.value.filters, selections)
   return {
     ...query,
+    // R146/T129: a further page keeps the first page's order and leaves out
+    // the featured listings already shown at its top.
+    ...(query.page > 1 ? { seed: searchSeed.value || undefined, featuredIds: shownFeaturedIds.value } : {}),
     priceMin: query.priceMin || undefined,
     priceMax: query.priceMax || undefined,
     priceUnit: priceUnitInUse() || undefined,
@@ -968,7 +974,14 @@ async function executeSearch({ append = false } = {}) {
   searchError.value = ''
   try {
     const response = await api.post('/search', buildSearchBody())
-    results.value = append ? [...results.value, ...response.results] : response.results
+    if (append) {
+      const shown = new Set(results.value.map((listing) => listing.id))
+      results.value = [...results.value, ...response.results.filter((listing) => !shown.has(listing.id))]
+    } else {
+      results.value = response.results
+      searchSeed.value = response.seed || ''
+      shownFeaturedIds.value = response.featuredIds || []
+    }
     total.value = response.total
   } catch (e) {
     searchError.value = extractErrorMessage(e, t('auth.genericError'))
@@ -991,6 +1004,8 @@ async function tryRelaxedSearch() {
   try {
     const response = await api.post('/search/relaxed', buildSearchBody())
     results.value = response.results
+    searchSeed.value = response.seed || ''
+    shownFeaturedIds.value = response.featuredIds || []
     total.value = response.total
   } catch (e) {
     searchError.value = extractErrorMessage(e, t('auth.genericError'))

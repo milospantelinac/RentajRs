@@ -109,5 +109,19 @@
   "CITY_IN_USE": "The place is in use ({count} listings), so it cannot be deleted. Hide it: the listings stay, and the place is no longer offered for new listings or in search.",
   "AREA_IN_USE": "The part of the city is in use ({count} listings), so it cannot be deleted. Hide it: the listings stay, and it is no longer offered for new listings.",
   "PLACE_HIDDEN": "The chosen place is no longer offered. Choose another one.",
-  "CITY_AREA_HIDDEN": "The chosen part of the city is no longer offered. Choose another one."
+  "CITY_AREA_HIDDEN": "The chosen part of the city is no longer offered. Choose another one.",
+  "FEATURED_LISTING_NOT_ACTIVE": "Only an active listing can be featured.",
+  "FEATURED_OWNER_NOT_ELIGIBLE": "The listing's owner is blocked or restricted at the moment, so the listing cannot be featured.",
+  "FEATURED_ALREADY": "This listing is already featured.",
+  "FEATURED_ALREADY_WAITING": "This listing is already waiting for a free featured place.",
+  "FEATURED_OWNER_LIMIT": "The owner already has a featured listing in this category (at most {limit} per category).",
+  "FEATURED_REQUEST_EXISTS": "A request to feature this listing has already been sent.",
+  "FEATURED_REQUEST_CLOSED": "This request has already been decided.",
+  "FEATURED_DISABLED": "Featuring listings is not available at the moment.",
+  "FEATURED_END_INVALID": "The end of a featured period must come after its start.",
+  "FEATURED_PERIOD_OVER": "This featured period has already ended.",
+  "LEADER_NOT_LEADER": "This owner is not in the leaders' program.",
+  "LEADER_BENEFIT_USED": "This leader has already used their free featured period.",
+  "LEADER_NO_ACTIVE_LISTING": "The owner has no active listing that could be featured.",
+  "RANKING_WEIGHTS_EMPTY": "At least one weight must be above zero."
 }

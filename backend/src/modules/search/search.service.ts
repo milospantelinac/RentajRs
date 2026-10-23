@@ -1,11 +1,20 @@
+import { randomUUID } from 'crypto';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { CategoryFilter, FilterControl, FilterPlacement, PriceUnit, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CacheService } from '../../common/cache/cache.service';
 import { SEARCH_FILTERS_CACHE_PREFIX, TaxonomyService } from '../taxonomy/taxonomy.service';
+import { FeaturedService } from '../featured/featured.service';
 import { rsdToPara } from '../../common/utils/money';
 import { GUEST_CAPACITY_ATTRIBUTE_KEYS } from '../../common/utils/guest-capacity';
 import { LISTING_CARD_INCLUDE, loadListingCardNames, serializeListingCard } from '../../common/utils/listing-card';
+import { seededRandom } from '../../common/utils/featured-rules';
+import {
+  RANKING_WEIGHTS_CACHE_KEY,
+  RANKING_WEIGHTS_KEY,
+  RankingWeights,
+  readRankingWeights,
+} from '../../common/utils/ranking-weights';
 import {
   SearchFilter,
   SearchFilterChoice,
@@ -17,9 +26,11 @@ import {
 } from '../../common/utils/search-filters';
 import { SearchListingsDto } from './dto/search-listings.dto';
 
-const RELEVANCE_CANDIDATE_POOL = 200;
+// "Preporučeno" scores every match from a few columns. Past this many matches
+// in one search the oldest are left out; ranking in SQL is the next step then.
+const RELEVANCE_MAX_RANKED = 5000;
 const DEFAULT_PAGE_SIZE = 20;
-const RANKING_WEIGHTS_CACHE_KEY = 'settings:ranking_weights';
+const FRESHNESS_FLOOR_MS = 90 * 86_400_000;
 // Short: the option counts behind Opremljenost's order move with the listings.
 const SEARCH_FILTERS_TTL = 300;
 
@@ -38,6 +49,7 @@ export class SearchService {
     private prisma: PrismaService,
     private cache: CacheService,
     private taxonomy: TaxonomyService,
+    private featured: FeaturedService,
   ) {}
 
   /**
@@ -166,119 +178,117 @@ export class SearchService {
     const page = dto.page ?? 1;
     const pageSize = Math.min(dto.pageSize ?? DEFAULT_PAGE_SIZE, 50);
     const where = await this.buildWhere(dto);
+    const relevance = !dto.sort || dto.sort === 'relevance';
+    // R146: one seed per search, sent back with "Prikaži još", so all of its
+    // pages share one order: no listing twice, none skipped.
+    const seed = dto.seed || randomUUID();
 
-    const result =
-      dto.sort && dto.sort !== 'relevance'
-        ? await this.searchWithDbSort(where, dto.sort, page, pageSize)
-        : await this.searchWithRelevanceRanking(where, page, pageSize);
+    // T129: on "Preporučeno", the featured listings that match this search
+    // open its first page (FeaturedService picks which, R114). The next pages
+    // get their ids back and leave them out, so none shows twice.
+    const featuredIds = relevance
+      ? page === 1
+        ? await this.featured.pickForSearch(where, pageSize)
+        : (dto.featuredIds ?? [])
+      : [];
+    const rest: Prisma.ListingWhereInput = featuredIds.length ? { AND: [where, { id: { notIn: featuredIds } }] } : where;
+    // Every page is pageSize cards: the first holds the featured ones too.
+    const skip = Math.max(0, page === 1 ? 0 : (page - 1) * pageSize - featuredIds.length);
+    const take = Math.max(0, page === 1 ? pageSize - featuredIds.length : pageSize);
+
+    const [total, restRows, topRows] = await Promise.all([
+      this.prisma.listing.count({ where }),
+      relevance ? this.rankByRelevance(rest, skip, take, seed) : this.sortInDatabase(rest, dto.sort ?? 'newest', skip, take),
+      page === 1 ? this.loadRows(featuredIds) : Promise.resolve([]),
+    ]);
+    const rows = [...topRows, ...restRows];
+    // The rest keep their place, but a featured one among them says so too.
+    const marked = await this.featured.featuredAmong(restRows.map((row) => row.id));
+    const { categoryNames, optionNames } = await loadListingCardNames(this.taxonomy, rows);
+    const results = rows.map((row) => ({
+      ...serializeListingCard(row, categoryNames, optionNames),
+      featured: featuredIds.includes(row.id) || marked.has(row.id),
+    }));
 
     // R45/R46 — every empty result is demand data, not just the ones where the
     // visitor bothers to leave an email via /search/notify-empty afterwards.
-    if (result.total === 0) {
+    if (total === 0) {
       await this.recordEmptySearch(dto).catch(() => undefined);
     }
 
-    return { ...result, indexThreshold: await this.getIndexThreshold() };
+    return { results, total, page, pageSize, featuredIds, seed, indexThreshold: await this.getIndexThreshold() };
   }
 
-  private async searchWithDbSort(
+  /** "Cena" and "Najnovije": in the database, the id breaking ties so pages never overlap. */
+  private async sortInDatabase(
     where: Prisma.ListingWhereInput,
-    sort: 'price_asc' | 'price_desc' | 'newest',
-    page: number,
-    pageSize: number,
+    sort: 'price_asc' | 'price_desc' | 'newest' | 'relevance',
+    skip: number,
+    take: number,
   ) {
-    const orderBy: Prisma.ListingOrderByWithRelationInput =
+    if (take <= 0) return [];
+    const orderBy: Prisma.ListingOrderByWithRelationInput[] =
       sort === 'price_asc'
-        ? { price: 'asc' }
+        ? [{ price: 'asc' }, { id: 'asc' }]
         : sort === 'price_desc'
-          ? { price: 'desc' }
-          : { publishedAt: 'desc' };
-
-    const [total, rows] = await this.prisma.$transaction([
-      this.prisma.listing.count({ where }),
-      this.prisma.listing.findMany({
-        where,
-        orderBy,
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-        include: this.resultInclude(),
-      }),
-    ]);
-
-    const { categoryNames, optionNames } = await loadListingCardNames(this.taxonomy, rows);
-    const results = rows.map((r) => serializeListingCard(r, categoryNames, optionNames));
-    return { results, total, page, pageSize };
+          ? [{ price: 'desc' }, { id: 'asc' }]
+          : [{ publishedAt: 'desc' }, { id: 'asc' }];
+    return this.prisma.listing.findMany({ where, orderBy, skip, take, include: this.resultInclude() });
   }
 
   /**
-   * R146: relevance mixes rating, freshness, response time and a random
-   * factor so results don't calcify. Re-scoring the full table per request
-   * doesn't scale, so we pull a bounded, cheaply-indexed candidate pool
-   * (newest-first, capped at RELEVANCE_CANDIDATE_POOL) and rank *that* in
-   * memory — correct for the MVP's listing volumes, and the pool size is
-   * the one knob to revisit if/when it isn't (see DOCUMENTATION.md).
+   * R146: "Preporučeno" mixes rating, freshness, response time and a random
+   * part so results don't calcify. Every match is scored from a few columns
+   * (it used to be only the 200 newest, so older listings, the first owners'
+   * among them, never showed past that), and only the page's cards load.
+   * The random part comes from the search's seed, so one search keeps one
+   * order across its pages.
    */
-  private async searchWithRelevanceRanking(where: Prisma.ListingWhereInput, page: number, pageSize: number) {
-    const total = await this.prisma.listing.count({ where });
-    const candidates = await this.prisma.listing.findMany({
-      where,
-      orderBy: { publishedAt: 'desc' },
-      take: RELEVANCE_CANDIDATE_POOL,
-      include: this.resultInclude(),
-    });
-
-    if (candidates.length === 0) {
-      return { results: [], total, page, pageSize };
-    }
-
-    const weights = await this.getRankingWeights();
+  private async rankByRelevance(where: Prisma.ListingWhereInput, skip: number, take: number, seed: string) {
+    if (take <= 0) return [];
+    const [weights, candidates] = await Promise.all([
+      this.getRankingWeights(),
+      this.prisma.listing.findMany({
+        where,
+        orderBy: { publishedAt: 'desc' },
+        take: RELEVANCE_MAX_RANKED,
+        select: { id: true, avgRating: true, publishedAt: true, user: { select: { avgResponseTimeMinutes: true } } },
+      }),
+    ]);
     const now = Date.now();
-    const maxAgeMs = 1000 * 60 * 60 * 24 * 90; // 90 days -> freshness floor
-
     const scored = candidates.map((listing) => {
       const ratingScore = listing.avgRating ? Number(listing.avgRating) / 5 : 0.5;
       // publishedAt is nullable in the schema even though every real ACTIVE
       // listing sets it on approval — treat a missing value as maximally
       // old rather than letting one bad row 500 the whole search endpoint.
-      const ageMs = listing.publishedAt ? now - listing.publishedAt.getTime() : maxAgeMs;
-      const freshnessScore = Math.max(0, 1 - ageMs / maxAgeMs);
+      const ageMs = listing.publishedAt ? now - listing.publishedAt.getTime() : FRESHNESS_FLOOR_MS;
+      const freshnessScore = Math.max(0, 1 - ageMs / FRESHNESS_FLOOR_MS);
       const responseScore = listing.user.avgResponseTimeMinutes
         ? Math.max(0, 1 - listing.user.avgResponseTimeMinutes / (24 * 60))
         : 0.5;
-      const randomScore = Math.random();
-
       const score =
         weights.rating * ratingScore +
         weights.freshness * freshnessScore +
         weights.responseTime * responseScore +
-        weights.random * randomScore;
-
-      return { listing, score };
+        weights.random * seededRandom(seed, listing.id);
+      return { id: listing.id, score };
     });
-
-    scored.sort((a, b) => b.score - a.score);
-    const pageItems = scored.slice((page - 1) * pageSize, (page - 1) * pageSize + pageSize);
-
-    const pageListings = pageItems.map((s) => s.listing);
-    const { categoryNames, optionNames } = await loadListingCardNames(this.taxonomy, pageListings);
-    return {
-      results: pageListings.map((listing) => serializeListingCard(listing, categoryNames, optionNames)),
-      total,
-      page,
-      pageSize,
-    };
+    scored.sort((a, b) => b.score - a.score || (a.id < b.id ? -1 : 1));
+    return this.loadRows(scored.slice(skip, skip + take).map((entry) => entry.id));
   }
 
-  private async getRankingWeights(): Promise<{
-    rating: number;
-    freshness: number;
-    responseTime: number;
-    random: number;
-  }> {
-    return this.cache.getOrSet(RANKING_WEIGHTS_CACHE_KEY, 300, async () => {
-      const setting = await this.prisma.setting.findUnique({ where: { key: 'ranking_weights' } });
-      return (setting?.value as any) ?? { rating: 0.35, freshness: 0.25, responseTime: 0.2, random: 0.2 };
-    });
+  /** The cards' rows for these ids, in this order. */
+  private async loadRows(ids: string[]) {
+    if (!ids.length) return [];
+    const rows = await this.prisma.listing.findMany({ where: { id: { in: ids } }, include: this.resultInclude() });
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    return ids.map((id) => byId.get(id)).filter((row): row is NonNullable<typeof row> => !!row);
+  }
+
+  private async getRankingWeights(): Promise<RankingWeights> {
+    return this.cache.getOrSet(RANKING_WEIGHTS_CACHE_KEY, 300, async () =>
+      readRankingWeights((await this.prisma.setting.findUnique({ where: { key: RANKING_WEIGHTS_KEY } }))?.value),
+    );
   }
 
   /** R45/R46 — logs the query as demand data; the frontend calls this once it sees total===0. */
@@ -505,12 +515,9 @@ export class SearchService {
     return { results: rows.map((r) => serializeListingCard(r, categoryNames, optionNames)) };
   }
 
-  /** The card's own fields (common/utils/listing-card.ts) plus what relevance ranking reads. */
+  /** The card's own fields (common/utils/listing-card.ts); "Preporučeno" reads its columns in rankByRelevance. */
   private resultInclude() {
-    return {
-      ...LISTING_CARD_INCLUDE,
-      user: { select: { avgResponseTimeMinutes: true } },
-    } satisfies Prisma.ListingInclude;
+    return LISTING_CARD_INCLUDE;
   }
 
   /** Feeds the frontend's dynamic sitemap — every publicly reachable, genuinely indexable URL. */

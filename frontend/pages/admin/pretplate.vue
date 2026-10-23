@@ -100,56 +100,11 @@
       </div>
     </div>
 
-    <div class="admin-card admin-card-table">
-      <div class="admin-card-head">
-        <div>
-          <p class="admin-card-title">{{ t('admin.featuredWaitlist') }}</p>
-          <p class="admin-card-note">{{ t('admin.featuredWaitlistHint') }}</p>
-        </div>
-      </div>
-
-      <StateBlock
-        v-if="!waitlist?.length"
-        icon="listings"
-        :title="t('admin.empty.waitlist.title')"
-        :text="t('admin.empty.waitlist.text')"
-      />
-
-      <table v-else class="admin-table">
-        <thead>
-          <tr>
-            <th>{{ t('listing.title') }}</th>
-            <th>{{ t('admin.categories') }}</th>
-            <th>{{ t('admin.waitlistedSince') }}</th>
-            <th>{{ t('admin.durationDays') }}</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="entry in waitlist" :key="entry.id">
-            <td :data-label="t('listing.title')">
-              <NuxtLink :to="`/oglasi/${entry.listing.slug}`" target="_blank" class="admin-cell-name admin-cell-link">
-                {{ entry.listing.title }}
-              </NuxtLink>
-            </td>
-            <td :data-label="t('admin.categories')">{{ entry.category?.slug }}</td>
-            <td :data-label="t('admin.waitlistedSince')">{{ new Date(entry.requestedAt).toLocaleDateString('sr-RS') }}</td>
-            <td :data-label="t('admin.durationDays')">
-              <select v-model.number="durationForms[entry.id]" class="admin-field waitlist-duration" :aria-label="t('admin.durationDays')">
-                <option :value="7">7</option>
-                <option :value="15">15</option>
-                <option :value="30">30</option>
-              </select>
-            </td>
-            <td class="admin-cell-actions">
-              <div class="admin-actions">
-                <button class="admin-action" @click="assignFree(entry)">{{ t('admin.assignFree') }}</button>
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+    <!-- T129: featured listings, their requests and queue have their own page. -->
+    <p class="admin-card-note subs-featured-link">
+      {{ t('admin.featured.movedNote') }}
+      <NuxtLink to="/admin/istaknuti-oglasi" class="admin-cell-link">{{ t('admin.featured.title') }}</NuxtLink>
+    </p>
   </div>
 </template>
 
@@ -226,21 +181,6 @@ async function updatePrice(packageId) {
   await api.post(`/admin/packages/${packageId}/price`, priceForms[packageId])
 }
 
-const { data: waitlist, refresh: refreshWaitlist } = await useAsyncData('admin-featured-waitlist', () =>
-  api.get('/admin/featured/waitlist'),
-)
-const durationForms = reactive({})
-for (const entry of waitlist.value || []) {
-  durationForms[entry.id] = 7
-}
-
-async function assignFree(entry) {
-  await api.post(`/admin/featured/${entry.listing.id}/assign-free`, {
-    durationDays: durationForms[entry.id] || 7,
-  })
-  await refreshWaitlist()
-}
-
 onMounted(load)
 useSeoMeta({ title: t('admin.subscriptions') })
 </script>
@@ -284,12 +224,16 @@ useSeoMeta({ title: t('admin.subscriptions') })
   margin-bottom: 7px;
 }
 
-.waitlist-duration {
-  width: 104px;
+.subs-featured-link {
+  margin-top: 20px;
+}
+
+.admin-cell-link {
+  color: $color-primary;
 }
 
 .admin-cell-link:hover {
-  color: $color-primary;
+  text-decoration: underline;
 }
 
 @include mobile-only {

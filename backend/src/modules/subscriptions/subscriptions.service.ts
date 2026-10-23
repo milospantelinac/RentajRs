@@ -11,7 +11,7 @@ import { LISTING_COUNTS_CACHE_KEY, TaxonomyService } from '../taxonomy/taxonomy.
 import { NestPayCheckoutService } from '../../common/payment/nestpay/nestpay-checkout.service';
 import { FiscalizationProvider } from '../../common/fiscalization/fiscalization-provider.interface';
 import { paraToRsd, rsdToPara } from '../../common/utils/money';
-import { LISTING_CARD_INCLUDE, loadListingCardNames, serializeListingCard } from '../../common/utils/listing-card';
+import { grantFeatured } from '../featured/featured-grant';
 import {
   DAY_MS,
   PACKAGE_ENDING_WITHOUT_RENEWAL,
@@ -27,7 +27,6 @@ type RenewalBlock = 'NOT_RENEWABLE' | 'NO_LISTINGS' | 'ALREADY_RENEWED';
 @Injectable()
 export class SubscriptionsService {
   private readonly logger = new Logger(SubscriptionsService.name);
-  private featuredExpiryCheckedUntil: Date | null = null;
 
   constructor(
     private prisma: PrismaService,
@@ -679,50 +678,9 @@ export class SubscriptionsService {
 
   // -- Featured listings ---------------------------------------------
 
-  // There is no owner purchase of a featured slot. It "charged" the card
-  // through the mock provider, which always succeeds, so any owner could
-  // feature a listing for free. Until a real checkout covers featured slots,
-  // an admin grants them (adminAssignFreeFeatured).
-
-  /**
-   * Rotates equally among all currently-featured listings in the category (R114) — call on every page render, not stored order.
-   * A public endpoint, so a listing goes out as the same card search shows,
-   * never the whole row with its address and iCal export token, and only
-   * while it is live.
-   */
-  async getRotatedFeatured(categoryId: string, limit = 6) {
-    const featured = await this.prisma.featuredListing.findMany({
-      where: { listing: { categoryId, status: 'ACTIVE' }, expiresAt: { gt: new Date() } },
-      include: { listing: { include: LISTING_CARD_INCLUDE } },
-    });
-    const picked = shuffle(featured).slice(0, Math.min(Math.max(limit, 0), 24));
-    const rows = picked.map((f) => f.listing);
-    const { categoryNames, optionNames } = await loadListingCardNames(this.taxonomy, rows);
-    return rows.map((row) => serializeListingCard(row, categoryNames, optionNames));
-  }
-
-  @Cron(CronExpression.EVERY_HOUR)
-  async expireFeaturedAndNotifyWaitlist() {
-    // Only the slots that ran out since the last run (after a restart, the
-    // last hour): every expired row ever used to count again each hour and
-    // notify another waiter.
-    const now = new Date();
-    const since = this.featuredExpiryCheckedUntil ?? new Date(now.getTime() - 60 * 60 * 1000);
-    this.featuredExpiryCheckedUntil = now;
-    const expired = await this.prisma.featuredListing.findMany({
-      where: { expiresAt: { gte: since, lt: now } },
-    });
-    for (const item of expired) {
-      const waiting = await this.prisma.featuredWaitlist.findFirst({
-        where: { categoryId: (await this.prisma.listing.findUnique({ where: { id: item.listingId } }))?.categoryId, notifiedAt: null },
-        orderBy: { requestedAt: 'asc' },
-      });
-      if (waiting) {
-        await this.prisma.featuredWaitlist.update({ where: { id: waiting.id }, data: { notifiedAt: new Date() } });
-        this.events.emit('subscriptions.featured_slot_available', { listingId: waiting.listingId });
-      }
-    }
-  }
+  // Featured listings live in modules/featured (FeaturedService): what shows
+  // where, owners' requests, the queue of a full category and the leaders.
+  // There is still no paid checkout for them; an admin grants them.
 
   // -- Admin -----------------------------------------------------------
 
@@ -760,44 +718,28 @@ export class SubscriptionsService {
     return { message: this.i18n.t('common.SUCCESS') };
   }
 
-  // Featured-listing prices (P7/R116, no longer hardcoded — see
-  // getFeaturedPriceTable() below) are edited like every other Setting, via
-  // the generic /admin/podesavanja panel (key "featured_listing_prices").
-
-  async getFeaturedPrices() {
-    return this.getFeaturedPriceTable();
-  }
-
-  /** R145 — administrator can hand out a featured slot for free, bypassing payment entirely. */
-  async adminAssignFreeFeatured(adminId: string, listingId: string, durationDays: 7 | 15 | 30) {
-    const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: listingId } });
-    const featured = await this.prisma.featuredListing.create({
+  /**
+   * R145: an admin features a listing for free (Administracija > Oglasi, at
+   * publishing). Same rules as Administracija > Istaknuti oglasi: it starts
+   * now, or waits for a place when the category is full.
+   */
+  async adminAssignFreeFeatured(adminId: string, listingId: string, durationDays: number) {
+    const outcome = await grantFeatured(this.prisma, this.events, this.i18n, {
+      listingId,
+      source: 'ADMIN',
+      days: durationDays,
+      adminId,
+    });
+    await this.prisma.adminLog.create({
       data: {
-        listingId: listing.id,
-        durationDays,
-        price: 0n,
-        startsAt: new Date(),
-        expiresAt: new Date(Date.now() + durationDays * 86_400_000),
-        free: true,
-        assignedByUserId: adminId,
+        userId: adminId,
+        action: 'featured.grant',
+        entityType: outcome.status === 'STARTED' ? 'FeaturedListing' : 'FeaturedRequest',
+        entityId: outcome.status === 'STARTED' ? outcome.featuredId : outcome.requestId,
+        newValue: { listingId, days: durationDays, status: outcome.status },
       },
     });
-    // A free grant resolves the listing's own place in the queue, if any.
-    await this.prisma.featuredWaitlist.deleteMany({ where: { listingId: listing.id } });
-    this.events.emit('subscriptions.featured_assigned_free', { listingId: listing.id, adminId });
-    return { ...featured, price: paraToRsd(featured.price) };
-  }
-
-  /** Feeds the admin "assign free featured" list — the concrete, already-expressed demand (R114 waitlist). */
-  async adminGetFeaturedWaitlist() {
-    const entries = await this.prisma.featuredWaitlist.findMany({
-      orderBy: { requestedAt: 'asc' },
-      include: {
-        listing: { select: { id: true, title: true, slug: true } },
-        category: { select: { id: true, slug: true } },
-      },
-    });
-    return entries;
+    return outcome;
   }
 
   async adminListSubscriptions(status?: SubscriptionStatus) {
@@ -990,16 +932,6 @@ export class SubscriptionsService {
     }
   }
 
-  private async getFeaturedPriceTable(): Promise<Record<7 | 15 | 30, number>> {
-    const setting = await this.prisma.setting.findUnique({ where: { key: 'featured_listing_prices' } });
-    const value = setting?.value as Record<string, number> | undefined;
-    return {
-      7: value?.['7'] ?? 890,
-      15: value?.['15'] ?? 1590,
-      30: value?.['30'] ?? 2490,
-    };
-  }
-
   private serialize(subscription: Subscription & { package?: any; listings?: any[] }) {
     return {
       ...subscription,
@@ -1049,12 +981,4 @@ function endOfDay(date: Date): Date {
   const d = new Date(date);
   d.setHours(23, 59, 59, 999);
   return d;
-}
-function shuffle<T>(arr: T[]): T[] {
-  const copy = [...arr];
-  for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [copy[i], copy[j]] = [copy[j], copy[i]];
-  }
-  return copy;
 }

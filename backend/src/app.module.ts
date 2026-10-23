@@ -28,6 +28,7 @@ import { BookingsModule } from './modules/bookings/bookings.module';
 import { MessagingModule } from './modules/messaging/messaging.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
+import { FeaturedModule } from './modules/featured/featured.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
@@ -79,6 +80,7 @@ import { ContactModule } from './modules/contact/contact.module';
     MessagingModule,
     ReviewsModule,
     SubscriptionsModule,
+    FeaturedModule,
     AdminModule,
     DashboardModule,
     NotificationsModule,

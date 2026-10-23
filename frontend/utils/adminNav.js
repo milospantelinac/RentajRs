@@ -26,6 +26,8 @@ export const ADMIN_NAV_GROUPS = [
     items: [
       { to: '/admin/rezervacije', labelKey: 'admin.bookings', icon: 'bookings' },
       { to: '/admin/pretplate', labelKey: 'admin.subscriptions', icon: 'packages' },
+      // T129: featured listings, owners' requests, the leaders and the rules.
+      { to: '/admin/istaknuti-oglasi', labelKey: 'admin.featured.title', icon: 'featured' },
       { to: '/admin/placanje', labelKey: 'admin.paymentSettings', icon: 'payments' },
       // T143: stored files, their checks and limits.
       { to: '/admin/skladiste', labelKey: 'admin.storage', icon: 'storage' },

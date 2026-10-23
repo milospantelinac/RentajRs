@@ -101,10 +101,3 @@ export class AdjustPriceDto {
   @IsInt()
   priceYearlyRsd: number;
 }
-
-/** R145 — admin manually grants a featured slot without a charge. */
-export class AssignFreeFeaturedDto {
-  @ApiProperty({ enum: [7, 15, 30] })
-  @IsIn([7, 15, 30])
-  durationDays: 7 | 15 | 30;
-}

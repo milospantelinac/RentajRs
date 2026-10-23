@@ -10,6 +10,8 @@ import { OPEN_DISPUTE_STATUSES, PAYMENT_REPORT_HOLD_MS } from '../../common/util
 import { PaymentSettingsService } from '../../common/payment/nestpay/payment-settings.service';
 import { UploadsService } from '../../common/uploads/uploads.service';
 import { STORAGE_SETTING_PREFIX } from '../../common/uploads/storage-settings.service';
+import { FEATURED_LEADERS_KEY, FEATURED_RULES_KEY } from '../../common/utils/featured-rules';
+import { RANKING_WEIGHTS_KEY } from '../../common/utils/ranking-weights';
 import { UpdatePaymentSettingsDto } from '../../common/payment/nestpay/dto/payment-settings.dto';
 import {
   ReportListingDto,
@@ -23,6 +25,7 @@ import {
 } from './dto/admin.dto';
 
 const PRIORITY_REPORT_THRESHOLD = 3; // R144
+const SETTINGS_WITH_OWN_FORM = [FEATURED_RULES_KEY, FEATURED_LEADERS_KEY, RANKING_WEIGHTS_KEY];
 const RESTRICTION_DAYS = 30; // Ch.6.7 — how long a RESTRICTION dispute outcome blocks new listings/bookings
 
 @Injectable()
@@ -273,8 +276,12 @@ export class AdminService {
 
   async listSettings() {
     // T143: storage_* rows are set in Administracija > Skladište, with their limits.
+    // T129: the featured rules, the leaders' rule and the weights of
+    // "Preporučeno" have their own form in Administracija > Istaknuti oglasi.
     return this.prisma.setting.findMany({
-      where: { NOT: { key: { startsWith: STORAGE_SETTING_PREFIX } } },
+      where: {
+        NOT: [{ key: { startsWith: STORAGE_SETTING_PREFIX } }, { key: { in: SETTINGS_WITH_OWN_FORM } }],
+      },
       orderBy: { key: 'asc' },
     });
   }

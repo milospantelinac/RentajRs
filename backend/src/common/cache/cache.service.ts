@@ -77,6 +77,28 @@ export class CacheService implements OnModuleDestroy {
     return value;
   }
 
+  /**
+   * Adds one to each named field of a hash (a field named twice gets two) and
+   * keeps the hash for ttlSeconds. The featured listings' daily counts live
+   * here; one Redis cannot take is simply not counted.
+   */
+  async hashIncrement(key: string, fields: string[], ttlSeconds: number): Promise<void> {
+    if (!fields.length || this.bypassing()) return;
+    await this.optional(async () => {
+      const batch = this.client.multi();
+      for (const field of fields) batch.hincrby(key, field, 1);
+      batch.expire(key, ttlSeconds);
+      await batch.exec();
+    });
+  }
+
+  /** A hash's fields as numbers; empty when Redis cannot be reached. */
+  async hashGetAll(key: string): Promise<Record<string, number>> {
+    if (this.bypassing()) return {};
+    const raw = await this.optional(() => this.client.hgetall(key));
+    return Object.fromEntries(Object.entries(raw ?? {}).map(([field, value]) => [field, Number(value) || 0]));
+  }
+
   async onModuleDestroy() {
     // quit() needs a live connection; without one there is nothing to close gracefully.
     await this.client.quit().catch(() => this.client.disconnect());

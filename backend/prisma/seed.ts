@@ -130,7 +130,29 @@ async function seedPermissionsAndAdmin() {
 async function seedSettings() {
   const settings: Array<{ key: string; value: any; description: string }> = [
     { key: 'search_result_counters_enabled', value: false, description: 'R44 — off in v1' },
-    { key: 'max_featured_per_category', value: 10, description: 'R114' },
+    // R114: set in Administracija > Istaknuti oglasi (common/utils/featured-rules.ts reads them).
+    {
+      key: 'featured_rules',
+      value: {
+        enabled: true,
+        searchTopCount: 5,
+        homeDesktopCount: 4,
+        homePhoneCount: 1,
+        homeIntervalSeconds: 5,
+        maxPerCategory: 10,
+        categoryLimits: {},
+        maxPerOwnerPerCategory: 1,
+        defaultDays: 30,
+      },
+      description:
+        'Featured listings: places at the top of search and on the home page, limits per category and owner, default length (Administracija > Istaknuti oglasi)',
+    },
+    {
+      key: 'featured_leaders',
+      value: { cutoffDate: null, days: 30 },
+      description:
+        "Leaders' program: an owner whose first listing went live by cutoffDate gets one free featured period of the given days (Administracija > Istaknuti oglasi)",
+    },
     { key: 'featured_listing_prices', value: { '7': 890, '15': 1590, '30': 2490 }, description: 'Ch.11.3 — istaknut oglas, cena po trajanju (RSD)' },
     { key: 'auto_approve_listings', value: false, description: 'R119 — switch exists, off in v1' },
     {

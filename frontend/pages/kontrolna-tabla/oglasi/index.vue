@@ -67,6 +67,8 @@
             <div class="mylist-text">
               <p class="mylist-title">{{ row.title }}</p>
               <p v-if="row.meta" class="mylist-meta">{{ row.meta }}</p>
+              <!-- T129: featured until when, and how often shown and opened. -->
+              <p v-if="row.featured?.text" class="mylist-featured" :class="`is-${row.featured.tone}`">{{ row.featured.text }}</p>
             </div>
           </div>
 
@@ -117,6 +119,12 @@
                 <NuxtLink :to="row.viewUrl" class="mylist-menu-item" role="menuitem">{{ t('myListings.view') }}</NuxtLink>
                 <NuxtLink v-if="row.renewUrl" :to="row.renewUrl" class="mylist-menu-item" role="menuitem">{{ t('myListings.renew') }}</NuxtLink>
                 <NuxtLink v-if="row.icalUrl" :to="row.icalUrl" class="mylist-menu-item" role="menuitem">{{ t('myListings.ical') }}</NuxtLink>
+                <button v-if="row.featured?.canRequest" type="button" class="mylist-menu-item" role="menuitem" @click="requestFeatured(row)">
+                  {{ t('myListings.featured.request') }}
+                </button>
+                <button v-if="row.featured?.canCancel" type="button" class="mylist-menu-item" role="menuitem" @click="cancelFeatured(row)">
+                  {{ t('myListings.featured.cancel') }}
+                </button>
                 <button type="button" class="mylist-menu-item is-danger" role="menuitem" @click="remove(row)">
                   {{ t('listing.deleteListing') }}
                 </button>
@@ -154,6 +162,7 @@ import {
   countMyListings,
   filterMyListings,
   formatMyListingsSummary,
+  getFeaturedCell,
   getMyListingsTab,
 } from '~/utils/myListings'
 
@@ -188,8 +197,19 @@ const tabs = computed(() =>
   })),
 )
 
+// T129: featuring per listing; the table shows without it if the call fails.
+const { data: featuredMine, refresh: refreshFeatured } = await useAsyncData('my-featured', () =>
+  api.get('/featured/mine').catch(() => null),
+)
+const featuredByListing = computed(() => new Map((featuredMine.value?.listings || []).map((item) => [item.listingId, item])))
+
 const now = Date.now()
-const rows = computed(() => filterMyListings(allListings.value, activeTab.value).map((listing) => buildMyListingRow(t, listing, now)))
+const rows = computed(() =>
+  filterMyListings(allListings.value, activeTab.value).map((listing) => ({
+    ...buildMyListingRow(t, listing, now),
+    featured: getFeaturedCell(t, featuredByListing.value.get(listing.id)),
+  })),
+)
 
 // 474:409: the "⋯" menu of one row at a time.
 const openMenuId = ref(null)
@@ -249,6 +269,32 @@ watch(
     deleteError.value = ''
   },
 )
+
+// T129: the owner asks for a featured period; an admin decides. A refusal
+// (another listing featured in the category, say) shows above the table.
+async function requestFeatured(row) {
+  openMenuId.value = null
+  if (!confirm(t('myListings.featured.requestConfirm', { days: featuredMine.value?.defaultDays || 30 }))) return
+  deleteError.value = ''
+  try {
+    await api.post(`/listings/${row.id}/featured-request`, {})
+    await refreshFeatured()
+  } catch (e) {
+    deleteError.value = extractErrorMessage(e, t('auth.genericError'))
+  }
+}
+
+async function cancelFeatured(row) {
+  openMenuId.value = null
+  if (!confirm(t('myListings.featured.cancelConfirm'))) return
+  deleteError.value = ''
+  try {
+    await api.delete(`/listings/${row.id}/featured-request`)
+    await refreshFeatured()
+  } catch (e) {
+    deleteError.value = extractErrorMessage(e, t('auth.genericError'))
+  }
+}
 
 // The API refuses a listing with open requests or bookings; its message is shown above the table.
 async function remove(row) {
@@ -489,6 +535,23 @@ $mylist-dash-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/
   font-weight: 300;
   line-height: normal;
   color: $color-text-muted;
+}
+
+// T129: no frame of its own; the meta line's size, in the colour of its state.
+.mylist-featured {
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: normal;
+  color: $color-text-muted;
+}
+
+.mylist-featured.is-live {
+  color: $color-primary;
+}
+
+.mylist-featured.is-rejected {
+  color: $color-error;
 }
 
 .mylist-field-status {

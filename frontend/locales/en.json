@@ -1025,7 +1025,8 @@
     "reviewSubmit": "Submit for approval",
     "resubmitForApproval": "Send for approval again",
     "renewPackage": "Renew package",
-    "bookingModelChoice": "Booking model"
+    "bookingModelChoice": "Booking model",
+    "featuredBadge": "Featured"
   },
   "search": {
     "sortRelevance": "Recommended",
@@ -1632,11 +1633,6 @@
     "updatePrice": "Update package price",
     "priceMonthly": "Monthly price (RSD)",
     "priceYearly": "Yearly price (RSD)",
-    "featuredWaitlist": "Featured waitlist",
-    "featuredWaitlistHint": "Categories where every featured slot is taken — grant a free featured slot out of turn (R145).",
-    "assignFree": "Assign for free",
-    "durationDays": "Duration (days)",
-    "waitlistedSince": "Waiting since",
     "newCategory": "New category",
     "categoryName": "Category name",
     "categoryShortDescription": "Short description (shown on the card when adding a listing)",
@@ -1755,7 +1751,7 @@
       "categories": "The category tree, owner proposals and attributes.",
       "users": "Search accounts, block them and see dispute history.",
       "bookings": "Search every booking on the platform.",
-      "subscriptions": "Subscriptions, package prices and the featured waitlist.",
+      "subscriptions": "Subscriptions and package prices.",
       "disputes": "Disputes and listing reports waiting for a decision.",
       "emailTemplates": "The text of the messages the platform sends, in Serbian and English.",
       "content": "Static pages, the FAQ and the homepage video.",
@@ -1799,10 +1795,6 @@
       "reports": {
         "title": "No reports",
         "text": "When someone reports a listing, it shows up here."
-      },
-      "waitlist": {
-        "title": "The waitlist is empty",
-        "text": "No owner is waiting for a free featured slot."
       },
       "categories": {
         "title": "No categories",
@@ -2418,6 +2410,259 @@
       "confirmDeleteTitleOne": "Delete {count} selected item?",
       "confirmDeleteTitleFew": "Delete {count} selected items?",
       "confirmDeleteTitleMany": "Delete {count} selected items?"
+    },
+    "featured": {
+      "title": "Featured listings",
+      "subtitle": "Who is featured and until when, owners' requests, the leaders and the rotation rules.",
+      "movedNote": "Featured listings, featuring requests and the waiting list have their own page:",
+      "tabs": {
+        "active": "Active",
+        "requests": "Requests",
+        "leaders": "Leaders",
+        "preview": "Preview",
+        "settings": "Settings",
+        "history": "History"
+      },
+      "capacityTitle": "Places per category",
+      "capacityNote": "Each category has a limited number of featured places, so every featured listing gets enough views. When they are all taken, new ones go to the waiting list.",
+      "capacityEmpty": "No listing is featured or waiting at the moment.",
+      "capacityCount": "{taken} of {limit} places",
+      "capacityWaiting": "waiting: {count}",
+      "periodState": {
+        "live": "Featured now",
+        "ended": "Ended (90 days)"
+      },
+      "grantButton": "Feature a listing",
+      "empty": {
+        "live": {
+          "title": "No listing is featured",
+          "text": "Feature a listing with the button above or approve an owner's request."
+        },
+        "ended": {
+          "title": "No ended featuring",
+          "text": "Featuring that ended in the last 90 days shows here."
+        }
+      },
+      "col": {
+        "listing": "Listing",
+        "category": "Category",
+        "source": "Source",
+        "period": "Period",
+        "shown": "Shown",
+        "opened": "Opened",
+        "requested": "Sent",
+        "status": "Status"
+      },
+      "hidden": {
+        "NOT_ACTIVE": "Not shown: the listing is not active",
+        "UNAVAILABLE": "Not shown: the listing is unavailable at the moment",
+        "OWNER_RESTRICTED": "Not shown: the owner is blocked or restricted",
+        "OTHER_CITY": "Another city"
+      },
+      "noteLabel": "Note",
+      "notePlaceholder": "For administrators only, the owner never sees it",
+      "source": {
+        "ADMIN": "Admin",
+        "REQUEST": "Request",
+        "LEADER": "Leader",
+        "PAID": "Paid"
+      },
+      "assignedBy": "By: {name}",
+      "shownSplit": "search {search} · home {home}",
+      "changeEnd": "Change end",
+      "endNow": "End now",
+      "endsToday": "ends today",
+      "daysLeftOne": "{count} day left",
+      "daysLeftFew": "{count} days left",
+      "daysLeftMany": "{count} days left",
+      "grantTitle": "Feature a listing",
+      "grantListing": "Listing",
+      "grantSearchPlaceholder": "Listing title, owner's last name or email",
+      "grantNoResults": "No active listing matches.",
+      "alreadyUntil": "already featured until {date}",
+      "daysLabel": "Length (days)",
+      "daysQuick": "{count} days",
+      "grantHint": "Featuring starts now. If the category is full, the listing goes to the waiting list and starts as soon as a place frees up.",
+      "grantSubmit": "Feature",
+      "grantStarted": "\"{title}\" is featured until {date}.",
+      "grantWaiting": "The category is full: \"{title}\" is on the waiting list and will be featured as soon as a place frees up.",
+      "changeEndTitle": "Change the end of featuring",
+      "currentEnd": "now until {date}",
+      "newEnd": "New end",
+      "extendBy": "+{count} days",
+      "newEndHint": "A later date lengthens featuring, an earlier one shortens it. A date already past ends it now.",
+      "endChanged": "The end of featuring for \"{title}\" changed.",
+      "endNowConfirm": "End featuring \"{title}\" now? The owner is told, and the first listing on the waiting list takes the place.",
+      "ended": "Featuring \"{title}\" has ended.",
+      "requestFilter": {
+        "open": "Open",
+        "APPROVED": "Approved",
+        "REJECTED": "Declined",
+        "CANCELLED": "Withdrawn"
+      },
+      "requestsIntro": "Owners send requests from My listings. An approved request starts now, or goes to the waiting list if the category is full (in the order the requests came in).",
+      "emptyRequests": {
+        "open": {
+          "title": "No requests waiting",
+          "text": "When an owner asks for featuring, the request shows here."
+        },
+        "APPROVED": {
+          "title": "No approved requests",
+          "text": "Approved requests show here."
+        },
+        "REJECTED": {
+          "title": "No declined requests",
+          "text": "Declined requests show here, with the reason."
+        },
+        "CANCELLED": {
+          "title": "No withdrawn requests",
+          "text": "Requests the owner withdrew, or that lapsed because the listing is no longer active."
+        }
+      },
+      "leaderPill": "Leader",
+      "leaderBenefitFree": "free featuring not used yet",
+      "leaderBenefitUsed": "free featuring already used",
+      "requestStatus": {
+        "PENDING": "Waiting for a decision",
+        "WAITING": "On the waiting list (#{position})",
+        "APPROVED": "Approved",
+        "REJECTED": "Declined",
+        "CANCELLED": "Withdrawn"
+      },
+      "decidedBy": "Decided by: {name}",
+      "approve": "Approve",
+      "reject": "Decline",
+      "removeFromQueue": "Remove from the list",
+      "approveTitle": "Approve featuring",
+      "useLeaderBenefit": "Use the leader's free featuring ({count} days)",
+      "categoryFullNote": "The category is full ({taken} of {limit} places): the listing goes to the waiting list and starts as soon as a place frees up.",
+      "rejectTitle": "Decline the request",
+      "rejectReason": "Reason",
+      "rejectReasonHint": "The owner gets this reason by email.",
+      "rejected": "The request for \"{title}\" was declined.",
+      "leaders": {
+        "ruleTitle": "Who is a leader",
+        "ruleNote": "A leader is an owner whose first listing went live by the chosen date, or whom you add by hand. Every leader gets one free featured period: it starts by itself when their listing goes live, or here with Grant. Leaders take places in a category like everyone else.",
+        "cutoff": "First listing live by (inclusive)",
+        "cutoffHint": "Without a date, only the leaders you add by hand count.",
+        "days": "Length of the free featuring (days)",
+        "daysHint": "Applies to featuring that has not started yet.",
+        "add": "Add a leader",
+        "addPlaceholder": "Add a leader: first name, last name or email",
+        "activeListings": "active listings: {count}",
+        "grantAll": "Grant to all ({count})",
+        "grantAllConfirm": "Grant {days} days of free featuring to every leader who has not used it and has an active listing ({count})? Where a category is full, the listing goes to the waiting list.",
+        "grantAllDone": "Featured now: {started}. On the waiting list: {waiting}.",
+        "emptyTitle": "No leaders",
+        "emptyText": "Set the date above or add a leader by hand.",
+        "colOwner": "Owner",
+        "colFirst": "First listing",
+        "colHow": "How",
+        "colBenefit": "Free featuring",
+        "howRule": "By the rule",
+        "howManual": "Added by hand",
+        "howExcluded": "Kept out",
+        "benefitUnused": "Not used",
+        "benefitLive": "Featured until {date}",
+        "benefitUsed": "Used (until {date})",
+        "benefitWaiting": "Waiting for a free place",
+        "pickListing": "Listing to feature",
+        "noActiveListing": "no active listing",
+        "grant": "Grant",
+        "exclude": "Keep out",
+        "remove": "Remove from leaders",
+        "include": "Back to the rule",
+        "granted": "{name}: the listing is featured until {date}.",
+        "grantedWaiting": "{name}: the category is full, the listing is on the waiting list."
+      },
+      "preview": {
+        "title": "Preview",
+        "note": "Pick a category and a city to see which featured listings that search would put on top now, and why some are not there. Looking does not count as a view.",
+        "category": "Category",
+        "allCategories": "All categories",
+        "city": "City",
+        "anyCity": "Any city",
+        "show": "Show",
+        "disabled": "Featuring is switched off in the settings: no featured listings are on top of search now.",
+        "emptyTitle": "No featured listings for this search",
+        "emptyText": "No listing is featured in the chosen category.",
+        "topTitle": "{count} of at most {max} would be on top now",
+        "orderNote": "Order: whoever was on top least often today goes first, and one owner has at most one listing on top. The others take their turn in the next searches.",
+        "shownToday": "On top today",
+        "until": "until {date}",
+        "inTop": "On top",
+        "nextTurn": "Next in turn"
+      },
+      "settings": {
+        "rulesTitle": "Featuring rules",
+        "rulesNote": "They apply at once, without a new release.",
+        "enabled": "Featuring is on",
+        "enabledHint": "When off, no featured listing stands out anywhere and owners cannot ask for featuring. Periods already running keep running.",
+        "searchTopCount": "Featured at the top of search",
+        "searchTopCountHint": "With the Recommended order only; sorting by price or newest has no block on top.",
+        "homeDesktopCount": "On the home page at once (computer)",
+        "homeDesktopCountHint": "How many cards show at once before they change.",
+        "homePhoneCount": "On the home page at once (phone)",
+        "homePhoneCountHint": "How many cards the row moves at each change.",
+        "homeIntervalSeconds": "Home page change (seconds)",
+        "homeIntervalSecondsHint": "The change pauses while the mouse is over the section.",
+        "maxPerCategory": "Places per category",
+        "maxPerCategoryHint": "With 5 places on top and 10 per category, every featured listing tops at least every second search of its category on average.",
+        "maxPerOwnerPerCategory": "Featured per owner in one category",
+        "maxPerOwnerPerCategoryHint": "So one owner does not take several places in the same category.",
+        "defaultDays": "Default length (days)",
+        "defaultDaysHint": "Suggested when approving requests and featuring by hand.",
+        "categoryLimits": "A limit for one category",
+        "categoryLimitsHint": "For example when one category has more leaders than places.",
+        "limitFor": "Limit for {name}",
+        "addLimit": "Add a limit",
+        "pickCategory": "Pick a category",
+        "removeLimit": "Remove",
+        "rankingTitle": "Order of the other results (Recommended)",
+        "rankingNote": "After the featured ones, results are ordered by the sum of these weights. Every listing is scored the same way, so the rule is the same for all.",
+        "weight": {
+          "rating": "Rating",
+          "ratingHint": "Guests' average rating; a listing without reviews gets half.",
+          "freshness": "Freshness",
+          "freshnessHint": "A new listing gets a head start that fades over 90 days from publishing.",
+          "responseTime": "Response time",
+          "responseTimeHint": "How fast the owner answers questions.",
+          "random": "Chance",
+          "randomHint": "A little shuffling, so the same listings do not always hold the same places."
+        },
+        "weightShare": "Share: {shares}."
+      },
+      "history": {
+        "emptyTitle": "No changes yet",
+        "emptyText": "Every featuring, change of end, request decision, leader change and rule change is recorded here.",
+        "when": "When",
+        "who": "Who",
+        "what": "What",
+        "details": "Details",
+        "settingRules": "Featuring rules changed",
+        "settingLeaders": "Leaders rule changed",
+        "settingRanking": "Order weights changed",
+        "action": {
+          "grant": "Listing featured",
+          "change_end": "End of featuring changed",
+          "end": "Featuring ended early",
+          "request_approve": "Request approved",
+          "request_reject": "Request declined",
+          "leader_set": "Leader changed",
+          "leader_grant": "Featuring granted to a leader"
+        },
+        "days": "{count} days",
+        "status": {
+          "STARTED": "started now",
+          "WAITING": "on the waiting list"
+        },
+        "override": {
+          "true": "added by hand",
+          "false": "kept out",
+          "null": "by the rule"
+        }
+      },
+      "openedCount": "opened: {count}"
     }
   },
   "home": {
@@ -2448,7 +2693,6 @@
     "featuredTitleStrong": "Featured",
     "featuredTitleLight": "listings",
     "seeAllListings": "See all listings",
-    "noListingsYet": "The first listings in this category are coming soon",
     "detailsLink": "Details",
     "possibilitiesTitleStrong": "Everything you need,",
     "possibilitiesTitleLight": "in one place.",
@@ -2654,7 +2898,23 @@
     "loadErrorTitle": "Listings could not be loaded",
     "loadErrorText": "Check your internet connection and try again.",
     "ical": "iCal sync",
-    "renew": "Renew package"
+    "renew": "Renew package",
+    "featured": {
+      "live": "Featured until {date} · {shown} · {opened}",
+      "shownOne": "shown {count} time",
+      "shownFew": "shown {count} times",
+      "shownMany": "shown {count} times",
+      "openedOne": "opened {count} time",
+      "openedFew": "opened {count} times",
+      "openedMany": "opened {count} times",
+      "pending": "The featuring request was sent and waits for a decision",
+      "waiting": "Featuring waits for a free place in the category",
+      "rejected": "The featuring request was declined: {reason}",
+      "request": "Feature this listing",
+      "cancel": "Withdraw the featuring request",
+      "requestConfirm": "Ask for this listing to be featured for {days} days? Featured listings take turns on the home page and at the top of search, all equally. An administrator decides on the request.",
+      "cancelConfirm": "Withdraw the featuring request for this listing?"
+    }
   },
   "ical": {
     "title": "Calendar sync (iCal)",

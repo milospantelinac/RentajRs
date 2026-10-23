@@ -205,6 +205,22 @@ enum TransactionType {
   FEATURED
 }
 
+/// Where a featured period came from. The selection treats them all alike.
+enum FeaturedSource {
+  ADMIN // an admin featured the listing directly
+  REQUEST // the owner asked for it and an admin approved
+  LEADER // the leaders' program: once per owner, free
+  PAID // kept for the paid checkout, between the request and the approval
+}
+
+enum FeaturedRequestStatus {
+  PENDING // the owner asked, no admin has decided yet
+  WAITING // approved while the category was full: starts on its first free place
+  APPROVED // became a FeaturedListing (featuredId)
+  REJECTED
+  CANCELLED // withdrawn by the owner, or the listing went offline while waiting
+}
+
 enum DocumentType {
   FISCAL_RECEIPT
   E_INVOICE
@@ -311,6 +327,10 @@ model User {
   /// and new booking requests until it passes. Only BLOCK (User.blocked) is permanent.
   warningsCount            Int        @default(0)
   restrictedUntil          DateTime?  @db.Timestamptz
+  /// The leaders' program of featured listings: null lets the rule decide (the
+  /// owner's first listing went live by the cutoff date in the featured_leaders
+  /// setting), true makes the owner a leader anyway, false keeps them out.
+  leaderOverride           Boolean?
 
   logins                  UserLogin[]
   permissions             UserPermission[]
@@ -326,7 +346,8 @@ model User {
   transactions            Transaction[]
   invoices                Invoice[]
   featuredAssigned        FeaturedListing[]     @relation("FeaturedAssignedBy")
-  bookingsAsGuest         Booking[]             @relation("BookingGuest")
+  featuredDecided         FeaturedRequest[]     @relation("FeaturedRequestDecidedBy")
+  bookingsAsGuest        Booking[]             @relation("BookingGuest")
   bookingsAsOwner         Booking[]             @relation("BookingOwner")
   bookingHistoryChanges   BookingHistory[]      @relation("BookingHistoryChangedBy")
   conversationsAsGuest    Conversation[]        @relation("ConversationGuest")
@@ -478,7 +499,6 @@ model Category {
   filters          CategoryFilter[]
   bookingModels    CategoryBookingModel[]
   listings         Listing[]
-  featuredWaitlist FeaturedWaitlist[]
   emptySearches    EmptySearch[]
 
   @@index([parentId])
@@ -770,7 +790,8 @@ model Listing {
   icalSources        IcalSource[]
   bankedDays         BankedDay[]
   featuredPeriods    FeaturedListing[]
-  featuredWaitlist   FeaturedWaitlist[]
+  featuredRequests   FeaturedRequest[]
+  featuredStats      FeaturedStat[]
   bookings           Booking[]
   conversations      Conversation[]
   reviews            Review[]
@@ -1161,38 +1182,74 @@ model Invoice {
   @@index([userId])
 }
 
-/// Rotates on every page refresh so all featured listings in a category get
-/// equal visibility (R114) — see FeaturedListingsService.getRotatedFeatured().
+/// One featured period of a listing. Live while startsAt <= now < expiresAt;
+/// ending one early moves expiresAt to now. Which live ones show first is
+/// decided per page by FeaturedService (least shown today first, R114).
 model FeaturedListing {
-  id               String   @id @default(uuid()) @db.Uuid
-  listingId        String   @db.Uuid
-  transactionId    String?  @db.Uuid
+  id               String         @id @default(uuid()) @db.Uuid
+  listingId        String         @db.Uuid
+  transactionId    String?        @db.Uuid
   durationDays     Int
   price            BigInt
-  startsAt         DateTime @db.Timestamptz
-  expiresAt        DateTime @db.Timestamptz
-  free             Boolean  @default(false) // admin-assigned, no charge (R145)
-  assignedByUserId String?  @db.Uuid
+  startsAt         DateTime       @db.Timestamptz
+  expiresAt        DateTime       @db.Timestamptz
+  free             Boolean        @default(false) // admin-assigned, no charge (R145)
+  assignedByUserId String?        @db.Uuid
+  source           FeaturedSource @default(ADMIN)
+  /// The admin's own note, never shown to the owner.
+  note             String?
+  /// The owner's emails: the reminder before the end and the end itself, each once.
+  reminderSentAt   DateTime?      @db.Timestamptz
+  endedNotifiedAt  DateTime?      @db.Timestamptz
+  createdAt        DateTime       @default(now()) @db.Timestamptz
 
-  listing        Listing      @relation(fields: [listingId], references: [id], onDelete: Cascade)
-  transaction    Transaction? @relation(fields: [transactionId], references: [id])
-  assignedByUser User?        @relation("FeaturedAssignedBy", fields: [assignedByUserId], references: [id])
+  listing        Listing          @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  transaction    Transaction?     @relation(fields: [transactionId], references: [id])
+  assignedByUser User?            @relation("FeaturedAssignedBy", fields: [assignedByUserId], references: [id])
+  request        FeaturedRequest?
 
   @@index([listingId])
   @@index([expiresAt])
 }
 
-model FeaturedWaitlist {
-  id          String    @id @default(uuid()) @db.Uuid
-  listingId   String    @db.Uuid
-  categoryId  String    @db.Uuid
-  requestedAt DateTime  @default(now()) @db.Timestamptz
-  notifiedAt  DateTime? @db.Timestamptz
+/// An owner's "Istakni oglas", and every featuring that waits for a free place
+/// in a full category (whatever its source). Replaces FeaturedWaitlist.
+model FeaturedRequest {
+  id              String                @id @default(uuid()) @db.Uuid
+  listingId       String                @db.Uuid
+  source          FeaturedSource        @default(REQUEST)
+  status          FeaturedRequestStatus @default(PENDING)
+  durationDays    Int
+  /// The admin's reason when it is rejected, shown to the owner.
+  decisionNote    String?
+  /// The admin's own note, carried over to the featured period.
+  note            String?
+  requestedAt     DateTime              @default(now()) @db.Timestamptz
+  decidedAt       DateTime?             @db.Timestamptz
+  decidedByUserId String?               @db.Uuid
+  featuredId      String?               @unique @db.Uuid
 
-  listing  Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
-  category Category @relation(fields: [categoryId], references: [id])
+  listing   Listing          @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  decidedBy User?            @relation("FeaturedRequestDecidedBy", fields: [decidedByUserId], references: [id])
+  featured  FeaturedListing? @relation(fields: [featuredId], references: [id], onDelete: SetNull)
 
-  @@index([categoryId])
+  @@index([status])
+  @@index([listingId])
+}
+
+/// Per listing and Belgrade day: how often it was among the featured at the top
+/// of a search or on the home page, and how often such a card was opened.
+/// Counted in Redis during the day and copied here every few minutes.
+model FeaturedStat {
+  listingId         String   @db.Uuid
+  date              DateTime @db.Date
+  searchImpressions Int      @default(0)
+  homeImpressions   Int      @default(0)
+  clicks            Int      @default(0)
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@id([listingId, date])
 }
 
 /// Singleton row (id is always "default") holding the platform's Banca Intesa

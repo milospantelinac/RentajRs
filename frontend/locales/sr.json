@@ -1025,7 +1025,8 @@
     "reviewSubmit": "Pošalji na odobrenje",
     "resubmitForApproval": "Pošalji ponovo na odobrenje",
     "renewPackage": "Obnovi paket",
-    "bookingModelChoice": "Model rezervacije"
+    "bookingModelChoice": "Model rezervacije",
+    "featuredBadge": "Istaknuto"
   },
   "search": {
     "sortRelevance": "Preporučeno",
@@ -1632,11 +1633,6 @@
     "updatePrice": "Izmeni cenu paketa",
     "priceMonthly": "Mesečna cena (RSD)",
     "priceYearly": "Godišnja cena (RSD)",
-    "featuredWaitlist": "Lista čekanja za isticanje",
-    "featuredWaitlistHint": "Kategorije u kojima su sva istaknuta mesta popunjena — dodelite besplatno isticanje van reda (R145).",
-    "assignFree": "Dodeli besplatno",
-    "durationDays": "Trajanje (dana)",
-    "waitlistedSince": "Čeka od",
     "newCategory": "Nova kategorija",
     "categoryName": "Naziv kategorije",
     "categoryShortDescription": "Kratak opis (prikazuje se na kartici pri dodavanju oglasa)",
@@ -1755,7 +1751,7 @@
       "categories": "Stablo kategorija, predlozi vlasnika i atributi.",
       "users": "Pretraga naloga, blokiranje i istorija sporova.",
       "bookings": "Pretraga svih rezervacija na platformi.",
-      "subscriptions": "Pretplate, cene paketa i lista čekanja za isticanje.",
+      "subscriptions": "Pretplate i cene paketa.",
       "disputes": "Sporovi i prijave oglasa koji čekaju odluku.",
       "emailTemplates": "Tekst poruka koje platforma šalje, na srpskom i engleskom.",
       "content": "Statične stranice, pitanja i odgovori i video na početnoj.",
@@ -1799,10 +1795,6 @@
       "reports": {
         "title": "Nema prijava",
         "text": "Kada neko prijavi oglas, pojaviće se ovde."
-      },
-      "waitlist": {
-        "title": "Lista čekanja je prazna",
-        "text": "Nijedan vlasnik ne čeka slobodno mesto za isticanje."
       },
       "categories": {
         "title": "Nema kategorija",
@@ -2418,6 +2410,259 @@
       "confirmDeleteTitleOne": "Obrisati {count} izabranu stavku?",
       "confirmDeleteTitleFew": "Obrisati {count} izabrane stavke?",
       "confirmDeleteTitleMany": "Obrisati {count} izabranih stavki?"
+    },
+    "featured": {
+      "title": "Istaknuti oglasi",
+      "subtitle": "Ko je istaknut i do kada, zahtevi vlasnika, lideri i pravila rotacije.",
+      "movedNote": "Istaknuti oglasi, zahtevi za isticanje i lista čekanja su na posebnoj strani:",
+      "tabs": {
+        "active": "Aktivni",
+        "requests": "Zahtevi",
+        "leaders": "Lideri",
+        "preview": "Probni prikaz",
+        "settings": "Podešavanja",
+        "history": "Istorija"
+      },
+      "capacityTitle": "Popunjenost po kategorijama",
+      "capacityNote": "Svaka kategorija ima ograničen broj mesta za istaknute oglase, da svaki dobije dovoljno prikaza. Kad su sva mesta zauzeta, novi idu na listu čekanja.",
+      "capacityEmpty": "Trenutno nema istaknutih oglasa ni oglasa na listi čekanja.",
+      "capacityCount": "{taken} od {limit} mesta",
+      "capacityWaiting": "čeka: {count}",
+      "periodState": {
+        "live": "Trenutno istaknuti",
+        "ended": "Završeni (90 dana)"
+      },
+      "grantButton": "Istakni oglas",
+      "empty": {
+        "live": {
+          "title": "Nijedan oglas nije istaknut",
+          "text": "Istaknite oglas dugmetom iznad ili odobrite zahtev vlasnika."
+        },
+        "ended": {
+          "title": "Nema završenih isticanja",
+          "text": "Ovde se vide isticanja završena u poslednjih 90 dana."
+        }
+      },
+      "col": {
+        "listing": "Oglas",
+        "category": "Kategorija",
+        "source": "Izvor",
+        "period": "Trajanje",
+        "shown": "Prikazan",
+        "opened": "Otvoren",
+        "requested": "Poslat",
+        "status": "Stanje"
+      },
+      "hidden": {
+        "NOT_ACTIVE": "Ne prikazuje se: oglas nije aktivan",
+        "UNAVAILABLE": "Ne prikazuje se: oglas je trenutno nedostupan",
+        "OWNER_RESTRICTED": "Ne prikazuje se: vlasnik je blokiran ili ograničen",
+        "OTHER_CITY": "Drugi grad"
+      },
+      "noteLabel": "Napomena",
+      "notePlaceholder": "Samo za administratore, vlasnik je ne vidi",
+      "source": {
+        "ADMIN": "Admin",
+        "REQUEST": "Zahtev",
+        "LEADER": "Lider",
+        "PAID": "Plaćeno"
+      },
+      "assignedBy": "Dodelio: {name}",
+      "shownSplit": "pretraga {search} · početna {home}",
+      "changeEnd": "Promeni kraj",
+      "endNow": "Završi odmah",
+      "endsToday": "ističe danas",
+      "daysLeftOne": "još {count} dan",
+      "daysLeftFew": "još {count} dana",
+      "daysLeftMany": "još {count} dana",
+      "grantTitle": "Istakni oglas",
+      "grantListing": "Oglas",
+      "grantSearchPlaceholder": "Naziv oglasa, prezime ili e-mail vlasnika",
+      "grantNoResults": "Nema aktivnih oglasa koji odgovaraju pretrazi.",
+      "alreadyUntil": "već istaknut do {date}",
+      "daysLabel": "Trajanje (dana)",
+      "daysQuick": "{count} dana",
+      "grantHint": "Isticanje počinje odmah. Ako je kategorija puna, oglas ide na listu čekanja i počinje čim se mesto oslobodi.",
+      "grantSubmit": "Istakni",
+      "grantStarted": "Oglas \"{title}\" je istaknut do {date}.",
+      "grantWaiting": "Kategorija je puna: oglas \"{title}\" je na listi čekanja i biće istaknut čim se mesto oslobodi.",
+      "changeEndTitle": "Promeni kraj isticanja",
+      "currentEnd": "sada do {date}",
+      "newEnd": "Novi kraj",
+      "extendBy": "+{count} dana",
+      "newEndHint": "Kasniji datum produžava isticanje, raniji ga skraćuje. Datum koji je već prošao završava ga odmah.",
+      "endChanged": "Kraj isticanja oglasa \"{title}\" je promenjen.",
+      "endNowConfirm": "Završiti isticanje oglasa \"{title}\" odmah? Vlasnik dobija obaveštenje, a mesto preuzima prvi oglas sa liste čekanja.",
+      "ended": "Isticanje oglasa \"{title}\" je završeno.",
+      "requestFilter": {
+        "open": "Otvoreni",
+        "APPROVED": "Odobreni",
+        "REJECTED": "Odbijeni",
+        "CANCELLED": "Povučeni"
+      },
+      "requestsIntro": "Vlasnik šalje zahtev iz Mojih oglasa. Odobren zahtev počinje odmah, ili ide na listu čekanja ako je kategorija puna (redom kojim su zahtevi stigli).",
+      "emptyRequests": {
+        "open": {
+          "title": "Nema zahteva koji čekaju",
+          "text": "Kad vlasnik pošalje zahtev za isticanje, pojaviće se ovde."
+        },
+        "APPROVED": {
+          "title": "Nema odobrenih zahteva",
+          "text": "Odobreni zahtevi se vide ovde."
+        },
+        "REJECTED": {
+          "title": "Nema odbijenih zahteva",
+          "text": "Odbijeni zahtevi se vide ovde, sa razlogom."
+        },
+        "CANCELLED": {
+          "title": "Nema povučenih zahteva",
+          "text": "Zahtevi koje je vlasnik povukao, ili koji su otpali jer oglas više nije aktivan."
+        }
+      },
+      "leaderPill": "Lider",
+      "leaderBenefitFree": "besplatno isticanje nije iskorišćeno",
+      "leaderBenefitUsed": "besplatno isticanje je iskorišćeno",
+      "requestStatus": {
+        "PENDING": "Čeka odluku",
+        "WAITING": "Na listi čekanja (#{position})",
+        "APPROVED": "Odobren",
+        "REJECTED": "Odbijen",
+        "CANCELLED": "Povučen"
+      },
+      "decidedBy": "Odlučio: {name}",
+      "approve": "Odobri",
+      "reject": "Odbij",
+      "removeFromQueue": "Ukloni sa liste",
+      "approveTitle": "Odobri isticanje",
+      "useLeaderBenefit": "Iskoristi besplatno isticanje lidera ({count} dana)",
+      "categoryFullNote": "Kategorija je puna ({taken} od {limit} mesta): oglas ide na listu čekanja i počinje čim se mesto oslobodi.",
+      "rejectTitle": "Odbij zahtev",
+      "rejectReason": "Razlog",
+      "rejectReasonHint": "Vlasnik dobija ovaj razlog u mejlu.",
+      "rejected": "Zahtev za oglas \"{title}\" je odbijen.",
+      "leaders": {
+        "ruleTitle": "Ko je lider",
+        "ruleNote": "Lider je vlasnik čiji je prvi oglas objavljen do izabranog datuma, ili koga dodate ručno. Svaki lider dobija jedno besplatno isticanje: počinje samo kad mu oglas postane aktivan, ili ovde dugmetom Dodeli. Lideri zauzimaju mesta u kategoriji kao i ostali.",
+        "cutoff": "Prvi oglas objavljen do (uključujući)",
+        "cutoffHint": "Bez datuma lideri su samo oni koje dodate ručno.",
+        "days": "Trajanje besplatnog isticanja (dana)",
+        "daysHint": "Važi za isticanja koja tek počinju.",
+        "add": "Dodaj lidera",
+        "addPlaceholder": "Dodaj lidera: ime, prezime ili e-mail",
+        "activeListings": "aktivnih oglasa: {count}",
+        "grantAll": "Dodeli svima ({count})",
+        "grantAllConfirm": "Dodeliti besplatno isticanje od {days} dana svim liderima koji ga nisu iskoristili i imaju aktivan oglas ({count})? Gde je kategorija puna, oglas ide na listu čekanja.",
+        "grantAllDone": "Istaknuto odmah: {started}. Na listi čekanja: {waiting}.",
+        "emptyTitle": "Nema lidera",
+        "emptyText": "Postavite datum iznad ili dodajte lidera ručno.",
+        "colOwner": "Vlasnik",
+        "colFirst": "Prvi oglas",
+        "colHow": "Kako",
+        "colBenefit": "Besplatno isticanje",
+        "howRule": "Po pravilu",
+        "howManual": "Dodat ručno",
+        "howExcluded": "Isključen",
+        "benefitUnused": "Nije iskorišćeno",
+        "benefitLive": "Istaknut do {date}",
+        "benefitUsed": "Iskorišćeno (do {date})",
+        "benefitWaiting": "Čeka slobodno mesto",
+        "pickListing": "Oglas koji se ističe",
+        "noActiveListing": "nema aktivan oglas",
+        "grant": "Dodeli",
+        "exclude": "Isključi",
+        "remove": "Ukloni iz lidera",
+        "include": "Vrati pravilu",
+        "granted": "{name}: oglas je istaknut do {date}.",
+        "grantedWaiting": "{name}: kategorija je puna, oglas je na listi čekanja."
+      },
+      "preview": {
+        "title": "Probni prikaz",
+        "note": "Izaberite kategoriju i grad da vidite koje istaknute oglase bi ta pretraga sada prikazala na vrhu i zašto neki nisu tu. Pregled ne menja brojanje prikaza.",
+        "category": "Kategorija",
+        "allCategories": "Sve kategorije",
+        "city": "Grad",
+        "anyCity": "Bilo koji grad",
+        "show": "Prikaži",
+        "disabled": "Isticanje je isključeno u podešavanjima: na vrhu pretrage trenutno nema istaknutih oglasa.",
+        "emptyTitle": "Nema istaknutih oglasa za ovu pretragu",
+        "emptyText": "U izabranoj kategoriji nijedan oglas nije istaknut.",
+        "topTitle": "Na vrhu bi sada bilo {count} od najviše {max}",
+        "orderNote": "Redosled: ko je danas najmanje puta bio na vrhu ide prvi, a jedan vlasnik ima najviše jedan oglas na vrhu. Ostali dolaze na red u sledećim pretragama.",
+        "shownToday": "Danas na vrhu",
+        "until": "do {date}",
+        "inTop": "Na vrhu",
+        "nextTurn": "Sledeći na redu"
+      },
+      "settings": {
+        "rulesTitle": "Pravila isticanja",
+        "rulesNote": "Važe odmah, bez novog objavljivanja sajta.",
+        "enabled": "Isticanje je uključeno",
+        "enabledHint": "Kad je isključeno, istaknuti oglasi se nigde ne izdvajaju, a vlasnici ne mogu da šalju zahteve. Započeta isticanja i dalje teku.",
+        "searchTopCount": "Istaknutih na vrhu pretrage",
+        "searchTopCountHint": "Samo uz redosled Preporučeno; uz sortiranje po ceni ili najnovijem nema bloka na vrhu.",
+        "homeDesktopCount": "Na početnoj odjednom (računar)",
+        "homeDesktopCountHint": "Koliko kartica se vidi odjednom pre smene.",
+        "homePhoneCount": "Na početnoj odjednom (telefon)",
+        "homePhoneCountHint": "Za koliko kartica se red pomera pri smeni.",
+        "homeIntervalSeconds": "Smena na početnoj (sekundi)",
+        "homeIntervalSecondsHint": "Smena staje dok je miš iznad sekcije.",
+        "maxPerCategory": "Mesta po kategoriji",
+        "maxPerCategoryHint": "Sa 5 mesta na vrhu i 10 po kategoriji, svaki istaknut oglas je u proseku na vrhu bar svake druge pretrage svoje kategorije.",
+        "maxPerOwnerPerCategory": "Istaknutih po vlasniku u jednoj kategoriji",
+        "maxPerOwnerPerCategoryHint": "Da jedan vlasnik ne zauzme više mesta u istoj kategoriji.",
+        "defaultDays": "Podrazumevano trajanje (dana)",
+        "defaultDaysHint": "Predlog kod odobravanja zahteva i ručnog isticanja.",
+        "categoryLimits": "Posebna granica za kategoriju",
+        "categoryLimitsHint": "Na primer kad u jednoj kategoriji ima više lidera nego mesta.",
+        "limitFor": "Granica za {name}",
+        "addLimit": "Dodaj granicu",
+        "pickCategory": "Izaberite kategoriju",
+        "removeLimit": "Ukloni",
+        "rankingTitle": "Redosled ostalih rezultata (Preporučeno)",
+        "rankingNote": "Posle istaknutih, rezultati se ređaju po zbiru ovih težina. Svaki oglas se ocenjuje na isti način, pa je pravilo isto za sve.",
+        "weight": {
+          "rating": "Ocena",
+          "ratingHint": "Prosečna ocena gostiju; oglas bez ocena dobija polovinu.",
+          "freshness": "Svežina",
+          "freshnessHint": "Novi oglas dobija prednost koja nestaje za 90 dana od objave.",
+          "responseTime": "Brzina odgovora",
+          "responseTimeHint": "Koliko brzo vlasnik odgovara na upite.",
+          "random": "Slučaj",
+          "randomHint": "Malo mešanja, da isti oglasi ne stoje uvek na istom mestu."
+        },
+        "weightShare": "Udeo: {shares}."
+      },
+      "history": {
+        "emptyTitle": "Još nema izmena",
+        "emptyText": "Ovde se beleži svako isticanje, promena kraja, odluka o zahtevu, izmena lidera i pravila.",
+        "when": "Kada",
+        "who": "Ko",
+        "what": "Šta",
+        "details": "Detalji",
+        "settingRules": "Izmenjena pravila isticanja",
+        "settingLeaders": "Izmenjeno pravilo lidera",
+        "settingRanking": "Izmenjene težine redosleda",
+        "action": {
+          "grant": "Istaknut oglas",
+          "change_end": "Promenjen kraj isticanja",
+          "end": "Isticanje završeno ranije",
+          "request_approve": "Odobren zahtev",
+          "request_reject": "Odbijen zahtev",
+          "leader_set": "Izmena lidera",
+          "leader_grant": "Dodeljeno isticanje lideru"
+        },
+        "days": "{count} dana",
+        "status": {
+          "STARTED": "počelo odmah",
+          "WAITING": "na listi čekanja"
+        },
+        "override": {
+          "true": "dodat ručno",
+          "false": "isključen",
+          "null": "po pravilu"
+        }
+      },
+      "openedCount": "otvaranja: {count}"
     }
   },
   "home": {
@@ -2448,7 +2693,6 @@
     "featuredTitleStrong": "Izdvajamo iz",
     "featuredTitleLight": "ponude",
     "seeAllListings": "Pogledaj sve oglase",
-    "noListingsYet": "Uskoro prvi oglasi u ovoj kategoriji",
     "detailsLink": "Detaljnije",
     "possibilitiesTitleStrong": "Sve mogućnosti na",
     "possibilitiesTitleLight": "jednom mestu.",
@@ -2654,7 +2898,23 @@
     "loadErrorTitle": "Oglasi nisu učitani",
     "loadErrorText": "Proverite internet vezu i pokušajte ponovo.",
     "ical": "iCal sinhronizacija",
-    "renew": "Obnovi paket"
+    "renew": "Obnovi paket",
+    "featured": {
+      "live": "Istaknut do {date} · {shown} · {opened}",
+      "shownOne": "{count} prikaz",
+      "shownFew": "{count} prikaza",
+      "shownMany": "{count} prikaza",
+      "openedOne": "{count} otvaranje",
+      "openedFew": "{count} otvaranja",
+      "openedMany": "{count} otvaranja",
+      "pending": "Zahtev za isticanje je poslat i čeka odluku",
+      "waiting": "Isticanje čeka slobodno mesto u kategoriji",
+      "rejected": "Zahtev za isticanje nije prihvaćen: {reason}",
+      "request": "Istakni oglas",
+      "cancel": "Povuci zahtev za isticanje",
+      "requestConfirm": "Poslati zahtev da oglas bude istaknut {days} dana? Istaknuti oglasi se smenjuju na početnoj strani i pri vrhu pretrage, svi podjednako. O zahtevu odlučuje administrator.",
+      "cancelConfirm": "Povući zahtev za isticanje ovog oglasa?"
+    }
   },
   "ical": {
     "title": "Sinhronizacija kalendara (iCal)",

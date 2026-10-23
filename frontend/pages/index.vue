@@ -169,7 +169,19 @@
       </div>
     </section>
 
-    <section class="container featured-section">
+    <!-- T129: only featured listings, all of them in turn; no section without one.
+         A wide screen shows a group at a time and moves to the next group, a
+         phone's row moves one card along; both pause under a mouse, with
+         keyboard focus inside, off screen and in a hidden tab. -->
+    <section
+      v-if="featuredListings.length"
+      ref="featuredSection"
+      class="container featured-section"
+      @pointerenter="onFeaturedPointer($event, true)"
+      @pointerleave="onFeaturedPointer($event, false)"
+      @focusin="onFeaturedFocusIn"
+      @focusout="onFeaturedFocusOut"
+    >
       <div class="featured-header">
         <!-- A plain space, so the phone frame's break before "ponude" can happen. -->
         <h2 class="section-title featured-title">
@@ -182,9 +194,20 @@
         </NuxtLink>
       </div>
 
-      <p v-if="!featuredListings.length" class="text-muted">{{ t('home.noListingsYet') }}</p>
-      <div v-else class="featured-grid">
-        <div v-for="listing in featuredListings" :key="listing.id" class="featured-grid-item">
+      <div
+        ref="featuredRow"
+        class="featured-grid"
+        :class="{ 'is-switching': featuredSwitching }"
+        :style="{ '--featured-columns': featuredColumns }"
+        @scroll.passive="onFeaturedRowScroll"
+      >
+        <div
+          v-for="(listing, index) in featuredListings"
+          :key="listing.id"
+          class="featured-grid-item"
+          :class="{ 'is-shown': featuredSlot(index) < featuredDesktopCount }"
+          :style="{ '--featured-slot': featuredSlot(index) }"
+        >
           <!-- T143: a phone's row of 253px cards, four of at most 300px elsewhere. -->
           <ListingCard :listing="listing" image-sizes="(max-width: 767.98px) 253px, 300px" />
         </div>
@@ -674,18 +697,121 @@ onBeforeUnmount(() => {
 
 // One useAsyncData covering everything the page needs, fetched concurrently.
 const { data: homeData } = await useAsyncData('home-page-data', async () => {
-  const [categories, search] = await Promise.all([
+  const [categories, featured] = await Promise.all([
     api.get('/categories'),
-    api.post('/search', { sort: 'newest', page: 1, pageSize: 8 }),
+    // T129: the featured listings in the order to show them. Without them the
+    // page still renders and their section stays out.
+    api.get('/featured/home').catch(() => null),
   ])
-  return { categories, featuredListings: search.results }
+  return { categories, featured }
 })
 
 const categories = computed(() => homeData.value?.categories || [])
 const homeCategories = computed(() =>
   categories.value.filter((c) => HOME_CATEGORY_TILES[c.slug]).map((c) => ({ slug: c.slug, ...HOME_CATEGORY_TILES[c.slug] })),
 )
-const featuredListings = computed(() => homeData.value?.featuredListings || [])
+const featuredData = computed(() => homeData.value?.featured || null)
+const featuredListings = computed(() => featuredData.value?.listings || [])
+// Administracija > Istaknuti oglasi sets these (4 on a wide screen, 1 on a phone, 5 s).
+const featuredDesktopCount = computed(() => Math.max(1, featuredData.value?.desktopCount || 4))
+const featuredPhoneCount = computed(() => Math.max(1, featuredData.value?.phoneCount || 1))
+const featuredIntervalMs = computed(() => Math.max(3, featuredData.value?.intervalSeconds || 5) * 1000)
+const featuredColumns = computed(() => featuredDesktopCount.value)
+
+// T129 rotation. A wide screen shows featuredDesktopCount cards and moves on
+// to the next ones in turn, after a short fade; a phone keeps Dizajn 42's
+// sideways row and moves it along by featuredPhoneCount cards, back to the
+// start after the last. Same pauses as the possibilities above: a mouse over
+// the section, keyboard focus inside it, the section off screen, the tab
+// hidden, and no rotation at all for visitors who ask for reduced motion. On
+// a phone, a swipe of the visitor's own holds it for a while.
+const PHONE_QUERY = '(max-width: 767.98px)'
+const FEATURED_FADE_MS = 200
+const FEATURED_HOLD_AFTER_SWIPE_MS = 8000
+const featuredSection = ref(null)
+const featuredRow = ref(null)
+const featuredOffset = ref(0)
+const featuredSwitching = ref(false)
+const pointerInFeatured = ref(false)
+const keyboardInFeatured = ref(false)
+const featuredInView = ref(false)
+const featuredPaused = computed(
+  () => !rotationEnabled.value || pointerInFeatured.value || keyboardInFeatured.value || !featuredInView.value || !pageVisible.value,
+)
+let featuredTimer = null
+let featuredObserver = null
+let lastSwipeAt = 0
+let ownScrollUntil = 0
+
+// Where a card stands in the group on screen (0 is the first); the wide grid
+// shows the first featuredDesktopCount in that order.
+function featuredSlot(index) {
+  const count = featuredListings.value.length
+  return (index - featuredOffset.value + count) % count
+}
+
+function onFeaturedPointer(event, inside) {
+  if (event.pointerType === 'mouse') pointerInFeatured.value = inside
+}
+
+function onFeaturedFocusIn(event) {
+  keyboardInFeatured.value = event.target.matches(':focus-visible')
+}
+
+function onFeaturedFocusOut(event) {
+  if (!featuredSection.value?.contains(event.relatedTarget)) keyboardInFeatured.value = false
+}
+
+function onFeaturedRowScroll() {
+  if (Date.now() > ownScrollUntil) lastSwipeAt = Date.now()
+}
+
+function advanceFeaturedRow() {
+  const row = featuredRow.value
+  if (!row || featuredListings.value.length < 2 || Date.now() - lastSwipeAt < FEATURED_HOLD_AFTER_SWIPE_MS) return
+  const items = [...row.children]
+  const rowLeft = row.getBoundingClientRect().left
+  const padding = parseFloat(getComputedStyle(row).paddingLeft) || 0
+  // Each card's place in the row's own scroll coordinates.
+  const starts = items.map((item) => item.getBoundingClientRect().left - rowLeft + row.scrollLeft - padding)
+  const current = Math.max(0, starts.findIndex((start) => start >= row.scrollLeft - 2))
+  const atEnd = row.scrollLeft + row.clientWidth >= row.scrollWidth - 2
+  const next = atEnd ? 0 : Math.min(items.length - 1, current + featuredPhoneCount.value)
+  ownScrollUntil = Date.now() + 1000
+  row.scrollTo({ left: starts[next], behavior: 'smooth' })
+}
+
+function advanceFeatured() {
+  if (featuredPaused.value) return
+  if (window.matchMedia(PHONE_QUERY).matches) {
+    advanceFeaturedRow()
+    return
+  }
+  const count = featuredListings.value.length
+  if (count <= featuredDesktopCount.value) return
+  featuredSwitching.value = true
+  setTimeout(() => {
+    featuredOffset.value = (featuredOffset.value + featuredDesktopCount.value) % count
+    featuredSwitching.value = false
+  }, FEATURED_FADE_MS)
+}
+
+onMounted(() => {
+  if (!featuredSection.value) return
+  featuredObserver = new IntersectionObserver(
+    ([entry]) => {
+      featuredInView.value = entry.intersectionRatio >= 0.249
+    },
+    { threshold: 0.25 },
+  )
+  featuredObserver.observe(featuredSection.value)
+  featuredTimer = setInterval(advanceFeatured, featuredIntervalMs.value)
+})
+
+onBeforeUnmount(() => {
+  clearInterval(featuredTimer)
+  featuredObserver?.disconnect()
+})
 
 // SelectMenu takes flat { value, label } pairs so it stays independent of the
 // API's shape; the leading entry is the "any" option the old <option> carried.
@@ -1498,6 +1624,12 @@ useHead({
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 16px;
+  transition: opacity 0.2s ease;
+}
+
+// T129: the moment between two groups of featured listings.
+.featured-grid.is-switching {
+  opacity: 0;
 }
 
 // Grid items default to min-width: auto, so a nowrap-truncated title inside
@@ -1507,9 +1639,19 @@ useHead({
   min-width: 0;
 }
 
+// T129: a wide screen shows one group of featured listings at a time, in the
+// order of their place in it (--featured-slot), the rest wait their turn.
 @include respond-above(md) {
   .featured-grid {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(var(--featured-columns, 4), 1fr);
+  }
+
+  .featured-grid-item {
+    order: var(--featured-slot, 0);
+  }
+
+  .featured-grid-item:not(.is-shown) {
+    display: none;
   }
 }
 
@@ -1518,7 +1660,7 @@ useHead({
 // gaps both ways (4×280 + 3×32 = 1216, exactly the content width).
 @include respond-above(xxl) {
   .featured-grid {
-    grid-template-columns: repeat(4, 280px);
+    grid-template-columns: repeat(var(--featured-columns, 4), 280px);
     gap: 32px;
   }
 }

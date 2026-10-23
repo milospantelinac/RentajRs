@@ -439,7 +439,22 @@ async function deleteAccount() {
 // non-critical events appear as toggleable — money/security/confirmed-
 // booking emails always send (see backend CRITICAL_EMAIL_EVENTS).
 const NOTIFICATION_CATEGORIES = [
-  { key: 'Listings', events: ['listing_submitted_for_approval', 'listing_approved', 'listing_rejected', 'listing_category_assigned', 'listing_price_dropped'] },
+  {
+    key: 'Listings',
+    events: [
+      'listing_submitted_for_approval',
+      'listing_approved',
+      'listing_rejected',
+      'listing_category_assigned',
+      'listing_price_dropped',
+      // T129: a listing's featured period.
+      'featured_started',
+      'featured_waiting',
+      'featured_ending_soon',
+      'featured_ended',
+      'featured_request_rejected',
+    ],
+  },
   {
     key: 'Bookings',
     events: [

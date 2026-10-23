@@ -120,6 +120,34 @@ function getBookingsCell(t, bookings = {}) {
   return { count: String(bookings.confirmed || 0), open }
 }
 
+// T129: what the row says about featuring (GET /featured/mine), and which of
+// "Istakni oglas" and "Povuci zahtev" its menu offers. Null: nothing to say.
+export function getFeaturedCell(t, item) {
+  if (!item) return null
+  if (item.state === 'LIVE') {
+    const shown = (item.stats?.searchImpressions || 0) + (item.stats?.homeImpressions || 0)
+    const opened = item.stats?.clicks || 0
+    return {
+      tone: 'live',
+      text: t('myListings.featured.live', {
+        date: formatListingDate(item.until),
+        shown: t(`myListings.featured.shown${srPluralCategory(shown)}`, { count: shown }),
+        opened: t(`myListings.featured.opened${srPluralCategory(opened)}`, { count: opened }),
+      }),
+    }
+  }
+  if (item.state === 'PENDING') return { tone: 'pending', text: t('myListings.featured.pending'), canCancel: true }
+  if (item.state === 'WAITING') return { tone: 'pending', text: t('myListings.featured.waiting'), canCancel: true }
+  if (item.lastRejection) {
+    return {
+      tone: 'rejected',
+      text: t('myListings.featured.rejected', { reason: item.lastRejection.note || '-' }),
+      canRequest: item.canRequest,
+    }
+  }
+  return item.canRequest ? { tone: null, text: '', canRequest: true } : null
+}
+
 export function buildMyListingRow(t, listing, now = Date.now()) {
   const published = PUBLISHED_STATUSES.includes(listing.status)
   const category = listing.pendingCategoryAssignment ? t('myListings.noCategory') : listing.categoryName

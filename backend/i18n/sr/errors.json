@@ -109,5 +109,19 @@
   "CITY_IN_USE": "Mesto je u upotrebi (broj oglasa: {count}), pa ne može da se obriše. Sakrijte ga: oglasi ostaju, a mesto se više ne nudi za nove oglase ni u pretrazi.",
   "AREA_IN_USE": "Deo grada je u upotrebi (broj oglasa: {count}), pa ne može da se obriše. Sakrijte ga: oglasi ostaju, a deo grada se više ne nudi za nove oglase.",
   "PLACE_HIDDEN": "Izabrano mesto se više ne nudi. Izaberite drugo.",
-  "CITY_AREA_HIDDEN": "Izabrani deo grada se više ne nudi. Izaberite drugi."
+  "CITY_AREA_HIDDEN": "Izabrani deo grada se više ne nudi. Izaberite drugi.",
+  "FEATURED_LISTING_NOT_ACTIVE": "Istaknut može da bude samo aktivan oglas.",
+  "FEATURED_OWNER_NOT_ELIGIBLE": "Vlasnik oglasa je trenutno blokiran ili ograničen, pa oglas ne može da bude istaknut.",
+  "FEATURED_ALREADY": "Ovaj oglas je već istaknut.",
+  "FEATURED_ALREADY_WAITING": "Ovaj oglas već čeka slobodno mesto za isticanje.",
+  "FEATURED_OWNER_LIMIT": "Vlasnik već ima istaknut oglas u ovoj kategoriji (najviše {limit} po kategoriji).",
+  "FEATURED_REQUEST_EXISTS": "Zahtev za isticanje ovog oglasa je već poslat.",
+  "FEATURED_REQUEST_CLOSED": "O ovom zahtevu je već odlučeno.",
+  "FEATURED_DISABLED": "Isticanje oglasa trenutno nije dostupno.",
+  "FEATURED_END_INVALID": "Kraj isticanja mora da bude posle njegovog početka.",
+  "FEATURED_PERIOD_OVER": "Ovo isticanje je već završeno.",
+  "LEADER_NOT_LEADER": "Ovaj vlasnik nije u programu lidera.",
+  "LEADER_BENEFIT_USED": "Ovaj lider je već iskoristio svoje besplatno isticanje.",
+  "LEADER_NO_ACTIVE_LISTING": "Vlasnik nema aktivan oglas koji bi mogao da bude istaknut.",
+  "RANKING_WEIGHTS_EMPTY": "Bar jedna težina mora da bude veća od nule."
 }
