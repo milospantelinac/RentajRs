@@ -453,6 +453,9 @@ const NOTIFICATION_CATEGORIES = [
       'featured_ending_soon',
       'featured_ended',
       'featured_request_rejected',
+      // Administracija > Oglasi: Rentaj published a listing for its owner, or changed how long it lasts.
+      'listing_published_by_admin',
+      'listing_period_changed',
     ],
   },
   {

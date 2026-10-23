@@ -3,7 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { ConfigService } from '@nestjs/config';
 import { I18nService } from 'nestjs-i18n';
-import { Prisma, Subscription, SubscriptionStatus } from '@prisma/client';
+import { BillingCycle, Prisma, Subscription, SubscriptionStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CacheService } from '../../common/cache/cache.service';
 import { ListingsService } from '../listings/listings.service';
@@ -20,9 +20,16 @@ import {
   cycleLength,
   isRunningPeriod,
 } from '../../common/utils/subscription-renewal';
+import { PeriodUnit, periodEnd } from '../../common/utils/free-listing-period';
+import { isAdminDraft } from '../../common/utils/listing-access';
 import { PurchaseSubscriptionDto, AdjustPriceDto, InitCheckoutDto } from './dto/subscriptions.dto';
 
 type RenewalBlock = 'NOT_RENEWABLE' | 'NO_LISTINGS' | 'ALREADY_RENEWED';
+
+/** Administracija > Oglasi, "Trajanje": what an admin does to a package's end. */
+export type PeriodChange =
+  | { mode: 'EXTEND' | 'SET'; amount: number; unit: PeriodUnit }
+  | { mode: 'UNLIMITED' | 'END_NOW' };
 
 @Injectable()
 export class SubscriptionsService {
@@ -70,6 +77,7 @@ export class SubscriptionsService {
     const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: dto.listingId } });
     if (listing.userId !== userId) throw new ForbiddenException();
     assertCategoryAssigned(listing, this.i18n);
+    assertNotAdminDraft(listing, this.i18n);
 
     const wasActive = listing.status === 'ACTIVE';
     const eligibleStatuses = dto.existingSubscriptionId ? ['DRAFT', 'REJECTED', 'ACTIVE'] : ['DRAFT', 'REJECTED'];
@@ -128,6 +136,10 @@ export class SubscriptionsService {
     if (subscription.userId !== userId) throw new ForbiddenException();
     if (subscription.package.key !== 'PRO') {
       throw new BadRequestException('Only Pro subscriptions can cover more than one listing');
+    }
+    // A Pro an admin gave without payment covers the listing it was given for, nothing more (the user, 2026-10-22).
+    if (subscription.grantedByAdminId) {
+      throw new BadRequestException(this.i18n.t('errors.SUBSCRIPTION_FREE_NOT_SHARED'));
     }
     if (subscription.status !== 'ACTIVE') {
       throw new BadRequestException('Subscription is not active');
@@ -199,6 +211,7 @@ export class SubscriptionsService {
     const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: dto.listingId } });
     if (listing.userId !== userId) throw new ForbiddenException();
     assertCategoryAssigned(listing, this.i18n);
+    assertNotAdminDraft(listing, this.i18n);
     // A renewal pays for the next period of a package the listing is already on;
     // everything else is a first package or a move to Pro.
     const renewed = dto.renewSubscriptionId ? await this.assertRenewable(userId, dto) : null;
@@ -352,6 +365,8 @@ export class SubscriptionsService {
 
   private async getRenewalBlock(subscription: Subscription & { listings: { id: string }[] }): Promise<RenewalBlock | null> {
     if (!RENEWABLE_SUBSCRIPTION_STATUSES.includes(subscription.status)) return 'NOT_RENEWABLE';
+    // A free package with no end (Administracija > Oglasi) has no next period to pay for.
+    if (subscription.status === 'ACTIVE' && !subscription.expiresAt) return 'NOT_RENEWABLE';
     if (!subscription.listings.length) return 'NO_LISTINGS';
     const scheduled = await this.prisma.subscription.count({
       where: { renewsSubscriptionId: subscription.id, status: 'SCHEDULED' },
@@ -742,6 +757,132 @@ export class SubscriptionsService {
     return outcome;
   }
 
+  // -- Free packages (Administracija > Oglasi) ----------------------------
+  // A package an admin gives without payment (the user, 2026-10-22). It runs
+  // from the moment it is given until expiresAt (null: no end until an admin
+  // sets one) and ends like a paid one: the owner is reminded 7, 3 and 1 day
+  // before and may pay to continue the same package. No transaction, invoice
+  // or receipt stands behind it.
+
+  async createAdminGrant(
+    adminId: string,
+    input: { userId: string; listingId: string; packageId: string; expiresAt: Date | null; billingCycle: BillingCycle; note?: string | null },
+  ) {
+    await this.assertPackageCompatibleWithListing(input.listingId, input.packageId);
+    return this.prisma.subscription.create({
+      data: {
+        userId: input.userId,
+        packageId: input.packageId,
+        billingCycle: input.billingCycle,
+        status: 'ACTIVE',
+        priceAtPurchase: 0n,
+        startsAt: new Date(),
+        expiresAt: input.expiresAt,
+        grantedByAdminId: adminId,
+        grantNote: input.note?.trim() || null,
+      },
+    });
+  }
+
+  /**
+   * "Trajanje" in Administracija > Oglasi. A free package's end moves either
+   * way, goes away or comes now; a paid package only gets time on top, as a
+   * gift. A package that already ended comes back with its listings. Paid
+   * renewals queued behind the package move with its end, so none loses days.
+   * Returns the package before and after, for the admin log.
+   */
+  async adminChangePeriod(subscriptionId: string, change: PeriodChange) {
+    const subscription = await this.prisma.subscription.findUniqueOrThrow({ where: { id: subscriptionId } });
+    const before = { status: subscription.status, expiresAt: subscription.expiresAt };
+    if (subscription.status !== 'ACTIVE' && subscription.status !== 'EXPIRED') {
+      throw new BadRequestException(this.i18n.t('errors.PERIOD_NOT_CHANGEABLE'));
+    }
+    if (!subscription.grantedByAdminId && change.mode !== 'EXTEND') {
+      throw new BadRequestException(this.i18n.t('errors.PERIOD_PAID_EXTEND_ONLY'));
+    }
+    const now = new Date();
+    const queued = await this.scheduledRenewalsOf(subscription.id);
+
+    if (change.mode === 'END_NOW') {
+      if (subscription.status !== 'ACTIVE') throw new BadRequestException(this.i18n.t('errors.PERIOD_ALREADY_ENDED'));
+      // A continuation the owner already paid for starts now, whole.
+      await this.shiftRenewals(queued, subscription.expiresAt, now);
+      const ended = await this.prisma.subscription.update({ where: { id: subscription.id }, data: { expiresAt: now } });
+      await this.expireSubscription(ended);
+      return { before, after: { status: 'EXPIRED' as SubscriptionStatus, expiresAt: now } };
+    }
+    // The owner paid to continue after this package; with no end it would never start.
+    if (change.mode === 'UNLIMITED' && queued.length) {
+      throw new BadRequestException(this.i18n.t('errors.PERIOD_UNLIMITED_RENEWED'));
+    }
+
+    let expiresAt: Date | null = null;
+    if (change.mode === 'SET') {
+      expiresAt = periodEnd(now, change.amount, change.unit);
+    } else if (change.mode === 'EXTEND') {
+      // On top of the running end; a package that ended, or has no end, counts from today.
+      const runningEnd = subscription.status === 'ACTIVE' && subscription.expiresAt && subscription.expiresAt > now ? subscription.expiresAt : null;
+      expiresAt = periodEnd(runningEnd ?? now, change.amount, change.unit);
+    }
+    await this.shiftRenewals(queued, subscription.expiresAt, expiresAt);
+    await this.prisma.subscription.update({ where: { id: subscription.id }, data: { expiresAt, status: 'ACTIVE' } });
+    if (subscription.status === 'EXPIRED') await this.bringBackListings(subscription.id);
+    return { before, after: { status: 'ACTIVE' as SubscriptionStatus, expiresAt } };
+  }
+
+  /** The paid renewals waiting behind a package, in the order they start. */
+  private async scheduledRenewalsOf(subscriptionId: string): Promise<Subscription[]> {
+    const chain: Subscription[] = [];
+    let previous = subscriptionId;
+    for (let depth = 0; depth < 100; depth++) {
+      const next = await this.prisma.subscription.findFirst({
+        where: { renewsSubscriptionId: previous, status: 'SCHEDULED' },
+        orderBy: { startsAt: 'asc' },
+      });
+      if (!next) break;
+      chain.push(next);
+      previous = next.id;
+    }
+    return chain;
+  }
+
+  /** Queued renewals keep their length and start where the package now ends. */
+  private async shiftRenewals(queued: Subscription[], oldEnd: Date | null, newEnd: Date | null) {
+    if (!queued.length || !oldEnd || !newEnd) return;
+    const delta = newEnd.getTime() - oldEnd.getTime();
+    if (!delta) return;
+    for (const renewal of queued) {
+      await this.prisma.subscription.update({
+        where: { id: renewal.id },
+        data: {
+          startsAt: renewal.startsAt ? new Date(renewal.startsAt.getTime() + delta) : renewal.startsAt,
+          expiresAt: renewal.expiresAt ? new Date(renewal.expiresAt.getTime() + delta) : renewal.expiresAt,
+        },
+      });
+    }
+  }
+
+  /**
+   * A package that ended runs again: its listings that were live before are
+   * back in search, and days carried over from an earlier package that had
+   * started running wait for this period to end again (ADR-005).
+   */
+  private async bringBackListings(subscriptionId: string) {
+    const listings = await this.prisma.listing.findMany({
+      where: { subscriptionId, status: { not: 'DELETED' } },
+      select: { id: true, status: true, publishedAt: true },
+    });
+    let back = false;
+    for (const listing of listings) {
+      await this.rebankRunningDays(listing.id);
+      if (listing.status === 'EXPIRED' && listing.publishedAt) {
+        await this.prisma.listing.update({ where: { id: listing.id }, data: { status: 'ACTIVE' } });
+        back = true;
+      }
+    }
+    if (back) await this.cache.del(LISTING_COUNTS_CACHE_KEY);
+  }
+
   async adminListSubscriptions(status?: SubscriptionStatus) {
     const subscriptions = await this.prisma.subscription.findMany({
       where: status ? { status } : undefined,
@@ -750,6 +891,8 @@ export class SubscriptionsService {
         user: { select: { id: true, firstName: true, lastName: true, email: true, buyerType: true } },
         package: true,
         listings: { select: { id: true, title: true, slug: true, status: true } }, // no .price — see money.ts note below
+        // Administracija > Oglasi: who gave a free package.
+        grantedByAdmin: { select: { id: true, firstName: true, lastName: true } },
       },
     });
     // Every BigInt (para) field must be converted before this crosses into JSON (Node's
@@ -780,11 +923,13 @@ export class SubscriptionsService {
       ? await this.prisma.bankedDay.findMany({ where: { listingId: { in: listingIds }, usedAt: null } })
       : [];
 
-    return subscriptions.map((s) => ({
+    return subscriptions.map(({ grantedByAdminId, grantNote: _note, ...s }) => ({
       ...s,
       priceAtPurchase: paraToRsd(s.priceAtPurchase),
       package: { ...s.package, priceMonthly: paraToRsd(s.package.priceMonthly), priceYearly: paraToRsd(s.package.priceYearly) },
       bankedDays: bankedDays.filter((b) => s.listings.some((l) => l.id === b.listingId)),
+      // Administracija > Oglasi: "Besplatno od Rentaja", with no price or receipt.
+      freeGrant: !!grantedByAdminId,
     }));
   }
 
@@ -870,43 +1015,46 @@ export class SubscriptionsService {
    */
   private async expireOverdueSubscriptions() {
     const overdue = await this.prisma.subscription.findMany({ where: { status: 'ACTIVE', expiresAt: { lt: new Date() } } });
-    for (const sub of overdue) {
-      await this.prisma.subscription.update({ where: { id: sub.id }, data: { status: 'EXPIRED' } });
+    for (const sub of overdue) await this.expireSubscription(sub);
+  }
 
-      // A renewal paid in advance takes the listings over without a gap; any
-      // carried-over days keep waiting for that period to end.
-      const renewal = await this.prisma.subscription.findFirst({
-        where: { renewsSubscriptionId: sub.id, status: 'SCHEDULED' },
-        orderBy: { startsAt: 'asc' },
-      });
-      if (renewal) {
-        await this.prisma.subscription.update({ where: { id: renewal.id }, data: { status: 'ACTIVE' } });
-        await this.handOverListings(sub.id, renewal.id, { reactivate: false });
-        continue;
-      }
+  /** One package's end, from the nightly sweep or an admin's "Završi odmah". */
+  private async expireSubscription(sub: Subscription) {
+    await this.prisma.subscription.update({ where: { id: sub.id }, data: { status: 'EXPIRED' } });
 
-      // A deleted listing keeps its subscriptionId, and stays deleted.
-      const listings = await this.prisma.listing.findMany({ where: { subscriptionId: sub.id, status: { not: 'DELETED' } } });
-      const leftSearch: string[] = [];
-      for (const listing of listings) {
-        const unused = await this.prisma.bankedDay.findMany({ where: { listingId: listing.id, usedAt: null } });
-        const totalDays = unused.reduce((sum, b) => sum + b.days, 0);
-        if (totalDays > 0) {
-          const validUntil = addDays(new Date(), totalDays);
-          await this.prisma.bankedDay.updateMany({
-            where: { id: { in: unused.map((b) => b.id) } },
-            data: { validFrom: new Date(), validUntil },
-          });
-        } else {
-          await this.prisma.listing.update({ where: { id: listing.id }, data: { status: 'EXPIRED' } });
-          if (listing.status === 'ACTIVE') leftSearch.push(listing.id);
-        }
+    // A renewal paid in advance takes the listings over without a gap; any
+    // carried-over days keep waiting for that period to end.
+    const renewal = await this.prisma.subscription.findFirst({
+      where: { renewsSubscriptionId: sub.id, status: 'SCHEDULED' },
+      orderBy: { startsAt: 'asc' },
+    });
+    if (renewal) {
+      await this.prisma.subscription.update({ where: { id: renewal.id }, data: { status: 'ACTIVE' } });
+      await this.handOverListings(sub.id, renewal.id, { reactivate: false });
+      return;
+    }
+
+    // A deleted listing keeps its subscriptionId, and stays deleted.
+    const listings = await this.prisma.listing.findMany({ where: { subscriptionId: sub.id, status: { not: 'DELETED' } } });
+    const leftSearch: string[] = [];
+    for (const listing of listings) {
+      const unused = await this.prisma.bankedDay.findMany({ where: { listingId: listing.id, usedAt: null } });
+      const totalDays = unused.reduce((sum, b) => sum + b.days, 0);
+      if (totalDays > 0) {
+        const validUntil = addDays(new Date(), totalDays);
+        await this.prisma.bankedDay.updateMany({
+          where: { id: { in: unused.map((b) => b.id) } },
+          data: { validFrom: new Date(), validUntil },
+        });
+      } else {
+        await this.prisma.listing.update({ where: { id: listing.id }, data: { status: 'EXPIRED' } });
+        if (listing.status === 'ACTIVE') leftSearch.push(listing.id);
       }
-      // The email says the listing is no longer visible, so it only goes out when one really left search.
-      if (leftSearch.length) {
-        this.events.emit('subscription.expired', { subscriptionId: sub.id, listingIds: leftSearch });
-        await this.cache.del(LISTING_COUNTS_CACHE_KEY);
-      }
+    }
+    // The email says the listing is no longer visible, so it only goes out when one really left search.
+    if (leftSearch.length) {
+      this.events.emit('subscription.expired', { subscriptionId: sub.id, listingIds: leftSearch });
+      await this.cache.del(LISTING_COUNTS_CACHE_KEY);
     }
   }
 
@@ -932,9 +1080,11 @@ export class SubscriptionsService {
     }
   }
 
-  private serialize(subscription: Subscription & { package?: any; listings?: any[] }) {
+  private serialize({ grantedByAdminId, grantNote: _note, ...subscription }: Subscription & { package?: any; listings?: any[] }) {
     return {
       ...subscription,
+      // The admin's note on a free package stays with the admins.
+      freeGrant: !!grantedByAdminId,
       priceAtPurchase: paraToRsd(subscription.priceAtPurchase),
       // attachToExistingSubscription()'s lookup includes these relations to
       // check free-slot capacity — both packages and listings carry their
@@ -964,6 +1114,13 @@ export class SubscriptionsService {
 function assertCategoryAssigned(listing: { pendingCategoryAssignment: boolean }, i18n: I18nService) {
   if (listing.pendingCategoryAssignment) {
     throw new BadRequestException(i18n.t('errors.LISTING_CATEGORY_PENDING'));
+  }
+}
+
+/** A listing an admin is still preparing is published by the admin, without payment. */
+function assertNotAdminDraft(listing: { createdByAdminId: string | null; subscriptionId: string | null }, i18n: I18nService) {
+  if (isAdminDraft(listing)) {
+    throw new BadRequestException(i18n.t('errors.LISTING_ADMIN_DRAFT'));
   }
 }
 

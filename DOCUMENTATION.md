@@ -240,6 +240,18 @@ No folder is made ahead of time (a new user gets none): a prefix exists once its
 
 ---
 
+## 8b. Listings an admin adds without payment (Administracija > Oglasi)
+
+Decided with the user on 2026-10-22 (four rounds of questions). **Administracija > Oglasi** (`/admin/oglasi`, permission `manage_free_listings`, which migration `20261022100000_admin_free_listings` gives to every account that held a permission then) lists every listing (search by title or owner, status, "Besplatni" and "Dodao admin" filters, 25 a page) and adds new ones.
+
+**Adding.** "Dodaj oglas" picks an existing account (`GET /admin/listings/owners`; the owner registers first), then the category (`/oglasi/novi?vlasnik=<id>`), and `POST /admin/listings` opens a draft in the owner's name with `Listing.createdByAdminId`. The admin fills it in the owners' own wizard: `canEditListing` (common/utils/listing-access.ts) lets every admin with the permission into a listing an admin added (ListingsService and AvailabilityService), never into one an owner added. The wizard reads the owner from `adminView` (`GET /listings/:id`): the phone and bank account are the owner's to add in their profile, and the listing must be ready as an owner's would; the owner's email address need not be confirmed. The owner does not see the draft (`ADMIN_DRAFT` is left out of Moji oglasi and the home page) and cannot buy a package for it.
+
+**Publishing.** "Objavi bez plaćanja" (`POST /admin/listings/:id/publish`) takes the package (Osnovni only for a listing without online booking), a period in months or days (common/utils/free-listing-period.ts: to the end of that Belgrade day, at most 120 months or 3650 days) or none, an optional free featured slot of 7, 15 or 30 days and an admin note. It opens a `Subscription` with `grantedByAdminId`, price 0, ACTIVE from now (`expiresAt` null: no end), and the listing goes live at once with a moderation row the admin decided. No transaction, invoice or receipt exists for it. The owner gets `listing_published_by_admin`.
+
+**After.** A free package ends like a paid one: reminders 7, 3 and 1 day before, the owner may pay to continue the same package, and the listing leaves search after its end; one with no end is never swept and has nothing to renew. A free Pro covers its own listing only. "Trajanje" (`POST /admin/listings/:id/period`) extends a free package, sets a new end from today (sooner too), takes the end away or ends it now (`subscription_expired` tells the owner); a paid package only gets time on top, for every listing on it. A package that ended comes back with its listings, and paid renewals queued behind a package move with its end. The owner gets `listing_period_changed`, and sees "Besplatno od Rentaja" and the end (or "Bez isteka") in Moji oglasi and Moje pretplate; the admin's note and name never reach the owner. Every step writes an AdminLog row (`listing.admin_created`, `listing.published_free`, `listing.period_changed`).
+
+---
+
 ## 8c. Featured listings (T129 point 6)
 
 `modules/featured/` (FeaturedService, FeaturedController, `featured-grant.ts`) with the pure rules in `common/utils/featured-rules.ts`. A featured period is a `FeaturedListing` row, live while `startsAt <= now < expiresAt`; its `source` says where it came from (ADMIN, REQUEST, LEADER, later PAID) and nothing else depends on it.

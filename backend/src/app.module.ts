@@ -30,6 +30,7 @@ import { ReviewsModule } from './modules/reviews/reviews.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
 import { FeaturedModule } from './modules/featured/featured.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { AdminListingsModule } from './modules/admin-listings/admin-listings.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { EmailModule } from './modules/email/email.module';
@@ -82,6 +83,8 @@ import { ContactModule } from './modules/contact/contact.module';
     SubscriptionsModule,
     FeaturedModule,
     AdminModule,
+    // Administracija > Oglasi: listings added for users without payment.
+    AdminListingsModule,
     DashboardModule,
     NotificationsModule,
     EmailModule,

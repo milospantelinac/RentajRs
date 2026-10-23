@@ -94,6 +94,14 @@ function getDetail(t, listing) {
 
 function getPackageCell(t, listing, now) {
   const name = listing.subscription?.package?.key || '-'
+  // Administracija > Oglasi: a package Rentaj gave without payment, which may have no end at all.
+  const free = !!listing.subscription?.freeGrant
+  if (listing.subscription?.noEnd) return { name, free, text: t('myListings.noEnd') }
+  return { ...getPackagePeriod(t, listing, now), name, free }
+}
+
+function getPackagePeriod(t, listing, now) {
+  const name = listing.subscription?.package?.key || '-'
   if (!listing.validUntil) return { name, text: '' }
   const date = formatListingDate(listing.validUntil)
   const left = new Date(listing.validUntil).getTime() - now
@@ -172,8 +180,13 @@ export function buildMyListingRow(t, listing, now = Date.now()) {
     // Dizajn 33: only listings that can connect calendars get the menu item.
     icalUrl: listing.icalAvailable ? `/kontrolna-tabla/oglasi/${listing.id}/ical` : null,
     // A published listing's package can be renewed until its next period is paid for.
+    // A free package with no end has no next period to pay for.
     renewUrl:
-      published && listing.subscriptionId && RENEWABLE_SUBSCRIPTIONS.includes(listing.subscription?.status) && !listing.renewalScheduled
+      published &&
+      listing.subscriptionId &&
+      RENEWABLE_SUBSCRIPTIONS.includes(listing.subscription?.status) &&
+      !listing.renewalScheduled &&
+      !listing.subscription?.noEnd
         ? `/oglasi/${listing.id}/paket?obnova=${listing.subscriptionId}`
         : null,
   }

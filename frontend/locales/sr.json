@@ -1757,7 +1757,8 @@
       "content": "Statične stranice, pitanja i odgovori i video na početnoj.",
       "settings": "Sistemske vrednosti koje menjaju ponašanje platforme.",
       "bookingModels": "Načini rezervacije koje vlasnici biraju u wizardu i koje kategorije ih nude.",
-      "locations": "Okruzi, mesta i delovi grada koje vlasnici biraju u oglasu, a gosti u pretrazi."
+      "locations": "Okruzi, mesta i delovi grada koje vlasnici biraju u oglasu, a gosti u pretrazi.",
+      "listings": "Svi oglasi na sajtu, dodavanje oglasa za korisnike bez plaćanja i koliko traju."
     },
     "empty": {
       "queue": {
@@ -2670,7 +2671,8 @@
         }
       },
       "openedCount": "otvaranja: {count}"
-    }
+    },
+    "listings": "Oglasi"
   },
   "home": {
     "heroTitleLine1": "Oglasi. Rezervacije.",
@@ -2921,7 +2923,9 @@
       "cancel": "Povuci zahtev za isticanje",
       "requestConfirm": "Poslati zahtev da oglas bude istaknut {days} dana? Istaknuti oglasi se smenjuju na početnoj strani i pri vrhu pretrage, svi podjednako. O zahtevu odlučuje administrator.",
       "cancelConfirm": "Povući zahtev za isticanje ovog oglasa?"
-    }
+    },
+    "freeFromRentaj": "Besplatno od Rentaja",
+    "noEnd": "Bez isteka"
   },
   "ical": {
     "title": "Sinhronizacija kalendara (iCal)",
@@ -3137,7 +3141,9 @@
     "renewedNote": "Obnovljeno: novi period počinje {date}",
     "expiredNoteOne": "Oglas nije vidljiv u pretrazi dok se paket ne obnovi.",
     "expiredNoteMany": "Oglasi nisu vidljivi u pretrazi dok se paket ne obnovi.",
-    "expiredBankedNote": "Oglas je vidljiv iz prenetih dana; obnova čuva ostatak za posle."
+    "expiredBankedNote": "Oglas je vidljiv iz prenetih dana; obnova čuva ostatak za posle.",
+    "freeFromRentaj": "Besplatno od Rentaja",
+    "noEnd": "Bez isteka"
   },
   "savedListings": {
     "summaryOne": "{count} oglas koji ste sačuvali",
@@ -3423,5 +3429,142 @@
       "title": "Termin ove rezervacije ne može da se menja",
       "text": "Izmena se traži za poslatu, odobrenu ili potvrđenu rezervaciju, dok oglas prima rezervacije."
     }
+  },
+  "adminListings": {
+    "add": "Dodaj oglas",
+    "addTitle": "Dodaj oglas",
+    "addSubtitle": "Oglas pripada postojećem korisniku i objavljuje se bez plaćanja. Prvo izaberite korisnika.",
+    "ownerSearchLabel": "Korisnik",
+    "ownerSearchPlaceholder": "Ime, prezime ili mejl",
+    "ownerSearchHint": "Vlasnik mora već da ima nalog na Rentaju.",
+    "ownerNone": "Nijedan korisnik ne odgovara pretrazi.",
+    "ownerBlocked": "Blokiran",
+    "ownerRestricted": "Privremeno ograničen",
+    "ownerNoPhone": "Nema telefon",
+    "ownerUnverified": "Mejl nije potvrđen",
+    "ownerListingsOne": "{count} oglas",
+    "ownerListingsFew": "{count} oglasa",
+    "ownerListingsMany": "{count} oglasa",
+    "ownerNoPhoneHint": "Oglas može da se objavi tek kada vlasnik u svom profilu doda broj telefona (i broj računa, ako gosti plaćaju uplatom).",
+    "backToList": "Nazad na oglase",
+    "categoryFor": "Dodajete oglas za: {name} ({email}). Oglas se objavljuje bez plaćanja.",
+    "wizardAdding": "Dodajete oglas za: {name} ({email}). Na kraju ga objavljujete bez plaćanja; vlasnik ga vidi tek kada bude objavljen.",
+    "wizardEditing": "Menjate oglas korisnika {name} ({email}).",
+    "ownerAddsInProfile": "Dodaje vlasnik ({name}) u svom profilu",
+    "ownerBankAccountMissing": "{name} nema broj računa u profilu, pa se QR kod za uplatu ne može poslati. Vlasnik treba sam da ga doda u profilu, ili izaberite plaćanje gotovinom.",
+    "publishFree": "Objavi bez plaćanja",
+    "publishTitle": "Objavi bez plaćanja",
+    "publishIntro": "Oglas odmah postaje vidljiv gostima, bez reda za odobravanje. Vlasnik ({name}) dobija mejl i vidi oglas u delu Moji oglasi.",
+    "packageLabel": "Paket",
+    "feature": {
+      "bookings": "Rezervacije",
+      "messaging": "Poruke",
+      "reviews": "Ocene",
+      "ical": "iCal",
+      "contactOnly": "Samo kontakt podaci"
+    },
+    "durationLabel": "Trajanje",
+    "unit": {
+      "MONTHS": "Meseci",
+      "DAYS": "Dani",
+      "UNLIMITED": "Bez isteka"
+    },
+    "unitWord": {
+      "MONTHSOne": "mesec",
+      "MONTHSFew": "meseca",
+      "MONTHSMany": "meseci",
+      "DAYSOne": "dan",
+      "DAYSFew": "dana",
+      "DAYSMany": "dana"
+    },
+    "amountLabel": {
+      "MONTHS": "Broj meseci",
+      "DAYS": "Broj dana"
+    },
+    "quick": {
+      "MONTHSOne": "{count} mesec",
+      "MONTHSFew": "{count} meseca",
+      "MONTHSMany": "{count} meseci",
+      "DAYSOne": "{count} dan",
+      "DAYSFew": "{count} dana",
+      "DAYSMany": "{count} dana"
+    },
+    "amountInvalid": {
+      "MONTHS": "Upišite od 1 do {max} meseci",
+      "DAYS": "Upišite od 1 do {max} dana"
+    },
+    "endsOn": "Važi do {date}",
+    "endsNever": "Važi dok ga admin ne ugasi",
+    "endsNeverShort": "Bez isteka",
+    "endedOn": "Isteklo {date}",
+    "featuredLabel": "Isticanje",
+    "featuredNone": "Bez isticanja",
+    "featuredDays": "Istaknut {count} dana",
+    "noteLabel": "Beleška",
+    "notePlaceholder": "Npr. dogovor ili razlog. Vidi je samo admin.",
+    "publishConfirm": "Objavi",
+    "publishedNotice": "Oglas je objavljen. Vlasnik je dobio mejl.",
+    "searchPlaceholder": "Naslov, ime ili mejl vlasnika",
+    "allStatuses": "Svi statusi",
+    "statusDeleted": "Obrisan",
+    "filterLabel": "Vrsta oglasa",
+    "filterAll": "Svi oglasi",
+    "filterFree": "Besplatni (od Rentaja)",
+    "filterAdmin": "Dodao admin",
+    "emptyTitle": "Još nema oglasa",
+    "emptyText": "Oglasi koje dodaju vlasnici i admini pojaviće se ovde.",
+    "emptySearchTitle": "Nijedan oglas ne odgovara",
+    "emptySearchText": "Probajte drugi naziv ili uklonite neki filter.",
+    "col": {
+      "listing": "Oglas",
+      "owner": "Vlasnik",
+      "package": "Paket",
+      "validUntil": "Važi do"
+    },
+    "adminDraft": "Priprema admin",
+    "free": "Besplatno",
+    "paid": "Plaćeno",
+    "addedBy": "dodao {name}",
+    "continuedUntil": "Plaćen nastavak do {date}",
+    "featuredUntil": "Istaknut do {date}",
+    "continue": "Nastavi",
+    "edit": "Izmeni",
+    "period": "Trajanje",
+    "view": "Pogledaj",
+    "prevPage": "Prethodna",
+    "nextPage": "Sledeća",
+    "pageOf": "Strana {page} od {total}",
+    "noPermission": "Za ovu stranu potrebna je dozvola \"Oglasi bez plaćanja\".",
+    "periodTitle": "Trajanje oglasa",
+    "validUntil": "Važi do",
+    "continuedLabel": "Posle toga",
+    "grantedBy": "Dao",
+    "grantedByShort": "Besplatno, dao {name}",
+    "periodNotChangeable": "Trajanje se ne menja dok paket čeka uplatu ili prvo odobrenje.",
+    "noPackage": "Oglas još nema paket. Objavite ga iz čarobnjaka.",
+    "mode": {
+      "EXTEND": "Produži",
+      "SET": "Novi rok od danas",
+      "UNLIMITED": "Bez isteka",
+      "END_NOW": "Završi odmah"
+    },
+    "giftExplain": "Ovaj paket je plaćen. Možete mu pokloniti dodatno vreme.",
+    "giftWholePackage": "Poklon važi za ceo paket, pa i za oglase: {listings}.",
+    "result": {
+      "UNLIMITED": "Oglas će važiti dok ga admin ne ugasi.",
+      "END_NOW": "Oglas odmah prestaje da bude vidljiv, a vlasnik dobija mejl.",
+      "newEnd": "Novi rok: {date}"
+    },
+    "save": {
+      "EXTEND": "Produži",
+      "SET": "Sačuvaj rok",
+      "UNLIMITED": "Ukloni rok",
+      "END_NOW": "Završi odmah"
+    },
+    "endNowConfirm": "Oglas će odmah prestati da bude vidljiv. Nastaviti?",
+    "reviewChecklistNote": "Kada su sve stavke zelene, dugme „Objavi bez plaćanja” postaje aktivno. Telefon i broj računa vlasnik dodaje sam, u svom profilu.",
+    "stepReviewDesc": "Proverite da li je sve spremno. Oglas se objavljuje odmah, bez plaćanja i bez reda za odobravanje, a vlasnik dobija mejl.",
+    "stepReviewDescPublished": "Proverite izmene. Oglas je već objavljen, a izmene važe čim ih sačuvate.",
+    "reviewAllDone": "Sve je spremno za objavu"
   }
 }

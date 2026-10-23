@@ -7,13 +7,17 @@
           <h1 class="category-pick-title">{{ t('listing.categoryPickTitle') }}</h1>
           <p class="category-pick-subtitle">{{ t('listing.categoryPickSubtitle') }}</p>
         </header>
+        <!-- Administracija > Oglasi: an admin adds this listing for an existing user. -->
+        <p v-if="adminOwner" class="category-pick-admin" role="note">
+          {{ t('adminListings.categoryFor', { name: adminOwner.name, email: adminOwner.email }) }}
+        </p>
         <p v-if="error" class="form-error mb-3">{{ error }}</p>
 
         <div class="category-pick-grid">
           <CategoryPickCard v-for="cat in topCategories" :key="cat.id" :category="cat" @click="selectTopCategory(cat)" />
           <!-- Fixed UI, always last. Dizajn 50: Ostalo itself is one of the
-               categories above once the owner publishes it. -->
-          <button v-if="!changingListingId" type="button" class="category-card category-card-unlock" @click="step = 'propose'">
+               categories above once the owner publishes it. Not for an admin's listing. -->
+          <button v-if="!changingListingId && !adminOwnerId" type="button" class="category-card category-card-unlock" @click="step = 'propose'">
             <span class="category-card-unlock-icon" aria-hidden="true">
               <img src="/images/icons/plus-brand.svg" alt="" />
             </span>
@@ -186,6 +190,15 @@ const activeTopCategory = ref(null)
 // creating a listing, and the "Otključaj svoju kategoriju" tile stays hidden.
 const changingListingId = computed(() => (typeof route.query.oglas === 'string' ? route.query.oglas : ''))
 
+// Administracija > Oglasi: "Dodaj oglas" picks the owner first (?vlasnik=<userId>);
+// the draft is then the owner's, added by the admin, and the admin fills it in the wizard.
+const adminOwnerId = computed(() => (typeof route.query.vlasnik === 'string' ? route.query.vlasnik : ''))
+const adminOwner = ref(null)
+if (adminOwnerId.value) {
+  adminOwner.value = await api.get(`/admin/listings/owners/${adminOwnerId.value}`).catch(() => null)
+  if (!adminOwner.value) await navigateTo('/admin/oglasi/novi', { replace: true })
+}
+
 const { data: categories } = await useAsyncData('wizard-categories', () => api.get('/categories'))
 
 // The frame puts Magacini i skladišta before Građevinske mašine. That is the
@@ -258,6 +271,10 @@ function cancel() {
     returnToWizard(changingListingId.value)
     return
   }
+  if (adminOwnerId.value) {
+    router.push('/admin/oglasi/novi')
+    return
+  }
   const back = window.history.state?.back
   if (back && !AUTH_PAGE.test(back)) {
     router.back()
@@ -295,7 +312,9 @@ async function selectLeafCategory(categoryId) {
       returnToWizard(changingListingId.value)
       return
     }
-    const listing = await api.post('/listings', { categoryId })
+    const listing = adminOwnerId.value
+      ? await api.post('/admin/listings', { userId: adminOwnerId.value, categoryId })
+      : await api.post('/listings', { categoryId })
     await navigateTo(`/oglasi/${listing.id}/uredi`)
   } catch (e) {
     error.value = extractErrorMessage(e, t('auth.genericError'))
@@ -369,6 +388,17 @@ useSeoMeta({ title: () => t(changingListingId.value ? 'listing.changeCategory' :
   font-size: 18px;
   line-height: 27px;
   color: $color-text-muted;
+}
+
+// Administracija > Oglasi, no frame: whose listing an admin is adding.
+.category-pick-admin {
+  margin: -8px 0 24px;
+  padding: 12px 16px;
+  border-radius: $radius-card;
+  background: $color-accent-tint;
+  font-size: 15px;
+  line-height: 22px;
+  color: $color-text;
 }
 
 // 174:287 — 280px cards 32 apart: four to a row at 1216, fewer as the

@@ -1757,7 +1757,8 @@
       "content": "Static pages, the FAQ and the homepage video.",
       "settings": "System values that change how the platform behaves.",
       "bookingModels": "The ways of booking owners pick in the wizard, and which categories offer them.",
-      "locations": "Districts, places and parts of a city that owners pick for a listing and guests search by."
+      "locations": "Districts, places and parts of a city that owners pick for a listing and guests search by.",
+      "listings": "Every listing on the site, adding listings for users without payment and how long they last."
     },
     "empty": {
       "queue": {
@@ -2670,7 +2671,8 @@
         }
       },
       "openedCount": "opened: {count}"
-    }
+    },
+    "listings": "Listings"
   },
   "home": {
     "heroTitleLine1": "Listings. Bookings.",
@@ -2921,7 +2923,9 @@
       "cancel": "Withdraw the featuring request",
       "requestConfirm": "Ask for this listing to be featured for {days} days? Featured listings take turns on the home page and at the top of search, all equally. An administrator decides on the request.",
       "cancelConfirm": "Withdraw the featuring request for this listing?"
-    }
+    },
+    "freeFromRentaj": "Free from Rentaj",
+    "noEnd": "No end date"
   },
   "ical": {
     "title": "Calendar sync (iCal)",
@@ -3137,7 +3141,9 @@
     "renewedNote": "Renewed: the new period starts on {date}",
     "expiredNoteOne": "The listing stays out of search until the package is renewed.",
     "expiredNoteMany": "The listings stay out of search until the package is renewed.",
-    "expiredBankedNote": "The listing is visible on carried-over days; renewing keeps the rest for later."
+    "expiredBankedNote": "The listing is visible on carried-over days; renewing keeps the rest for later.",
+    "freeFromRentaj": "Free from Rentaj",
+    "noEnd": "No end date"
   },
   "savedListings": {
     "summaryOne": "{count} listing you saved",
@@ -3423,5 +3429,142 @@
       "title": "The term of this booking cannot be changed",
       "text": "Another term can be asked for a booking that is sent, approved or confirmed, while the listing takes bookings."
     }
+  },
+  "adminListings": {
+    "add": "Add listing",
+    "addTitle": "Add listing",
+    "addSubtitle": "The listing belongs to an existing user and is published without payment. Pick the user first.",
+    "ownerSearchLabel": "User",
+    "ownerSearchPlaceholder": "First name, last name or email",
+    "ownerSearchHint": "The owner must already have a Rentaj account.",
+    "ownerNone": "No user matches the search.",
+    "ownerBlocked": "Blocked",
+    "ownerRestricted": "Temporarily restricted",
+    "ownerNoPhone": "No phone",
+    "ownerUnverified": "Email not confirmed",
+    "ownerListingsOne": "{count} listing",
+    "ownerListingsFew": "{count} listings",
+    "ownerListingsMany": "{count} listings",
+    "ownerNoPhoneHint": "The listing can be published only once the owner adds a phone number to their profile (and a bank account, if guests pay by transfer).",
+    "backToList": "Back to listings",
+    "categoryFor": "You are adding a listing for: {name} ({email}). It is published without payment.",
+    "wizardAdding": "You are adding a listing for: {name} ({email}). At the end you publish it without payment; the owner sees it once it is published.",
+    "wizardEditing": "You are editing a listing of {name} ({email}).",
+    "ownerAddsInProfile": "The owner ({name}) adds it in their profile",
+    "ownerBankAccountMissing": "{name} has no bank account in their profile, so no payment QR code can be sent. The owner has to add it in their profile, or choose cash payment.",
+    "publishFree": "Publish without payment",
+    "publishTitle": "Publish without payment",
+    "publishIntro": "The listing becomes visible to guests at once, without the review queue. The owner ({name}) gets an email and sees it in My listings.",
+    "packageLabel": "Package",
+    "feature": {
+      "bookings": "Bookings",
+      "messaging": "Messages",
+      "reviews": "Reviews",
+      "ical": "iCal",
+      "contactOnly": "Contact details only"
+    },
+    "durationLabel": "Duration",
+    "unit": {
+      "MONTHS": "Months",
+      "DAYS": "Days",
+      "UNLIMITED": "No end"
+    },
+    "unitWord": {
+      "MONTHSOne": "month",
+      "MONTHSFew": "months",
+      "MONTHSMany": "months",
+      "DAYSOne": "day",
+      "DAYSFew": "days",
+      "DAYSMany": "days"
+    },
+    "amountLabel": {
+      "MONTHS": "Number of months",
+      "DAYS": "Number of days"
+    },
+    "quick": {
+      "MONTHSOne": "{count} month",
+      "MONTHSFew": "{count} months",
+      "MONTHSMany": "{count} months",
+      "DAYSOne": "{count} day",
+      "DAYSFew": "{count} days",
+      "DAYSMany": "{count} days"
+    },
+    "amountInvalid": {
+      "MONTHS": "Enter 1 to {max} months",
+      "DAYS": "Enter 1 to {max} days"
+    },
+    "endsOn": "Valid until {date}",
+    "endsNever": "Valid until an admin ends it",
+    "endsNeverShort": "No end date",
+    "endedOn": "Ended {date}",
+    "featuredLabel": "Featured",
+    "featuredNone": "Not featured",
+    "featuredDays": "Featured for {count} days",
+    "noteLabel": "Note",
+    "notePlaceholder": "An arrangement or a reason, for example. Only admins see it.",
+    "publishConfirm": "Publish",
+    "publishedNotice": "The listing is published. The owner got an email.",
+    "searchPlaceholder": "Title, owner name or email",
+    "allStatuses": "All statuses",
+    "statusDeleted": "Deleted",
+    "filterLabel": "Kind of listing",
+    "filterAll": "All listings",
+    "filterFree": "Free (from Rentaj)",
+    "filterAdmin": "Added by an admin",
+    "emptyTitle": "No listings yet",
+    "emptyText": "Listings owners and admins add will appear here.",
+    "emptySearchTitle": "No listing matches",
+    "emptySearchText": "Try another name or remove a filter.",
+    "col": {
+      "listing": "Listing",
+      "owner": "Owner",
+      "package": "Package",
+      "validUntil": "Valid until"
+    },
+    "adminDraft": "Admin is preparing it",
+    "free": "Free",
+    "paid": "Paid",
+    "addedBy": "added by {name}",
+    "continuedUntil": "Paid continuation until {date}",
+    "featuredUntil": "Featured until {date}",
+    "continue": "Continue",
+    "edit": "Edit",
+    "period": "Duration",
+    "view": "View",
+    "prevPage": "Previous",
+    "nextPage": "Next",
+    "pageOf": "Page {page} of {total}",
+    "noPermission": "This page needs the \"Listings without payment\" permission.",
+    "periodTitle": "Listing duration",
+    "validUntil": "Valid until",
+    "continuedLabel": "After that",
+    "grantedBy": "Given by",
+    "grantedByShort": "Free, given by {name}",
+    "periodNotChangeable": "The duration does not change while the package waits for payment or a first approval.",
+    "noPackage": "The listing has no package yet. Publish it from the wizard.",
+    "mode": {
+      "EXTEND": "Extend",
+      "SET": "New end from today",
+      "UNLIMITED": "No end",
+      "END_NOW": "End now"
+    },
+    "giftExplain": "This package is paid for. You can give it extra time.",
+    "giftWholePackage": "The gift covers the whole package, including these listings: {listings}.",
+    "result": {
+      "UNLIMITED": "The listing will stay until an admin ends it.",
+      "END_NOW": "The listing stops being visible at once, and the owner gets an email.",
+      "newEnd": "New end date: {date}"
+    },
+    "save": {
+      "EXTEND": "Extend",
+      "SET": "Save end date",
+      "UNLIMITED": "Remove the end date",
+      "END_NOW": "End now"
+    },
+    "endNowConfirm": "The listing will stop being visible at once. Continue?",
+    "reviewChecklistNote": "When every item is green, the \"Publish without payment\" button becomes active. The owner adds the phone and the bank account in their own profile.",
+    "stepReviewDesc": "Check that everything is ready. The listing goes live at once, without payment or the review queue, and the owner gets an email.",
+    "stepReviewDescPublished": "Check the changes. The listing is already live, and changes apply as soon as you save them.",
+    "reviewAllDone": "Everything is ready to publish"
   }
 }

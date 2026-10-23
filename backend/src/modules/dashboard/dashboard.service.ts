@@ -10,6 +10,7 @@ import { PACKAGE_ENDING_WITHOUT_RENEWAL } from '../../common/utils/subscription-
 import { getGuestUnits } from '../../common/utils/guest-capacity';
 import { shortName } from '../../common/utils/short-name';
 import { normalizeBankAccount } from '../../common/utils/ips-qr';
+import { ADMIN_DRAFT } from '../../common/utils/listing-access';
 import { OPEN_PAYMENT_REPORT } from '../../common/utils/payment-report';
 
 interface AttentionItem {
@@ -248,7 +249,8 @@ export class DashboardService {
   private async getOnboarding(userId: string) {
     const [listings, workingHoursCount, definedSlotCount, blockedTermCount, icalCount, user] = await Promise.all([
       this.prisma.listing.findMany({
-        where: { userId, status: { not: 'DELETED' } },
+        // A listing an admin is still preparing is not the owner's to set up yet.
+        where: { userId, status: { not: 'DELETED' }, NOT: ADMIN_DRAFT },
         orderBy: { createdAt: 'asc' },
         select: { id: true, bookingModel: true, priceUnit: true },
       }),

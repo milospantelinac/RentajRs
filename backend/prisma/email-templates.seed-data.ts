@@ -219,6 +219,42 @@ export const emailTemplates: EmailTemplateSeed[] = [
       buttonLabel: 'Continue listing',
     },
   },
+  // Administracija > Oglasi: an admin added the listing and published it
+  // without payment. {paket} is the package key, {rok} its end date or "bez isteka".
+  {
+    key: 'listing_published_by_admin',
+    sr: {
+      subject: 'Rentaj je objavio vaš oglas',
+      heading: '"{oglas}" je objavljen',
+      bodyText:
+        'Rentaj je objavio vaš oglas bez plaćanja, na paketu {paket}. Oglas je sada vidljiv gostima. Rok važenja: {rok}. U delu Moji oglasi možete da ga menjate kao i svaki svoj oglas.',
+      buttonLabel: 'Pogledaj oglas',
+    },
+    en: {
+      subject: 'Rentaj published your listing',
+      heading: '"{oglas}" is live',
+      bodyText:
+        'Rentaj published your listing without payment, on the {paket} package. Guests can see it now. Valid until: {rok}. You can edit it in My listings like any of your listings.',
+      buttonLabel: 'View listing',
+    },
+  },
+  // An admin changed how long the listing's package lasts (not "Završi odmah",
+  // which subscription_expired tells). {rok} is the new end date or "bez isteka".
+  {
+    key: 'listing_period_changed',
+    sr: {
+      subject: 'Promenjen rok važenja oglasa',
+      heading: 'Novi rok važenja za "{oglas}"',
+      bodyText: 'Rentaj je promenio rok važenja vašeg oglasa na paketu {paket}. Novi rok važenja: {rok}.',
+      buttonLabel: 'Moji oglasi',
+    },
+    en: {
+      subject: 'Your listing’s validity has changed',
+      heading: 'New end date for "{oglas}"',
+      bodyText: 'Rentaj changed how long your listing on the {paket} package stays online. Valid until: {rok}.',
+      buttonLabel: 'My listings',
+    },
+  },
 
   // -- Rezervacije / Bookings -----------------------------------------------------
   {

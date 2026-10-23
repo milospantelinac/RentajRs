@@ -24,6 +24,9 @@ export const ADMIN_NAV_GROUPS = [
     key: 'operations',
     titleKey: 'admin.sectionOperations',
     items: [
+      // Every listing, and listings added for users without payment; the
+      // dashboard's own "Moji oglasi" icon, as Rezervacije and Pretplate reuse theirs.
+      { to: '/admin/oglasi', labelKey: 'admin.listings', icon: 'listings' },
       { to: '/admin/rezervacije', labelKey: 'admin.bookings', icon: 'bookings' },
       { to: '/admin/pretplate', labelKey: 'admin.subscriptions', icon: 'packages' },
       // T129: featured listings, owners' requests, the leaders and the rules.

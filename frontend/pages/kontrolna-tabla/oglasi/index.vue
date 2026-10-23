@@ -86,6 +86,8 @@
           <div class="mylist-field-package mylist-pair" :class="{ 'is-empty': !row.published }" role="cell">
             <span class="mylist-cell-label">{{ t('myListings.columns.package') }}</span>
             <p class="mylist-value">{{ row.package.name }}</p>
+            <!-- Administracija > Oglasi: a package Rentaj gave without payment. -->
+            <p v-if="row.package.free" class="mylist-sub mylist-free">{{ t('myListings.freeFromRentaj') }}</p>
             <p v-if="row.package.text" class="mylist-sub" :class="{ 'is-urgent': row.package.urgent }">{{ row.package.text }}</p>
           </div>
 
@@ -621,6 +623,12 @@ a.mylist-pill:hover {
 // 380:567
 .mylist-sub.is-urgent {
   color: $color-error;
+}
+
+// No frame: a package Rentaj gave without payment, in the site's blue.
+.mylist-sub.mylist-free {
+  font-weight: 500;
+  color: $color-primary;
 }
 
 .mylist-open {

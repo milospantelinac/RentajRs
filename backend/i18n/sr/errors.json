@@ -125,5 +125,20 @@
   "LEADER_NOT_LEADER": "Ovaj vlasnik nije u programu lidera.",
   "LEADER_BENEFIT_USED": "Ovaj lider je već iskoristio svoje besplatno isticanje.",
   "LEADER_NO_ACTIVE_LISTING": "Vlasnik nema aktivan oglas koji bi mogao da bude istaknut.",
-  "RANKING_WEIGHTS_EMPTY": "Bar jedna težina mora da bude veća od nule."
+  "RANKING_WEIGHTS_EMPTY": "Bar jedna težina mora da bude veća od nule.",
+  "OWNER_NOT_FOUND": "Korisnik nije pronađen",
+  "OWNER_BLOCKED": "Nalog vlasnika je blokiran ili obrisan, pa mu oglas ne može biti dodat ni objavljen",
+  "LISTING_NOT_ADMIN_ADDED": "Bez plaćanja se objavljuje samo oglas koji je dodao admin",
+  "LISTING_ALREADY_PUBLISHED": "Oglas je već objavljen. Trajanje mu menjate u Administracija > Oglasi.",
+  "PACKAGE_NOT_AVAILABLE": "Izabrani paket nije dostupan",
+  "LISTING_NO_PACKAGE": "Oglas nema paket, pa nema ni trajanje",
+  "PERIOD_NOT_CHANGEABLE": "Trajanje ovog paketa ne može da se menja dok čeka uplatu ili prvo odobrenje",
+  "PERIOD_PAID_EXTEND_ONLY": "Plaćenom paketu admin može samo da pokloni dodatno vreme",
+  "PERIOD_ALREADY_ENDED": "Paket je već istekao",
+  "PERIOD_UNLIMITED_RENEWED": "Vlasnik je već platio nastavak posle ovog perioda, pa paket ne može biti bez isteka. Produžite ga za određen broj meseci ili dana.",
+  "PERIOD_TOO_LONG_MONTHS": "Trajanje može biti najviše {max} meseci",
+  "PERIOD_TOO_LONG_DAYS": "Trajanje može biti najviše {max} dana",
+  "SUBSCRIPTION_FREE_NOT_SHARED": "Besplatan paket od Rentaja važi samo za oglas za koji je dat",
+  "LISTING_ADMIN_DRAFT": "Ovaj oglas priprema Rentaj i objaviće ga za vas, bez plaćanja",
+  "FEATURED_PUBLISHED_WAITING": "Oglas je objavljen. Kategorija je puna, pa oglas čeka slobodno mesto za isticanje i biće istaknut čim se mesto oslobodi."
 }

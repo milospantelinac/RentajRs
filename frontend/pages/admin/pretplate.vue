@@ -62,11 +62,27 @@
                   <span class="admin-cell-sub">{{ s.user?.email }}</span>
                 </div>
               </td>
-              <td :data-label="t('billing.receiptPackage')">{{ s.package?.key }}</td>
+              <td :data-label="t('billing.receiptPackage')">
+                <!-- Administracija > Oglasi: a package an admin gave without payment, and who gave it. -->
+                <div class="admin-cell-pair">
+                  <span>{{ s.package?.key }}</span>
+                  <span v-if="s.grantedByAdmin" class="admin-cell-sub">
+                    {{ t('adminListings.grantedByShort', { name: `${s.grantedByAdmin.firstName} ${s.grantedByAdmin.lastName}`.trim() }) }}
+                  </span>
+                </div>
+              </td>
               <td :data-label="t('admin.statusLabel')">
                 <span class="admin-pill" :class="statusPillClass(s.status)">{{ statusLabel(s.status) }}</span>
               </td>
-              <td :data-label="t('billing.expiresOn')">{{ s.expiresAt ? new Date(s.expiresAt).toLocaleDateString('sr-RS') : '-' }}</td>
+              <td :data-label="t('billing.expiresOn')">
+                {{
+                  s.expiresAt
+                    ? new Date(s.expiresAt).toLocaleDateString('sr-RS')
+                    : s.grantedByAdmin && s.status === 'ACTIVE'
+                      ? t('adminListings.endsNeverShort')
+                      : '-'
+                }}
+              </td>
               <td class="admin-cell-actions">
                 <div class="admin-actions">
                   <button v-if="s.status === 'PENDING_ACTIVATION'" class="admin-action" @click="activate(s.id)">

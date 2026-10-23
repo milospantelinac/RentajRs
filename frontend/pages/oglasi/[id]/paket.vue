@@ -150,8 +150,9 @@ const disabledReason = computed(() => {
 })
 const freeSlotSubscription = computed(() => {
   if (!listing.value || listing.value.subscriptionId) return null
+  // A Pro Rentaj gave without payment covers its own listing only.
   return (mySubscriptions.value || []).find(
-    (s) => s.status === 'ACTIVE' && s.package?.key === 'PRO' && (s.listings?.length || 0) < (s.package?.listingLimit || 0),
+    (s) => s.status === 'ACTIVE' && s.package?.key === 'PRO' && !s.freeGrant && (s.listings?.length || 0) < (s.package?.listingLimit || 0),
   )
 })
 

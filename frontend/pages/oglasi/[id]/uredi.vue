@@ -43,6 +43,15 @@
       </template>
     </div>
 
+    <!-- Administracija > Oglasi: an admin fills this listing for its owner; no frame. -->
+    <div v-if="adminView" class="wizard-admin" role="note">
+      <img src="/images/icons/info-circle.svg" alt="" class="wizard-admin-icon" />
+      <p class="wizard-admin-text">
+        {{ t(adminView.published ? 'adminListings.wizardEditing' : 'adminListings.wizardAdding', { name: adminOwnerName, email: adminView.owner.email }) }}
+        <NuxtLink to="/admin/oglasi" class="wizard-admin-link">{{ t('adminListings.backToList') }}</NuxtLink>
+      </p>
+    </div>
+
     <header class="wizard-head">
       <h1 class="wizard-title">
         {{ t(steps[currentStep].labelKey) }}<span v-if="steps[currentStep].key === 'photos'" class="wizard-title-required"> *</span>
@@ -420,10 +429,14 @@
             </div>
           </div>
 
-          <!-- No frame: without a bank account no QR code goes out, and step 9 holds the listing back. -->
+          <!-- No frame: without a bank account no QR code goes out, and step 9 holds the listing back.
+               An admin filling the listing for its owner cannot add the owner's account. -->
           <p v-if="paymentUsesQr && !hasBankAccount" class="payment-note">
-            {{ t('listing.paymentBankAccountMissing') }}
-            <NuxtLink to="/kontrolna-tabla/podesavanja">{{ t('listing.paymentBankAccountAdd') }}</NuxtLink>
+            <template v-if="adminView">{{ t('adminListings.ownerBankAccountMissing', { name: adminOwnerName }) }}</template>
+            <template v-else>
+              {{ t('listing.paymentBankAccountMissing') }}
+              <NuxtLink to="/kontrolna-tabla/podesavanja">{{ t('listing.paymentBankAccountAdd') }}</NuxtLink>
+            </template>
           </p>
         </div>
 
@@ -871,7 +884,7 @@
           </ul>
           <!-- 289:356 -->
           <p class="review-note">
-            {{ t('listing.reviewChecklistNote') }}
+            {{ t(adminView ? 'adminListings.reviewChecklistNote' : 'listing.reviewChecklistNote') }}
             <img src="/images/icons/info-circle.svg" alt="" />
           </p>
         </section>
@@ -1252,6 +1265,16 @@
         <img src="/images/icons/arrow-right-white.svg" alt="" />
       </button>
     </div>
+
+    <!-- Administracija > Oglasi: the package, how long it lasts and a free featured slot. -->
+    <AdminPublishDialog
+      v-if="publishOpen"
+      :listing-id="listingId"
+      :booking-model="listing?.bookingModel"
+      :owner-name="adminOwnerName"
+      @close="publishOpen = false"
+      @published="onAdminPublished"
+    />
   </div>
 </template>
 
@@ -1273,6 +1296,19 @@ const saving = ref(false)
 const error = ref('')
 const listing = ref(null)
 const readiness = ref(null)
+
+// Administracija > Oglasi: an admin fills a listing they added for its owner.
+// The profile facts the listing needs (phone, bank account) are the owner's,
+// and the last step publishes without payment instead of choosing a package.
+const adminView = computed(() => listing.value?.adminView || null)
+const adminOwnerName = computed(() =>
+  adminView.value ? `${adminView.value.owner.firstName} ${adminView.value.owner.lastName}`.trim() : '',
+)
+const publishOpen = ref(false)
+async function onAdminPublished(result) {
+  publishOpen.value = false
+  await navigateTo(`/admin/oglasi?objavljen=${result.id}`)
+}
 // T72 — lets saveCurrentStep() reach WorkingHoursEditor's save() when the
 // step is left via the main CTA instead of the editor's own button.
 const workingHoursEditorRef = ref(null)
@@ -1354,9 +1390,10 @@ watch(
 // listingLimit has a free slot; a brand-new listing can attach to it instead
 // of buying a new package. Same condition pretplate.vue already uses for its
 // "attach free" action, just reached from the create wizard this time.
+// A Pro Rentaj gave without payment covers its own listing only.
 const freeSlotSubscription = computed(() =>
   (mySubscriptions.value || []).find(
-    (s) => s.status === 'ACTIVE' && s.package?.key === 'PRO' && (s.listings?.length || 0) < (s.package?.listingLimit || 0),
+    (s) => s.status === 'ACTIVE' && s.package?.key === 'PRO' && !s.freeGrant && (s.listings?.length || 0) < (s.package?.listingLimit || 0),
   ),
 )
 
@@ -2302,12 +2339,16 @@ const reviewChecklist = computed(() =>
     if (key === 'requiredAttributesFilled' && !ok && readiness.value?.missingAttributeNames?.length) {
       note = `${t('listing.missingAttributesPrefix')}: ${readiness.value.missingAttributeNames.join(', ')}`
     }
+    // Administracija > Oglasi: the owner adds their phone and bank account
+    // themselves (the user, 2026-10-22); the admin's own settings are not theirs.
+    const profileCheck = REVIEW_PROFILE_CHECKS.includes(key)
+    if (adminView.value && profileCheck && !ok) note = t('adminListings.ownerAddsInProfile', { name: adminOwnerName.value })
     return {
       key,
       ok,
       label: t(`listing.checklist.${key}`),
       note,
-      to: REVIEW_PROFILE_CHECKS.includes(key) ? SETTINGS_PATH : '',
+      to: profileCheck && !adminView.value ? SETTINGS_PATH : '',
       step: steps.value.some((s) => s.key === stepKey) ? stepKey : '',
     }
   }),
@@ -2318,7 +2359,7 @@ const reviewMissingCount = computed(() => reviewChecklist.value.filter((item) =>
 const reviewHeadline = computed(() =>
   reviewMissingCount.value
     ? t(`listing.reviewMissing${srPluralCategory(reviewMissingCount.value)}`, { count: reviewMissingCount.value })
-    : t('listing.reviewAllDone'),
+    : t(adminView.value && !adminView.value.published ? 'adminListings.reviewAllDone' : 'listing.reviewAllDone'),
 )
 
 const REVIEW_DAY_KEYS = ['dayMon', 'dayTue', 'dayWed', 'dayThu', 'dayFri', 'daySat', 'daySun']
@@ -2604,6 +2645,12 @@ const reviewTips = computed(() => {
 // 285:467: the frame's single "Pošalji na odobrenje" covers three real outcomes, so the
 // button says which one this listing gets (T41, T42).
 const reviewCta = computed(() => {
+  // Administracija > Oglasi: an admin publishes the listing they added without
+  // payment, live at once; afterwards their edits save as the owner's do.
+  if (adminView.value) {
+    if (listing.value?.subscriptionId) return { label: t('listing.saveChanges'), to: '', run: finishEditing }
+    return { label: t('adminListings.publishFree'), to: '', run: () => { publishOpen.value = true } }
+  }
   // Dizajn 29: a rejected listing goes back to review on its own package while that
   // package is still waiting or running; an ended one needs a new package.
   if (listing.value?.status === 'REJECTED' && listing.value.subscriptionId) {
@@ -2637,7 +2684,8 @@ function validateLocation() {
   return !first
 }
 const attributeValues = reactive({})
-const hasBankAccount = computed(() => !!auth.user?.bankAccount)
+// The QR code goes out with the owner's account, also when an admin fills the listing.
+const hasBankAccount = computed(() => (adminView.value ? adminView.value.owner.hasBankAccount : !!auth.user?.bankAccount))
 
 // Dizajn 19: every wizard frame is drawn for Igraonice, a slot category, so the
 // frames' subtitles for the pricing, availability and rules steps talk about
@@ -2651,6 +2699,10 @@ const stepSubtitle = computed(() => {
     return t(form.slotSubmode === 'DEFINED_SLOTS' ? 'listing.stepAvailabilityDescDefinedSlots' : 'listing.stepAvailabilityDescWorkingHours')
   }
   if (step.key === 'rules' && form.bookingModel === 'PER_SLOT') return t('listing.stepRulesDescSlot')
+  // Administracija > Oglasi: an admin's listing goes live at once, with no review to wait for.
+  if (step.key === 'review' && adminView.value) {
+    return t(adminView.value.published ? 'adminListings.stepReviewDescPublished' : 'adminListings.stepReviewDesc')
+  }
   // Dizajn 25: each category's frame words step 6 for that category.
   if (step.key === 'attributes' && detailsCopyKind.value !== 'default') {
     return t(`listing.stepAttributesDescCategory.${detailsCopyKind.value}`)
@@ -3277,7 +3329,8 @@ function rememberSavedBooking(saved) {
 // there's nothing left to buy. Every step already persisted via
 // saveCurrentStep as the owner went, so finishing is pure confirmation.
 async function finishEditing() {
-  await navigateTo('/kontrolna-tabla/oglasi?updated=1')
+  // An admin working on a listing they added goes back to Administracija > Oglasi.
+  await navigateTo(adminView.value ? '/admin/oglasi' : '/kontrolna-tabla/oglasi?updated=1')
 }
 
 // T42 — attach this brand-new listing to the owner's existing PRO
@@ -3314,8 +3367,9 @@ async function resubmitForApproval() {
 
 onMounted(async () => {
   regions.value = await api.get('/locations/regions')
-  api.get('/subscriptions/mine').then((subs) => { mySubscriptions.value = subs }).catch(() => {})
   await loadListing()
+  // The packages are the owner's; an admin filling the listing has none of theirs to offer.
+  if (!adminView.value) api.get('/subscriptions/mine').then((subs) => { mySubscriptions.value = subs }).catch(() => {})
   if (locationCity.value) cityAreas.value = await loadAreasOf(locationCity.value)
 })
 
@@ -3496,6 +3550,38 @@ useSeoMeta({ title: () => wizardTitle.value })
 .wizard-category-change:hover {
   color: $color-primary;
   text-decoration: underline;
+}
+
+// Administracija > Oglasi, no frame: the info strip the package page uses
+// ("ističe" notes), naming whose listing an admin is filling.
+.wizard-admin {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 28px;
+  padding: 14px 18px;
+  border-radius: $radius-card;
+  background: $color-accent-tint;
+}
+
+.wizard-admin-icon {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+}
+
+.wizard-admin-text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 20px;
+  color: $color-text;
+}
+
+.wizard-admin-link {
+  margin-left: 6px;
+  font-weight: 500;
+  color: $color-primary;
+  white-space: nowrap;
 }
 
 // 228:311

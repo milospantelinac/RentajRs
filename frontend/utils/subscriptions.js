@@ -154,6 +154,14 @@ function getNote(t, { subscription, renewal, listings, bankedDays, now, renewUrl
   return null
 }
 
+// A free package runs from the day Rentaj gave it to the end it was given, or has no end.
+function getFreeDuration(t, subscription) {
+  if (!subscription.expiresAt) return t('mySubscriptions.noEnd')
+  if (!subscription.startsAt) return ''
+  const days = Math.max(1, belgradeDayNumber(subscription.expiresAt) - belgradeDayNumber(subscription.startsAt))
+  return t(`mySubscriptions.days${srPluralCategory(days)}`, { count: days })
+}
+
 export function buildSubscriptionCard(t, subscription, listingsById, now = Date.now(), all = [subscription]) {
   const { status } = subscription
   const byId = new Map(all.map((item) => [item.id, item]))
@@ -170,12 +178,17 @@ export function buildSubscriptionCard(t, subscription, listingsById, now = Date.
   const bankedDays = subscription.bankedDays || []
   const renewal = all.find((item) => item.status === 'SCHEDULED' && item.renewsSubscriptionId === subscription.id)
   const cycleDays = CYCLE_DAYS[subscription.billingCycle] || CYCLE_DAYS.MONTHLY
+  // Administracija > Oglasi: a package Rentaj gave without payment; one with no end has nothing to renew.
+  const free = !!subscription.freeGrant
+  const noEnd = status === 'ACTIVE' && !subscription.expiresAt && free
   const renewUrl =
-    RENEWABLE_STATUSES.includes(status) && listings.length && !renewal ? getRenewalUrl(subscription.id, listings[0].id) : null
+    RENEWABLE_STATUSES.includes(status) && listings.length && !renewal && !noEnd ? getRenewalUrl(subscription.id, listings[0].id) : null
   const note = getNote(t, { subscription, renewal, listings, bankedDays, now, renewUrl })
 
   const dates = []
-  if (status === 'ACTIVE' && subscription.expiresAt) {
+  if (noEnd) {
+    dates.push({ label: t('billing.expiresOn'), value: t('mySubscriptions.noEnd') })
+  } else if (status === 'ACTIVE' && subscription.expiresAt) {
     dates.push({ label: t('billing.expiresOn'), value: formatListingDate(subscription.expiresAt), urgent: note?.tone === 'danger' })
   } else if (status === 'SCHEDULED') {
     dates.push({ label: t('mySubscriptions.startsLabel'), value: formatListingDate(subscription.startsAt) })
@@ -194,16 +207,17 @@ export function buildSubscriptionCard(t, subscription, listingsById, now = Date.
     label: [pkg.key, statusText, ...described.map((listing) => listing.text)].filter(Boolean).join(', '),
     packageKey: pkg.key || '',
     statusText,
-    price: formatRsd(subscription.priceAtPurchase),
-    listingsLabel: t(limit > 1 ? 'mySubscriptions.listingsLabel' : 'mySubscriptions.listingLabel'),
+    price: free ? t('mySubscriptions.freeFromRentaj') : formatRsd(subscription.priceAtPurchase),
+    free,
+    listingsLabel: t(limit > 1 && !free ? 'mySubscriptions.listingsLabel' : 'mySubscriptions.listingLabel'),
     listings: described,
     // A package with room for several listings shows how many it holds (2 od 4)
-    // while those places can still be used.
+    // while those places can still be used. A free one covers its own listing only.
     usage:
-      limit > 1 && ['ACTIVE', 'SCHEDULED', 'PENDING_ACTIVATION'].includes(status)
+      limit > 1 && !free && ['ACTIVE', 'SCHEDULED', 'PENDING_ACTIVATION'].includes(status)
         ? { used: attached.length, limit, percent: Math.min(100, Math.round((attached.length / limit) * 100)) }
         : null,
-    duration: t(`mySubscriptions.days${srPluralCategory(cycleDays)}`, { count: cycleDays }),
+    duration: free ? getFreeDuration(t, subscription) : t(`mySubscriptions.days${srPluralCategory(cycleDays)}`, { count: cycleDays }),
     dates,
     banked: getBankedRow(t, bankedDays, now),
     note,

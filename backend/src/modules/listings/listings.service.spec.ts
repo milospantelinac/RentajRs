@@ -77,7 +77,12 @@ describe('ListingsService#getMine (Dizajn 32)', () => {
 
     const [active, pending, rejected, banked] = await service.getMine('u1');
 
-    expect(prisma.listing.findMany.mock.calls[0][0].where).toEqual({ userId: 'u1', status: { not: 'DELETED' } });
+    // A listing an admin is still preparing waits until it is published (Administracija > Oglasi).
+    expect(prisma.listing.findMany.mock.calls[0][0].where).toEqual({
+      userId: 'u1',
+      status: { not: 'DELETED' },
+      NOT: { createdByAdminId: { not: null }, subscriptionId: null },
+    });
     expect(prisma.booking.groupBy.mock.calls[0][0].where).toEqual({
       listingId: { in: ['active', 'pending', 'rejected', 'banked'] },
       status: { in: ['REQUESTED', 'AWAITING_PAYMENT', 'CONFIRMED', 'COMPLETED'] },
@@ -741,5 +746,125 @@ describe('ListingsService#updateLocation (T119)', () => {
     await expect(
       serviceWith({ areas: [...areas, { id: 'a-new', hidden: false }] }).service.updateLocation('u1', 'l1', dto),
     ).rejects.toThrow('errors.CITY_AREA_REQUIRED');
+  });
+});
+
+describe('ListingsService and listings an admin adds (Administracija > Oglasi)', () => {
+  const taxonomy = { getCategoryNames: jest.fn().mockResolvedValue(new Map([['c1', 'Igraonice']])) };
+
+  it('marks a free package in Moji oglasi, and one with no end', async () => {
+    const prisma = {
+      listing: {
+        findMany: jest.fn().mockResolvedValue([
+          listingRow({
+            id: 'free',
+            subscriptionId: 's1',
+            subscription: { package: { key: 'PRO', hasIcal: true }, status: 'ACTIVE', expiresAt: null, grantedByAdminId: 'admin' },
+          }),
+          listingRow({
+            id: 'paid',
+            subscriptionId: 's2',
+            subscription: { package: { key: 'STANDARD' }, status: 'ACTIVE', expiresAt: new Date('2026-12-01T00:00:00Z'), grantedByAdminId: null },
+          }),
+        ]),
+      },
+      booking: { groupBy: jest.fn().mockResolvedValue([]) },
+      subscription: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+    const [free, paid] = await makeService(prisma, taxonomy).getMine('u1');
+    expect(free.subscription).toEqual({ package: { key: 'PRO', hasIcal: true }, status: 'ACTIVE', expiresAt: null, freeGrant: true, noEnd: true });
+    expect(free.validUntil).toBeNull();
+    expect(paid.subscription).toMatchObject({ freeGrant: false, noEnd: false });
+    expect(paid.subscription).not.toHaveProperty('grantedByAdminId');
+  });
+
+  it('opens a listing an admin added to an admin with the permission, naming its owner', async () => {
+    const row = {
+      ...listingRow({ id: 'l1', userId: 'owner', createdByAdminId: 'admin-1', subscriptionId: null, status: 'DRAFT' }),
+      faqs: [],
+      extraServices: [],
+      attributes: [],
+      region: null,
+    };
+    const prisma = {
+      listing: { findUnique: jest.fn().mockResolvedValue(row) },
+      userPermission: { count: jest.fn().mockResolvedValue(1) },
+      booking: { count: jest.fn().mockResolvedValue(0) },
+      user: {
+        findUniqueOrThrow: jest.fn().mockResolvedValue({
+          id: 'owner',
+          firstName: 'Marko',
+          lastName: 'Petrović',
+          email: 'marko@example.com',
+          emailVerified: false,
+          phone: '+381601234567',
+          bankAccount: null,
+        }),
+      },
+    };
+    const owned = await makeService(prisma).getOwned('admin-2', 'l1');
+    expect(owned.adminView).toEqual({
+      owner: {
+        id: 'owner',
+        firstName: 'Marko',
+        lastName: 'Petrović',
+        email: 'marko@example.com',
+        emailVerified: false,
+        hasPhone: true,
+        hasBankAccount: false,
+      },
+      published: false,
+    });
+
+    // The owner sees their own listing as always.
+    const mine = await makeService(prisma).getOwned('owner', 'l1');
+    expect(mine.adminView).toBeNull();
+  });
+
+  it('keeps a listing an owner added away from admins', async () => {
+    const prisma = {
+      listing: { findUnique: jest.fn().mockResolvedValue(listingRow({ id: 'l1', userId: 'owner', createdByAdminId: null })) },
+      userPermission: { count: jest.fn().mockResolvedValue(1) },
+    };
+    await expect(makeService(prisma).getOwned('admin', 'l1')).rejects.toThrow('Forbidden');
+  });
+
+  it('publishes at once, without the queue, and records who did it', async () => {
+    const moderations: any[] = [];
+    const prisma: any = {
+      listing: {
+        findUniqueOrThrow: jest.fn().mockResolvedValue(listingRow({ id: 'l1', userId: 'owner', status: 'DRAFT', publishedAt: null, description: '' })),
+        update: jest.fn(async ({ data }: any) => listingRow({ id: 'l1', ...data })),
+      },
+      listingPhoto: { count: jest.fn().mockResolvedValue(3) },
+      listingAttribute: { findMany: jest.fn().mockResolvedValue([]) },
+      listingModeration: {
+        count: jest.fn().mockResolvedValue(0),
+        create: jest.fn(async ({ data }: any) => (moderations.push(data), data)),
+      },
+      $transaction: jest.fn(async (writes: Promise<unknown>[]) => Promise.all(writes)),
+    };
+    const users = { ensureProfileSlug: jest.fn() };
+    const cache = { del: jest.fn() };
+    const events = { emit: jest.fn() };
+    const service = new ListingsService(
+      prisma,
+      cache as any,
+      {} as any,
+      {} as any,
+      { resolveAttributesForCategory: jest.fn().mockResolvedValue([]) } as any,
+      users as any,
+      i18n as any,
+      events as any,
+    );
+    const published = await service.publishByAdmin('admin', 'l1', 'sub-free');
+    expect(prisma.listing.update.mock.calls[0][0].data).toMatchObject({ status: 'ACTIVE', subscriptionId: 'sub-free' });
+    expect(prisma.listing.update.mock.calls[0][0].data.publishedAt).toBeInstanceOf(Date);
+    expect(moderations[0]).toMatchObject({ listingId: 'l1', decision: 'APPROVED', decidedByUserId: 'admin', hasWarnings: false });
+    expect(users.ensureProfileSlug).toHaveBeenCalledWith('owner');
+    expect(cache.del).toHaveBeenCalledWith(LISTING_COUNTS_CACHE_KEY);
+    // The admin flow sends its own email, not "your listing passed review".
+    expect(events.emit).not.toHaveBeenCalled();
+    expect(published).toMatchObject({ status: 'ACTIVE' });
   });
 });

@@ -196,9 +196,10 @@ const buyPackageLink = computed(() => {
 })
 
 // T42: an active Pro package with a free place takes another listing at no charge.
+// A Pro Rentaj gave without payment covers its own listing only.
 const proSubscriptionWithRoom = computed(() =>
   subscriptions.value.find(
-    (s) => s.status === 'ACTIVE' && s.package?.key === 'PRO' && (s.listings?.length || 0) < (s.package?.listingLimit || 0),
+    (s) => s.status === 'ACTIVE' && s.package?.key === 'PRO' && !s.freeGrant && (s.listings?.length || 0) < (s.package?.listingLimit || 0),
   ),
 )
 

@@ -22,6 +22,7 @@ import { NonPublicAddressError, fetchUserUrl } from '../../common/utils/outbound
 import { paraToRsd, rsdToPara } from '../../common/utils/money';
 import { belgradeDayStart, belgradeWallClock, toBelgradeDateOnly, toBelgradeHHMM } from '../../common/utils/timezone';
 import { DAY_MS } from '../../common/utils/subscription-renewal';
+import { canEditListing } from '../../common/utils/listing-access';
 import {
   SetWorkingHoursDto,
   SetWorkingScheduleDto,
@@ -726,7 +727,8 @@ export class AvailabilityService {
       },
     });
     if (!listing || listing.status === 'DELETED') throw new NotFoundException(this.i18n.t('errors.LISTING_NOT_FOUND'));
-    if (listing.userId !== userId) throw new ForbiddenException();
+    // The owner, or an admin on a listing an admin added, as on every other calendar route.
+    if (!(await canEditListing(this.prisma, userId, listing))) throw new ForbiddenException();
 
     const availability = getIcalAvailability(listing, !!listing.subscription?.package.hasIcal);
     let exportToken: string | null = null;
@@ -850,10 +852,11 @@ export class AvailabilityService {
 
   // -- Internal --------------------------------------------------------
 
+  /** The owner, or an admin on a listing an admin added (canEditListing). */
   private async assertOwnership(userId: string, listingId: string) {
     const listing = await this.prisma.listing.findUnique({ where: { id: listingId } });
     if (!listing) throw new NotFoundException();
-    if (listing.userId !== userId) throw new ForbiddenException();
+    if (!(await canEditListing(this.prisma, userId, listing))) throw new ForbiddenException();
     return listing;
   }
 

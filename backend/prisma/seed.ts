@@ -84,6 +84,8 @@ const PERMISSION_DEFS: Array<{ key: string; description: string }> = [
   { key: 'manage_settings', description: 'Change platform settings, prices and thresholds' },
   // T143: Administracija > Skladište, where file deletions are approved.
   { key: 'manage_storage', description: 'Check storage, approve file deletions and set retention and upload limits' },
+  // Administracija > Oglasi: listings added for users without payment, and how long they last.
+  { key: 'manage_free_listings', description: 'Add listings for users without payment and set how long they last' },
 ];
 
 async function seedPermissionsAndAdmin() {

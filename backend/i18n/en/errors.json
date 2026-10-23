@@ -125,5 +125,20 @@
   "LEADER_NOT_LEADER": "This owner is not in the leaders' program.",
   "LEADER_BENEFIT_USED": "This leader has already used their free featured period.",
   "LEADER_NO_ACTIVE_LISTING": "The owner has no active listing that could be featured.",
-  "RANKING_WEIGHTS_EMPTY": "At least one weight must be above zero."
+  "RANKING_WEIGHTS_EMPTY": "At least one weight must be above zero.",
+  "OWNER_NOT_FOUND": "User not found",
+  "OWNER_BLOCKED": "The owner's account is blocked or deleted, so a listing cannot be added or published for it",
+  "LISTING_NOT_ADMIN_ADDED": "Only a listing an admin added is published without payment",
+  "LISTING_ALREADY_PUBLISHED": "The listing is already published. Change how long it lasts in Administration > Listings.",
+  "PACKAGE_NOT_AVAILABLE": "The chosen package is not available",
+  "LISTING_NO_PACKAGE": "The listing has no package, so it has no period either",
+  "PERIOD_NOT_CHANGEABLE": "This package's period cannot change while it waits for payment or a first approval",
+  "PERIOD_PAID_EXTEND_ONLY": "An admin can only give a paid package extra time",
+  "PERIOD_ALREADY_ENDED": "The package has already ended",
+  "PERIOD_UNLIMITED_RENEWED": "The owner already paid to continue after this period, so the package cannot be without an end. Extend it by a number of months or days.",
+  "PERIOD_TOO_LONG_MONTHS": "The period can be at most {max} months",
+  "PERIOD_TOO_LONG_DAYS": "The period can be at most {max} days",
+  "SUBSCRIPTION_FREE_NOT_SHARED": "A free package from Rentaj covers only the listing it was given for",
+  "LISTING_ADMIN_DRAFT": "Rentaj is preparing this listing and will publish it for you, without payment",
+  "FEATURED_PUBLISHED_WAITING": "The listing is published. Its category is full, so it waits for a free featured place and will be featured as soon as one frees up."
 }

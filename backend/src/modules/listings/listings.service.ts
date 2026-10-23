@@ -28,6 +28,7 @@ import { rsdToPara, paraToRsd } from '../../common/utils/money';
 import { normalizeBankAccount } from '../../common/utils/ips-qr';
 import { maskPhone } from '../../common/utils/phone-mask';
 import { DAY_MS } from '../../common/utils/subscription-renewal';
+import { ADMIN_DRAFT, canEditListing } from '../../common/utils/listing-access';
 import { CreateListingDto } from './dto/create-listing.dto';
 import { UpdateListingDto } from './dto/update-listing.dto';
 import { UpdateLocationDto } from './dto/update-location.dto';
@@ -73,7 +74,8 @@ export class ListingsService {
 
   // -- Owner-facing --------------------------------------------------------
 
-  async createDraft(userId: string, dto: CreateListingDto) {
+  /** A new draft; `createdByAdminId` when an admin adds it for its owner (Administracija > Oglasi). */
+  async createDraft(userId: string, dto: CreateListingDto, createdByAdminId?: string) {
     const owner = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     if (owner.restrictedUntil && owner.restrictedUntil.getTime() > Date.now()) {
       throw new ForbiddenException(this.i18n.t('errors.ACCOUNT_RESTRICTED'));
@@ -99,6 +101,7 @@ export class ListingsService {
         priceUnit: category.defaultPriceUnit,
         price: 0n,
         icalExportToken: category.defaultBookingModel === 'PER_STAY' ? crypto.randomUUID() : undefined,
+        createdByAdminId,
       },
     });
     return this.serialize(listing);
@@ -186,7 +189,8 @@ export class ListingsService {
    */
   async getMine(userId: string) {
     const listings = await this.prisma.listing.findMany({
-      where: { userId, status: { not: ListingStatus.DELETED } },
+      // A listing an admin is still preparing appears once it is published.
+      where: { userId, status: { not: ListingStatus.DELETED }, NOT: ADMIN_DRAFT },
       orderBy: { createdAt: 'desc' },
       include: {
         photos: {
@@ -199,7 +203,9 @@ export class ListingsService {
         cityArea: { select: { name: true } },
         // RNT-060 — "Moji oglasi" is where an owner sees what their
         // subscription paid for, per listing, not just the listing itself.
-        subscription: { select: { package: { select: { key: true, hasIcal: true } }, status: true, expiresAt: true } },
+        subscription: {
+          select: { package: { select: { key: true, hasIcal: true } }, status: true, expiresAt: true, grantedByAdminId: true },
+        },
         // Each submission opens a moderation row, and a rejection is written onto it.
         moderations: { orderBy: { createdAt: 'desc' }, take: 1, select: { createdAt: true, rejectionReason: true, note: true } },
         bankedDays: { where: { usedAt: null }, select: { validUntil: true, days: true } },
@@ -235,8 +241,21 @@ export class ListingsService {
         .filter((row) => row.listingId === listingId && statuses.includes(row.status))
         .reduce((sum, row) => sum + row._count._all, 0);
 
-    return listings.map(({ moderations, bankedDays, city, cityArea, ...listing }) => {
+    return listings.map(({ moderations, bankedDays, city, cityArea, subscription, ...rest }) => {
       const moderation = moderations[0];
+      // Administracija > Oglasi: "Besplatno od Rentaja"; a free package may have no end at all.
+      const listing = {
+        ...rest,
+        subscription: subscription
+          ? {
+              package: subscription.package,
+              status: subscription.status,
+              expiresAt: subscription.expiresAt,
+              freeGrant: !!subscription.grantedByAdminId,
+              noEnd: subscription.status === SubscriptionStatus.ACTIVE && !subscription.expiresAt,
+            }
+          : null,
+      };
       // A listing that outlives its package on banked days (ADR-005) stays online
       // until the last of them ends: a window already running, or the days still
       // waiting, which start where the last paid period (renewals included) ends.
@@ -274,9 +293,38 @@ export class ListingsService {
   async getOwned(userId: string, listingId: string) {
     const listing = await this.getFullListing(listingId);
     if (!listing) throw new NotFoundException(this.i18n.t('errors.LISTING_NOT_FOUND'));
-    if (listing.userId !== userId) throw new ForbiddenException();
+    if (!(await canEditListing(this.prisma, userId, listing))) throw new ForbiddenException();
     // T140: the wizard keeps the way terms are created while one is ahead.
-    return { ...this.serialize(listing), hasFutureBookings: await this.hasFutureBookings(listing.id) };
+    return {
+      ...this.serialize(listing),
+      hasFutureBookings: await this.hasFutureBookings(listing.id),
+      adminView: listing.userId === userId ? null : await this.adminViewOf(listing),
+    };
+  }
+
+  /**
+   * Administracija > Oglasi: an admin works on a listing they added for its
+   * owner. The wizard names the owner and reads the profile facts the listing
+   * needs from the owner, not from the admin; the package and how long it
+   * lasts come in when the admin publishes.
+   */
+  private async adminViewOf(listing: Pick<Listing, 'userId' | 'subscriptionId'>) {
+    const owner = await this.prisma.user.findUniqueOrThrow({
+      where: { id: listing.userId },
+      select: { id: true, firstName: true, lastName: true, email: true, emailVerified: true, phone: true, bankAccount: true },
+    });
+    return {
+      owner: {
+        id: owner.id,
+        firstName: owner.firstName,
+        lastName: owner.lastName,
+        email: owner.email,
+        emailVerified: owner.emailVerified,
+        hasPhone: !!owner.phone,
+        hasBankAccount: !!normalizeBankAccount(owner.bankAccount),
+      },
+      published: !!listing.subscriptionId,
+    };
   }
 
   /** T140: a request, a booking waiting for payment or a confirmed one that hasn't ended. */
@@ -1006,6 +1054,37 @@ export class ListingsService {
     return this.serialize(updated);
   }
 
+  /**
+   * Administracija > Oglasi: a listing an admin added goes live at once on the
+   * package the admin gave it, without the review queue (the user,
+   * 2026-10-22); its moderation history still records who published it and
+   * what the automatic checks said. The caller emails the owner.
+   */
+  async publishByAdmin(adminUserId: string, listingId: string, subscriptionId: string) {
+    const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: listingId } });
+    const checkResults = await this.runAutomaticChecks(listingId);
+    const now = new Date();
+    const [updated] = await this.prisma.$transaction([
+      this.prisma.listing.update({
+        where: { id: listingId },
+        data: { status: ListingStatus.ACTIVE, subscriptionId, publishedAt: listing.publishedAt ?? now },
+      }),
+      this.prisma.listingModeration.create({
+        data: {
+          listingId,
+          checkResults: checkResults as unknown as Prisma.InputJsonValue,
+          hasWarnings: Object.values(checkResults).some((value) => value === 'WARNING'),
+          decision: ModerationDecision.APPROVED,
+          decidedByUserId: adminUserId,
+          decidedAt: now,
+        },
+      }),
+    ]);
+    await this.users.ensureProfileSlug(listing.userId);
+    await this.cache.del(LISTING_COUNTS_CACHE_KEY);
+    return this.serialize(updated);
+  }
+
   async adminReject(adminUserId: string, listingId: string, dto: RejectListingDto) {
     const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: listingId } });
     const updated = await this.prisma.listing.update({
@@ -1214,10 +1293,11 @@ export class ListingsService {
 
   // -- Internal helpers --------------------------------------------------
 
+  /** The owner, or an admin on a listing an admin added (canEditListing). */
   private async assertOwnership(userId: string, listingId: string) {
     const listing = await this.prisma.listing.findUnique({ where: { id: listingId } });
     if (!listing) throw new NotFoundException(this.i18n.t('errors.LISTING_NOT_FOUND'));
-    if (listing.userId !== userId) throw new ForbiddenException();
+    if (!(await canEditListing(this.prisma, userId, listing))) throw new ForbiddenException();
     return listing;
   }
 

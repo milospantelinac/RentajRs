@@ -347,7 +347,9 @@ model User {
   invoices                Invoice[]
   featuredAssigned        FeaturedListing[]     @relation("FeaturedAssignedBy")
   featuredDecided         FeaturedRequest[]     @relation("FeaturedRequestDecidedBy")
-  bookingsAsGuest        Booking[]             @relation("BookingGuest")
+  listingsAddedAsAdmin    Listing[]             @relation("ListingCreatedByAdmin")
+  subscriptionsGranted    Subscription[]        @relation("SubscriptionGrantedBy")
+  bookingsAsGuest         Booking[]             @relation("BookingGuest")
   bookingsAsOwner         Booking[]             @relation("BookingOwner")
   bookingHistoryChanges   BookingHistory[]      @relation("BookingHistoryChangedBy")
   conversationsAsGuest    Conversation[]        @relation("ConversationGuest")
@@ -768,9 +770,14 @@ model Listing {
   publishedAt             DateTime?      @db.Timestamptz // subscription clock starts here (R28)
   deletedAt               DateTime?      @db.Timestamptz
   createdAt               DateTime       @default(now()) @db.Timestamptz
+  /// The admin who added this listing for its owner (Administracija > Oglasi,
+  /// published without payment). Admins holding manage_free_listings may open
+  /// it in the wizard as well as its owner; a listing an owner added stays theirs alone.
+  createdByAdminId        String?        @db.Uuid
 
-  user         User          @relation(fields: [userId], references: [id])
-  category     Category      @relation(fields: [categoryId], references: [id])
+  user           User          @relation(fields: [userId], references: [id])
+  createdByAdmin User?         @relation("ListingCreatedByAdmin", fields: [createdByAdminId], references: [id], onDelete: SetNull)
+  category       Category      @relation(fields: [categoryId], references: [id])
   subscription Subscription? @relation(fields: [subscriptionId], references: [id])
   region       Region?       @relation(fields: [regionId], references: [id])
   city         City?         @relation(fields: [cityId], references: [id])
@@ -1107,9 +1114,16 @@ model Subscription {
   // starts at payment. Kept afterwards as the chain of paid periods.
   renewsSubscriptionId String?           @db.Uuid
   createdAt           DateTime           @default(now()) @db.Timestamptz
+  // A package an admin gave without payment (Administracija > Oglasi): no
+  // transaction or invoice stands behind it and priceAtPurchase is 0. It runs
+  // and ends like a paid one; expiresAt null means it has no end until an
+  // admin sets one. grantNote is the admin's own note, never shown to the owner.
+  grantedByAdminId    String?            @db.Uuid
+  grantNote           String?
 
-  user     User          @relation(fields: [userId], references: [id])
-  package  Package       @relation(fields: [packageId], references: [id])
+  user           User          @relation(fields: [userId], references: [id])
+  grantedByAdmin User?         @relation("SubscriptionGrantedBy", fields: [grantedByAdminId], references: [id], onDelete: SetNull)
+  package        Package       @relation(fields: [packageId], references: [id])
   renews   Subscription? @relation("SubscriptionRenewals", fields: [renewsSubscriptionId], references: [id], onDelete: SetNull)
   renewals Subscription[] @relation("SubscriptionRenewals")
   listings Listing[]
