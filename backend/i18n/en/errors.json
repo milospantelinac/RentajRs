@@ -50,6 +50,8 @@
   "IMAGE_TYPE_NOT_ALLOWED": "Only JPG, PNG and WEBP photos are allowed",
   "IMAGE_TOO_LARGE": "The photo is larger than {max}MB",
   "IMAGE_INVALID": "The uploaded file is not a valid image",
+  "ICON_TYPE_NOT_ALLOWED": "An icon can be a PNG, SVG, JPG or WEBP image",
+  "ICON_EMPTY": "No icon was found in the image. Upload an icon on a transparent or single-colour background",
   "FILE_TOO_LARGE": "The file is too large to upload",
   "ATTACHMENT_TYPE_NOT_ALLOWED": "Only images (JPEG, PNG, WEBP) or a PDF file are allowed",
   "ATTACHMENT_TOO_LARGE": "The attachment is larger than {max}MB",

@@ -1,5 +1,6 @@
 import {
   attachmentKey,
+  attributeIconKeyIn,
   imageFileNames,
   imageFolderOf,
   imageKeyOf,
@@ -32,6 +33,20 @@ describe('media keys (T143)', () => {
     expect(imageKindOf(`listings/${L}/photos/${F}/800.webp`)).toBeNull();
     expect(imageKindOf(`listings/${L}/photos/not-a-uuid`)).toBeNull();
     expect(imageKindOf(null)).toBeNull();
+  });
+
+  it('keeps the icons uploaded for fields and amenity items apart from any record (T129)', () => {
+    const key = `site/attribute-icons/${F}`;
+    expect(newImageKey({ kind: 'attributeIcon' }, F)).toBe(key);
+    expect(imageKindOf(key)).toBe('attributeIcon');
+    expect(imageUrl(BASE, key)).toBe(`${BASE}/${key}/128.webp`);
+    expect(imageFileNames('attributeIcon')).toEqual(['128.webp', 'master.webp']);
+    // The panel sends the URL it was shown back on a save; any base gives the key.
+    expect(attributeIconKeyIn(key)).toBe(key);
+    expect(attributeIconKeyIn(`${BASE}/${key}/128.webp`)).toBe(key);
+    expect(attributeIconKeyIn(`http://127.0.0.1:3335/media/${key}/128.webp`)).toBe(key);
+    expect(attributeIconKeyIn('bazen')).toBeNull();
+    expect(attributeIconKeyIn(`categories/${L}/${F}`)).toBeNull();
   });
 
   it('names the widths and, where kept, the master', () => {

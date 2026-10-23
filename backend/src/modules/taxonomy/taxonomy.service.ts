@@ -27,8 +27,9 @@ const CACHE_TTL = 60 * 30; // 30 min — categories/attributes change rarely and
 // Bump the suffix anyway when a tree node gains or loses a field, for an old
 // instance still writing during a rolling deploy. v3: the listing counts
 // moved to their own key. v4: Dizajn 50 picks the categories by the published
-// flag, where an older instance left Ostalo out by its slug.
-const TREE_CACHE_KEY = 'taxonomy:tree:v4';
+// flag, where an older instance left Ostalo out by its slug. v5 (T129): a
+// node carries its uploaded icon (imageUrl).
+const TREE_CACHE_KEY = 'taxonomy:tree:v5';
 /**
  * Live listings per category (getListingCounts). Kept apart from the tree,
  * which changes only when an admin edits a category: the counts change
@@ -49,6 +50,14 @@ const FACT_KEYS_CACHE_PREFIX = 'taxonomy:facts:v1:';
 const BOOKING_MODELS_CACHE_PREFIX = 'taxonomy:booking-models:v1:';
 const FUZZY_THRESHOLD = 0.35;
 export const FALLBACK_CATEGORY_SLUG = 'ostalo';
+/**
+ * T129: Category.icon when the category wears the icon uploaded for it
+ * (imageUrl). Otherwise icon names a file of the frontend's icon library, or
+ * is empty (or a seed's old name) and the slug decides. An upload alone is
+ * not enough: one made while the upload was still a "category picture" was
+ * kept as a photo, and it must not replace a category's drawn icon by itself.
+ */
+export const UPLOADED_ICON = 'upload';
 /** T129: lowercase ASCII words joined by single hyphens, as uniqueSlug makes them. */
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -56,6 +65,8 @@ type CategoryNode = {
   id: string;
   slug: string;
   icon: string | null;
+  /** The uploaded icon's key; MediaUrlInterceptor hands it out as a URL. */
+  imageUrl: string | null;
   name: string;
   shortDescription: string | null;
   children: CategoryNode[];
@@ -142,6 +153,8 @@ export class TaxonomyService {
         id: cat.id,
         slug: cat.slug,
         icon: cat.icon,
+        // T129: the icon an admin uploaded, for the search tiles and the wizard's cards.
+        imageUrl: cat.imageUrl,
         name: names.get(cat.id) ?? cat.slug,
         shortDescription: shortDescriptions.get(cat.id) ?? null,
         children: (byParent.get(cat.id) ?? []).map(toNode),
@@ -592,8 +605,8 @@ export class TaxonomyService {
           slug,
           parentId: moving ? (dto.parentId ?? null) : undefined,
           level,
-          // No icon picked is none, not an empty name.
-          icon: dto.icon === '' ? null : dto.icon,
+          // No icon picked is none, not an empty name; nor is the uploaded one when nothing was uploaded.
+          icon: dto.icon === '' || (dto.icon === UPLOADED_ICON && !category.imageUrl) ? null : dto.icon,
           defaultBookingModel: dto.defaultBookingModel,
           allowedPriceUnits: dto.allowedPriceUnits,
           defaultPriceUnit: dto.defaultPriceUnit,
@@ -659,24 +672,44 @@ export class TaxonomyService {
     return { message: this.i18n.t('common.SUCCESS') };
   }
 
-  /** T129: the category picture, replaced by every upload. */
+  /**
+   * T129: the category's own icon (Category.imageUrl), replaced by every
+   * upload, for a category the icon library has nothing for. An upload is
+   * the icon the site shows from then on (icon becomes UPLOADED_ICON), so a
+   * library icon picked before is let go; picking one again later comes first.
+   */
   async adminSetCategoryImage(adminId: string, id: string, file: Express.Multer.File) {
     const category = await this.prisma.category.findUnique({ where: { id } });
     if (!category) throw new NotFoundException();
-    if (!file) throw new BadRequestException(this.i18n.t('errors.IMAGE_INVALID'));
-    const key = await this.uploads.saveImage(file, { kind: 'categoryImage', categoryId: id });
-    const updated = await this.prisma.category.update({ where: { id }, data: { imageUrl: key } });
-    await this.logChange(adminId, 'category.image', 'Category', id, { imageUrl: category.imageUrl }, { imageUrl: key });
+    const key = await this.uploads.saveCategoryIcon(file, id);
+    const updated = await this.prisma.category.update({ where: { id }, data: { imageUrl: key, icon: UPLOADED_ICON } });
+    await this.logChange(
+      adminId,
+      'category.image',
+      'Category',
+      id,
+      { imageUrl: category.imageUrl, icon: category.icon },
+      { imageUrl: key, icon: UPLOADED_ICON },
+    );
     await this.invalidateTreeCache(id);
     await this.uploads.removeImage(category.imageUrl);
     return updated;
   }
 
+  /** Without its uploaded icon a category wearing it falls back to the slug's; a library pick stays. */
   async adminRemoveCategoryImage(adminId: string, id: string) {
     const category = await this.prisma.category.findUnique({ where: { id } });
     if (!category) throw new NotFoundException();
-    const updated = await this.prisma.category.update({ where: { id }, data: { imageUrl: null } });
-    await this.logChange(adminId, 'category.image', 'Category', id, { imageUrl: category.imageUrl }, { imageUrl: null });
+    const icon = category.icon === UPLOADED_ICON ? null : category.icon;
+    const updated = await this.prisma.category.update({ where: { id }, data: { imageUrl: null, icon } });
+    await this.logChange(
+      adminId,
+      'category.image',
+      'Category',
+      id,
+      { imageUrl: category.imageUrl, icon: category.icon },
+      { imageUrl: null, icon },
+    );
     await this.invalidateTreeCache(id);
     await this.uploads.removeImage(category.imageUrl);
     return updated;

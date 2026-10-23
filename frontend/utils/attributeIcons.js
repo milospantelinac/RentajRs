@@ -69,6 +69,15 @@ const REGISTRY = Object.fromEntries(
 /** T129: every icon of the library, by file name, for the picker in Administracija > Kategorije. */
 export const ATTRIBUTE_ICON_NAMES = Object.keys(REGISTRY).sort()
 
+/**
+ * T129: an icon an admin uploaded for a field or an amenity item (Administracija
+ * > Kategorije). The API hands it out as the address of its file, which a
+ * library name or a key never is (they have no slash).
+ */
+export function isUploadedAttributeIcon(value) {
+  return typeof value === 'string' && value.includes('/')
+}
+
 export function resolveAttributeIconSlug(key) {
   if (!key) return DEFAULT_SLUG
   if (REGISTRY[key]) return key

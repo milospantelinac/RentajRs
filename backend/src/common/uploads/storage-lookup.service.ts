@@ -8,7 +8,7 @@ import { ImageKind, imageKindOf } from './media';
 
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const IMAGE_KEY_IN_TEXT = new RegExp(
-  `(listings/${UUID}/photos/${UUID}|users/${UUID}/avatar/${UUID}|categories/${UUID}/${UUID}|site/homepage/video-poster/${UUID})(?:/|$)`,
+  `(listings/${UUID}/photos/${UUID}|users/${UUID}/avatar/${UUID}|categories/${UUID}/${UUID}|site/homepage/video-poster/${UUID}|site/attribute-icons/${UUID})(?:/|$)`,
 );
 const ATTACHMENT_KEY_IN_TEXT = new RegExp(`conversations/${UUID}/${UUID}/${UUID}\\.(?:webp|pdf)`);
 const OLD_ADDRESS_IN_TEXT = new RegExp(
@@ -163,7 +163,28 @@ export class StorageLookupService {
         link: `/admin/kategorije/${category.id}`,
       }));
     }
-    const setting = await this.prisma.setting.findUnique({ where: { key: 'homepage_video_thumbnail' } });
+    if (kind === 'attributeIcon') {
+      // Fields and items are shown on their category's page; both are named by their keys.
+      const category = { select: { id: true, slug: true } };
+      const [fields, items] = await Promise.all([
+        this.prisma.categoryAttribute.findMany({ where: { icon: filter }, select: { key: true, category } }),
+        this.prisma.attributeOption.findMany({
+          where: { icon: filter },
+          select: { key: true, attribute: { select: { key: true, category } } },
+        }),
+      ]);
+      return [
+        ...fields.map((field) => ({ category: field.category, detail: field.key })),
+        ...items.map((item) => ({ category: item.attribute.category, detail: `${item.attribute.key} · ${item.key}` })),
+      ].map(({ category, detail }) => ({
+        type: 'category' as const,
+        id: category.id,
+        label: category.slug,
+        detail,
+        link: `/admin/kategorije/${category.id}`,
+      }));
+    }
+    const setting =await this.prisma.setting.findUnique({ where: { key: 'homepage_video_thumbnail' } });
     const value = typeof setting?.value === 'string' ? setting.value : '';
     const used = 'contains' in filter ? value.includes(filter.contains) : value.endsWith(filter.endsWith);
     return used ? [{ type: 'homepage', id: 'homepage_video_thumbnail', label: 'homepage_video_thumbnail', link: '/admin/sadrzaj' }] : [];

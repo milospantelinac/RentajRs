@@ -1,5 +1,10 @@
 <template>
-  <span class="category-tile-icon" v-html="markup" />
+  <!-- T129: a category the icon library has nothing for wears the icon the
+       admin uploaded, at the 30 the solid icons have in this box. -->
+  <span v-if="src" class="category-tile-icon">
+    <CategoryUploadedIcon :src="src" class="category-tile-icon-upload" />
+  </span>
+  <span v-else class="category-tile-icon" v-html="markup" />
 </template>
 
 <script setup>
@@ -7,6 +12,8 @@
 // on the active tile, grey otherwise (Dizajn 8).
 const props = defineProps({
   slug: { type: String, required: true },
+  // The address of an uploaded icon (categoryIconUpload), which comes before the slug's.
+  src: { type: String, default: '' },
 })
 
 const markup = computed(() => getSearchCategoryIconMarkup(props.slug))
@@ -29,5 +36,10 @@ const markup = computed(() => getSearchCategoryIconMarkup(props.slug))
 .category-tile-icon :deep(svg) {
   display: block;
   flex-shrink: 0;
+}
+
+.category-tile-icon .category-tile-icon-upload {
+  width: 30px;
+  height: 30px;
 }
 </style>

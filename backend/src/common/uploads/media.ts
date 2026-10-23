@@ -12,6 +12,7 @@ import { randomUUID } from 'crypto';
  *   users/{userId}/avatar/{fileId}/400.webp, 128.webp
  *   categories/{categoryId}/{fileId}/master.webp, 1600.webp ... 400.webp
  *   site/homepage/video-poster/{fileId}/master.webp, 1600.webp, 800.webp
+ *   site/attribute-icons/{fileId}/master.webp, 128.webp
  *
  * The database holds the folder (the "key"), never a URL, so moving the
  * files behind another domain or a CDN is an environment change. Message
@@ -23,13 +24,15 @@ import { randomUUID } from 'crypto';
  * cached for a year.
  */
 
-export type ImageKind = 'listingPhoto' | 'avatar' | 'categoryImage' | 'homepagePoster';
+export type ImageKind = 'listingPhoto' | 'avatar' | 'categoryImage' | 'homepagePoster' | 'attributeIcon';
 
 export type ImageTarget =
   | { kind: 'listingPhoto'; listingId: string }
   | { kind: 'avatar'; userId: string }
   | { kind: 'categoryImage'; categoryId: string }
-  | { kind: 'homepagePoster' };
+  | { kind: 'homepagePoster' }
+  // T129: the icon of a field or an amenity item; several of them may wear the same one.
+  | { kind: 'attributeIcon' };
 
 export interface ImageProfile {
   /** Longest side of the master copy; null keeps none (an avatar arrives cropped to its final size). */
@@ -48,6 +51,8 @@ export const IMAGE_PROFILES: Record<ImageKind, ImageProfile> = {
   avatar: { master: null, widths: [128, 400], boxed: true },
   categoryImage: { master: 2560, widths: [400, 800, 1600], boxed: false },
   homepagePoster: { master: 2560, widths: [800, 1600], boxed: false },
+  // Only the shape (icon-shape.ts), drawn at 15 to 22 px; 128 covers a 3x screen.
+  attributeIcon: { master: 1024, widths: [128], boxed: true },
 };
 
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
@@ -57,7 +62,19 @@ const IMAGE_KEY_PATTERNS: Array<[ImageKind, RegExp]> = [
   ['avatar', new RegExp(`^users/${UUID}/avatar/${UUID}$`)],
   ['categoryImage', new RegExp(`^categories/${UUID}/${UUID}$`)],
   ['homepagePoster', new RegExp(`^site/homepage/video-poster/${UUID}$`)],
+  ['attributeIcon', new RegExp(`^site/attribute-icons/${UUID}$`)],
 ];
+
+/** T129: where the keys of the icons uploaded for fields and amenity items start. */
+export const ATTRIBUTE_ICON_PREFIX = 'site/attribute-icons/';
+
+/** T129: an uploaded attribute icon's key, alone or inside one of its URLs. */
+export const ATTRIBUTE_ICON_KEY = new RegExp(`${ATTRIBUTE_ICON_PREFIX}${UUID}`);
+
+/** The uploaded attribute icon a key or one of its URLs names, or null. */
+export function attributeIconKeyIn(value: string): string | null {
+  return value.match(ATTRIBUTE_ICON_KEY)?.[0] ?? null;
+}
 
 const ATTACHMENT_KEY = new RegExp(`^conversations/${UUID}/${UUID}/${UUID}\\.(webp|pdf)$`);
 
@@ -71,6 +88,8 @@ export function newImageKey(target: ImageTarget, fileId: string = randomUUID()):
       return `categories/${target.categoryId}/${fileId}`;
     case 'homepagePoster':
       return `site/homepage/video-poster/${fileId}`;
+    case 'attributeIcon':
+      return `${ATTRIBUTE_ICON_PREFIX}${fileId}`;
   }
 }
 

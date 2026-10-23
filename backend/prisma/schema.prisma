@@ -523,7 +523,8 @@ model CategoryAttribute {
   /// stays on the listings that already have a value.
   hidden       Boolean       @default(false)
   /// T129: an icon of the attribute icon library (frontend
-  /// assets/icons/attributes) picked in the panel; null: the key decides.
+  /// assets/icons/attributes) picked in the panel, or the key of one the
+  /// admin uploaded (site/attribute-icons/{fileId}); null: the key decides.
   icon         String?
   minValue     Decimal?      @db.Decimal(12, 2)
   maxValue     Decimal?      @db.Decimal(12, 2)

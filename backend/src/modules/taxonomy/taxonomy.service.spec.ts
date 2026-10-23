@@ -83,7 +83,7 @@ describe('TaxonomyService#getCategoryTree', () => {
     });
     await service.adminUpdateCategory('admin-1', 'c-ost', { published: true });
     expect(update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ published: true }) }));
-    expect(cache.del).toHaveBeenCalledWith('taxonomy:tree:v4', LISTING_COUNTS_CACHE_KEY);
+    expect(cache.del).toHaveBeenCalledWith('taxonomy:tree:v5', LISTING_COUNTS_CACHE_KEY);
     // T129: the change history keeps who changed what, before and after.
     expect(adminLog.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
@@ -120,8 +120,8 @@ describe('TaxonomyService#getCategoryTree', () => {
     await service.getCategoryTree();
 
     const calls = cache.getOrSet.mock.calls.map(([key, ttl]) => [key, ttl]);
-    expect(calls).toEqual(expect.arrayContaining([[LISTING_COUNTS_CACHE_KEY, 60], ['taxonomy:tree:v4', 1800]]));
-    const structure = await cache.getOrSet.mock.results[calls.findIndex(([key]) => key === 'taxonomy:tree:v4')].value;
+    expect(calls).toEqual(expect.arrayContaining([[LISTING_COUNTS_CACHE_KEY, 60], ['taxonomy:tree:v5', 1800]]));
+    const structure = await cache.getOrSet.mock.results[calls.findIndex(([key]) => key === 'taxonomy:tree:v5')].value;
     expect(JSON.stringify(structure)).not.toContain('listingCount');
   });
 
@@ -131,7 +131,106 @@ describe('TaxonomyService#getCategoryTree', () => {
       adminLog: { create: jest.fn().mockResolvedValue({}) },
     });
     await service.adminApproveCategory('admin-1', 'c1');
-    expect(cache.del).toHaveBeenCalledWith('taxonomy:tree:v4', LISTING_COUNTS_CACHE_KEY);
+    expect(cache.del).toHaveBeenCalledWith('taxonomy:tree:v5', LISTING_COUNTS_CACHE_KEY);
+  });
+
+  it('hands every node its uploaded icon, subcategories too (T129)', async () => {
+    const SPA_ICON = 'categories/c-spa/7d3c3f0e-1c9f-4b7a-a0d4-6bfa2b0f2a10';
+    const { service } = makeService({
+      ...prisma,
+      category: {
+        findMany: jest.fn().mockResolvedValue([
+          { ...category('c-spa', 'spa-centri'), imageUrl: SPA_ICON },
+          { ...category('c-dan', 'dnevne-karte', 'c-spa'), imageUrl: null },
+        ]),
+      },
+    });
+    const [spa] = await service.getCategoryTree();
+    expect(spa).toMatchObject({ slug: 'spa-centri', imageUrl: SPA_ICON });
+    expect(spa.children[0]).toMatchObject({ slug: 'dnevne-karte', imageUrl: null });
+  });
+});
+
+describe('TaxonomyService#adminSetCategoryImage (T129)', () => {
+  const OLD = 'categories/c-spa/0b6f8e5e-6a43-4c39-9a52-2f3f43c9a001';
+  const NEW = 'categories/c-spa/7d3c3f0e-1c9f-4b7a-a0d4-6bfa2b0f2a10';
+
+  function setup() {
+    const update = jest.fn(async ({ data }: any) => ({ ...category('c-spa', 'spa-centri'), ...data }));
+    const prisma = {
+      category: { findUnique: jest.fn().mockResolvedValue({ ...category('c-spa', 'spa-centri'), icon: 'sobe', imageUrl: OLD }), update },
+      adminLog: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const uploads = { saveCategoryIcon: jest.fn().mockResolvedValue(NEW), removeImage: jest.fn().mockResolvedValue(undefined) };
+    const cache = passThroughCache();
+    const service = new TaxonomyService(prisma as any, cache as any, { t: (key: string) => key } as any, { emit: jest.fn() } as any, uploads as any);
+    return { service, prisma, uploads, cache, update };
+  }
+
+  it('makes the upload the icon the site shows: the library pick goes, the old upload is deleted', async () => {
+    const { service, prisma, uploads, cache, update } = setup();
+    const file = { mimetype: 'image/png' } as Express.Multer.File;
+
+    const saved = await service.adminSetCategoryImage('admin-1', 'c-spa', file);
+
+    expect(uploads.saveCategoryIcon).toHaveBeenCalledWith(file, 'c-spa');
+    expect(update).toHaveBeenCalledWith({ where: { id: 'c-spa' }, data: { imageUrl: NEW, icon: 'upload' } });
+    expect(saved).toMatchObject({ imageUrl: NEW, icon: 'upload' });
+    expect(prisma.adminLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'category.image',
+        entityId: 'c-spa',
+        oldValue: { imageUrl: OLD, icon: 'sobe' },
+        newValue: { imageUrl: NEW, icon: 'upload' },
+      }),
+    });
+    expect(cache.del).toHaveBeenCalledWith('taxonomy:tree:v5', LISTING_COUNTS_CACHE_KEY);
+    expect(uploads.removeImage).toHaveBeenCalledWith(OLD);
+  });
+
+  it('changes nothing when the upload is refused', async () => {
+    const { service, uploads, update } = setup();
+    uploads.saveCategoryIcon.mockRejectedValueOnce(new Error('errors.ICON_EMPTY'));
+
+    await expect(service.adminSetCategoryImage('admin-1', 'c-spa', {} as Express.Multer.File)).rejects.toThrow('errors.ICON_EMPTY');
+    expect(update).not.toHaveBeenCalled();
+    expect(uploads.removeImage).not.toHaveBeenCalled();
+  });
+
+  it('takes a category wearing its upload back to the default icon when the upload goes', async () => {
+    const { service, prisma, uploads, update } = setup();
+    prisma.category.findUnique.mockResolvedValueOnce({ ...category('c-spa', 'spa-centri'), icon: 'upload', imageUrl: OLD });
+
+    await service.adminRemoveCategoryImage('admin-1', 'c-spa');
+
+    expect(update).toHaveBeenCalledWith({ where: { id: 'c-spa' }, data: { imageUrl: null, icon: null } });
+    expect(uploads.removeImage).toHaveBeenCalledWith(OLD);
+  });
+
+  it('saves the uploaded icon as the pick only for a category that has one', async () => {
+    for (const [imageUrl, expected] of [
+      [OLD, 'upload'],
+      [null, null],
+    ]) {
+      const update = jest.fn().mockResolvedValue({});
+      const row = { ...category('c-spa', 'spa-centri'), imageUrl };
+      const { service } = makeService({
+        category: { findUnique: jest.fn().mockResolvedValue(row), findUniqueOrThrow: jest.fn().mockResolvedValue(row), update },
+        translation: { findMany: jest.fn().mockResolvedValue([]) },
+        adminLog: { create: jest.fn().mockResolvedValue({}) },
+        $transaction: jest.fn(async (fn: any) => fn({ category: { update } })),
+      });
+      await service.adminUpdateCategory('admin-1', 'c-spa', { icon: 'upload' });
+      expect(update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ icon: expected }) }));
+    }
+  });
+
+  it('keeps a library pick when an upload the category does not wear goes', async () => {
+    const { service, update } = setup();
+
+    await service.adminRemoveCategoryImage('admin-1', 'c-spa');
+
+    expect(update).toHaveBeenCalledWith({ where: { id: 'c-spa' }, data: { imageUrl: null, icon: 'sobe' } });
   });
 });
 

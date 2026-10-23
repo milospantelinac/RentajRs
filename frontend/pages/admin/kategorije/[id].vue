@@ -82,6 +82,20 @@
                 <span class="cat-icon-glyph" aria-hidden="true" v-html="iconPreview(category.slug)" />
                 <span class="cat-icon-name">{{ t('admin.cat.iconDefault') }}</span>
               </button>
+              <!-- T129: the icon uploaded for the category, next to the default one. -->
+              <button
+                v-if="uploadedIcon"
+                type="button"
+                class="cat-icon"
+                :class="{ 'is-active': form.icon === UPLOADED_ICON }"
+                :aria-pressed="form.icon === UPLOADED_ICON"
+                @click="form.icon = UPLOADED_ICON"
+              >
+                <span class="cat-icon-glyph" aria-hidden="true">
+                  <CategoryUploadedIcon :src="uploadedIcon" />
+                </span>
+                <span class="cat-icon-name">{{ t('admin.cat.iconUploaded') }}</span>
+              </button>
               <button
                 v-for="key in CATEGORY_ICON_KEYS"
                 :key="key"
@@ -96,22 +110,25 @@
               </button>
             </div>
             <p class="admin-card-note cat-hint">{{ t('admin.cat.iconHint') }}</p>
-          </fieldset>
-
-          <div class="form-group">
-            <p class="form-label">{{ t('admin.cat.image') }}</p>
-            <img v-if="category.imageUrl" :src="category.imageUrl" alt="" class="cat-image" />
+            <!-- T129: for a category the library has nothing for, an icon of its own. -->
             <div class="cat-row-actions">
-              <label class="btn btn-tertiary btn-sm cat-upload">
-                {{ category.imageUrl ? t('admin.cat.imageReplace') : t('admin.cat.imageUpload') }}
-                <input type="file" accept="image/jpeg,image/png,image/webp" class="visually-hidden" @change="uploadImage" />
+              <label class="btn btn-tertiary btn-sm cat-upload" :class="{ 'is-busy': uploadingIcon }">
+                {{ uploadedIcon ? t('admin.cat.iconReplace') : t('admin.cat.iconUpload') }}
+                <input
+                  type="file"
+                  accept="image/png,image/svg+xml,image/webp,image/jpeg"
+                  class="visually-hidden"
+                  :disabled="uploadingIcon"
+                  @change="uploadIcon"
+                />
               </label>
-              <button v-if="category.imageUrl" type="button" class="btn btn-tertiary btn-sm" @click="removeImage">
-                {{ t('admin.cat.imageRemove') }}
+              <button v-if="uploadedIcon" type="button" class="btn btn-tertiary btn-sm" @click="removeIcon">
+                {{ t('admin.cat.iconRemove') }}
               </button>
             </div>
-            <p class="admin-card-note cat-hint">{{ t('admin.cat.imageHint') }}</p>
-          </div>
+            <p class="admin-card-note cat-hint">{{ t('admin.cat.iconUploadHint') }}</p>
+            <p v-if="iconError" class="form-error" role="alert">{{ iconError }}</p>
+          </fieldset>
 
           <fieldset class="cat-fieldset">
             <legend class="form-label">{{ t('admin.cat.bookingSection') }}</legend>
@@ -315,19 +332,25 @@ function fillForm(c) {
     shortDescription: c.shortDescription || '',
     description: c.description || '',
     parentId: c.parentId || null,
-    // Only an icon from the library counts as picked; the seed's old names fall back to the slug.
-    icon: CATEGORY_ICON_KEYS.includes(c.icon) ? c.icon : '',
+    // Only an icon from the library, or the uploaded one, counts as picked; the seed's old names fall back to the slug.
+    icon: CATEGORY_ICON_KEYS.includes(c.icon) || (c.icon === UPLOADED_ICON && c.imageUrl) ? c.icon : '',
     modelKeys: [...(c.modelKeys || [])],
     defaultPriceUnit: c.defaultPriceUnit,
     allowedPriceUnits: [...c.allowedPriceUnits],
     published: c.published,
   })
 }
-watch(category, fillForm, { immediate: true })
+// The form is filled when a category opens and again after each save, not on
+// every change of `category`: an icon upload changes it too, and must not
+// throw away what the admin has not saved yet.
+watch(() => category.value?.id, () => fillForm(category.value), { immediate: true })
 
 function iconPreview(key) {
   return getCategoryIconMarkup(key) || getSearchCategoryIconMarkup(key)
 }
+
+// T129: the icon uploaded for the category, a choice of the grid next to the library's.
+const uploadedIcon = computed(() => (category.value?.imageUrl ? mediaVariant(category.value.imageUrl, 400) : ''))
 
 function toggleModel(key) {
   const i = form.modelKeys.indexOf(key)
@@ -371,6 +394,7 @@ async function saveBasics() {
       defaultPriceUnit: form.defaultPriceUnit,
     })
     await Promise.all([refresh(), refreshTree(), loadAttributes()])
+    fillForm(category.value)
     formSaved.value = true
   } catch (e) {
     formError.value = extractErrorMessage(e, t('auth.genericError'))
@@ -379,28 +403,40 @@ async function saveBasics() {
   }
 }
 
-async function uploadImage(event) {
+const uploadingIcon = ref(false)
+const iconError = ref('')
+
+// T129: an uploaded icon is stored at once and is the category's icon from
+// then on (the backend saves it as the pick), so the grid moves to it. The
+// rest of the form stays as the admin left it.
+async function uploadIcon(event) {
   const file = event.target.files?.[0]
   if (!file) return
   const body = new FormData()
   body.append('file', file)
+  uploadingIcon.value = true
+  iconError.value = ''
   try {
-    await api.post(`/admin/categories/${category.value.id}/image`, body)
-    await refresh()
+    const updated = await api.post(`/admin/categories/${category.value.id}/image`, body)
+    category.value = { ...category.value, imageUrl: updated.imageUrl, icon: updated.icon }
+    form.icon = UPLOADED_ICON
   } catch (e) {
-    alert(extractErrorMessage(e, t('auth.genericError')))
+    iconError.value = extractErrorMessage(e, t('auth.genericError'))
   } finally {
+    uploadingIcon.value = false
     event.target.value = ''
   }
 }
 
-async function removeImage() {
-  if (!confirm(t('admin.cat.imageRemoveConfirm'))) return
+async function removeIcon() {
+  if (!confirm(t('admin.cat.iconRemoveConfirm'))) return
+  iconError.value = ''
   try {
-    await api.delete(`/admin/categories/${category.value.id}/image`)
-    await refresh()
+    const updated = await api.delete(`/admin/categories/${category.value.id}/image`)
+    category.value = { ...category.value, imageUrl: updated.imageUrl, icon: updated.icon }
+    if (form.icon === UPLOADED_ICON) form.icon = ''
   } catch (e) {
-    alert(extractErrorMessage(e, t('auth.genericError')))
+    iconError.value = extractErrorMessage(e, t('auth.genericError'))
   }
 }
 
@@ -424,7 +460,8 @@ const previewCategory = computed(() => ({
   ...category.value,
   name: form.name || category.value.name,
   shortDescription: form.shortDescription,
-  icon: form.icon || category.value.icon,
+  // The pick on the form, saved or not; none shows the uploaded icon or the slug's.
+  icon: form.icon,
 }))
 
 // T129: what a new listing is offered, as the wizard filters it: no hidden fields or items.
@@ -479,6 +516,7 @@ function keyName(key, field) {
 
 function show(field, value) {
   if (value === undefined || value === null || value === '') return t('admin.cat.empty')
+  if (field === 'icon' && value === UPLOADED_ICON) return t('admin.cat.iconUploaded').toLowerCase()
   if (typeof value === 'boolean') return value ? t('admin.cat.yes') : t('admin.cat.no')
   if ((field === 'parentId' || field === 'mergedIntoId') && categoryName(value)) return categoryName(value)
   if (KEY_LIST_FIELDS.includes(field) && Array.isArray(value)) return value.map((key) => keyName(key, field)).join(', ') || t('admin.cat.empty')
@@ -486,6 +524,9 @@ function show(field, value) {
   if (Array.isArray(value)) return value.map((item) => (typeof item === 'object' ? item.name || item.key : item)).join(', ') || t('admin.cat.empty')
   return String(value)
 }
+
+// An uploaded icon reads as one, not as the address of its file.
+const uploadedIconLabel = (value, key) => (value ? t(`admin.cat.${key}`) : t('admin.cat.empty'))
 
 // An empty text or list and none read the same (a saved form sends the icon as '').
 const emptyAsNull = (value) => (value === undefined || value === '' || (Array.isArray(value) && !value.length) ? null : value)
@@ -500,8 +541,8 @@ function changesOf(row) {
     .map((field) => ({
       field,
       label: t(`admin.cat.fields.${field}`),
-      from: show(field, before[field]),
-      to: show(field, after[field]),
+      from: field === 'imageUrl' ? uploadedIconLabel(before[field], 'historyIconOld') : show(field, before[field]),
+      to: field === 'imageUrl' ? uploadedIconLabel(after[field], 'historyIconNew') : show(field, after[field]),
     }))
 }
 
@@ -526,6 +567,7 @@ async function archiveCategory() {
   try {
     await api.post(`/admin/categories/${category.value.id}/reject`, {})
     await Promise.all([refresh(), refreshTree()])
+    fillForm(category.value)
   } catch (e) {
     alert(extractErrorMessage(e, t('auth.genericError')))
   }
@@ -535,6 +577,7 @@ async function restoreCategory() {
   try {
     await api.post(`/admin/categories/${category.value.id}/approve`, {})
     await Promise.all([refresh(), refreshTree()])
+    fillForm(category.value)
   } catch (e) {
     alert(extractErrorMessage(e, t('auth.genericError')))
   }
@@ -661,16 +704,14 @@ useSeoMeta({ title: () => category.value?.name || t('admin.categories') })
   text-align: center;
 }
 
-.cat-image {
-  display: block;
-  width: 280px;
-  max-width: 100%;
-  margin-bottom: 10px;
-  border-radius: 12px;
-}
-
 .cat-upload {
   cursor: pointer;
+}
+
+// While an icon is uploading the button cannot be pressed again.
+.cat-upload.is-busy {
+  opacity: 0.6;
+  pointer-events: none;
 }
 
 .cat-row-actions {

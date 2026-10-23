@@ -1,5 +1,9 @@
 <template>
-  <span class="attribute-icon" :style="{ width: size + 'px', height: size + 'px' }" v-html="markup" />
+  <!-- T129: an icon the admin uploaded, filled with the text colour like the library's. -->
+  <span v-if="uploaded" class="attribute-icon" :style="{ width: size + 'px', height: size + 'px' }">
+    <CategoryUploadedIcon :src="name" />
+  </span>
+  <span v-else class="attribute-icon" :style="{ width: size + 'px', height: size + 'px' }" v-html="markup" />
 </template>
 
 <script setup>
@@ -13,7 +17,8 @@ const props = defineProps({
   size: { type: [Number, String], default: 24 },
 })
 
-const markup = computed(() => getAttributeIconMarkup(props.name))
+const uploaded = computed(() => isUploadedAttributeIcon(props.name))
+const markup = computed(() => (uploaded.value ? '' : getAttributeIconMarkup(props.name)))
 </script>
 
 <style lang="scss" scoped>

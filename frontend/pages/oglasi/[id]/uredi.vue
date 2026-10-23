@@ -30,7 +30,10 @@
     <div class="wizard-category">
       <template v-if="listing?.category">
         <span class="wizard-category-pill">
-          <span class="wizard-category-icon" aria-hidden="true" v-html="categoryIconMarkup" />
+          <span v-if="categoryIconSrc" class="wizard-category-icon" aria-hidden="true">
+            <CategoryUploadedIcon :src="categoryIconSrc" />
+          </span>
+          <span v-else class="wizard-category-icon" aria-hidden="true" v-html="categoryIconMarkup" />
           {{ listing.category.name }}
         </span>
         <!-- Only a draft can move to another category (novi.vue ?oglas=). -->
@@ -2656,6 +2659,8 @@ const stepSubtitle = computed(() => {
 })
 
 const categoryIconMarkup = computed(() => getWizardPillCategoryIconMarkup(categoryIconKey(listing.value?.category)))
+// T129: the icon the admin uploaded for a category the library has nothing for.
+const categoryIconSrc = computed(() => categoryIconUpload(listing.value?.category))
 
 // Dizajn 20: 228:316 is drawn for Igraonice. Its second tip names what guests
 // look for first, so each category the wizard knows gets its own version, and a

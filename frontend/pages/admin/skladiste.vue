@@ -498,7 +498,7 @@ const api = useApi()
 const POLL_MS = 2000
 const ITEMS_PAGE = 100
 const HISTORY_SHOWN = 10
-const USAGE_KINDS = ['listingPhoto', 'avatar', 'categoryImage', 'homepagePoster', 'attachment', 'other']
+const USAGE_KINDS = ['listingPhoto', 'avatar', 'categoryImage', 'homepagePoster', 'attributeIcon', 'attachment', 'other']
 const REASONS = ['ORPHAN', 'DELETED_LISTING', 'DELETED_ACCOUNT']
 const HEALTH_ICONS = {
   ok: '/images/icons/check-circle.svg',

@@ -47,6 +47,8 @@ function makeScanPrisma(state: {
   holds?: string[];
   deletedListings?: any[];
   expiredAttachments?: any[];
+  fieldIcons?: string[];
+  itemIcons?: string[];
 }) {
   const written: any = { items: [], superseded: null, scan: null };
   const tx = {
@@ -65,6 +67,8 @@ function makeScanPrisma(state: {
     },
     user: { findMany: jest.fn(async () => (state.avatars ?? []).map((avatarUrl) => ({ avatarUrl }))) },
     category: { findMany: jest.fn(async () => []) },
+    categoryAttribute: { findMany: jest.fn(async () => (state.fieldIcons ?? []).map((icon) => ({ icon }))) },
+    attributeOption: { findMany: jest.fn(async () => (state.itemIcons ?? []).map((icon) => ({ icon }))) },
     setting: { findMany: jest.fn(async () => []) },
     messageAttachment: {
       findMany: jest.fn(async (args: any) =>
@@ -109,6 +113,24 @@ describe('StorageScanService#run (T143): it lists, it never deletes', () => {
     expect(prisma.written.scan.data.usage.kinds.listingPhoto).toEqual({ items: 4, files: 5, bytes: 6300 });
     expect(prisma.written.scan.data.usage.kinds.other).toEqual({ items: 0, files: 1, bytes: 100 });
     expect(prisma.written.scan.data.usage.private).toEqual({ files: 2, bytes: 400 });
+  });
+
+  it('lists an uploaded field or item icon nothing wears, and keeps the worn ones (T129)', async () => {
+    const icon = (n: number) => `site/attribute-icons/${uuid(n)}`;
+    const storage = makeStorage({
+      public: [
+        [`${icon(1)}/128.webp`, OLD, 200],
+        [`${icon(1)}/master.webp`, OLD, 800],
+        [`${icon(2)}/128.webp`, OLD],
+        [`${icon(3)}/128.webp`, OLD],
+      ],
+    });
+    const prisma = makeScanPrisma({ fieldIcons: [icon(2)], itemIcons: [icon(3), icon(3)] });
+
+    await makeService(prisma, storage).run('scan-icons', NOW);
+
+    expect(prisma.written.items).toEqual([expect.objectContaining({ key: icon(1), reason: 'ORPHAN', files: 2, bytes: 1000 })]);
+    expect(prisma.written.scan.data.usage.kinds.attributeIcon).toEqual({ items: 3, files: 4, bytes: 1200 });
   });
 
   it('lists the photos of a listing deleted past its retention, unless a live listing uses them too', async () => {
@@ -224,6 +246,8 @@ describe('StorageScanService#deleteItems (T143): only what an admin approved, ch
       listingPhoto: { findMany: jest.fn(async () => extra.photoRows ?? []), deleteMany: jest.fn() },
       user: { findFirst: jest.fn(async () => extra.avatarUser ?? null) },
       category: { findFirst: jest.fn(async () => null) },
+      categoryAttribute: { findFirst: jest.fn(async () => extra.iconField ?? null) },
+      attributeOption: { findFirst: jest.fn(async () => extra.iconItem ?? null) },
       setting: { findUnique: jest.fn(async () => null) },
       adminLog: { create: jest.fn() },
     };
@@ -256,6 +280,17 @@ describe('StorageScanService#deleteItems (T143): only what an admin approved, ch
   it('leaves an avatar folder that a user picked up again meanwhile', async () => {
     const storage = makeStorage({});
     const prisma = makeDeletePrisma([item({ key: `users/${uuid(3)}/avatar/${uuid(4)}` })], { avatarUser: { id: 'u' } });
+
+    const result = await makeService(prisma, storage).deleteItems('admin', ['i1'], NOW);
+
+    expect(storage.deletePrefix).not.toHaveBeenCalled();
+    expect(result.skipped).toBe(1);
+    expect(prisma.updates[0].data).toMatchObject({ status: 'SKIPPED', note: 'in_use' });
+  });
+
+  it('leaves an uploaded icon that a field or an item wears again meanwhile (T129)', async () => {
+    const storage = makeStorage({});
+    const prisma = makeDeletePrisma([item({ key: `site/attribute-icons/${uuid(5)}` })], { iconItem: { id: 'o1' } });
 
     const result = await makeService(prisma, storage).deleteItems('admin', ['i1'], NOW);
 

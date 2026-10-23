@@ -129,6 +129,83 @@ describe('UploadsService#saveImage (T143)', () => {
   });
 });
 
+describe('UploadsService#saveCategoryIcon (T129)', () => {
+  const svg = Buffer.from(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30"><circle cx="15" cy="15" r="12" fill="#CED6DE"/></svg>',
+  );
+
+  it('stores the shape of the icon, see-through round it, as a category picture', async () => {
+    const storage = makeStorage();
+    const service = new UploadsService(i18n as any, storage as any, settings as any);
+
+    const key = await service.saveCategoryIcon(file(svg, 'image/svg+xml', 'spa.svg'), L);
+
+    expect(key).toMatch(new RegExp(`^categories/${L}/[0-9a-f-]{36}$`));
+    const calls = storage.put.mock.calls as any[];
+    expect(calls.map(([, objectKey]) => objectKey.split('/').pop())).toEqual(['400.webp', '800.webp', '1600.webp', 'master.webp']);
+    const small = await sharp(calls[0][2]).metadata();
+    expect(small).toMatchObject({ format: 'webp', width: 400, height: 400, hasAlpha: true });
+  });
+
+  it('takes a PNG, a JPG and a WebP as well, and refuses anything else', async () => {
+    const storage = makeStorage();
+    const service = new UploadsService(i18n as any, storage as any, settings as any);
+
+    await expect(service.saveCategoryIcon(file(await jpeg(300, 300), 'image/gif'), L)).rejects.toThrow('errors.ICON_TYPE_NOT_ALLOWED');
+    await expect(service.saveCategoryIcon(undefined, L)).rejects.toThrow('errors.FILE_REQUIRED');
+    expect(storage.put).not.toHaveBeenCalled();
+  });
+
+  it('refuses a picture with no icon in it, and a file that is no picture, storing nothing', async () => {
+    const storage = makeStorage();
+    const service = new UploadsService(i18n as any, storage as any, settings as any);
+
+    await expect(service.saveCategoryIcon(file(await jpeg(300, 300), 'image/jpeg'), L)).rejects.toThrow('errors.ICON_EMPTY');
+    await expect(service.saveCategoryIcon(file(Buffer.from('<html>'), 'image/png'), L)).rejects.toThrow('errors.IMAGE_INVALID');
+    expect(storage.put).not.toHaveBeenCalled();
+  });
+
+  it('holds an icon to the picture size limit', async () => {
+    const storage = makeStorage();
+    const service = new UploadsService(i18n as any, storage as any, settings as any);
+    const big = file(svg, 'image/svg+xml');
+    big.size = 8 * 1024 * 1024 + 1;
+
+    await expect(service.saveCategoryIcon(big, L)).rejects.toThrow('errors.IMAGE_TOO_LARGE');
+  });
+});
+
+describe('UploadsService#saveAttributeIcon (T129)', () => {
+  // A tall icon: the 128 file is bounded by its height too.
+  const svg = Buffer.from(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="40"><rect x="2" y="2" width="16" height="36" fill="#1E2A3B"/></svg>',
+  );
+
+  it('stores only the shape, in a folder of its own, at 128 and a master', async () => {
+    const storage = makeStorage();
+    const service = new UploadsService(i18n as any, storage as any, settings as any);
+
+    const key = await service.saveAttributeIcon(file(svg, 'image/svg+xml', 'jacuzzi.svg'));
+
+    expect(key).toMatch(/^site\/attribute-icons\/[0-9a-f-]{36}$/);
+    const calls = storage.put.mock.calls as any[];
+    expect(calls.map(([, objectKey]) => objectKey.split('/').pop())).toEqual(['128.webp', 'master.webp']);
+    const small = await sharp(calls[0][2]).metadata();
+    expect(small).toMatchObject({ format: 'webp', height: 128, hasAlpha: true });
+    expect(small.width).toBeLessThan(128);
+  });
+
+  it('refuses what a category icon refuses, storing nothing', async () => {
+    const storage = makeStorage();
+    const service = new UploadsService(i18n as any, storage as any, settings as any);
+
+    await expect(service.saveAttributeIcon(undefined)).rejects.toThrow('errors.FILE_REQUIRED');
+    await expect(service.saveAttributeIcon(file(await jpeg(300, 300), 'image/gif'))).rejects.toThrow('errors.ICON_TYPE_NOT_ALLOWED');
+    await expect(service.saveAttributeIcon(file(await jpeg(300, 300), 'image/jpeg'))).rejects.toThrow('errors.ICON_EMPTY');
+    expect(storage.put).not.toHaveBeenCalled();
+  });
+});
+
 describe('UploadsService#saveAttachment (T143, R85)', () => {
   const place = { conversationId: L, messageId: F, attachmentId: L };
 

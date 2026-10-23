@@ -6,7 +6,7 @@ import { Prisma, StorageItemReason, StorageScanItem } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StorageService } from './storage.service';
 import { StoragePolicy, StorageSettingsService } from './storage-settings.service';
-import { ImageKind, IMAGE_PROFILES, imageFolderOf, imageKeyOf, imageKindOf, imageUrl, isAttachmentKey } from './media';
+import { ATTRIBUTE_ICON_PREFIX, ImageKind, IMAGE_PROFILES, imageFolderOf, imageKeyOf, imageKindOf, imageUrl, isAttachmentKey } from './media';
 
 // An upload in progress has its files in the bucket a moment before its
 // record exists, so nothing younger than a day counts as forgotten.
@@ -440,12 +440,15 @@ export class StorageScanService {
 
   /** Every image folder and attachment a record points at. */
   private async references(): Promise<{ images: Set<string>; attachments: Set<string> }> {
-    const [photos, users, categories, settings, attachments] = await Promise.all([
+    const uploadedIcon = { icon: { startsWith: ATTRIBUTE_ICON_PREFIX } };
+    const [photos, users, categories, settings, attachments, fieldIcons, itemIcons] = await Promise.all([
       this.prisma.listingPhoto.findMany({ select: { url: true } }),
       this.prisma.user.findMany({ where: { avatarUrl: { not: null } }, select: { avatarUrl: true } }),
       this.prisma.category.findMany({ where: { imageUrl: { not: null } }, select: { imageUrl: true } }),
       this.prisma.setting.findMany({ where: { key: 'homepage_video_thumbnail' }, select: { value: true } }),
       this.prisma.messageAttachment.findMany({ select: { url: true } }),
+      this.prisma.categoryAttribute.findMany({ where: uploadedIcon, select: { icon: true } }),
+      this.prisma.attributeOption.findMany({ where: uploadedIcon, select: { icon: true } }),
     ]);
     const images = new Set<string>();
     for (const value of [
@@ -453,6 +456,8 @@ export class StorageScanService {
       ...users.map((row) => row.avatarUrl),
       ...categories.map((row) => row.imageUrl),
       ...settings.map((row) => row.value),
+      ...fieldIcons.map((row) => row.icon),
+      ...itemIcons.map((row) => row.icon),
     ]) {
       const key = imageKeyOf(value, this.storage.publicBaseUrl);
       if (key) images.add(key);
@@ -495,6 +500,13 @@ export class StorageScanService {
     if (kind === 'homepagePoster') {
       const setting = await this.prisma.setting.findUnique({ where: { key: 'homepage_video_thumbnail' } });
       return typeof setting?.value === 'string' && setting.value.includes(item.key) ? 'in_use' : null;
+    }
+    if (kind === 'attributeIcon') {
+      const [field, option] = await Promise.all([
+        this.prisma.categoryAttribute.findFirst({ where: { icon: item.key }, select: { id: true } }),
+        this.prisma.attributeOption.findFirst({ where: { icon: item.key }, select: { id: true } }),
+      ]);
+      return field || option ? 'in_use' : null;
     }
     // Not an image folder this build makes: never deleted from here.
     return 'in_use';
@@ -544,6 +556,7 @@ function emptyUsage(): StorageUsage {
       avatar: zero(),
       categoryImage: zero(),
       homepagePoster: zero(),
+      attributeIcon: zero(),
       attachment: zero(),
       other: zero(),
     },

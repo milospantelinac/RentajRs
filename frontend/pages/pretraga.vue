@@ -39,7 +39,7 @@
           :aria-pressed="tile.slug === activeCategorySlug"
           @click="selectCategoryTile(tile)"
         >
-          <CategoryTileIcon :slug="tile.iconSlug" />
+          <CategoryTileIcon :slug="tile.iconSlug" :src="tile.iconSrc" />
           <span class="category-tile-label">{{ tile.name }}</span>
         </button>
       </div>
@@ -502,10 +502,17 @@ const sortOptions = computed(() => [
 // categories, in the endpoint's own order, since Dizajn 46 made the seed's
 // displayOrder the one place that order is written down. With Ostalo
 // published that is eight equal tiles (Dizajn 50). Subcategories stay out of
-// this row; they are the pills below it.
+// this row; they are the pills below it. T129: a category added from the
+// admin panel wears the icon picked there, or the one uploaded for it.
 const categoryTiles = computed(() => [
-  { slug: '', iconSlug: ALL_CATEGORIES_SLUG, name: t('search.allCategories'), category: null },
-  ...categories.value.map((c) => ({ slug: c.slug, iconSlug: categoryIconKey(c), name: c.name, category: c })),
+  { slug: '', iconSlug: ALL_CATEGORIES_SLUG, iconSrc: '', name: t('search.allCategories'), category: null },
+  ...categories.value.map((c) => ({
+    slug: c.slug,
+    iconSlug: categoryIconKey(c),
+    iconSrc: categoryIconUpload(c),
+    name: c.name,
+    category: c,
+  })),
 ])
 
 // A subcategory keeps its parent's tile highlighted.

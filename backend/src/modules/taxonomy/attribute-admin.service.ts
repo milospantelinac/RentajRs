@@ -3,6 +3,8 @@ import { I18nService } from 'nestjs-i18n';
 import { AttributeType, CategoryFilter, FilterControl, FilterPlacement, Language, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { GUEST_CAPACITY_ATTRIBUTE_KEYS } from '../../common/utils/guest-capacity';
+import { UploadsService } from '../../common/uploads/uploads.service';
+import { ATTRIBUTE_ICON_PREFIX } from '../../common/uploads/media';
 import { TaxonomyService, slugify } from './taxonomy.service';
 import {
   CreateAttributeDto,
@@ -80,7 +82,35 @@ export class AttributeAdminService {
     private prisma: PrismaService,
     private taxonomy: TaxonomyService,
     private i18n: I18nService,
+    private uploads: UploadsService,
   ) {}
+
+  // -- Uploaded icons ------------------------------------------------------
+
+  /**
+   * T129: an icon an admin uploads in the icon picker of a field or an
+   * amenity item, for a concept the icon library has nothing for. It is
+   * stored at once and worn once the field or item is saved with it; one
+   * nothing wears is listed by the storage check (Administracija > Skladište).
+   */
+  async uploadIcon(file: Express.Multer.File | undefined) {
+    return { icon: await this.uploads.saveAttributeIcon(file) };
+  }
+
+  /** T129: the uploaded icons fields and items wear, most worn first, so the picker offers them for another item too. */
+  async listUploadedIcons() {
+    const where = { icon: { startsWith: ATTRIBUTE_ICON_PREFIX } };
+    const [attributes, options] = await Promise.all([
+      this.prisma.categoryAttribute.findMany({ where, select: { icon: true } }),
+      this.prisma.attributeOption.findMany({ where, select: { icon: true } }),
+    ]);
+    const uses = new Map<string, number>();
+    for (const { icon } of [...attributes, ...options]) {
+      if (icon) uses.set(icon, (uses.get(icon) ?? 0) + 1);
+    }
+    const icons = [...uses].map(([icon, count]) => ({ icon, uses: count }));
+    return { icons: icons.sort((a, b) => b.uses - a.uses) };
+  }
 
   // -- Fields and amenities ---------------------------------------------
 

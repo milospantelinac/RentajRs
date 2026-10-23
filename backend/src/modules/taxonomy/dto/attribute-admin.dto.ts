@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
@@ -17,9 +17,16 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { AttributeType, FilterControl, FilterPlacement } from '@prisma/client';
+import { ATTRIBUTE_ICON_KEY, attributeIconKeyIn } from '../../../common/uploads/media';
 
-/** T129: an icon of the frontend's attribute icon library, by its file name. */
-const ICON_NAME = /^[a-z0-9-]+$/;
+/**
+ * T129: the icon of a field or an amenity item: a file of the frontend's
+ * attribute icon library, by its name, or one an admin uploaded, by its key
+ * (site/attribute-icons/{fileId}). The API hands an uploaded icon out as its
+ * URL and the panel sends that URL back on a save, so it is read back to its key.
+ */
+const ICON_VALUE = new RegExp(`^(?:[a-z0-9-]+|${ATTRIBUTE_ICON_KEY.source})$`);
+const toIconKey = ({ value }: { value: unknown }) => (typeof value === 'string' ? (attributeIconKeyIn(value) ?? value) : value);
 
 class NewOptionInput {
   @ApiProperty()
@@ -30,7 +37,8 @@ class NewOptionInput {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @Matches(ICON_NAME)
+  @Transform(toIconKey)
+  @Matches(ICON_VALUE)
   @MaxLength(60)
   icon?: string;
 }
@@ -65,7 +73,8 @@ export class CreateAttributeDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @Matches(ICON_NAME)
+  @Transform(toIconKey)
+  @Matches(ICON_VALUE)
   @MaxLength(60)
   icon?: string;
 
@@ -125,7 +134,8 @@ export class UpdateAttributeDto {
   @ApiPropertyOptional({ nullable: true, description: 'null or an empty string clears it' })
   @IsOptional()
   @ValidateIf((_dto, value) => value !== null && value !== '')
-  @Matches(ICON_NAME)
+  @Transform(toIconKey)
+  @Matches(ICON_VALUE)
   @MaxLength(60)
   icon?: string | null;
 
@@ -155,7 +165,8 @@ export class UpdateOptionDto {
   @ApiPropertyOptional({ nullable: true, description: 'null or an empty string clears it' })
   @IsOptional()
   @ValidateIf((_dto, value) => value !== null && value !== '')
-  @Matches(ICON_NAME)
+  @Transform(toIconKey)
+  @Matches(ICON_VALUE)
   @MaxLength(60)
   icon?: string | null;
 

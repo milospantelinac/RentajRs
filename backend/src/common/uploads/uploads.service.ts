@@ -13,9 +13,13 @@ import {
   newImageKey,
 } from './media';
 import { toNestPaySafeAscii } from '../utils/ascii-transliterate';
+import { EmptyIconError, iconShape } from './icon-shape';
 
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const PDF_TYPE = 'application/pdf';
+const SVG_TYPE = 'image/svg+xml';
+// T129: an uploaded icon (a category's, a field's, an amenity item's) may also come as an SVG (a Figma export).
+const ICON_TYPES = [...IMAGE_TYPES, SVG_TYPE];
 
 // T143 point 5: multer holds a whole upload in memory before any check runs,
 // so every upload route caps it here. The real limits, set in
@@ -35,7 +39,7 @@ export const PUBLIC_CACHE_CONTROL = 'public, max-age=31536000, immutable';
 export const PRIVATE_CACHE_CONTROL = 'private, max-age=3600';
 
 /**
- * Every upload path (listing photos, avatars, category pictures, the
+ * Every upload path (listing photos, avatars, category icons, the
  * homepage poster, message attachments) goes through here rather than
  * reimplementing resize and storage per feature. Pictures are re-encoded
  * through sharp rather than stored as they came: this both optimizes them and
@@ -61,12 +65,51 @@ export class UploadsService {
       // Dizajn 27: the photos step shows this to the owner, so it has to be in their language.
       throw new BadRequestException(this.i18n.t('errors.IMAGE_TYPE_NOT_ALLOWED'));
     }
+    await this.checkPictureSize(file);
+    return this.storeImage(file.buffer, target);
+  }
+
+  /**
+   * T129: the icon an admin uploads for a category, kept under it
+   * (categories/{categoryId}/{fileId}) as its shape only (icon-shape.ts),
+   * which the site fills with the text colour. An SVG is accepted too: it is
+   * drawn here, and only the drawing is stored.
+   */
+  async saveCategoryIcon(file: Express.Multer.File | undefined, categoryId: string): Promise<string> {
+    return this.storeImage(await this.uploadedIconShape(file), { kind: 'categoryImage', categoryId });
+  }
+
+  /**
+   * T129: an icon an admin uploads for a field or an amenity item
+   * (site/attribute-icons/{fileId}), kept and shown as a category icon is.
+   * It belongs to no record of its own: the items that wear it hold its key.
+   */
+  async saveAttributeIcon(file: Express.Multer.File | undefined): Promise<string> {
+    return this.storeImage(await this.uploadedIconShape(file), { kind: 'attributeIcon' });
+  }
+
+  private async uploadedIconShape(file: Express.Multer.File | undefined): Promise<Buffer> {
+    if (!file) throw new BadRequestException(this.i18n.t('errors.FILE_REQUIRED'));
+    if (!ICON_TYPES.includes(file.mimetype)) throw new BadRequestException(this.i18n.t('errors.ICON_TYPE_NOT_ALLOWED'));
+    await this.checkPictureSize(file);
+    try {
+      return await iconShape(file.buffer, file.mimetype === SVG_TYPE);
+    } catch (error) {
+      if (error instanceof EmptyIconError) throw new BadRequestException(this.i18n.t('errors.ICON_EMPTY'));
+      throw new BadRequestException(this.i18n.t('errors.IMAGE_INVALID'));
+    }
+  }
+
+  private async checkPictureSize(file: Express.Multer.File) {
     const { photoMaxMb: maxSizeMb } = await this.settings.uploadLimits();
     if (file.size > maxSizeMb * 1024 * 1024) {
       throw new BadRequestException(this.i18n.t('errors.IMAGE_TOO_LARGE', { args: { max: maxSizeMb } }));
     }
+  }
 
-    const files = await this.renderImage(file.buffer, IMAGE_PROFILES[target.kind]);
+  /** Writes a picture's widths and master under a new folder of its record; the folder is its key. */
+  private async storeImage(input: Buffer, target: ImageTarget): Promise<string> {
+    const files = await this.renderImage(input, IMAGE_PROFILES[target.kind]);
     const key = newImageKey(target);
     try {
       await Promise.all(

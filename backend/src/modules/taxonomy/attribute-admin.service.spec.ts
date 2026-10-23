@@ -1,4 +1,7 @@
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
 import { AttributeAdminService } from './attribute-admin.service';
+import { CreateOptionDto, UpdateAttributeDto, UpdateOptionDto } from './dto/attribute-admin.dto';
 
 const i18n = { t: (key: string) => key };
 
@@ -46,7 +49,7 @@ describe('AttributeAdminService (T129 part 2)', () => {
       },
       $transaction: jest.fn(async (fn) => fn(tx)),
     });
-    const service = new AttributeAdminService(prisma as any, makeTaxonomy() as any, i18n as any);
+    const service = new AttributeAdminService(prisma as any, makeTaxonomy() as any, i18n as any, {} as any);
 
     await service.createAttribute('admin-1', 'sobe', {
       name: 'Površina',
@@ -65,7 +68,7 @@ describe('AttributeAdminService (T129 part 2)', () => {
       categoryAttribute: { findUnique: jest.fn(), count: jest.fn().mockResolvedValue(2) },
       $queryRaw: usage,
     });
-    const service = new AttributeAdminService(prisma as any, makeTaxonomy() as any, i18n as any);
+    const service = new AttributeAdminService(prisma as any, makeTaxonomy() as any, i18n as any, {} as any);
 
     prisma.categoryAttribute.findUnique.mockResolvedValueOnce(attribute('kapacitet_ljudi'));
     await expect(service.deleteAttribute('admin-1', 'a1')).rejects.toMatchObject({ response: expect.objectContaining({ code: 'ATTRIBUTE_SYSTEM' }) });
@@ -88,7 +91,7 @@ describe('AttributeAdminService (T129 part 2)', () => {
       categoryAttribute: { findUnique: jest.fn(), count: jest.fn().mockResolvedValue(0) },
       $queryRaw: jest.fn().mockResolvedValue([{ attributeId: 'a1', count: 3 }]),
     });
-    const service = new AttributeAdminService(prisma as any, makeTaxonomy() as any, i18n as any);
+    const service = new AttributeAdminService(prisma as any, makeTaxonomy() as any, i18n as any, {} as any);
 
     prisma.categoryAttribute.findUnique.mockResolvedValueOnce({ id: 'a1', categoryId: 'sobe', key: 'kapacitet_dece', type: 'NUMBER', options: [] });
     await expect(service.updateAttribute('admin-1', 'a1', { hidden: true })).rejects.toMatchObject({
@@ -122,7 +125,7 @@ describe('AttributeAdminService (T129 part 2)', () => {
         },
       });
       prisma.category.findMany = jest.fn().mockResolvedValue([]);
-      const service = new AttributeAdminService(prisma as any, makeTaxonomy(resolved) as any, i18n as any);
+      const service = new AttributeAdminService(prisma as any, makeTaxonomy(resolved) as any, i18n as any, {} as any);
       return { prisma, service };
     }
 
@@ -177,7 +180,7 @@ describe('AttributeAdminService (T129 part 2)', () => {
         ]),
       },
     });
-    const service = new AttributeAdminService(prisma as any, makeTaxonomy() as any, i18n as any);
+    const service = new AttributeAdminService(prisma as any, makeTaxonomy() as any, i18n as any, {} as any);
     for (const keys of [['opis_prostora'], ['sadrzaji'], ['kvadratura', 'kvadratura'], ['nepostojece']]) {
       await expect(service.setFactKeys('admin-1', 'sobe', { cardFactKeys: keys })).rejects.toMatchObject({
         response: expect.objectContaining({ code: 'FACTS_INVALID' }),
@@ -186,6 +189,61 @@ describe('AttributeAdminService (T129 part 2)', () => {
     await expect(service.setFactKeys('admin-1', 'sobe', { cardFactKeys: ['kvadratura'] })).resolves.toEqual({
       cardFactKeys: ['kvadratura'],
       listingFactKeys: [],
+    });
+  });
+});
+
+describe('Uploaded icons of fields and amenity items (T129)', () => {
+  const F = '7d3c3f0e-1c9f-4b7a-a0d4-6bfa2b0f2a10';
+  const KEY = `site/attribute-icons/${F}`;
+
+  async function check(dtoClass: any, body: Record<string, unknown>): Promise<{ dto: any; errors: unknown[] }> {
+    const dto = plainToInstance(dtoClass, body) as object;
+    return { dto, errors: await validate(dto) };
+  }
+
+  it('takes a library name or an uploaded icon, read back from the URL the panel was shown to its key', async () => {
+    const fromUrl = await check(UpdateOptionDto, { icon: `https://rentaj-media.example/${KEY}/128.webp` });
+    expect(fromUrl.errors).toEqual([]);
+    expect(fromUrl.dto.icon).toBe(KEY);
+
+    for (const [dtoClass, body] of [
+      [UpdateOptionDto, { icon: 'bazen' }],
+      [UpdateOptionDto, { icon: KEY }],
+      [UpdateOptionDto, { icon: null }],
+      [UpdateOptionDto, { icon: '' }],
+      [CreateOptionDto, { name: 'Džakuzi', icon: KEY }],
+      [UpdateAttributeDto, { icon: `http://127.0.0.1:3335/media/${KEY}/128.webp` }],
+    ] as const) {
+      expect((await check(dtoClass, body)).errors).toEqual([]);
+    }
+  });
+
+  it('refuses any other address or text', async () => {
+    for (const icon of ['https://evil.example/icon.svg', `categories/${F}/${F}`, 'Bazen', '../site/attribute-icons/x']) {
+      expect((await check(UpdateOptionDto, { icon })).errors).not.toEqual([]);
+    }
+  });
+
+  it('stores an upload and lists the uploaded icons that fields and items wear, most worn first', async () => {
+    const other = `site/attribute-icons/0b6f8e5e-6a43-4c39-9a52-2f3f43c9a001`;
+    const prisma = {
+      categoryAttribute: { findMany: jest.fn().mockResolvedValue([{ icon: other }]) },
+      attributeOption: { findMany: jest.fn().mockResolvedValue([{ icon: KEY }, { icon: other }, { icon: KEY }, { icon: KEY }]) },
+    };
+    const uploads = { saveAttributeIcon: jest.fn().mockResolvedValue(KEY) };
+    const service = new AttributeAdminService(prisma as any, makeTaxonomy() as any, i18n as any, uploads as any);
+
+    await expect(service.uploadIcon({ buffer: Buffer.from('') } as any)).resolves.toEqual({ icon: KEY });
+    await expect(service.listUploadedIcons()).resolves.toEqual({
+      icons: [
+        { icon: KEY, uses: 3 },
+        { icon: other, uses: 2 },
+      ],
+    });
+    expect(prisma.attributeOption.findMany).toHaveBeenCalledWith({
+      where: { icon: { startsWith: 'site/attribute-icons/' } },
+      select: { icon: true },
     });
   });
 });

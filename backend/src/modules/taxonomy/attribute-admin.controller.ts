@@ -1,5 +1,7 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Put } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags } from '@nestjs/swagger';
+import { UPLOAD_LIMITS } from '../../common/uploads/uploads.service';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import { AttributeAdminService } from './attribute-admin.service';
@@ -20,6 +22,19 @@ import {
 @Controller('admin')
 export class AttributeAdminController {
   constructor(private attributes: AttributeAdminService) {}
+
+  /** T129: the uploaded icons fields and amenity items wear, offered by the icon picker. */
+  @Get('attribute-icons')
+  listIcons() {
+    return this.attributes.listUploadedIcons();
+  }
+
+  /** T129: an icon of the admin's own for a field or an amenity item; it is worn once the item is saved with it. */
+  @Post('attribute-icons')
+  @UseInterceptors(FileInterceptor('file', { limits: UPLOAD_LIMITS }))
+  uploadIcon(@UploadedFile() file: Express.Multer.File) {
+    return this.attributes.uploadIcon(file);
+  }
 
   @Get('categories/:id/attributes')
   list(@Param('id') id: string) {

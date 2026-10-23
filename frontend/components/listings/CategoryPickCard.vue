@@ -3,11 +3,15 @@
        T129: Administracija > Kategorije previews a category with the same
        card, so what the admin sees is what the owner will see. -->
   <component :is="tag" :type="tag === 'button' ? 'button' : undefined" class="category-card" :class="{ 'category-card-sub': sub }">
+    <span v-if="icon.upload" class="category-card-icon category-card-icon-solid" aria-hidden="true">
+      <CategoryUploadedIcon :src="icon.upload" />
+    </span>
     <span
+      v-else
       class="category-card-icon"
-      :class="{ 'category-card-icon-solid': solid }"
+      :class="{ 'category-card-icon-solid': icon.solid }"
       aria-hidden="true"
-      v-html="markup"
+      v-html="icon.markup"
     />
     <span class="category-card-text">
       <span class="category-card-name">{{ category.name }}</span>
@@ -28,11 +32,20 @@ const props = defineProps({
 // Dizajn 50: every subcategory and Ostalo have a solid icon of their own, drawn
 // at the cards' 26px; the six categories keep their 172:287 exports. A
 // subcategory an admin adds later shows its parent's icon, as all of them did.
-const ownKey = computed(() => categoryIconKey(props.category))
-const solid = computed(() => Boolean(getCategoryIconMarkup(ownKey.value)))
-const markup = computed(
-  () => getCategoryIconMarkup(ownKey.value) || getWizardCategoryIconMarkup(props.parent ? categoryIconKey(props.parent) : ownKey.value),
-)
+// T129: the icon the admin picked for the category, from the library or the
+// one uploaded for it (drawn at the solid icons' 26), comes first; a
+// subcategory used to show its parent's instead. One with none of its own
+// shows its parent's, uploaded or not.
+function iconOf(category, parent) {
+  const upload = categoryIconUpload(category)
+  if (upload) return { upload, solid: true }
+  const key = categoryIconKey(category)
+  const solid = getCategoryIconMarkup(key)
+  if (solid) return { markup: solid, solid: true }
+  if (parent && !CATEGORY_ICON_KEYS.includes(category.icon)) return iconOf(parent, null)
+  return { markup: getWizardCategoryIconMarkup(key), solid: false }
+}
+const icon = computed(() => iconOf(props.category, props.parent))
 </script>
 
 <!-- Not scoped: the "Otključaj svoju kategoriju" card on /oglasi/novi builds
@@ -90,6 +103,11 @@ const markup = computed(
   flex-shrink: 0;
   width: auto;
   height: 100%;
+}
+
+// T129: an uploaded icon is cut to its shape, so it fills the 26 box like these.
+.category-card-icon-solid .category-uploaded-icon {
+  width: 100%;
 }
 
 // 1662:3280: unlike 172:287's cards, the subcategory card keeps its stroke

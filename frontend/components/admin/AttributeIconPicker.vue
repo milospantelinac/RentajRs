@@ -1,10 +1,12 @@
 <template>
   <!-- T129: an icon from the attribute icon library (assets/icons/attributes),
-       for a field or an amenity item. Empty: the icon named after the key. -->
+       for a field or an amenity item. Empty: the icon named after the key.
+       For a concept the library has nothing for, the admin uploads one of
+       their own; it is offered for every other field and item from then on. -->
   <div class="icon-picker">
-    <button type="button" class="icon-picker-current" :aria-expanded="open" @click="open = !open">
+    <button type="button" class="icon-picker-current" :aria-expanded="open" @click="toggle">
       <AttributeIcon :name="modelValue || fallbackKey || 'podrazumevana'" :size="22" />
-      <span>{{ modelValue || t('admin.attr.iconDefault') }}</span>
+      <span>{{ currentLabel }}</span>
     </button>
     <div v-if="open" class="icon-picker-panel">
       <input
@@ -26,6 +28,18 @@
           <span class="icon-picker-name">{{ t('admin.attr.iconDefault') }}</span>
         </button>
         <button
+          v-for="icon in shownUploads"
+          :key="icon"
+          type="button"
+          class="icon-picker-item"
+          :class="{ 'is-active': modelValue === icon }"
+          :title="t('admin.attr.iconUploaded')"
+          @click="pick(icon)"
+        >
+          <AttributeIcon :name="icon" :size="22" />
+          <span class="icon-picker-name">{{ t('admin.attr.iconUploaded') }}</span>
+        </button>
+        <button
           v-for="name in shown"
           :key="name"
           type="button"
@@ -37,6 +51,20 @@
           <AttributeIcon :name="name" :size="22" />
           <span class="icon-picker-name">{{ name }}</span>
         </button>
+      </div>
+      <div class="icon-picker-upload">
+        <label class="btn btn-tertiary btn-sm icon-picker-upload-button" :class="{ 'is-busy': uploading }">
+          {{ uploading ? t('admin.attr.iconUploading') : t('admin.attr.iconUpload') }}
+          <input
+            type="file"
+            accept="image/png,image/svg+xml,image/webp,image/jpeg"
+            class="visually-hidden"
+            :disabled="uploading"
+            @change="upload"
+          />
+        </label>
+        <p class="admin-card-note">{{ t('admin.attr.iconUploadHint') }}</p>
+        <p v-if="uploadError" class="form-error" role="alert">{{ uploadError }}</p>
       </div>
     </div>
   </div>
@@ -50,6 +78,7 @@ const props = defineProps({
 })
 const emit = defineEmits(['update:modelValue'])
 const { t } = useI18n()
+const api = useApi()
 
 const open = ref(false)
 const query = ref('')
@@ -58,9 +87,62 @@ const shown = computed(() => {
   return q ? ATTRIBUTE_ICON_NAMES.filter((name) => name.includes(q)) : ATTRIBUTE_ICON_NAMES
 })
 
+const currentLabel = computed(() => {
+  if (!props.modelValue) return t('admin.attr.iconDefault')
+  return isUploadedAttributeIcon(props.modelValue) ? t('admin.attr.iconUploaded') : props.modelValue
+})
+
+// The uploaded icons, shared by every picker on the page: one read per visit,
+// and an icon uploaded in one picker is offered by the others at once.
+const uploads = useState('admin-attribute-icon-uploads', () => null)
+// An item's own uploaded icon is offered even before the list has it.
+const shownUploads = computed(() => {
+  if (query.value.trim()) return []
+  const icons = uploads.value ?? []
+  return isUploadedAttributeIcon(props.modelValue) && !icons.includes(props.modelValue) ? [props.modelValue, ...icons] : icons
+})
+
+async function loadUploads() {
+  if (uploads.value) return
+  try {
+    const { icons } = await api.get('/admin/attribute-icons')
+    uploads.value = icons.map((row) => row.icon)
+  } catch {
+    // The library still works without them; a failed read is tried again on the next opening.
+  }
+}
+
+function toggle() {
+  open.value = !open.value
+  if (open.value) loadUploads()
+}
+
 function pick(name) {
   emit('update:modelValue', name)
   open.value = false
+}
+
+const uploading = ref(false)
+const uploadError = ref('')
+
+// The file is stored at once; the field or item wears it once it is saved.
+async function upload(event) {
+  const file = event.target.files?.[0]
+  if (!file) return
+  const body = new FormData()
+  body.append('file', file)
+  uploading.value = true
+  uploadError.value = ''
+  try {
+    const { icon } = await api.post('/admin/attribute-icons', body)
+    uploads.value = [icon, ...(uploads.value ?? []).filter((other) => other !== icon)]
+    pick(icon)
+  } catch (e) {
+    uploadError.value = extractErrorMessage(e, t('auth.genericError'))
+  } finally {
+    uploading.value = false
+    event.target.value = ''
+  }
 }
 </script>
 
@@ -137,5 +219,29 @@ function pick(name) {
   line-height: 13px;
   overflow-wrap: anywhere;
   text-align: center;
+}
+
+.icon-picker-upload {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid $color-border;
+}
+
+.icon-picker-upload .admin-card-note,
+.icon-picker-upload .form-error {
+  margin: 0;
+}
+
+.icon-picker-upload-button {
+  cursor: pointer;
+}
+
+// While an icon is uploading the button cannot be pressed again.
+.icon-picker-upload-button.is-busy {
+  pointer-events: none;
+  opacity: 0.6;
 }
 </style>
