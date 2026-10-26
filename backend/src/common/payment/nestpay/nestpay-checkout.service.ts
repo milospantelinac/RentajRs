@@ -73,7 +73,9 @@ export class NestPayCheckoutService {
       oid: input.oid,
       okUrl: creds.okUrl,
       failUrl: creds.failUrl,
-      lang: 'en',
+      // The card-entry page speaks the site's language. Banca Intesa asked for
+      // Serbian after its pilot check (2026-10); `lang` is not in the hash.
+      lang: 'sr',
       rnd,
       encoding: 'utf-8',
       email: input.billing.email,

@@ -75,27 +75,7 @@
         </div>
       </div>
 
-      <div class="footer-payment-strip">
-        <img src="/images/payment/maestro.svg" alt="Maestro" class="footer-payment-logo footer-payment-maestro" />
-        <img src="/images/payment/mastercard.svg" alt="Mastercard" class="footer-payment-logo footer-payment-mastercard" />
-        <img src="/images/payment/dinacard.png" alt="DinaCard" class="footer-payment-logo footer-payment-dinacard" />
-        <img src="/images/payment/visa.png" alt="Visa" class="footer-payment-logo footer-payment-visa" />
-        <img src="/images/payment/amex.png" alt="American Express" class="footer-payment-logo footer-payment-amex" />
-        <a href="https://www.bancaintesa.rs" target="_blank" rel="noopener" class="footer-payment-link">
-          <img src="/images/payment/banca-intesa.png" alt="Banca Intesa" class="footer-payment-logo footer-payment-intesa" />
-        </a>
-        <a href="https://www.mastercard.rs/sr-rs/korisnici/pronadite-karticu.html" target="_blank" rel="noopener" class="footer-payment-link">
-          <img src="/images/payment/mastercard-id-check.png" alt="Mastercard ID Check" class="footer-payment-logo footer-payment-idcheck" />
-        </a>
-        <a
-          href="https://rs.visa.com/pay-with-visa/security-and-assistance/protected-everywhere.html"
-          target="_blank"
-          rel="noopener"
-          class="footer-payment-link"
-        >
-          <img src="/images/payment/visa-secure.png" alt="Visa Secure" class="footer-payment-logo footer-payment-visasecure" />
-        </a>
-      </div>
+      <PaymentLogos v-if="showPaymentLogos" class="footer-payment-strip" />
 
       <p class="footer-copyright">© {{ year }} {{ t('footer.rights') }}</p>
     </div>
@@ -111,6 +91,10 @@ const year = new Date().getFullYear()
 // The homepage frames (26:12, 26:3073) end on the CTA banner and draw no rule
 // over the footer; every other page frame does.
 const hasDivider = computed(() => route.path !== '/')
+
+// The bank allows one group of security marks per page (EPM 2.2), and the
+// checkout shows its own strip under the order summary.
+const showPaymentLogos = computed(() => route.meta.footerPaymentLogos !== false)
 
 const { data: categories } = await useAsyncData('footer-categories', async () => {
   const api = useApi()
@@ -352,73 +336,17 @@ const { data: categories } = await useAsyncData('footer-categories', async () =>
   }
 }
 
-// Figma's strip runs 131 → 1297 on the 1440 canvas with roughly 62px between
-// marks — centred, not stretched edge to edge. Each mark keeps its own height
-// from the design rather than one shared value.
+// The card marks (components/billing/PaymentLogos.vue) follow Banca Intesa's
+// branding samples of 2026-10 rather than the Figma strip, which predates the
+// SafeKey and DinaCard Secure marks. Only the spacing around them is the footer's.
 .footer-payment-strip {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 28px;
   padding: 24px 0;
 }
 
-@include respond-above(lg) {
-  .footer-payment-strip {
-    flex-wrap: nowrap;
-    gap: 52px;
-  }
-}
-
-.footer-payment-link {
-  display: flex;
-  align-items: center;
-}
-
-// Heights measured off the Figma strip, mark by mark.
-.footer-payment-logo {
-  height: 24px;
-  width: auto;
-  display: block;
-  opacity: 0.85;
-  transition: opacity 0.15s ease;
-}
-
-// The comment after each value is the mark's height in the Figma strip. Three
-// of the files carry transparent padding (visa fills 60% of its box, ID Check
-// 50%, Visa Secure 86%), so their CSS height is scaled up to land the visible
-// mark on the design's height.
-.footer-payment-maestro { height: 35px; }
-.footer-payment-mastercard { height: 36px; }
-.footer-payment-dinacard { height: 45px; }
-.footer-payment-visa { height: 48px; } // 29 visible
-.footer-payment-amex { height: 48px; }
-.footer-payment-intesa { height: 52px; }
-.footer-payment-idcheck { height: 40px; } // 20 visible
-.footer-payment-visasecure { height: 49px; } // 42 visible
-
-// Phones can't fit eight marks in a row at full size. Dizajn 42 (26:3352,
-// 26:3353): five marks, then the bank and the two checks in a second row,
-// each sized so its visible mark matches the frame.
 @include respond-below(md) {
   .footer-payment-strip {
-    gap: 23.5px 30px;
     padding-top: 31px;
   }
-
-  .footer-payment-maestro { height: 27px; }
-  .footer-payment-mastercard { height: 27px; }
-  .footer-payment-dinacard { height: 25.5px; }
-  .footer-payment-visa { height: 25px; }
-  .footer-payment-amex { height: 28px; }
-  .footer-payment-intesa { height: 29.2px; }
-  .footer-payment-idcheck { height: 21px; }
-  .footer-payment-visasecure { height: 28px; }
-}
-
-.footer-payment-link:hover .footer-payment-logo {
-  opacity: 1;
 }
 
 .footer-copyright {

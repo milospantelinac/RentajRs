@@ -111,27 +111,7 @@
         </section>
 
         <!-- Under the summary: the bank wants the card marks on the payment page itself (Dizajn 14 review). -->
-        <div class="checkout-cards">
-          <img src="/images/payment/maestro.svg" alt="Maestro" class="checkout-cards-logo checkout-cards-maestro" />
-          <img src="/images/payment/mastercard.svg" alt="Mastercard" class="checkout-cards-logo checkout-cards-mastercard" />
-          <img src="/images/payment/dinacard.png" alt="DinaCard" class="checkout-cards-logo checkout-cards-dinacard" />
-          <img src="/images/payment/visa.png" alt="Visa" class="checkout-cards-logo checkout-cards-visa" />
-          <img src="/images/payment/amex.png" alt="American Express" class="checkout-cards-logo checkout-cards-amex" />
-          <a href="https://www.bancaintesa.rs" target="_blank" rel="noopener" class="checkout-cards-link">
-            <img src="/images/payment/banca-intesa.png" alt="Banca Intesa" class="checkout-cards-logo checkout-cards-intesa" />
-          </a>
-          <a href="https://www.mastercard.rs/sr-rs/korisnici/pronadite-karticu.html" target="_blank" rel="noopener" class="checkout-cards-link">
-            <img src="/images/payment/mastercard-id-check.png" alt="Mastercard ID Check" class="checkout-cards-logo checkout-cards-idcheck" />
-          </a>
-          <a
-            href="https://rs.visa.com/pay-with-visa/security-and-assistance/protected-everywhere.html"
-            target="_blank"
-            rel="noopener"
-            class="checkout-cards-link"
-          >
-            <img src="/images/payment/visa-secure.png" alt="Visa Secure" class="checkout-cards-logo checkout-cards-visasecure" />
-          </a>
-        </div>
+        <PaymentLogos stacked class="checkout-cards" />
       </div>
 
       <form v-if="nestpayForm" ref="nestpayFormEl" :action="nestpayForm.actionUrl" method="POST" class="checkout-hidden-form">
@@ -148,7 +128,9 @@
 import { getPackagePurchaseMode, getRenewalCopy } from '~/utils/subscriptions'
 
 // The query decides what is being paid for, so a new one builds the page again.
-definePageMeta({ middleware: 'auth', key: (route) => route.fullPath })
+// The card marks sit under the summary, and the bank allows one set of security
+// marks per page, so the footer leaves its own out here.
+definePageMeta({ middleware: 'auth', key: (route) => route.fullPath, footerPaymentLogos: false })
 const { t } = useI18n()
 const api = useApi()
 const auth = useAuthStore()
@@ -566,16 +548,10 @@ useSeoMeta({ title: t('billing.checkoutTitle') })
 // -- Card marks ---------------------------------------------------------------
 
 // Dizajn 14 review: the strip goes under the summary, in its column. 563:660
-// draws none there, so this is the phone footer's strip (26:3352, 26:3353)
-// with the footer's files and links, in full colour as in Figma. At the
-// frame's 343 it wraps into the same two rows: the five cards, then the bank
-// and the two checks.
+// draws none there; the marks are the shared PaymentLogos in the three rows
+// of the bank's vertical sample (cards, the bank, the security programs),
+// inside the 343 the phone footer's strip had.
 .checkout-cards {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: 23.5px 30px;
   justify-self: center;
   width: 100%;
   max-width: 343px;
@@ -586,28 +562,6 @@ useSeoMeta({ title: t('billing.checkoutTitle') })
     grid-column: 2;
   }
 }
-
-.checkout-cards-link {
-  display: flex;
-  align-items: center;
-}
-
-.checkout-cards-logo {
-  display: block;
-  width: auto;
-}
-
-// The heights the phone footer gives each mark to match 26:3352 and 26:3353.
-// The Visa, ID Check and Visa Secure files carry transparent padding, so
-// their boxes are taller than the marks.
-.checkout-cards-maestro { height: 27px; }
-.checkout-cards-mastercard { height: 27px; }
-.checkout-cards-dinacard { height: 25.5px; }
-.checkout-cards-visa { height: 25px; }
-.checkout-cards-amex { height: 28px; }
-.checkout-cards-intesa { height: 29.2px; }
-.checkout-cards-idcheck { height: 21px; }
-.checkout-cards-visasecure { height: 28px; }
 
 .checkout-hidden-form {
   display: none;

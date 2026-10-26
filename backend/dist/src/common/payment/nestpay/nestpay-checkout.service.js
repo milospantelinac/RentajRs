@@ -50,7 +50,7 @@ let NestPayCheckoutService = NestPayCheckoutService_1 = class NestPayCheckoutSer
             oid: input.oid,
             okUrl: creds.okUrl,
             failUrl: creds.failUrl,
-            lang: 'en',
+            lang: 'sr',
             rnd,
             encoding: 'utf-8',
             email: input.billing.email,
