@@ -1181,4 +1181,40 @@ export const emailTemplates: EmailTemplateSeed[] = [
       buttonLabel: 'Open requests',
     },
   },
+  // Fiscal receipts (Fiscomm): a card payment whose receipt could not be issued is the
+  // admins' to settle, so they are told: first when it is late, then when it needs a person.
+  {
+    key: 'admin_invoice_delayed',
+    sr: {
+      subject: 'Fiskalni račun kasni: {racun}',
+      heading: 'Fiskalni račun još nije izdat',
+      bodyText:
+        'Račun {racun} ({iznos}, {kupac}) nije izdat ni posle nekoliko pokušaja: {greska}. Sistem nastavlja da pokušava. Kupac je naplaćen i dobio je potvrdu uplate, a račun mu stiže čim bude izdat.',
+      buttonLabel: 'Otvori Račune',
+    },
+    en: {
+      subject: 'Fiscal receipt is late: {racun}',
+      heading: 'A fiscal receipt has not been issued yet',
+      bodyText:
+        'Receipt {racun} ({iznos}, {kupac}) was not issued after several tries: {greska}. The system keeps trying. The customer was charged and got the payment confirmation, and the receipt follows as soon as it is issued.',
+      buttonLabel: 'Open Receipts',
+    },
+  },
+  {
+    key: 'admin_invoice_failed',
+    sr: {
+      subject: 'Fiskalni račun nije izdat: {racun}',
+      heading: 'Fiskalni račun traži vašu proveru',
+      bodyText:
+        'Račun {racun} ({iznos}, {kupac}) nije mogao da bude izdat: {greska}. Kupac je naplaćen. Ispravite uzrok i pokrenite izdavanje ponovo iz Računa.',
+      buttonLabel: 'Otvori Račune',
+    },
+    en: {
+      subject: 'Fiscal receipt was not issued: {racun}',
+      heading: 'A fiscal receipt needs your attention',
+      bodyText:
+        'Receipt {racun} ({iznos}, {kupac}) could not be issued: {greska}. The customer was charged. Fix the cause and issue it again from Receipts.',
+      buttonLabel: 'Open Receipts',
+    },
+  },
 ];

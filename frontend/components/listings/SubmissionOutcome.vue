@@ -21,7 +21,10 @@
         </div>
         <div v-for="row in rows" :key="row.label" class="outcome-row">
           <span class="outcome-row-label">{{ row.label }}</span>
-          <span class="outcome-row-value">{{ row.value }}</span>
+          <span class="outcome-row-value">
+            <a v-if="row.href" :href="row.href" target="_blank" rel="noopener noreferrer" class="outcome-row-link">{{ row.value }}</a>
+            <template v-else>{{ row.value }}</template>
+          </span>
         </div>
       </div>
 
@@ -58,7 +61,7 @@ const props = defineProps({
   title: { type: String, required: true },
   text: { type: String, required: true },
   listing: { type: Object, default: null }, // GET /listings/:id/submission
-  rows: { type: Array, default: () => [] }, // [{ label, value }]
+  rows: { type: Array, default: () => [] }, // [{ label, value, href? }]
   note: { type: String, default: '' },
   steps: { type: Array, required: true }, // [{ title, text }]
   primary: { type: Object, required: true }, // { label, to }
@@ -229,6 +232,16 @@ $outcome-danger-bg: #fdeff1;
   text-align: right;
   color: $color-text;
   overflow-wrap: anywhere;
+}
+
+.outcome-row-link {
+  color: $color-primary;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.outcome-row-link:hover {
+  text-decoration: none;
 }
 
 .outcome-note {

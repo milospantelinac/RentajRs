@@ -274,6 +274,31 @@ Decided with the user on 2026-10-22 (four rounds of questions). **Administracija
 
 ---
 
+## 8d. Fiscal receipts (Fiscomm)
+
+Every successful card payment for a package (`SubscriptionsService.handleNestPaySuccess`: a first package, a move to Pro, a renewal) gets a fiscal receipt from Fiscomm (api.fiscomm.rs, the Tax Administration's approved solution no. 1099). A package an admin gives without payment has no payment and so no receipt. Code: `common/fiscalization/`.
+
+**Why a queue.** The receipt is not issued inside the bank's return request. `recordPayment` writes the `Transaction` and an `Invoice` (FISCAL_RECEIPT, status PENDING) in one database transaction, so a recorded payment always has its receipt waiting. `FiscalizationService.issueInBackground` tries once right away (usually about a second) without holding up the customer's redirect, and `processPending` (cron, every minute) tries again whatever is due. Every try asks Fiscomm with the same order number (`FISCOMM_ORDER_PREFIX` plus the invoice's running number, fixed at the first try) and `returnIfOrderNumberExists`, so a try whose answer was lost returns the receipt that exists instead of making a second one. The returned receipt's `metaFields` (our invoice and transaction ids) must match ours, or the receipt is refused as someone else's.
+
+**States.** `PENDING` (waiting for the first try or the next one), then `ISSUED` (documentNumber is the PFR number, with `invoiceCounter`, `verificationUrl`, `pdfUrl`, `issuedAt`) or `FAILED` (needs a person). A network error, a timeout, a 5xx, a 429 and a refused key (401, 403) are retried after 1, 5, 15, 60 and 180 minutes and then every 360 minutes, up to 12 tries (about a day and a half); the admins get `admin_invoice_delayed` after the third. A request Fiscomm or the Tax Administration refuses on its merits (400 `ERR_00202` or `ERR_01010`, for instance a tax label the account does not have) is `FAILED` at once, with `admin_invoice_failed`. The claim of a try is one conditional update, so the first try and the sweep never run the same receipt twice, and a try that dies halfway comes back after 5 minutes.
+
+**What goes to Fiscomm.** One line, "Oglašavanje na Rentaj.rs, paket <KEY> (30 or 365 dana)", quantity 1, the price paid, one tax label (`FISCOMM_TAX_LABEL`, default the Cyrillic "А" U+0410, "Nije u PDV", 0%, because the platform is outside the VAT system; the Latin "A" is another label), payment type `card`, and for a company buyer `buyerId` `10:<PIB>`. The checkout refuses a company PIB whose check digit does not add up (`common/utils/pib.ts`). Nothing personal is sent, only our ids in `metaFields`. Pro forma and e-invoice documents are not Fiscomm's: they still get a placeholder number from the mock provider (e-invoices through SEF are not built).
+
+**Emails.** The payment confirmation (`subscription_activated` or `subscription_renewed`) goes out at once, as before. The receipt follows in `subscription_invoice` when `invoice.issued` fires: the PDF attached (fetched from the receipt's public link, https and the Fiscomm host only, at most 2 MB and really a PDF; otherwise the email carries the link), the number, and the link to check the receipt at suf.purs.gov.rs. `Invoice.sentAt` is set once the mail system took the message, which keeps a receipt from going out twice. The owner also finds the receipt on the page after the payment (it asks again for a few seconds while PENDING) and on every paid card in Moje pretplate.
+
+**Admin.** `/admin/racuni` (permission `manage_subscriptions`): the live connection check (`GET /admin/fiscalization/status`: the company and shop behind the key, the receipt type, whether the tax label exists on the account), the receipts with their status, the reason of the last failure and the next try, and "Pokušaj ponovo" (`POST /admin/invoices/:id/retry`, written to AdminLog as `invoice.retry`). A retry of a receipt Fiscomm already issued returns the same receipt.
+
+**Environments.** `FISCALIZATION_PROVIDER=mock` is the default (development: nothing leaves the machine). With `fiscomm`, `FISCOMM_API_KEY` and `FISCOMM_INVOICE_TYPE` are required and the backend refuses to start without them. `training` receipts are marked "OVO NIJE FISKALNI RAČUN" and are not fiscal documents; `normal` ones are legal receipts. A key made with "Testni API ključ" switched on can issue only training receipts. A server for testing uses such a key and `training`; production uses a key made with the switch off, and `normal`. Environments that share a shop need different `FISCOMM_ORDER_PREFIX` values (an order number is unique per shop and receipt type). The key goes into `backend/.env` on the server, never into the repository. Fiscomm's API is part of its "Automatizacija" plan.
+
+**Not built.**
+- A refund (storno) receipt: a payment returned through the bank's merchant panel needs a refund receipt, issued by hand in the Fiscomm panel (or with `POST /receipt/{invoiceNumber}/refund/full`) until an admin action exists.
+- An advance receipt chain (if the accountant says the service starts later than the payment: `POST /receipt/advance/sale`, then `advance/finalize` at activation).
+- A receipt for a payment whose browser return never reached us. NestPay only pushes the result to the customer's browser (okUrl, failUrl); for a sale (`Auth`) it sends no server-to-server notice (the `CallbackUrl` belongs to the PreAuth flow). It does answer an Order Status query with the merchant's API user (XML to `/fim/api`, `Extra.ORDERSTATUS=QUERY`, see Nestpay_OrderDetailService.pdf in the bank's pilot folder), which is how such a payment could be found.
+
+**On the server:** migration `20261115140000_fiscal_receipts` (the `InvoiceStatus` enum and the queue columns on `Invoice`; the rows that exist become ISSUED) runs by hand before the new backend starts. The email templates `admin_invoice_delayed` and `admin_invoice_failed` are added at start.
+
+---
+
 ## 9. Auth & security
 
 - Passwords: `argon2`. Sessions: JWT access (15m) + refresh (30d, rotated on use) as httpOnly cookies.
@@ -282,7 +307,7 @@ Decided with the user on 2026-10-22 (four rounds of questions). **Administracija
 - `@nestjs/throttler` global rate limiting; Helmet; CORS locked to the frontend origin; every DTO validated with `class-validator` and the global pipe set to `whitelist: true` (unknown properties rejected) — this caught a real bug during this build (see §14).
 - Anti-bot: honeypot field + rate-limit heuristic on registration and first-message-in-a-conversation (R177), documented as swappable for hCaptcha/Turnstile later.
 - Outbound requests to addresses users type in (iCal feeds, on add and in the hourly sync) go through `fetchUserUrl()` in `backend/src/common/utils/outbound-fetch.ts`: http and https only, the host is resolved first and refused if any of its addresses is loopback, private, link-local, unique-local, unspecified, shared (carrier-grade NAT), multicast or reserved, and redirects are followed by hand (at most three) with the same check on every hop. A refused address reads as "unreachable" to the owner, so the answers can't be used to map the internal network. See `ICAL_ALLOW_PRIVATE_ADDRESSES` in §12 for local development.
-- Money never touches this platform (ADR-002) — no card data is ever stored; the mock payment/fiscalization providers exist behind an interface specifically so a real Banca Intesa/Sparkom VP integration is a provider swap, not a rewrite, once those integrations are contracted (Product Bible open items O22/O23).
+- Money never touches this platform (ADR-002) — no card data is ever stored; card payments go through Banca Intesa NestPay (a hosted page) and fiscal receipts through Fiscomm (§8d), each behind a provider interface with a mock for development (Product Bible open items O22/O23).
 
 ---
 
@@ -325,7 +350,7 @@ Decided with the user on 2026-10-22 (four rounds of questions). **Administracija
 | `GEOCODING_PROVIDER`, `GOOGLE_MAPS_API_KEY` | `nominatim` (default, free, no key) or `google` |
 | `ICAL_ALLOW_PRIVATE_ADDRESSES` | Whether an owner's iCal feed address may point at a loopback, private, link-local or unique-local host. Unset: allowed unless `NODE_ENV=production` (local development reads test feeds from `127.0.0.1`). Set it to `false` on every internet-facing server that doesn't run with `NODE_ENV=production` (the docker-compose setup runs `development`), and `true` only where a trusted internal feed has to be read |
 | `PAYMENT_PROVIDER`, `BANCA_INTESA_*` | `mock` (default) or real Banca Intesa credentials |
-| `FISCALIZATION_PROVIDER`, `SPARKOM_VP_*` | `mock` (default) or real Sparkom VP credentials |
+| `FISCALIZATION_PROVIDER`, `FISCOMM_API_KEY`, `FISCOMM_INVOICE_TYPE`, `FISCOMM_TAX_LABEL`, `FISCOMM_ORDER_PREFIX`, `FISCOMM_BASE_URL`, `FISCOMM_TIMEOUT_MS` | Fiscal receipts (§8d): `mock` (default) or `fiscomm`. With fiscomm the key and `FISCOMM_INVOICE_TYPE` (`training`: not fiscal, `normal`: legal receipts) are required; the others have defaults |
 | `ANTI_BOT_HONEYPOT_FIELD`, `RATE_LIMIT_TTL_SECONDS`, `RATE_LIMIT_MAX_REQUESTS` | Abuse prevention |
 | `ADMIN_SEED_EMAIL`, `ADMIN_SEED_PASSWORD` | First admin account, created by `prisma db seed` |
 
@@ -348,7 +373,7 @@ The Product Bible flags several items as genuinely undecided ("Za odlučivanje")
 - **O13** (home page adapted to seven/eight categories) — built from the Ch.18 design tokens directly (hero search + category grid + a per-category "featured" row for the first five categories with any listings + a "how it works" section + owner CTA), since Figma was never connected this session. Swapping in pixel-exact Figma output later is a component-level change, not a rebuild.
 - **O17/O18** (daily new-conversation limit, iCal sync frequency) — seeded as `Setting` rows (`daily_new_conversation_limit: 10`, iCal sync runs hourly), both admin-editable/code-adjustable without being hardcoded into logic.
 - **IPS QR payload** — built from the publicly documented NBS field structure (`common/utils/ips-qr.ts`). Not validated against NBS's own conformance test suite — worth doing before accepting real payments in production, even though the platform never touches the money itself (ADR-002).
-- **Payment/fiscalization providers** (O22/O23 — Banca Intesa tokenization, Sparkom VP e-Fakture/SEF coverage) — both are genuinely external confirmations, not code problems. Implemented behind a provider interface with a full mock implementation so the real integration is a swap-in once contracted.
+- **Payment/fiscalization providers** (O22/O23): card payments run through Banca Intesa NestPay and fiscal receipts through Fiscomm (§8d), each behind a provider interface with a mock for development. Recurring charges and e-invoices (SEF) stay out of scope.
 
 ---
 
@@ -369,4 +394,4 @@ Worth knowing about because they're the kind that don't show up until you actual
 
 Per the Bible's own "Za naredne verzije" (next versions) list, intentionally not built: rating criteria broken down per category (O19), extended dashboard analytics (O20), a dedicated mobile dashboard layout (O21), an agency-tier package above Pro, verified-owner badges, team accounts/organizations, SMS notifications.
 
-Also not built, and worth flagging explicitly rather than silently omitting: a real payment/fiscalization provider (mock only, by design — see §13) and NBS IPS-QR conformance validation.
+Also not built, and worth flagging explicitly rather than silently omitting: refund and advance fiscal receipts, e-invoices (SEF) and the NestPay order-status check for a lost browser return (all in §8d), and NBS IPS-QR conformance validation.

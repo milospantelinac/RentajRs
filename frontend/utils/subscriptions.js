@@ -162,6 +162,15 @@ function getFreeDuration(t, subscription) {
   return t(`mySubscriptions.days${srPluralCategory(days)}`, { count: days })
 }
 
+// The fiscal receipt of the card payment behind a package (SubscriptionsService.getMySubscriptions): its
+// number and links once it is issued; "being issued" while it is on its way or waits for an admin, since the
+// owner has nothing to do either way. A package Rentaj gave away has no payment, so no receipt.
+function buildReceipt(receipt, free) {
+  if (free || !receipt) return null
+  if (receipt.status !== 'ISSUED') return { pending: true }
+  return { number: receipt.documentNumber, pdfUrl: receipt.pdfUrl || null, checkUrl: receipt.verificationUrl || null }
+}
+
 export function buildSubscriptionCard(t, subscription, listingsById, now = Date.now(), all = [subscription]) {
   const { status } = subscription
   const byId = new Map(all.map((item) => [item.id, item]))
@@ -220,6 +229,7 @@ export function buildSubscriptionCard(t, subscription, listingsById, now = Date.
     duration: free ? getFreeDuration(t, subscription) : t(`mySubscriptions.days${srPluralCategory(cycleDays)}`, { count: cycleDays }),
     dates,
     banked: getBankedRow(t, bankedDays, now),
+    receipt: buildReceipt(subscription.receipt, free),
     note,
     danger: note?.tone === 'danger' && status === 'ACTIVE',
     deletable: status === 'AWAITING_PAYMENT',

@@ -23,6 +23,8 @@ export interface SendEmailOptions {
    * It is placed in the email as it is, so the caller escapes any value it puts into it.
    */
   extraMjml?: string;
+  /** Files that travel with the email, e.g. a fiscal receipt's PDF. */
+  attachments?: { filename: string; content: Buffer; contentType?: string }[];
 }
 
 /** The context values as they go into the email's HTML; in the body a line break stays a line break. */
@@ -91,9 +93,10 @@ export class EmailService implements OnApplicationBootstrap {
    * (R166), delivery logging (R170) and the shared layout (Ch.22.3) all stay
    * in one place. A missing template or a delivery failure never throws:
    * booking/listing flows must not fail because a notification couldn't go
-   * out (the failure itself is what EmailLog is for).
+   * out (the failure itself is what EmailLog is for). It answers whether the
+   * message was handed to the mail system, for the few callers that record it.
    */
-  async send(opts: SendEmailOptions): Promise<void> {
+  async send(opts: SendEmailOptions): Promise<boolean> {
     // R87/R90 — an event outside the always-on critical set respects the
     // recipient's own opt-out (NotificationSetting.emailEnabled); the in-app
     // bell has its own, separate appEnabled check inside createFromEmail().
@@ -101,7 +104,7 @@ export class EmailService implements OnApplicationBootstrap {
       const setting = await this.prisma.notificationSetting.findUnique({
         where: { userId_event: { userId: opts.userId, event: opts.key } },
       });
-      if (setting && !setting.emailEnabled) return;
+      if (setting && !setting.emailEnabled) return false;
     }
 
     const language = opts.language ?? Language.SR;
@@ -110,7 +113,7 @@ export class EmailService implements OnApplicationBootstrap {
     });
     if (!template) {
       this.logger.warn(`No email template for key=${opts.key} language=${language}`);
-      return;
+      return false;
     }
 
     // The copy is the admin's and may carry tags of its own (the contact
@@ -139,6 +142,7 @@ export class EmailService implements OnApplicationBootstrap {
         to: opts.to,
         subject: interpolate(template.subject, opts.context),
         html,
+        attachments: opts.attachments,
         // Postmark files the message under its template key (Activity filter,
         // stats per email type); MailDev just shows it as a header.
         headers: { 'X-PM-Tag': opts.key },
@@ -165,5 +169,6 @@ export class EmailService implements OnApplicationBootstrap {
         linkUrl: opts.buttonUrl,
       });
     }
+    return status === 'SENT';
   }
 }

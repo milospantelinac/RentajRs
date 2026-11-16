@@ -77,6 +77,19 @@
                 <dd class="subs-value">{{ card.banked }}</dd>
               </div>
 
+              <!-- The fiscal receipt of the card payment: its number, the PDF and its check at the Tax Administration. -->
+              <div v-if="card.receipt" class="subs-fact">
+                <dt class="subs-label">{{ t('billing.receiptFiscal') }}</dt>
+                <dd class="subs-value subs-receipt" :class="{ 'is-muted': card.receipt.pending }">
+                  <template v-if="card.receipt.pending">{{ t('billing.receiptPending') }}</template>
+                  <template v-else>
+                    <span class="subs-receipt-number">{{ card.receipt.number }}</span>
+                    <a v-if="card.receipt.pdfUrl" :href="card.receipt.pdfUrl" target="_blank" rel="noopener noreferrer" class="subs-receipt-link">{{ t('billing.receiptPdf') }}</a>
+                    <a v-if="card.receipt.checkUrl" :href="card.receipt.checkUrl" target="_blank" rel="noopener noreferrer" class="subs-receipt-link">{{ t('billing.receiptCheck') }}</a>
+                  </template>
+                </dd>
+              </div>
+
               <!-- T21: a checkout that never reached the bank can be cleared away. -->
               <div v-if="card.deletable" class="subs-fact">
                 <dt class="subs-label">{{ t('mySubscriptions.unfinishedPayment') }}</dt>
@@ -492,6 +505,26 @@ $subs-alert-bg: #fdeff1;
 
 .subs-listing:hover {
   color: $color-primary;
+  text-decoration: underline;
+}
+
+// The receipt's number, then its two links on a line of their own when the card is narrow.
+.subs-receipt {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 2px 12px;
+}
+
+.subs-receipt-number {
+  overflow-wrap: anywhere;
+}
+
+.subs-receipt-link {
+  color: $color-primary;
+}
+
+.subs-receipt-link:hover {
   text-decoration: underline;
 }
 

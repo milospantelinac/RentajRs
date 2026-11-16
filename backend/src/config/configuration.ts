@@ -77,11 +77,22 @@ export default () => ({
     },
   },
 
+  // Fiscal receipts: "mock" (placeholder numbers, development) or "fiscomm"
+  // (api.fiscomm.rs). With fiscomm the key and the receipt type are required, see
+  // common/fiscalization/fiscalization.factory.ts.
   fiscalization: {
-    provider: process.env.FISCALIZATION_PROVIDER || 'mock',
-    sparkomVp: {
-      apiKey: process.env.SPARKOM_VP_API_KEY,
-      apiUrl: process.env.SPARKOM_VP_API_URL,
+    provider: (process.env.FISCALIZATION_PROVIDER || 'mock').trim().toLowerCase(),
+    fiscomm: {
+      apiKey: process.env.FISCOMM_API_KEY?.trim() || undefined,
+      baseUrl: trimSlash(process.env.FISCOMM_BASE_URL) || 'https://api.fiscomm.rs',
+      // "training" (not fiscal) or "normal" (legal receipts); deliberately no default.
+      invoiceType: process.env.FISCOMM_INVOICE_TYPE?.trim().toLowerCase() || undefined,
+      // Rentaj is outside the VAT system: Cyrillic "А" (U+0410), 0%. Written as an escape
+      // because the Latin "A" looks the same and is a different label (10% on a demo account).
+      taxLabel: process.env.FISCOMM_TAX_LABEL?.trim() || 'А',
+      // Part of every receipt's order number, so two environments on one shop never share one.
+      orderPrefix: process.env.FISCOMM_ORDER_PREFIX?.trim() || 'RNT-',
+      timeoutMs: parseInt(process.env.FISCOMM_TIMEOUT_MS || '15000', 10),
     },
   },
 

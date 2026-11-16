@@ -227,6 +227,14 @@ enum DocumentType {
   PRO_FORMA
 }
 
+/// Where a fiscal receipt is on its way: the Invoice row is its own queue entry
+/// (FiscalizationService), so a payment never waits for the Tax Administration.
+enum InvoiceStatus {
+  PENDING // not issued yet: waiting for the first try or for the next one
+  ISSUED // the fiscal service answered, documentNumber and the links are set
+  FAILED // needs a person: the Tax Administration refused it, or the tries ran out
+}
+
 enum BookingStatus {
   REQUESTED
   AWAITING_PAYMENT
@@ -1177,24 +1185,49 @@ model Transaction {
   @@index([subscriptionId])
 }
 
-/// Two flows (R109): FISCAL_RECEIPT auto-issued for individuals, E_INVOICE via
-/// SEF for companies, PRO_FORMA sent before a bank transfer.
+/// Two flows (R109): FISCAL_RECEIPT issued by Fiscomm for every card payment,
+/// E_INVOICE via SEF for companies (not built), PRO_FORMA sent before a bank
+/// transfer (a placeholder number, no fiscal service behind it).
+///
+/// A FISCAL_RECEIPT is born PENDING in the same database transaction as the
+/// payment it belongs to and is issued afterwards by FiscalizationService, with
+/// retries, so a slow or unreachable fiscal service never loses a receipt.
 model Invoice {
-  id             String       @id @default(uuid()) @db.Uuid
-  transactionId  String       @db.Uuid
-  userId         String       @db.Uuid
+  id             String        @id @default(uuid()) @db.Uuid
+  transactionId  String        @db.Uuid
+  userId         String        @db.Uuid
   documentType   DocumentType
-  documentNumber String
+  /// The PFR number (Fiscomm's invoiceNumber) once the receipt is issued.
+  documentNumber String?
   amount         BigInt
-  externalId     String? // Sparkom VP reference
-  pdfUrl         String?
-  sentAt         DateTime?    @db.Timestamptz
-  createdAt      DateTime     @default(now()) @db.Timestamptz
+  externalId     String? // the fiscal service's own reference (the PFR number again)
+  pdfUrl         String? // public link to the receipt's PDF
+  /// When the receipt email was handed to the mail system.
+  sentAt         DateTime?     @db.Timestamptz
+  createdAt      DateTime      @default(now()) @db.Timestamptz
+
+  status          InvoiceStatus @default(PENDING)
+  /// Running number, the base of orderNumber.
+  number          Int           @unique @default(autoincrement())
+  /// What the fiscal service knows this receipt by (its idempotency key), fixed
+  /// at the first try so every retry asks for the same receipt.
+  orderNumber     String?       @unique
+  /// The one line printed on the receipt, and the buyer's PIB when a company
+  /// paid: both frozen at payment time.
+  description     String?
+  buyerTaxId      String?
+  invoiceCounter  String? // e.g. 468497/507302PP
+  verificationUrl String? // the customer's check at the Tax Administration
+  issuedAt        DateTime?     @db.Timestamptz // the Tax Administration's own time
+  attempts        Int           @default(0)
+  nextAttemptAt   DateTime?     @db.Timestamptz
+  lastError       String?
 
   transaction Transaction @relation(fields: [transactionId], references: [id])
   user        User        @relation(fields: [userId], references: [id])
 
   @@index([userId])
+  @@index([status, nextAttemptAt])
 }
 
 /// One featured period of a listing. Live while startsAt <= now < expiresAt;

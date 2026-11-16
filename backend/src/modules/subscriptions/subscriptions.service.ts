@@ -3,14 +3,16 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { ConfigService } from '@nestjs/config';
 import { I18nService } from 'nestjs-i18n';
-import { BillingCycle, Prisma, Subscription, SubscriptionStatus } from '@prisma/client';
+import { BillingCycle, InvoiceStatus, Prisma, Subscription, SubscriptionStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CacheService } from '../../common/cache/cache.service';
 import { ListingsService } from '../listings/listings.service';
 import { LISTING_COUNTS_CACHE_KEY, TaxonomyService } from '../taxonomy/taxonomy.service';
 import { NestPayCheckoutService } from '../../common/payment/nestpay/nestpay-checkout.service';
 import { FiscalizationProvider } from '../../common/fiscalization/fiscalization-provider.interface';
+import { FiscalizationService } from '../../common/fiscalization/fiscalization.service';
 import { paraToRsd, rsdToPara } from '../../common/utils/money';
+import { isValidPib, normalizePib } from '../../common/utils/pib';
 import { grantFeatured } from '../featured/featured-grant';
 import {
   DAY_MS,
@@ -45,6 +47,7 @@ export class SubscriptionsService {
     private i18n: I18nService,
     private events: EventEmitter2,
     private config: ConfigService,
+    private receipts: FiscalizationService,
   ) {}
 
   // -- Packages --------------------------------------------------------
@@ -192,6 +195,9 @@ export class SubscriptionsService {
         documentNumber: doc.documentNumber,
         amount: price,
         externalId: doc.externalId,
+        // Issued on the spot by the placeholder provider: nothing for the receipt queue to do.
+        status: 'ISSUED',
+        issuedAt: new Date(),
       },
     });
     this.events.emit('subscription.pro_forma_issued', { userId, subscriptionId: subscription.id });
@@ -212,6 +218,11 @@ export class SubscriptionsService {
     if (listing.userId !== userId) throw new ForbiddenException();
     assertCategoryAssigned(listing, this.i18n);
     assertNotAdminDraft(listing, this.i18n);
+    // A company's PIB goes onto its fiscal receipt as the buyer's ID, so one that
+    // does not add up stops here, before the card is charged.
+    if (dto.isCompany && !isValidPib(dto.taxId)) {
+      throw new BadRequestException(this.i18n.t('errors.TAX_ID_INVALID'));
+    }
     // A renewal pays for the next period of a package the listing is already on;
     // everything else is a first package or a move to Pro.
     const renewed = dto.renewSubscriptionId ? await this.assertRenewable(userId, dto) : null;
@@ -255,7 +266,7 @@ export class SubscriptionsService {
         ...(dto.isCompany
           ? {
               companyName: dto.companyName || undefined,
-              taxId: dto.taxId || undefined,
+              taxId: normalizePib(dto.taxId) || undefined,
               registrationNumber: dto.registrationNumber || undefined,
               billingAddress: dto.companyAddress || undefined,
             }
@@ -530,16 +541,7 @@ export class SubscriptionsService {
       return `${frontendUrl}${paymentFailedPath(listingId, subscription.renewsSubscriptionId)}`;
     }
 
-    await this.prisma.transaction.create({
-      data: {
-        userId: subscription.userId,
-        subscriptionId: subscription.id,
-        amount: subscription.priceAtPurchase,
-        status: 'SUCCESSFUL',
-        type: 'SUBSCRIPTION',
-        bankExternalId: verification.transId,
-      },
-    });
+    const receipt = await this.recordPayment(subscription, verification.transId);
 
     const listing = await this.prisma.listing.findUniqueOrThrow({ where: { id: listingId } });
     const isRenewal = !!subscription.renewsSubscriptionId;
@@ -590,35 +592,47 @@ export class SubscriptionsService {
       }
     }
 
-    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: subscription.userId } });
-    const pkg = await this.prisma.package.findUniqueOrThrow({ where: { id: subscription.packageId } });
-    const transaction = await this.prisma.transaction.findFirstOrThrow({
-      where: { subscriptionId: subscription.id, status: 'SUCCESSFUL' },
-      orderBy: { occurredAt: 'desc' },
-    });
-    const doc = await this.fiscalization.issueDocument({
-      documentType: 'FISCAL_RECEIPT',
-      amountRsd: paraToRsd(subscription.priceAtPurchase) ?? 0,
-      buyerName: user.buyerType === 'COMPANY' && user.companyName ? user.companyName : `${user.firstName} ${user.lastName}`,
-      buyerTaxId: user.taxId ?? undefined,
-      description: `Rentaj — ${pkg.key} (${subscription.billingCycle})`,
-    });
-    await this.prisma.invoice.create({
-      data: {
-        transactionId: transaction.id,
-        userId: subscription.userId,
-        documentType: 'FISCAL_RECEIPT',
-        documentNumber: doc.documentNumber,
-        amount: subscription.priceAtPurchase,
-        externalId: doc.externalId,
-      },
-    });
-
     this.events.emit(isRenewal ? 'subscription.renewed' : 'subscription.purchased', {
       userId: subscription.userId,
       subscriptionId: subscription.id,
     });
+    // The receipt is the fiscal service's to issue, and the customer does not wait for it:
+    // it is tried once now and, if that does not work out, again every minute. The email with
+    // the receipt goes out when it exists (SubscriptionEmailListener, `invoice.issued`).
+    this.receipts.issueInBackground(receipt.id);
     return `${frontendUrl}${redirectPath}`;
+  }
+
+  /**
+   * A successful card payment and the fiscal receipt it needs are written in one
+   * transaction: either both exist or neither does, so a recorded payment is never
+   * left without its receipt waiting to be issued.
+   */
+  private async recordPayment(subscription: Subscription, bankTransactionId?: string) {
+    const [user, pkg] = await Promise.all([
+      this.prisma.user.findUniqueOrThrow({ where: { id: subscription.userId } }),
+      this.prisma.package.findUniqueOrThrow({ where: { id: subscription.packageId } }),
+    ]);
+    return this.prisma.$transaction(async (tx) => {
+      const transaction = await tx.transaction.create({
+        data: {
+          userId: subscription.userId,
+          subscriptionId: subscription.id,
+          amount: subscription.priceAtPurchase,
+          status: 'SUCCESSFUL',
+          type: 'SUBSCRIPTION',
+          bankExternalId: bankTransactionId,
+        },
+      });
+      return this.receipts.enqueueReceipt(tx, {
+        transactionId: transaction.id,
+        userId: subscription.userId,
+        amount: subscription.priceAtPurchase,
+        description: receiptDescription(pkg.key, subscription.billingCycle),
+        // A person's receipt carries no buyer ID; a company's carries its PIB.
+        buyerTaxId: user.buyerType === 'COMPANY' ? user.taxId : null,
+      });
+    });
   }
 
   /** failUrl target — NestPay POSTs here when the customer's payment did not go through. */
@@ -904,6 +918,33 @@ export class SubscriptionsService {
     }));
   }
 
+  // -- Fiscal receipts (Administracija > Racuni) --------------------------
+
+  adminListInvoices(status?: InvoiceStatus) {
+    return this.receipts.listForAdmin(status);
+  }
+
+  /** A receipt that failed, or is waiting for its next try, is tried again now. */
+  async adminRetryInvoice(adminId: string, invoiceId: string) {
+    const invoice = await this.receipts.retry(invoiceId);
+    if (!invoice) throw new NotFoundException(this.i18n.t('errors.INVOICE_NOT_RETRYABLE'));
+    await this.prisma.adminLog.create({
+      data: {
+        userId: adminId,
+        action: 'invoice.retry',
+        entityType: 'Invoice',
+        entityId: invoiceId,
+        newValue: { status: invoice.status, documentNumber: invoice.documentNumber, lastError: invoice.lastError },
+      },
+    });
+    return { status: invoice.status, documentNumber: invoice.documentNumber, lastError: invoice.lastError };
+  }
+
+  /** What the admin page shows about the connection to the fiscal service (a live check). */
+  adminFiscalizationStatus() {
+    return this.receipts.status();
+  }
+
   // -- Reads ---------------------------------------------------------
 
   async getMySubscriptions(userId: string) {
@@ -916,6 +957,19 @@ export class SubscriptionsService {
         // the package (attachToExistingSubscription doesn't count it), so the free
         // Pro slot offers and Moje pretplate count the same listings the server does.
         listings: { where: { status: { not: 'DELETED' } }, select: { id: true, title: true, slug: true } },
+        // The fiscal receipt of the card payment behind the package (none for a free one).
+        transactions: {
+          where: { status: 'SUCCESSFUL' },
+          orderBy: { occurredAt: 'desc' },
+          take: 1,
+          select: {
+            invoices: {
+              where: { documentType: 'FISCAL_RECEIPT' },
+              take: 1,
+              select: { status: true, documentNumber: true, verificationUrl: true, pdfUrl: true, issuedAt: true },
+            },
+          },
+        },
       },
     });
     const listingIds = subscriptions.flatMap((s) => s.listings.map((l) => l.id));
@@ -923,8 +977,9 @@ export class SubscriptionsService {
       ? await this.prisma.bankedDay.findMany({ where: { listingId: { in: listingIds }, usedAt: null } })
       : [];
 
-    return subscriptions.map(({ grantedByAdminId, grantNote: _note, ...s }) => ({
+    return subscriptions.map(({ grantedByAdminId, grantNote: _note, transactions, ...s }) => ({
       ...s,
+      receipt: transactions[0]?.invoices[0] ? receiptView(transactions[0].invoices[0]) : null,
       priceAtPurchase: paraToRsd(s.priceAtPurchase),
       package: { ...s.package, priceMonthly: paraToRsd(s.package.priceMonthly), priceYearly: paraToRsd(s.package.priceYearly) },
       bankedDays: bankedDays.filter((b) => s.listings.some((l) => l.id === b.listingId)),
@@ -947,6 +1002,8 @@ export class SubscriptionsService {
       include: { invoices: true },
     });
 
+    const invoice = transaction?.invoices.find((item) => item.documentType === 'FISCAL_RECEIPT') ?? transaction?.invoices[0];
+
     return {
       package: subscription.package.key,
       billingCycle: subscription.billingCycle,
@@ -954,7 +1011,10 @@ export class SubscriptionsService {
       currency: 'RSD',
       purchasedAt: transaction?.occurredAt ?? subscription.createdAt,
       bankReference: transaction?.bankExternalId ?? null,
-      documentNumber: transaction?.invoices[0]?.documentNumber ?? null,
+      documentNumber: invoice?.documentNumber ?? null,
+      // Null for a package that was not paid by card; otherwise PENDING until the fiscal
+      // service has answered (usually a second or two after the payment).
+      receipt: invoice ? receiptView(invoice) : null,
     };
   }
 
@@ -1122,6 +1182,32 @@ function assertNotAdminDraft(listing: { createdByAdminId: string | null; subscri
   if (isAdminDraft(listing)) {
     throw new BadRequestException(i18n.t('errors.LISTING_ADMIN_DRAFT'));
   }
+}
+
+/**
+ * The one line on a fiscal receipt. The receipt's PDF prints some Serbian letters
+ * without their marks (the Tax Administration's own record keeps them), and some it
+ * drops outright, so the name sticks to letters that survive: no "č", "ć" or "đ".
+ */
+export function receiptDescription(packageKey: string, billingCycle: BillingCycle): string {
+  return `Oglašavanje na Rentaj.rs, paket ${packageKey} (${cycleLength(billingCycle)} dana)`;
+}
+
+/** What the owner sees of a receipt: where it stands, its number and the two links. */
+function receiptView(invoice: {
+  status: string;
+  documentNumber: string | null;
+  verificationUrl: string | null;
+  pdfUrl: string | null;
+  issuedAt: Date | null;
+}) {
+  return {
+    status: invoice.status,
+    documentNumber: invoice.documentNumber,
+    verificationUrl: invoice.verificationUrl,
+    pdfUrl: invoice.pdfUrl,
+    issuedAt: invoice.issuedAt,
+  };
 }
 
 /** Where a declined payment lands; a renewal keeps its package in the "try again" link. */

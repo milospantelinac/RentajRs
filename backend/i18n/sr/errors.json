@@ -140,5 +140,7 @@
   "PERIOD_TOO_LONG_DAYS": "Trajanje može biti najviše {max} dana",
   "SUBSCRIPTION_FREE_NOT_SHARED": "Besplatan paket od Rentaja važi samo za oglas za koji je dat",
   "LISTING_ADMIN_DRAFT": "Ovaj oglas priprema Rentaj i objaviće ga za vas, bez plaćanja",
-  "FEATURED_PUBLISHED_WAITING": "Oglas je objavljen. Kategorija je puna, pa oglas čeka slobodno mesto za isticanje i biće istaknut čim se mesto oslobodi."
+  "FEATURED_PUBLISHED_WAITING": "Oglas je objavljen. Kategorija je puna, pa oglas čeka slobodno mesto za isticanje i biće istaknut čim se mesto oslobodi.",
+  "TAX_ID_INVALID": "PIB nije ispravan. Unesite devet cifara, bez razmaka.",
+  "INVOICE_NOT_RETRYABLE": "Ovaj račun ne može ponovo da se izda"
 }

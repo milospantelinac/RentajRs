@@ -140,5 +140,7 @@
   "PERIOD_TOO_LONG_DAYS": "The period can be at most {max} days",
   "SUBSCRIPTION_FREE_NOT_SHARED": "A free package from Rentaj covers only the listing it was given for",
   "LISTING_ADMIN_DRAFT": "Rentaj is preparing this listing and will publish it for you, without payment",
-  "FEATURED_PUBLISHED_WAITING": "The listing is published. Its category is full, so it waits for a free featured place and will be featured as soon as one frees up."
+  "FEATURED_PUBLISHED_WAITING": "The listing is published. Its category is full, so it waits for a free featured place and will be featured as soon as one frees up.",
+  "TAX_ID_INVALID": "The PIB is not valid. Enter nine digits, without spaces.",
+  "INVOICE_NOT_RETRYABLE": "This receipt cannot be issued again"
 }

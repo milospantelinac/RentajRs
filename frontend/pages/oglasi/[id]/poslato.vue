@@ -33,13 +33,22 @@ if (outcome.value?.status === 'REJECTED') {
 // subscriptionId is only there when we came back from a successful NestPay
 // checkout (SubscriptionsService.handleNestPaySuccess); a free slot or a
 // resubmission has no payment to show, only the package.
-const { data: receipt } = await useAsyncData(`checkout-receipt-${listingId}`, async () => {
+const { data: receipt, refresh: refreshReceipt } = await useAsyncData(`checkout-receipt-${listingId}`, async () => {
   const subscriptionId = route.query.subscriptionId
   if (!subscriptionId) return null
   try {
     return await api.get(`/subscriptions/${subscriptionId}/receipt`)
   } catch {
     return null
+  }
+})
+
+// The receipt is issued right after the payment, so a page opened in the first seconds may still say
+// "being issued": ask again a few times, 2 seconds apart, and stop at once when it is there.
+onMounted(async () => {
+  for (let attempt = 0; attempt < 5 && receipt.value?.receipt?.status === 'PENDING'; attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, 2000))
+    await refreshReceipt()
   }
 })
 
@@ -56,7 +65,17 @@ const rows = computed(() => {
     { label: t('billing.receiptAmount'), value: `${new Intl.NumberFormat('sr-RS').format(r.amount)} ${r.currency}` },
     { label: t('billing.receiptDate'), value: formatDateTime(r.purchasedAt) },
   ]
-  if (r.documentNumber) rows.push({ label: t('billing.receiptDocument'), value: r.documentNumber })
+  const fiscal = r.receipt
+  if (fiscal?.status === 'ISSUED') {
+    // The number opens the receipt's check at the Tax Administration; the PDF is the receipt itself.
+    rows.push({ label: t('billing.receiptDocument'), value: fiscal.documentNumber, href: fiscal.verificationUrl || undefined })
+    if (fiscal.pdfUrl) rows.push({ label: t('billing.receiptFiscal'), value: t('billing.receiptPdf'), href: fiscal.pdfUrl })
+  } else if (fiscal) {
+    // Waiting for the fiscal service (usually a second or two); the email follows either way.
+    rows.push({ label: t('billing.receiptFiscal'), value: t('billing.receiptPending') })
+  } else if (r.documentNumber) {
+    rows.push({ label: t('billing.receiptDocument'), value: r.documentNumber })
+  }
   if (r.bankReference) rows.push({ label: t('billing.receiptReference'), value: r.bankReference })
   return rows
 })

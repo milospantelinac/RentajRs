@@ -29,6 +29,8 @@ export const ADMIN_NAV_GROUPS = [
       { to: '/admin/oglasi', labelKey: 'admin.listings', icon: 'listings' },
       { to: '/admin/rezervacije', labelKey: 'admin.bookings', icon: 'bookings' },
       { to: '/admin/pretplate', labelKey: 'admin.subscriptions', icon: 'packages' },
+      // Fiscal receipts of the card payments: the ones still waiting and the ones that need a person.
+      { to: '/admin/racuni', labelKey: 'admin.invoices.title', icon: 'receipts' },
       // T129: featured listings, owners' requests, the leaders and the rules.
       { to: '/admin/istaknuti-oglasi', labelKey: 'admin.featured.title', icon: 'featured' },
       { to: '/admin/placanje', labelKey: 'admin.paymentSettings', icon: 'payments' },

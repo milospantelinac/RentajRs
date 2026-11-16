@@ -4,7 +4,7 @@ import { OnEvent } from '@nestjs/event-emitter';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { EmailService } from '../../../common/email/email.service';
 import { escapeHtml } from '../../../common/utils/escape-html';
-import { formatDateTime } from '../format';
+import { formatDateTime, formatRsd } from '../format';
 
 @Injectable()
 export class AdminEmailListener {
@@ -210,6 +210,39 @@ export class AdminEmailListener {
       'admin_storage_deletion_pending',
       { broj: String(count) },
       `${this.frontendUrl}/admin/skladiste`,
+    );
+  }
+
+  // -- Fiscal receipts (FiscalizationService) ---------------------------------
+
+  /** Still not issued after a few tries (the service keeps trying). */
+  @OnEvent('invoice.delayed')
+  async onInvoiceDelayed({ invoiceId }: { invoiceId: string }) {
+    await this.notifyInvoiceProblem(invoiceId, 'admin_invoice_delayed');
+  }
+
+  /** Refused by the Tax Administration or out of tries: a person has to look at it. */
+  @OnEvent('invoice.failed')
+  async onInvoiceFailed({ invoiceId }: { invoiceId: string }) {
+    await this.notifyInvoiceProblem(invoiceId, 'admin_invoice_failed');
+  }
+
+  private async notifyInvoiceProblem(invoiceId: string, key: string) {
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      include: { user: { select: { firstName: true, lastName: true } } },
+    });
+    if (!invoice) return;
+    await this.sendToAdmins(
+      'manage_subscriptions',
+      key,
+      {
+        racun: invoice.orderNumber ?? invoice.id,
+        iznos: formatRsd(invoice.amount),
+        kupac: `${invoice.user.firstName} ${invoice.user.lastName}`.trim(),
+        greska: invoice.lastError ?? '-',
+      },
+      `${this.frontendUrl}/admin/racuni`,
     );
   }
 }

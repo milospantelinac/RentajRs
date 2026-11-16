@@ -34,6 +34,8 @@ function makePrisma(tables: Tables) {
       const spec = include.listings === true ? {} : include.listings;
       out.listings = tables.listing.filter((l) => l.subscriptionId === row.id && matches(l, spec.where));
     }
+    // The payments behind a package, with their receipts (none for a free one).
+    if (include.transactions) out.transactions = (tables.transaction ?? []).filter((t) => t.subscriptionId === row.id);
     return out;
   };
   const sortBy = (rows: Row[], orderBy?: Row) => {
@@ -104,6 +106,7 @@ function setup(rows: Partial<Tables>) {
     { t: (key: string) => key } as any,
     events as any,
     { get: () => 'http://front' } as any,
+    {} as any,
   );
   return { service, tables, events, cache };
 }

@@ -1,6 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import { FiscalizationProvider, IssueDocumentInput, IssueDocumentResult } from './fiscalization-provider.interface';
+import {
+  FiscalizationProvider,
+  FiscalizationStatus,
+  IssueDocumentInput,
+  IssueDocumentResult,
+} from './fiscalization-provider.interface';
 
 @Injectable()
 export class MockFiscalizationProvider extends FiscalizationProvider {
@@ -15,5 +20,9 @@ export class MockFiscalizationProvider extends FiscalizationProvider {
       externalId: `mock_doc_${randomUUID()}`,
       pdfUrl: undefined, // no real PDF generation in the mock provider
     };
+  }
+
+  async status(): Promise<FiscalizationStatus> {
+    return { provider: 'mock', ok: true };
   }
 }

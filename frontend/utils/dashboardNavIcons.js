@@ -34,6 +34,7 @@ const NAV_ICON_FALLBACKS = {
   models: 'sliders',
   users: 'users',
   payments: 'credit-card',
+  receipts: 'file-invoice',
   storage: 'hard-drive',
   featured: 'star',
   content: 'file-lines',

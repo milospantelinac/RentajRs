@@ -82,7 +82,10 @@ function makePrisma(tables: Tables) {
       return tables[name].splice(index, 1)[0];
     }),
   });
-  return Object.fromEntries(Object.keys(tables).map((name) => [name, model(name)])) as any;
+  const prisma = Object.fromEntries(Object.keys(tables).map((name) => [name, model(name)])) as any;
+  // The payment and its receipt are written in one transaction; the fake has one big transaction.
+  prisma.$transaction = jest.fn(async (run: (tx: any) => Promise<unknown>) => run(prisma));
+  return prisma;
 }
 
 const packages = [
@@ -110,6 +113,11 @@ function setup(rows: Partial<Tables>) {
     verifyCallback: jest.fn(async (body: Row) => ({ valid: true, approved: true, oid: body.oid, transId: 'T1' })),
   };
   const fiscalization = { issueDocument: jest.fn(async () => ({ documentNumber: 'R-1', externalId: 'X-1' })) };
+  // The receipt queue: what the payment hands it, and that the first try is started.
+  const receipts = {
+    enqueueReceipt: jest.fn(async (tx: any, input: Row) => tx.invoice.create({ data: { ...input, documentType: 'FISCAL_RECEIPT', status: 'PENDING' } })),
+    issueInBackground: jest.fn(),
+  };
   const i18n = { t: (key: string) => key };
   const events = { emit: jest.fn() };
   const config = { get: () => 'http://front' };
@@ -123,8 +131,9 @@ function setup(rows: Partial<Tables>) {
     i18n as any,
     events as any,
     config as any,
+    receipts as any,
   );
-  return { service, tables, listings, events, cache };
+  return { service, tables, listings, events, cache, receipts, fiscalization };
 }
 
 const checkout = (extra: Row) => ({
@@ -159,6 +168,29 @@ describe('SubscriptionsService renewal checkout', () => {
     await service.initCheckout('u1', checkout({ renewSubscriptionId: 's1' }) as any);
     const opened = tables.subscription.find((s) => s.status === 'AWAITING_PAYMENT');
     expect(opened).toMatchObject({ renewsSubscriptionId: 's1', pendingListingId: 'l1', packageId: 'pkg-standard' });
+  });
+
+  const company = { isCompany: true, companyName: 'Firma doo', companyAddress: 'Ulica 1', registrationNumber: '12345678' };
+
+  it('refuses a company whose PIB does not add up, before anything is opened', async () => {
+    const { service, tables } = setup({ subscription: [running()], listing: [listing({ id: 'l1', subscriptionId: 's1' })] });
+    await expect(service.initCheckout('u1', checkout({ renewSubscriptionId: 's1', ...company, taxId: '123456789' }) as any)).rejects.toThrow(
+      'errors.TAX_ID_INVALID',
+    );
+    await expect(service.initCheckout('u1', checkout({ renewSubscriptionId: 's1', ...company }) as any)).rejects.toThrow('errors.TAX_ID_INVALID');
+    expect(tables.subscription.filter((s) => s.status === 'AWAITING_PAYMENT')).toHaveLength(0);
+  });
+
+  it('keeps a company PIB the way a receipt needs it: nine digits', async () => {
+    const { service, tables } = setup({ subscription: [running()], listing: [listing({ id: 'l1', subscriptionId: 's1' })] });
+    await service.initCheckout('u1', checkout({ renewSubscriptionId: 's1', ...company, taxId: 'RS 115 213 635' }) as any);
+    expect(tables.user[0]).toMatchObject({ buyerType: 'COMPANY', taxId: '115213635' });
+  });
+
+  it('asks nothing of a person about a PIB', async () => {
+    const { service, tables } = setup({ subscription: [running()], listing: [listing({ id: 'l1', subscriptionId: 's1' })] });
+    await service.initCheckout('u1', checkout({ renewSubscriptionId: 's1', taxId: 'whatever' }) as any);
+    expect(tables.user[0]).toMatchObject({ buyerType: 'PERSON' });
   });
 
   it('keeps the same package', async () => {
@@ -259,6 +291,54 @@ describe('SubscriptionsService renewal payment', () => {
     expect(tables.listing[0].subscriptionId).toBe('s1');
     expect(tables.invoice).toHaveLength(1);
     expect(events.emit).toHaveBeenCalledWith('subscription.renewed', { userId: 'u1', subscriptionId: 'r1' });
+  });
+
+  describe('fiscal receipt', () => {
+    const renewalSetup = (user?: Row) =>
+      setup({
+        subscription: [subscription({ id: 's1', status: 'ACTIVE', expiresAt: new Date(Date.now() + 3 * DAY) }), paid({})],
+        listing: [listing({ id: 'l1', subscriptionId: 's1' })],
+        ...(user ? { user: [user] } : {}),
+      });
+
+    it('is written with the payment, as a pending receipt for one line, and tried at once', async () => {
+      const { service, tables, receipts, fiscalization } = renewalSetup();
+      await service.handleNestPaySuccess({ oid: 'r1' });
+
+      expect(tables.transaction).toHaveLength(1);
+      expect(tables.transaction[0]).toMatchObject({ status: 'SUCCESSFUL', amount: 334_000n });
+      expect(tables.invoice).toHaveLength(1);
+      expect(tables.invoice[0]).toMatchObject({
+        transactionId: tables.transaction[0].id,
+        userId: 'u1',
+        documentType: 'FISCAL_RECEIPT',
+        status: 'PENDING',
+        amount: 334_000n,
+        description: 'Oglašavanje na Rentaj.rs, paket STANDARD (30 dana)',
+        buyerTaxId: null,
+      });
+      expect(receipts.issueInBackground).toHaveBeenCalledWith(tables.invoice[0].id);
+      // The payment's own request never waits for the fiscal service.
+      expect(fiscalization.issueDocument).not.toHaveBeenCalled();
+    });
+
+    it('carries the PIB of a company, and the length of a yearly package', async () => {
+      const { service, tables } = setup({
+        subscription: [subscription({ id: 's1', status: 'ACTIVE', expiresAt: new Date(Date.now() + 3 * DAY) }), paid({ billingCycle: 'YEARLY' })],
+        listing: [listing({ id: 'l1', subscriptionId: 's1' })],
+        user: [{ id: 'u1', firstName: 'Ivana', lastName: 'Marković', emailVerified: true, buyerType: 'COMPANY', taxId: '115213635' }],
+      });
+      await service.handleNestPaySuccess({ oid: 'r1' });
+      expect(tables.invoice[0]).toMatchObject({ buyerTaxId: '115213635', description: 'Oglašavanje na Rentaj.rs, paket STANDARD (365 dana)' });
+    });
+
+    it('is not written for a payment the bank declined', async () => {
+      const { service, tables, receipts } = renewalSetup();
+      (service as any).nestpay.verifyCallback.mockResolvedValueOnce({ valid: true, approved: false, oid: 'r1', procReturnCode: '05' });
+      await service.handleNestPaySuccess({ oid: 'r1' });
+      expect(tables.invoice).toHaveLength(0);
+      expect(receipts.issueInBackground).not.toHaveBeenCalled();
+    });
   });
 
   it('lines a second paid renewal up behind the first', async () => {

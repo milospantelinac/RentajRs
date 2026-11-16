@@ -1,11 +1,11 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Query, Redirect } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Query, Redirect } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { SubscriptionsService } from './subscriptions.service';
 import { PurchaseSubscriptionDto, AdjustPriceDto, InitCheckoutDto } from './dto/subscriptions.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
-import { SubscriptionStatus } from '@prisma/client';
+import { InvoiceStatus, SubscriptionStatus } from '@prisma/client';
 
 @ApiTags('subscriptions')
 @Controller()
@@ -95,4 +95,26 @@ export class SubscriptionsController {
     return this.subscriptionsService.adminUpdatePackagePrice(id, dto);
   }
 
+  // -- Fiscal receipts (Administracija > Racuni) -----------------------------
+
+  @RequirePermissions('manage_subscriptions')
+  @Get('admin/invoices')
+  adminInvoices(@Query('status') status?: string) {
+    if (status && !Object.values(InvoiceStatus).includes(status as InvoiceStatus)) throw new BadRequestException('Unknown status');
+    return this.subscriptionsService.adminListInvoices(status as InvoiceStatus | undefined);
+  }
+
+  @RequirePermissions('manage_subscriptions')
+  @Post('admin/invoices/:id/retry')
+  @HttpCode(200)
+  adminRetryInvoice(@CurrentUser('id') adminId: string, @Param('id', ParseUUIDPipe) id: string) {
+    return this.subscriptionsService.adminRetryInvoice(adminId, id);
+  }
+
+  /** A live check of the connection: the account behind the key, and whether the tax label exists on it. */
+  @RequirePermissions('manage_subscriptions')
+  @Get('admin/fiscalization/status')
+  adminFiscalizationStatus() {
+    return this.subscriptionsService.adminFiscalizationStatus();
+  }
 }

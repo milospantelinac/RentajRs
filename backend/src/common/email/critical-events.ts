@@ -49,6 +49,9 @@ export const CRITICAL_EMAIL_EVENTS = new Set<string>([
   'admin_new_booking',
   // T129: an owner waits for the admins' answer
   'admin_featured_request',
+  // A card payment whose fiscal receipt is late or could not be issued
+  'admin_invoice_delayed',
+  'admin_invoice_failed',
   // T143: the storage behind every picture and attachment
   'admin_storage_unavailable',
   'admin_storage_recovered',

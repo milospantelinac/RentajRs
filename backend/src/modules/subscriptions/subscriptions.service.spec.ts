@@ -15,6 +15,7 @@ describe('SubscriptionsService#assertPackageCompatibleWithListing (Ch.11.2 packa
       i18n as any,
       {} as any,
       {} as any,
+      {} as any,
     );
   }
 
@@ -52,7 +53,7 @@ describe('SubscriptionsService#assertPackageCompatibleWithListing (Ch.11.2 packa
 
 describe('SubscriptionsService#getMySubscriptions (Dizajn 35)', () => {
   function makeService(prisma: any) {
-    return new SubscriptionsService(prisma, {} as any, {} as any, {} as any, {} as any, {} as any, {} as any, {} as any, {} as any);
+    return new SubscriptionsService(prisma, {} as any, {} as any, {} as any, {} as any, {} as any, {} as any, {} as any, {} as any, {} as any);
   }
 
   const pro = { id: 'p1', key: 'PRO', listingLimit: 4, priceMonthly: 864_800n, priceYearly: 9_490_000n };
@@ -61,7 +62,7 @@ describe('SubscriptionsService#getMySubscriptions (Dizajn 35)', () => {
     const prisma = {
       subscription: {
         findMany: jest.fn().mockResolvedValue([
-          { id: 's1', status: 'ACTIVE', priceAtPurchase: 864_800n, package: pro, listings: [{ id: 'l1', title: 'Sala', slug: 'sala' }] },
+          { id: 's1', status: 'ACTIVE', priceAtPurchase: 864_800n, package: pro, listings: [{ id: 'l1', title: 'Sala', slug: 'sala' }], transactions: [] },
         ]),
       },
       bankedDay: { findMany: jest.fn().mockResolvedValue([]) },
@@ -71,6 +72,30 @@ describe('SubscriptionsService#getMySubscriptions (Dizajn 35)', () => {
     const query = prisma.subscription.findMany.mock.calls[0][0];
     expect(query.where).toEqual({ userId: 'u1' });
     expect(query.include.listings.where).toEqual({ status: { not: 'DELETED' } });
+    // Only the last successful payment, and only its fiscal receipt, is read.
+    expect(query.include.transactions).toMatchObject({ where: { status: 'SUCCESSFUL' }, take: 1 });
+    expect(query.include.transactions.select.invoices.where).toEqual({ documentType: 'FISCAL_RECEIPT' });
+  });
+
+  it('gives the owner the receipt of a paid package, and nothing of the bank', async () => {
+    const issuedAt = new Date('2026-11-15T12:00:00Z');
+    const receipt = { status: 'ISSUED', documentNumber: 'AZM5ZCCR-Dt1Ov2o0-7', verificationUrl: 'https://suf.purs.gov.rs/v/?vl=x', pdfUrl: 'https://api.fiscomm.rs/receipt/x', issuedAt };
+    const prisma = {
+      subscription: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 's1', status: 'ACTIVE', priceAtPurchase: 334_000n, package: pro, listings: [], transactions: [{ invoices: [receipt] }] },
+          { id: 's2', status: 'ACTIVE', priceAtPurchase: 0n, package: pro, listings: [], transactions: [] },
+          { id: 's3', status: 'ACTIVE', priceAtPurchase: 334_000n, package: pro, listings: [], transactions: [{ invoices: [] }] },
+        ]),
+      },
+      bankedDay: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+    const [paid, free, unlinked] = await makeService(prisma).getMySubscriptions('u1');
+
+    expect(paid.receipt).toEqual(receipt);
+    expect(paid).not.toHaveProperty('transactions');
+    expect(free.receipt).toBeNull();
+    expect(unlinked.receipt).toBeNull();
   });
 
   it('returns prices in RSD and the unused banked days of each subscription', async () => {
@@ -81,8 +106,8 @@ describe('SubscriptionsService#getMySubscriptions (Dizajn 35)', () => {
     const prisma = {
       subscription: {
         findMany: jest.fn().mockResolvedValue([
-          { id: 's1', status: 'ACTIVE', priceAtPurchase: 864_800n, package: pro, listings: [{ id: 'l1', title: 'Sala', slug: 'sala' }] },
-          { id: 's2', status: 'CANCELLED', priceAtPurchase: 334_000n, package: { ...pro, key: 'STANDARD' }, listings: [] },
+          { id: 's1', status: 'ACTIVE', priceAtPurchase: 864_800n, package: pro, listings: [{ id: 'l1', title: 'Sala', slug: 'sala' }], transactions: [] },
+          { id: 's2', status: 'CANCELLED', priceAtPurchase: 334_000n, package: { ...pro, key: 'STANDARD' }, listings: [], transactions: [] },
         ]),
       },
       bankedDay: { findMany: jest.fn().mockResolvedValue(banked) },
@@ -106,7 +131,7 @@ describe('SubscriptionsService direct package purchase', () => {
   };
 
   function makeService(prisma: any) {
-    return new SubscriptionsService(prisma, {} as any, {} as any, taxonomy as any, {} as any, {} as any, i18n as any, {} as any, {} as any);
+    return new SubscriptionsService(prisma, {} as any, {} as any, taxonomy as any, {} as any, {} as any, i18n as any, {} as any, {} as any, {} as any);
   }
 
   it('refuses a person a new package outside the card checkout', async () => {
