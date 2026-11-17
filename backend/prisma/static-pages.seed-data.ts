@@ -25,7 +25,7 @@ export const staticPages: StaticPageSeed[] = [
 <h2>Za koga je Rentaj</h2>
 <p>Prvenstveno za vlasnike koji izdaju jedan do četiri objekta - apartman, vozilo, salu za proslave, igraonicu, mašinu ili magacin - i za goste koji traže overen, pregledan način da ih pronađu i rezervišu.</p>
 <h2>Kontakt</h2>
-<p>Pišite nam na <a href="mailto:podrska@rentaj.rs">podrska@rentaj.rs</a> - rado čujemo pitanja, predloge i prijave problema.</p>`.trim(),
+<p>Pišite nam na <a href="mailto:office@rentaj.rs">office@rentaj.rs</a> - rado čujemo pitanja, predloge i prijave problema.</p>`.trim(),
     },
     en: {
       title: 'About us',
@@ -38,7 +38,7 @@ export const staticPages: StaticPageSeed[] = [
 <h2>Who Rentaj is for</h2>
 <p>Primarily for owners renting out one to four properties - an apartment, a vehicle, an event venue, a playroom, machinery, or a warehouse - and for guests looking for a vetted, easy way to find and book them.</p>
 <h2>Contact</h2>
-<p>Write to us at <a href="mailto:podrska@rentaj.rs">podrska@rentaj.rs</a> - we're happy to hear questions, suggestions, and problem reports.</p>`.trim(),
+<p>Write to us at <a href="mailto:office@rentaj.rs">office@rentaj.rs</a> - we're happy to hear questions, suggestions, and problem reports.</p>`.trim(),
     },
   },
   {

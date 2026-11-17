@@ -39,8 +39,8 @@ export function renderEmailHtml(input: EmailLayoutInput): string {
   const settingsUrl = `${input.frontendUrl}/kontrolna-tabla/podesavanja`;
   const footerContact =
     input.language === 'EN'
-      ? `Rentaj &middot; <a href="mailto:podrska@rentaj.rs" style="color:${COLORS.textMuted};">podrska@rentaj.rs</a> &middot; <a href="${settingsUrl}" style="color:${COLORS.textMuted};">Notification settings</a>`
-      : `Rentaj &middot; <a href="mailto:podrska@rentaj.rs" style="color:${COLORS.textMuted};">podrska@rentaj.rs</a> &middot; <a href="${settingsUrl}" style="color:${COLORS.textMuted};">Podešavanja obaveštenja</a>`;
+      ? `Rentaj &middot; <a href="mailto:office@rentaj.rs" style="color:${COLORS.textMuted};">office@rentaj.rs</a> &middot; <a href="${settingsUrl}" style="color:${COLORS.textMuted};">Notification settings</a>`
+      : `Rentaj &middot; <a href="mailto:office@rentaj.rs" style="color:${COLORS.textMuted};">office@rentaj.rs</a> &middot; <a href="${settingsUrl}" style="color:${COLORS.textMuted};">Podešavanja obaveštenja</a>`;
 
   const mjml = `
     <mjml>
