@@ -1041,7 +1041,7 @@ export const emailTemplates: EmailTemplateSeed[] = [
     sr: {
       subject: 'Vaši podaci su spremni',
       heading: 'Vaši podaci su spremni za preuzimanje',
-      bodyText: 'Pripremili smo izvoz svih vaših podataka sa Rentaja, u skladu sa pravom na prenosivost podataka.',
+      bodyText: 'Pripremili smo izvoz svih vaših podataka sa Rentaj.rs, u skladu sa pravom na prenosivost podataka.',
       buttonLabel: 'Preuzmi',
     },
     en: {

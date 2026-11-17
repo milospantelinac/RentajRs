@@ -2967,7 +2967,7 @@
       "requestConfirm": "Poslati zahtev da oglas bude istaknut {days} dana? Istaknuti oglasi se smenjuju na početnoj strani i pri vrhu pretrage, svi podjednako. O zahtevu odlučuje administrator.",
       "cancelConfirm": "Povući zahtev za isticanje ovog oglasa?"
     },
-    "freeFromRentaj": "Besplatno od Rentaja",
+    "freeFromRentaj": "Besplatno od Rentaj.rs",
     "noEnd": "Bez isteka"
   },
   "ical": {
@@ -3185,7 +3185,7 @@
     "expiredNoteOne": "Oglas nije vidljiv u pretrazi dok se paket ne obnovi.",
     "expiredNoteMany": "Oglasi nisu vidljivi u pretrazi dok se paket ne obnovi.",
     "expiredBankedNote": "Oglas je vidljiv iz prenetih dana; obnova čuva ostatak za posle.",
-    "freeFromRentaj": "Besplatno od Rentaja",
+    "freeFromRentaj": "Besplatno od Rentaj.rs",
     "noEnd": "Bez isteka"
   },
   "savedListings": {
@@ -3554,7 +3554,7 @@
     "statusDeleted": "Obrisan",
     "filterLabel": "Vrsta oglasa",
     "filterAll": "Svi oglasi",
-    "filterFree": "Besplatni (od Rentaja)",
+    "filterFree": "Besplatni (od Rentaj.rs)",
     "filterAdmin": "Dodao admin",
     "emptyTitle": "Još nema oglasa",
     "emptyText": "Oglasi koje dodaju vlasnici i admini pojaviće se ovde.",

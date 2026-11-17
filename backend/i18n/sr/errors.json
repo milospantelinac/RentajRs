@@ -138,7 +138,7 @@
   "PERIOD_UNLIMITED_RENEWED": "Vlasnik je već platio nastavak posle ovog perioda, pa paket ne može biti bez isteka. Produžite ga za određen broj meseci ili dana.",
   "PERIOD_TOO_LONG_MONTHS": "Trajanje može biti najviše {max} meseci",
   "PERIOD_TOO_LONG_DAYS": "Trajanje može biti najviše {max} dana",
-  "SUBSCRIPTION_FREE_NOT_SHARED": "Besplatan paket od Rentaja važi samo za oglas za koji je dat",
+  "SUBSCRIPTION_FREE_NOT_SHARED": "Besplatan paket od Rentaj.rs važi samo za oglas za koji je dat",
   "LISTING_ADMIN_DRAFT": "Ovaj oglas priprema Rentaj i objaviće ga za vas, bez plaćanja",
   "FEATURED_PUBLISHED_WAITING": "Oglas je objavljen. Kategorija je puna, pa oglas čeka slobodno mesto za isticanje i biće istaknut čim se mesto oslobodi.",
   "TAX_ID_INVALID": "PIB nije ispravan. Unesite devet cifara, bez razmaka.",

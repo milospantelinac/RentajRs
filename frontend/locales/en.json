@@ -2967,7 +2967,7 @@
       "requestConfirm": "Ask for this listing to be featured for {days} days? Featured listings take turns on the home page and at the top of search, all equally. An administrator decides on the request.",
       "cancelConfirm": "Withdraw the featuring request for this listing?"
     },
-    "freeFromRentaj": "Free from Rentaj",
+    "freeFromRentaj": "Free from Rentaj.rs",
     "noEnd": "No end date"
   },
   "ical": {
@@ -3185,7 +3185,7 @@
     "expiredNoteOne": "The listing stays out of search until the package is renewed.",
     "expiredNoteMany": "The listings stay out of search until the package is renewed.",
     "expiredBankedNote": "The listing is visible on carried-over days; renewing keeps the rest for later.",
-    "freeFromRentaj": "Free from Rentaj",
+    "freeFromRentaj": "Free from Rentaj.rs",
     "noEnd": "No end date"
   },
   "savedListings": {
@@ -3554,7 +3554,7 @@
     "statusDeleted": "Deleted",
     "filterLabel": "Kind of listing",
     "filterAll": "All listings",
-    "filterFree": "Free (from Rentaj)",
+    "filterFree": "Free (from Rentaj.rs)",
     "filterAdmin": "Added by an admin",
     "emptyTitle": "No listings yet",
     "emptyText": "Listings owners and admins add will appear here.",

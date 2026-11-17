@@ -243,7 +243,7 @@ export class ListingsService {
 
     return listings.map(({ moderations, bankedDays, city, cityArea, subscription, ...rest }) => {
       const moderation = moderations[0];
-      // Administracija > Oglasi: "Besplatno od Rentaja"; a free package may have no end at all.
+      // Administracija > Oglasi: "Besplatno od Rentaj.rs"; a free package may have no end at all.
       const listing = {
         ...rest,
         subscription: subscription

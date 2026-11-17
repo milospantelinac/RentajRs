@@ -24,7 +24,7 @@ const OWNER_RESULTS = 20;
  * and listings an admin adds for an existing user and publishes without any
  * payment, for a number of months or days or with no end. Such a listing goes
  * live at once on the package the admin picks; the owner gets an email, sees
- * it in Moji oglasi as "Besplatno od Rentaja" and may pay to continue once it
+ * it in Moji oglasi as "Besplatno od Rentaj.rs" and may pay to continue once it
  * ends. "Trajanje" moves the end of a free package either way, or gives a paid
  * one extra time.
  */

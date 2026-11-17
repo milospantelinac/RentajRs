@@ -983,7 +983,7 @@ export class SubscriptionsService {
       priceAtPurchase: paraToRsd(s.priceAtPurchase),
       package: { ...s.package, priceMonthly: paraToRsd(s.package.priceMonthly), priceYearly: paraToRsd(s.package.priceYearly) },
       bankedDays: bankedDays.filter((b) => s.listings.some((l) => l.id === b.listingId)),
-      // Administracija > Oglasi: "Besplatno od Rentaja", with no price or receipt.
+      // Administracija > Oglasi: "Besplatno od Rentaj.rs", with no price or receipt.
       freeGrant: !!grantedByAdminId,
     }));
   }
