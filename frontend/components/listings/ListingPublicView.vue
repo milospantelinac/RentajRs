@@ -44,13 +44,13 @@
 
         <!-- T114: the rating from the first review on, "Novo" before it. -->
         <p class="listing-meta">
-          <img src="/images/icons/star-solid.svg" alt="" class="listing-meta-star" />
-          <template v-if="rated">
+          <img src="/images/icons/star.svg" alt="" class="listing-meta-star" />
+          <template v-if="rated && !listing.featured">
             <span class="listing-meta-rating">{{ formatRating(listing.avgRating) }}</span>
             <span class="listing-meta-sep" aria-hidden="true">·</span>
             <span>{{ reviewCountLabel }}</span>
           </template>
-          <span v-else class="listing-meta-rating">{{ t('listing.ratingNew') }}</span>
+          <span v-else class="listing-meta-rating">{{ listingMark(listing, t) }}</span>
           <template v-if="locationLabel">
             <span class="listing-meta-sep" aria-hidden="true">·</span>
             <img src="/images/icons/pin-muted.svg" alt="" class="listing-meta-pin" />

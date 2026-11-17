@@ -11,3 +11,13 @@ export function hasRating(listing) {
 export function formatRating(value) {
   return Number(value).toFixed(1)
 }
+
+/**
+ * The one mark beside a listing's title (cards, map card, listing page, booking
+ * panel): a featured listing says "Istaknuto" and nothing else, otherwise the
+ * rating from the first review on and "Novo" before it.
+ */
+export function listingMark(listing, t) {
+  if (listing?.featured) return t('listing.featuredBadge')
+  return hasRating(listing) ? formatRating(listing.avgRating) : t('listing.ratingNew')
+}

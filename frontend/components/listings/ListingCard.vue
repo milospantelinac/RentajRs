@@ -15,18 +15,9 @@
       <div v-else class="listing-card-image listing-card-image-placeholder" />
       <div class="listing-card-scrim" aria-hidden="true" />
 
-      <!-- T129: a featured listing says so before its category, wherever it shows. -->
-      <div v-if="listing.featured || listing.category?.name" class="listing-card-pills">
-        <span v-if="listing.featured" class="listing-card-featured-pill">
-          <svg viewBox="0 0 12 12" class="listing-card-featured-star" aria-hidden="true">
-            <path
-              d="M6 0.9l1.55 3.14 3.46.5-2.5 2.44.59 3.45L6 8.8l-3.1 1.63.59-3.45L1 4.54l3.46-.5L6 .9z"
-              fill="currentColor"
-            />
-          </svg>
-          {{ t('listing.featuredBadge') }}
-        </span>
-        <span v-if="listing.category?.name" class="listing-card-category-pill">{{ listing.category.name }}</span>
+      <!-- Only the category sits on the photo; "Istaknuto" is the mark beside the title. -->
+      <div v-if="listing.category?.name" class="listing-card-pills">
+        <span class="listing-card-category-pill">{{ listing.category.name }}</span>
       </div>
 
       <button
@@ -59,10 +50,10 @@
     <div class="listing-card-body">
       <div class="listing-card-title-row">
         <p class="listing-card-title">{{ listing.title }}</p>
-        <!-- T114: "Novo" until the first review. -->
+        <!-- T114: "Novo" until the first review; a featured listing says "Istaknuto" instead. -->
         <span class="listing-card-rating">
           <img src="/images/icons/star.svg" alt="" class="listing-card-star" />
-          {{ hasRating(listing) ? formatRating(listing.avgRating) : t('listing.ratingNew') }}
+          {{ listingMark(listing, t) }}
         </span>
       </div>
 
@@ -226,30 +217,6 @@ $listing-card-saved: #f43f5e;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-// T129 "Istaknuto": no Figma frame yet, so it borrows the category pill's
-// shape in the brand blue, with a small star.
-.listing-card-featured-pill {
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  gap: 4px;
-  height: 22px;
-  padding: 0 10px 0 8px;
-  border-radius: $radius-pill;
-  background: $color-primary;
-  color: $color-surface;
-  font-size: 10px;
-  font-weight: 500;
-  line-height: normal;
-  white-space: nowrap;
-}
-
-.listing-card-featured-star {
-  width: 11px;
-  height: 11px;
-  flex-shrink: 0;
 }
 
 .listing-card-favorite-btn {

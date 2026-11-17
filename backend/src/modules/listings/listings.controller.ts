@@ -16,6 +16,7 @@ import { UPLOAD_LIMITS } from '../../common/uploads/uploads.service';
 import { ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { ListingsService } from './listings.service';
+import { FeaturedService } from '../featured/featured.service';
 import { CreateListingDto } from './dto/create-listing.dto';
 import { UpdateListingDto } from './dto/update-listing.dto';
 import { UpdateLocationDto } from './dto/update-location.dto';
@@ -32,7 +33,10 @@ import { RequirePermissions } from '../../common/decorators/require-permissions.
 @ApiTags('listings')
 @Controller()
 export class ListingsController {
-  constructor(private listingsService: ListingsService) {}
+  constructor(
+    private listingsService: ListingsService,
+    private featured: FeaturedService,
+  ) {}
 
   @Post('listings')
   create(@CurrentUser('id') userId: string, @Body() dto: CreateListingDto) {
@@ -141,8 +145,10 @@ export class ListingsController {
   // T136: view=0 reads the listing without counting a visit (the booking change screen).
   @Public()
   @Get('listings/public/:slug')
-  getPublic(@Param('slug') slug: string, @Query('view') view?: string) {
-    return this.listingsService.getPublicBySlug(slug, { countView: view !== '0' });
+  async getPublic(@Param('slug') slug: string, @Query('view') view?: string) {
+    const listing = await this.listingsService.getPublicBySlug(slug, { countView: view !== '0' });
+    // The page says "Istaknuto" under the title, like the card does.
+    return { ...listing, featured: (await this.featured.featuredAmong([listing.id])).has(listing.id) };
   }
 
   // T134: "Prikaži broj", 10 a minute per visitor across every listing, so

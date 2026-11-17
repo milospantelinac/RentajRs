@@ -11,8 +11,8 @@
       </p>
       <!-- T114: "Novo" until the first review. -->
       <span class="booking-panel-rating">
-        <img src="/images/icons/star-solid.svg" alt="" class="booking-panel-star" />
-        {{ hasRating(listing) ? formatRating(listing.avgRating) : t('listing.ratingNew') }}
+        <img src="/images/icons/star.svg" alt="" class="booking-panel-star" />
+        {{ listingMark(listing, t) }}
       </span>
     </div>
 

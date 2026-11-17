@@ -24,7 +24,7 @@
           <!-- T114: "Novo" until the first review. -->
           <span class="map-card-rating">
             <img src="/images/icons/star.svg" alt="" class="map-card-star" />
-            {{ hasRating(listing) ? formatRating(listing.avgRating) : t('listing.ratingNew') }}
+            {{ listingMark(listing, t) }}
           </span>
         </div>
         <div class="map-card-row">
