@@ -8,20 +8,16 @@
           </NuxtLink>
           <p class="footer-tagline">{{ t('footer.description') }}</p>
           <div class="footer-social">
-            <a href="https://www.linkedin.com" target="_blank" rel="noopener" class="footer-social-btn" aria-label="LinkedIn">
-              <svg viewBox="0 0 38.9513 38.9513" fill="none">
+            <!-- Figma 2124:3521 and 2126:3319 draw the glyph inside the whole 51 by 51 circle frame, so these two svgs fill the circle. -->
+            <a href="https://www.tiktok.com/@rentaj.rs" target="_blank" rel="noopener noreferrer" class="footer-social-btn" :aria-label="t('footer.socialTikTok')">
+              <svg viewBox="0 0 51 51" fill="none" class="footer-social-glyph-full">
                 <path
-                  d="M27.9141 27.9148V21.8517C27.9141 18.8719 27.2727 16.5957 23.7963 16.5957C22.1201 16.5957 21.0027 17.5062 20.5475 18.3753H20.5061V16.8648H17.216V27.9148H20.651V22.4311C20.651 20.9826 20.9199 19.5963 22.6995 19.5963C24.4585 19.5963 24.4791 21.2309 24.4791 22.5139V27.894H27.9141V27.9148Z"
-                  fill="currentColor"
-                />
-                <path d="M11.6299 16.8647H15.0649V27.9147H11.6299V16.8647Z" fill="currentColor" />
-                <path
-                  d="M13.3469 11.3599C12.2501 11.3599 11.3604 12.2497 11.3604 13.3464C11.3604 14.4431 12.2501 15.3536 13.3469 15.3536C14.4436 15.3536 15.3334 14.4431 15.3334 13.3464C15.3334 12.2497 14.4436 11.3599 13.3469 11.3599Z"
+                  d="M25.9266 15.7662C26.9909 15.75 28.0472 15.7581 29.1034 15.75C29.1684 16.9931 29.6153 18.2606 30.5253 19.1381C31.4353 20.04 32.7191 20.4544 33.9703 20.5925V23.8669C32.8003 23.8263 31.6222 23.5825 30.5578 23.0788C30.0947 22.8675 29.6641 22.5994 29.2416 22.3231C29.2334 24.6956 29.2497 27.0681 29.2253 29.4325C29.1603 30.57 28.7866 31.6994 28.1284 32.6338C27.0641 34.1938 25.2197 35.2094 23.3266 35.2419C22.1647 35.3069 21.0028 34.99 20.0116 34.405C18.3703 33.4381 17.2166 31.6669 17.0459 29.7656C17.0297 29.3594 17.0216 28.9531 17.0378 28.555C17.1841 27.0113 17.9478 25.5325 19.1341 24.525C20.4828 23.355 22.3678 22.7944 24.1309 23.1275C24.1472 24.33 24.0984 25.5325 24.0984 26.735C23.2941 26.475 22.3516 26.5481 21.6447 27.0356C21.1328 27.3688 20.7428 27.8806 20.5397 28.4575C20.3691 28.8719 20.4178 29.3269 20.4259 29.7656C20.6209 31.0981 21.9047 32.2194 23.2697 32.0975C24.1797 32.0894 25.0491 31.5612 25.5203 30.7894C25.6747 30.5212 25.8453 30.245 25.8534 29.9281C25.9347 28.4738 25.9022 27.0275 25.9103 25.5731C25.9184 22.2987 25.9022 19.0325 25.9266 15.7662Z"
                   fill="currentColor"
                 />
               </svg>
             </a>
-            <a href="https://www.instagram.com" target="_blank" rel="noopener" class="footer-social-btn" aria-label="Instagram">
+            <a href="https://www.instagram.com/rentaj.rs/" target="_blank" rel="noopener noreferrer" class="footer-social-btn" :aria-label="t('footer.socialInstagram')">
               <svg viewBox="0 0 38.9513 38.9513" fill="none">
                 <path
                   fill-rule="evenodd"
@@ -38,10 +34,10 @@
                 <path d="M25.8761 14.19C25.8761 14.8047 25.3779 15.3029 24.7633 15.3029C24.1486 15.3029 23.6504 14.8047 23.6504 14.19C23.6504 13.5754 24.1486 13.0771 24.7633 13.0771C25.3779 13.0771 25.8761 13.5754 25.8761 14.19Z" fill="currentColor" />
               </svg>
             </a>
-            <a href="https://www.x.com" target="_blank" rel="noopener" class="footer-social-btn footer-social-btn-x" aria-label="X (Twitter)">
-              <svg viewBox="0 0 35.0913 35.0913" fill="none">
+            <a href="https://www.facebook.com/profile.php?id=61591503981480" target="_blank" rel="noopener noreferrer" class="footer-social-btn" :aria-label="t('footer.socialFacebook')">
+              <svg viewBox="0 0 51 51" fill="none" class="footer-social-glyph-full">
                 <path
-                  d="M19.2154 16.2019L25.7472 8.77246H24.1994L18.5279 15.2233L13.9981 8.77246H8.77344L15.6234 18.5273L8.77344 26.3181H10.3213L16.3106 19.5059L21.0944 26.3181H26.3191L19.2154 16.2019ZM17.0953 18.6132L16.4014 17.6418L10.8791 9.91264H13.2566L17.7131 16.1504L18.4072 17.1217L24.2002 25.2298H21.8227L17.0953 18.6132Z"
+                  d="M31.2 16.0001H28.35C27.0902 16.0001 25.882 16.5005 24.9912 17.3913C24.1005 18.2821 23.6 19.4903 23.6 20.7501V23.6001H20.75V27.4001H23.6V35.0001H27.4V27.4001H30.25L31.2 23.6001H27.4V20.7501C27.4 20.4981 27.5001 20.2565 27.6783 20.0783C27.8564 19.9002 28.0981 19.8001 28.35 19.8001H31.2V16.0001Z"
                   fill="currentColor"
                 />
               </svg>
@@ -203,9 +199,9 @@ const { data: categories } = await useAsyncData('footer-categories', async () =>
   height: 39px;
 }
 
-.footer-social-btn-x svg {
-  width: 35px;
-  height: 35px;
+.footer-social-btn .footer-social-glyph-full {
+  width: 51px;
+  height: 51px;
 }
 
 .footer-links {
@@ -312,9 +308,10 @@ const { data: categories } = await useAsyncData('footer-categories', async () =>
     height: 34.1px;
   }
 
-  .footer-social-btn-x svg {
-    width: 30.72px;
-    height: 30.72px;
+  // The full-frame glyphs follow the circle: 45 of 51.
+  .footer-social-btn .footer-social-glyph-full {
+    width: 45px;
+    height: 45px;
   }
 
   .footer-links {

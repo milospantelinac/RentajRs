@@ -69,7 +69,10 @@
     "description": "Rentaj is a modern platform for listing, booking, and managing rentals of every kind - from real estate and event spaces to vehicles, machinery, and equipment. No commission, no middlemen.",
     "aboutGroup": "About",
     "categoriesGroup": "Categories",
-    "platformGroup": "Platform"
+    "platformGroup": "Platform",
+    "socialTikTok": "Rentaj on TikTok",
+    "socialInstagram": "Rentaj on Instagram",
+    "socialFacebook": "Rentaj on Facebook"
   },
   "cookies": {
     "message": "Rentaj uses cookies to make the platform work and to understand how you use it.",

@@ -69,7 +69,10 @@
     "description": "Rentaj je moderna platforma za oglašavanje, rezervacije i upravljanje oglasima svih vrsta – od nekretnina i prostora do vozila, opreme i usluga. Bez provizije, bez posrednika.",
     "aboutGroup": "O nama",
     "categoriesGroup": "Kategorije",
-    "platformGroup": "Platforma"
+    "platformGroup": "Platforma",
+    "socialTikTok": "Rentaj na TikToku",
+    "socialInstagram": "Rentaj na Instagramu",
+    "socialFacebook": "Rentaj na Facebooku"
   },
   "cookies": {
     "message": "Rentaj koristi kolačiće da bi platforma radila ispravno i da bismo razumeli kako je koristite.",
