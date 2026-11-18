@@ -345,36 +345,55 @@
         <span class="section-title-light">{{ t('home.howItWorksVideoTitleStrong') }}</span>
         <span class="section-title-strong">{{ t('home.howItWorksVideoTitleLight') }}</span>
       </h2>
-      <div class="video-frame">
+      <div ref="videoFrameEl" class="video-frame">
         <button
-          v-if="videoEmbedUrl.type === 'iframe'"
           type="button"
           class="video-thumbnail"
           :style="videoEmbedUrl.thumbnail ? { backgroundImage: `url(${videoEmbedUrl.thumbnail})` } : {}"
           :aria-label="t('home.playVideo')"
           @click="openVideoModal"
         >
+          <!-- Our own video without a poster: its first frame, fetched once the frame is near the screen. -->
+          <video
+            v-if="videoEmbedUrl.type === 'video' && !videoEmbedUrl.thumbnail && videoFrameNear"
+            :src="`${videoEmbedUrl.src}#t=0.1`"
+            class="video-first-frame"
+            preload="metadata"
+            muted
+            playsinline
+            disablepictureinpicture
+            tabindex="-1"
+            aria-hidden="true"
+          />
           <span class="video-play-icon" aria-hidden="true">
             <img src="/images/icons/play.svg" alt="" width="118" height="118" />
           </span>
         </button>
-        <video v-else :src="videoEmbedUrl.src" class="video-native" controls />
       </div>
     </section>
 
     <Teleport to="body">
-      <div v-if="videoModalOpen" class="video-modal-backdrop" @click.self="closeVideoModal">
+      <div v-if="videoModalOpen && videoEmbedUrl" class="video-modal-backdrop" @click.self="closeVideoModal">
         <div class="video-modal-frame">
           <button type="button" class="video-modal-close" :aria-label="t('common.close')" @click="closeVideoModal">
             <FontAwesomeIcon icon="xmark" />
           </button>
           <iframe
+            v-if="videoEmbedUrl.type === 'iframe'"
             :src="videoModalSrc"
             class="video-iframe"
             title="Rentaj"
             frameborder="0"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
             allowfullscreen
+          />
+          <video
+            v-else
+            ref="modalVideoEl"
+            :src="videoEmbedUrl.src"
+            class="video-iframe video-player"
+            controls
+            playsinline
           />
         </div>
       </div>
@@ -461,18 +480,24 @@ const HOME_CATEGORY_TILES = {
   ostalo: { icon: '/images/categories/ostalo.svg', labelKey: 'home.categoryOstalo' },
 }
 
-// Admin-set via /admin/sadrzaj (Setting key homepage_video_url) — the
-// section only renders once a URL is actually set (RNT-052: an empty
-// placeholder here used to show a black box with no video).
+// Admin-set via /admin/sadrzaj: a link (Setting key homepage_video_url) or a
+// video uploaded to our own server (`file`, its path under the API base,
+// served by the backend from the server's disk). The section only renders
+// once there is one (RNT-052: an empty placeholder here used to show a black
+// box with no video).
+const config = useRuntimeConfig()
 const { data: videoData } = await useAsyncData('homepage-video-url', () => api.get('/homepage-video-url'))
 const videoEmbedUrl = computed(() => {
-  const url = videoData.value?.url
-  if (!url) return null
-  if (/\.(mp4|webm|ogg)$/i.test(url)) return { type: 'video', src: url }
-
   // A poster uploaded in /admin/sadrzaj wins over the provider's own
   // thumbnail, which is low-resolution and letterboxed at this frame's size.
   const poster = videoData.value?.thumbnailUrl || null
+
+  const file = videoData.value?.file
+  if (file?.path) return { type: 'video', src: `${config.public.apiBase}${file.path}`, thumbnail: poster }
+
+  const url = videoData.value?.url
+  if (!url) return null
+  if (/\.(mp4|webm|ogg)$/i.test(url)) return { type: 'video', src: url, thumbnail: poster }
 
   const youtubeMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([\w-]+)/)
   if (youtubeMatch) {
@@ -498,9 +523,37 @@ const videoModalSrc = computed(() => {
   const sep = videoEmbedUrl.value.src.includes('?') ? '&' : '?'
   return `${videoEmbedUrl.value.src}${sep}autoplay=1`
 })
-function openVideoModal() {
+// Our own video plays in the same modal. play() runs while the click is still
+// being handled, which is what lets the browser start it with sound.
+const modalVideoEl = ref(null)
+async function openVideoModal() {
   videoModalOpen.value = true
+  if (videoEmbedUrl.value?.type !== 'video') return
+  await nextTick()
+  modalVideoEl.value?.play().catch(() => {})
 }
+
+// The first frame of a poster-less video is fetched only once the frame comes
+// near the screen, not by every visitor who never scrolls that far.
+const videoFrameEl = ref(null)
+const videoFrameNear = ref(false)
+let videoFrameObserver = null
+onMounted(() => {
+  if (!videoFrameEl.value || typeof IntersectionObserver === 'undefined') {
+    videoFrameNear.value = true
+    return
+  }
+  videoFrameObserver = new IntersectionObserver(
+    (entries) => {
+      if (!entries.some((entry) => entry.isIntersecting)) return
+      videoFrameNear.value = true
+      videoFrameObserver?.disconnect()
+    },
+    { rootMargin: '600px 0px' },
+  )
+  videoFrameObserver.observe(videoFrameEl.value)
+})
+onUnmounted(() => videoFrameObserver?.disconnect())
 function closeVideoModal() {
   videoModalOpen.value = false
 }
@@ -2381,13 +2434,28 @@ useHead({
   }
 }
 
-.video-iframe,
-.video-native {
+.video-iframe {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   border: none;
+}
+
+// Our own video in the modal: letterboxed, never cropped.
+.video-player {
+  object-fit: contain;
+  background: #000;
+}
+
+// The first frame standing in for a poster, cropped to the frame as a poster is.
+.video-first-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
 }
 
 .video-thumbnail {

@@ -11,10 +11,18 @@ import { MediaUrlInterceptor } from './media-url.interceptor';
 import { LegacyUploadsController } from './legacy-uploads.controller';
 import { LocalMediaController } from './local-media.controller';
 import { StorageAdminController, UploadLimitsController } from './storage-admin.controller';
+import { VideoStorageService } from './video-storage.service';
+import { VideoFilesController } from './video-files.controller';
 
 @Global()
 @Module({
-  controllers: [LegacyUploadsController, LocalMediaController, StorageAdminController, UploadLimitsController],
+  controllers: [
+    LegacyUploadsController,
+    LocalMediaController,
+    StorageAdminController,
+    UploadLimitsController,
+    VideoFilesController,
+  ],
   providers: [
     StorageService,
     StorageSettingsService,
@@ -23,8 +31,10 @@ import { StorageAdminController, UploadLimitsController } from './storage-admin.
     StorageScanService,
     StorageLookupService,
     UploadsMigrationService,
+    // Videos stay on this server's disk, whatever STORAGE_DRIVER says.
+    VideoStorageService,
     { provide: APP_INTERCEPTOR, useClass: MediaUrlInterceptor },
   ],
-  exports: [StorageService, StorageSettingsService, UploadsService],
+  exports: [StorageService, StorageSettingsService, UploadsService, VideoStorageService],
 })
 export class UploadsModule {}

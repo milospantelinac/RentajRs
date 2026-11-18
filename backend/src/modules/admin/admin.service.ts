@@ -12,6 +12,7 @@ import { UploadsService } from '../../common/uploads/uploads.service';
 import { STORAGE_SETTING_PREFIX } from '../../common/uploads/storage-settings.service';
 import { FEATURED_LEADERS_KEY, FEATURED_RULES_KEY } from '../../common/utils/featured-rules';
 import { RANKING_WEIGHTS_KEY } from '../../common/utils/ranking-weights';
+import { HOMEPAGE_VIDEO_KEYS } from '../../common/utils/homepage-video';
 import { UpdatePaymentSettingsDto } from '../../common/payment/nestpay/dto/payment-settings.dto';
 import {
   ReportListingDto,
@@ -25,7 +26,14 @@ import {
 } from './dto/admin.dto';
 
 const PRIORITY_REPORT_THRESHOLD = 3; // R144
-const SETTINGS_WITH_OWN_FORM = [FEATURED_RULES_KEY, FEATURED_LEADERS_KEY, RANKING_WEIGHTS_KEY];
+const SETTINGS_WITH_OWN_FORM = [
+  FEATURED_RULES_KEY,
+  FEATURED_LEADERS_KEY,
+  RANKING_WEIGHTS_KEY,
+  // Set in Administracija > Sadržaj, where the video is uploaded: a name typed by hand would point at no file.
+  HOMEPAGE_VIDEO_KEYS.upload,
+  HOMEPAGE_VIDEO_KEYS.source,
+];
 const RESTRICTION_DAYS = 30; // Ch.6.7 — how long a RESTRICTION dispute outcome blocks new listings/bookings
 
 @Injectable()

@@ -54,6 +54,14 @@ export default () => ({
 
   storage: storageConfig(),
 
+  // Videos an admin uploads (the homepage guide video) stay on this server's
+  // own disk, under UPLOADS_DIR (the uploads volume in docker-compose), and
+  // never go to Object Storage whatever STORAGE_DRIVER says. The backend
+  // serves them itself at /api/v1/videos/.
+  videos: {
+    dir: path.resolve(process.cwd(), process.env.UPLOADS_DIR || 'uploads', 'videos'),
+  },
+
   geocoding: {
     provider: process.env.GEOCODING_PROVIDER || 'nominatim',
     googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY,

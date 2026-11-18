@@ -100,10 +100,27 @@
       <button v-if="faqsByLang.length" class="btn btn-tertiary btn-sm mt-4" @click="addFaq">+ {{ t('admin.addFaqItem') }}</button>
     </section>
 
-    <!-- Homepage video -->
+    <!-- Homepage video: a link, or a video uploaded to our own server -->
     <section v-else>
+      <p class="video-tab-intro">{{ t('admin.homepageVideoIntro') }}</p>
+
       <div class="admin-card content-card">
-        <p class="admin-card-note">{{ t('admin.homepageVideoHint') }}</p>
+        <div class="content-head content-head-top">
+          <div>
+            <p class="admin-card-title">{{ t('admin.homepageVideoLinkTitle') }}</p>
+            <p class="admin-card-note">{{ t('admin.homepageVideoHint') }}</p>
+          </div>
+          <span v-if="videoState.showing === 'link'" class="admin-pill admin-pill-success">{{ t('admin.homepageVideoShowing') }}</span>
+          <button
+            v-else-if="videoState.link"
+            type="button"
+            class="admin-action"
+            :disabled="switchingSource"
+            @click="showLinkOnHomepage"
+          >
+            {{ t('admin.homepageVideoShowThis') }}
+          </button>
+        </div>
 
         <div class="form-group">
           <label class="form-label">{{ t('admin.videoUrl') }}</label>
@@ -114,7 +131,10 @@
           <button class="btn btn-tertiary btn-sm" :disabled="!videoUrlForm" @click="clearVideoUrl">{{ t('admin.clearVideoUrl') }}</button>
           <p v-if="savedVideo" class="form-success">{{ t('dashboard.changesSaved') }}</p>
         </div>
+        <p v-if="videoError" class="form-error">{{ videoError }}</p>
       </div>
+
+      <HomepageVideoUpload :video="videoState" @update="applyVideoState" />
 
       <div class="admin-card content-card">
         <div>
@@ -222,19 +242,34 @@ async function reorderFaq(item, direction) {
 }
 
 // -- Homepage video ---------------------------------------------------------
+// GET /admin/homepage-video: the link, the video uploaded to our server, the
+// poster and which of the two the homepage shows (`showing`).
 
-const { data: settings } = await useAsyncData('admin-settings-for-content', () => api.get('/admin/settings'))
-const videoSetting = (settings.value || []).find((s) => s.key === 'homepage_video_url')
-const videoUrlForm = ref(typeof videoSetting?.value === 'string' ? videoSetting.value : '')
+const EMPTY_VIDEO = { link: null, thumbnailUrl: null, upload: null, source: 'link', showing: null }
+const { data: videoData } = await useAsyncData('admin-homepage-video', () => api.get('/admin/homepage-video'))
+const videoState = ref(videoData.value || EMPTY_VIDEO)
+const videoUrlForm = ref(videoState.value.link || '')
 const savedVideo = ref(false)
+const videoError = ref('')
+const switchingSource = ref(false)
+
+function applyVideoState(state) {
+  videoState.value = state || EMPTY_VIDEO
+}
 
 async function saveVideoUrl() {
-  // UpdateSettingDto's @IsDefined() rejects null, so an empty string is the
-  // "no video" sentinel here — getHomepageVideoUrl() already treats a blank
-  // string the same as unset.
-  await api.patch('/admin/settings/homepage_video_url', { value: videoUrlForm.value.trim() })
-  savedVideo.value = true
-  setTimeout(() => { savedVideo.value = false }, 2000)
+  videoError.value = ''
+  try {
+    // UpdateSettingDto's @IsDefined() rejects null, so an empty string is the
+    // "no video" sentinel here; getHomepageVideoUrl() already treats a blank
+    // string the same as unset.
+    await api.patch('/admin/settings/homepage_video_url', { value: videoUrlForm.value.trim() })
+    applyVideoState(await api.get('/admin/homepage-video'))
+    savedVideo.value = true
+    setTimeout(() => { savedVideo.value = false }, 2000)
+  } catch (e) {
+    videoError.value = extractErrorMessage(e, t('auth.genericError'))
+  }
 }
 
 function clearVideoUrl() {
@@ -242,11 +277,22 @@ function clearVideoUrl() {
   saveVideoUrl()
 }
 
+async function showLinkOnHomepage() {
+  switchingSource.value = true
+  videoError.value = ''
+  try {
+    applyVideoState(await api.patch('/admin/homepage-video/source', { source: 'link' }))
+  } catch (e) {
+    videoError.value = extractErrorMessage(e, t('auth.genericError'))
+  } finally {
+    switchingSource.value = false
+  }
+}
+
 // -- Homepage video poster --------------------------------------------------
 // Stored as the homepage_video_thumbnail setting; the upload endpoint writes
 // the setting itself, so this screen only needs to hold the resulting URL.
-const thumbSetting = (settings.value || []).find((s) => s.key === 'homepage_video_thumbnail')
-const thumbnailUrl = ref(typeof thumbSetting?.value === 'string' ? thumbSetting.value : '')
+const thumbnailUrl = ref(videoState.value.thumbnailUrl || '')
 const uploadingThumbnail = ref(false)
 const thumbnailError = ref('')
 
@@ -309,6 +355,20 @@ useSeoMeta({ title: t('admin.content') })
   justify-content: space-between;
   gap: 12px;
   width: 100%;
+}
+
+// A title with a note under it: the pill or the action stays by the title.
+.content-head-top {
+  align-items: flex-start;
+}
+
+.video-tab-intro {
+  max-width: 760px;
+  margin-bottom: 20px;
+  font-size: 14px;
+  font-weight: 300;
+  line-height: 22px;
+  color: $color-text-muted;
 }
 
 .content-actions {
